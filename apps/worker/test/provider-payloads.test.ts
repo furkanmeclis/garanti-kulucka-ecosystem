@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { type ProviderRequestEnvelope, providerRequestEnvelopeSchema } from "@garanti-kulucka/shared";
+import { buildProviderDryRunRequest } from "../src/providers/dry-run-transport.js";
 import { buildProviderTransportPayload } from "../src/providers/payloads.js";
 
 const contractsRoot = new URL("../../../contracts/providers", import.meta.url);
@@ -147,5 +148,40 @@ describe("provider transport payload builder", () => {
         channel: "sms",
       }),
     ).toThrow("Provider channel is not registered");
+  });
+
+  it("builds deterministic dry-run requests without live provider calls", () => {
+    expect(buildProviderDryRunRequest(readFixture("ptt", "shipment_create_minimal.json"))).toMatchObject({
+      provider: "ptt",
+      operation: "shipment.create",
+      method: "POST",
+      path: "/ptt/shipments",
+      headers: {
+        "content-type": "application/json",
+        "x-provider-credential": "[redacted:admin-managed]",
+      },
+      live_call_performed: false,
+    });
+    expect(buildProviderDryRunRequest(readFixture("whatsapp", "message_send_minimal.json"))).toMatchObject({
+      provider: "whatsapp",
+      operation: "message.send",
+      path: "/meta/whatsapp/messages",
+      headers: {
+        authorization: "[redacted:admin-managed]",
+      },
+      body: {
+        idempotency_key: "msg_whatsapp_demo_001",
+      },
+      live_call_performed: false,
+    });
+    expect(buildProviderDryRunRequest(readFixture("netgsm", "sms_send_minimal.json"))).toMatchObject({
+      provider: "netgsm",
+      operation: "sms.send",
+      path: "/netgsm/sms",
+      headers: {
+        "x-provider-credential": "[redacted:admin-managed]",
+      },
+      live_call_performed: false,
+    });
   });
 });

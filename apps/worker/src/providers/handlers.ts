@@ -10,6 +10,7 @@ import {
   providerWebhookJobPayloadSchema,
 } from "@garanti-kulucka/shared";
 import { assertProviderEnvelope } from "./registry.js";
+import { buildProviderDryRunRequest } from "./dry-run-transport.js";
 import { buildProviderTransportPayload } from "./payloads.js";
 import { providerTransportPolicyFor } from "./transport-policy.js";
 
@@ -198,6 +199,7 @@ function createFixtureAttempt(
       fixture_only: true,
       transport_policy: providerTransportPolicyFor(envelope),
       transport_payload: buildProviderTransportPayload(envelope),
+      dry_run_request: buildProviderDryRunRequest(envelope),
     },
     response_metadata: {
       accepted: true,

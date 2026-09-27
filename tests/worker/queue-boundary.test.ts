@@ -50,6 +50,13 @@ describe("worker gate", () => {
           live_call_permitted: false,
           reason: "legacy_fixture_replay_required",
         },
+        dry_run_request: {
+          path: "/ptt/shipments",
+          live_call_performed: false,
+          headers: {
+            "x-provider-credential": "[redacted:admin-managed]",
+          },
+        },
       },
     });
   });
