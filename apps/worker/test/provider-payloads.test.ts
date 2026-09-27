@@ -40,6 +40,13 @@ describe("provider transport payload builder", () => {
     expect(buildProviderTransportPayload(readFixture("surat", "shipment_track_minimal.json")).body).toEqual({
       tracking_number: "SR fixture tracking",
     });
+    expect(buildProviderTransportPayload(readFixture("surat", "shipment_create_minimal.json")).body).toEqual({
+      order_public_id: "ord_fixture_2",
+      recipient: {
+        recipient_name: "Fixture Customer",
+        recipient_phone: "+905550000001",
+      },
+    });
     expect(buildProviderTransportPayload(readFixture("kolaybi", "invoice_create_minimal.json")).body).toEqual({
       order_public_id: "ord_fixture_1",
       currency: "TRY",
@@ -48,6 +55,27 @@ describe("provider transport payload builder", () => {
     expect(buildProviderTransportPayload(readFixture("netgsm", "sms_send_minimal.json")).body).toEqual({
       recipient_phone: "+905550000000",
       message: "Fixture SMS",
+    });
+  });
+
+  it("builds direct messaging send bodies from frozen fixtures", () => {
+    expect(buildProviderTransportPayload(readFixture("whatsapp", "message_send_minimal.json")).body).toEqual({
+      conversation_public_id: "conv_whatsapp_demo",
+      recipient_id: "905551112233",
+      message: "Merhaba, talebiniz alindi.",
+      idempotency_key: "msg_whatsapp_demo_001",
+    });
+    expect(buildProviderTransportPayload(readFixture("instagram", "message_send_minimal.json")).body).toEqual({
+      conversation_public_id: "conv_instagram_demo",
+      recipient_id: "17841400000000000",
+      message: "Merhaba, mesajiniz alindi.",
+      idempotency_key: "msg_instagram_demo_001",
+    });
+    expect(buildProviderTransportPayload(readFixture("messenger", "message_send_minimal.json")).body).toEqual({
+      conversation_public_id: "conv_messenger_demo",
+      recipient_id: "psid_messenger_demo",
+      message: "Merhaba, mesajinizi aldik.",
+      idempotency_key: "msg_messenger_demo_001",
     });
   });
 

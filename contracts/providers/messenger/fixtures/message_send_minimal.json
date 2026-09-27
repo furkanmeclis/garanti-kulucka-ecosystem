@@ -1,0 +1,19 @@
+{
+  "request_id": "req_messenger_message_send_minimal",
+  "provider": "messenger",
+  "operation": "message.send",
+  "direction": "outbound",
+  "channel": "messenger",
+  "account_public_id": "iac_messenger_demo",
+  "occurred_at": "2026-01-01T00:00:00.000Z",
+  "payload": {
+    "conversation_public_id": "conv_messenger_demo",
+    "recipient_id": "psid_messenger_demo",
+    "message": "Merhaba, mesajinizi aldik.",
+    "idempotency_key": "msg_messenger_demo_001"
+  },
+  "legacy_contract": {
+    "source": "fixture-only direct Messenger outbound message contract",
+    "fixture_name": "message_send_minimal"
+  }
+}

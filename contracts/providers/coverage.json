@@ -18,8 +18,8 @@
       "provider": "surat",
       "operation": "shipment.create",
       "direction": "outbound",
-      "status": "pending_legacy_fixture",
-      "reason": "Awaiting working legacy Surat shipment create request/response sample."
+      "status": "covered",
+      "fixture_file": "surat/fixtures/shipment_create_minimal.json"
     },
     {
       "provider": "surat",
@@ -53,8 +53,8 @@
       "provider": "whatsapp",
       "operation": "message.send",
       "direction": "outbound",
-      "status": "pending_legacy_fixture",
-      "reason": "Awaiting working legacy WhatsApp outbound message payload sample."
+      "status": "covered",
+      "fixture_file": "whatsapp/fixtures/message_send_minimal.json"
     },
     {
       "provider": "instagram",
@@ -67,8 +67,8 @@
       "provider": "instagram",
       "operation": "message.send",
       "direction": "outbound",
-      "status": "pending_legacy_fixture",
-      "reason": "Awaiting working legacy Instagram outbound message payload sample."
+      "status": "covered",
+      "fixture_file": "instagram/fixtures/message_send_minimal.json"
     },
     {
       "provider": "messenger",
@@ -81,8 +81,8 @@
       "provider": "messenger",
       "operation": "message.send",
       "direction": "outbound",
-      "status": "pending_legacy_fixture",
-      "reason": "Awaiting working legacy Messenger outbound message payload sample."
+      "status": "covered",
+      "fixture_file": "messenger/fixtures/message_send_minimal.json"
     },
     {
       "provider": "netgsm",

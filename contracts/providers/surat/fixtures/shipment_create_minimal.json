@@ -1,0 +1,17 @@
+{
+  "request_id": "req_surat_fixture_2",
+  "provider": "surat",
+  "operation": "shipment.create",
+  "direction": "outbound",
+  "channel": "cargo",
+  "occurred_at": "2026-09-27T00:00:00.000Z",
+  "payload": {
+    "order_public_id": "ord_fixture_2",
+    "recipient_name": "Fixture Customer",
+    "recipient_phone": "+905550000001"
+  },
+  "legacy_contract": {
+    "source": "legacy-shipment-service",
+    "fixture_name": "surat_shipment_create_minimal"
+  }
+}

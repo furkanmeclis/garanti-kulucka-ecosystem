@@ -1,0 +1,19 @@
+{
+  "request_id": "req_whatsapp_message_send_minimal",
+  "provider": "whatsapp",
+  "operation": "message.send",
+  "direction": "outbound",
+  "channel": "whatsapp",
+  "account_public_id": "iac_whatsapp_demo",
+  "occurred_at": "2026-01-01T00:00:00.000Z",
+  "payload": {
+    "conversation_public_id": "conv_whatsapp_demo",
+    "recipient_id": "905551112233",
+    "message": "Merhaba, talebiniz alindi.",
+    "idempotency_key": "msg_whatsapp_demo_001"
+  },
+  "legacy_contract": {
+    "source": "fixture-only direct WhatsApp outbound message contract",
+    "fixture_name": "message_send_minimal"
+  }
+}
