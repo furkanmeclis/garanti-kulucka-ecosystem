@@ -7,7 +7,12 @@ This roadmap is the execution source of truth for the Garanti Kulucka ecosystem 
 - Phase 0 planning and contract inventory documents are in place.
 - Phase 1 foundation is implemented with API, worker, migrator, Dockerfiles, compose, and CI/tag automation.
 - Phase 2 canonical PostgreSQL schema is implemented with role/permission/provider seed data.
-- Phase 3 has started: backend-owned auth, JWT websocket authorization, admin settings persistence, integration account/token APIs, domain read/write API boundaries, audit logging, and BullMQ queue publishing boundaries are in place.
+- Phase 3 backend-owned auth and admin-managed persistence foundations are implemented: sessions, permissions, encrypted settings/tokens, admin integration APIs, webphone config, file metadata, and audit boundaries.
+- Phase 4 has backend/frontend typed client boundaries for auth, domain data, files, realtime, webphone, settings, and integrations. Direct Supabase usage is blocked by repository guards.
+- Phase 5 provider contracts are fixture-only and worker-routed. Live provider calls remain disabled until legacy payload fixtures are fully replayed.
+- Phase 6 realtime and webphone boundaries are implemented with Socket.IO event contracts, Redis fanout support, and SIP/WebRTC kept outside API media routing.
+- Phase 7 migrator foundation is implemented with manual commands, source/target ports, batch planning, legacy ID map helpers, and synthetic verification reports.
+- Current CI/tag state: latest passing checkpoint is `v0.1.9`.
 
 ## Non-Negotiables
 
@@ -131,6 +136,7 @@ Verification:
 - E2E auth test covers login, refresh, logout, revoked token, disabled user, and role-denied cases.
 - Restart test proves Instagram/Messenger/WhatsApp accounts survive API and worker restarts.
 - Audit log test proves admin setting changes are recorded.
+- Current foundation tests cover token claims, admin bootstrap, secret encryption, auth serialization, settings masking, and integration token masking.
 
 Anti-pattern guards:
 
@@ -155,6 +161,7 @@ Verification:
 - Grep check finds no frontend `supabase.from`, `supabase.auth`, or Supabase channel usage outside temporary migration shims.
 - Playwright e2e tests cover message inbox, order flow, shipment flow, admin settings, and webphone config.
 - API contract tests ensure frontend receives the same response shapes it expects.
+- Current typed client tests cover auth, admin settings, integrations, domain data, files, realtime, and webphone route mapping.
 
 Anti-pattern guards:
 
@@ -179,6 +186,7 @@ Verification:
 - Provider contract tests compare generated payloads to frozen fixtures.
 - Worker retry tests cover timeout, 429, 5xx, malformed response, and provider success after retry.
 - No CI test requires live credentials.
+- Current foundation tests cover provider envelopes, fixture-only handlers, provider catalog, webhook ingestion, payload hashing, queue envelope creation, and secret-free responses.
 
 Anti-pattern guards:
 
@@ -202,6 +210,7 @@ Verification:
 
 - Websocket tests cover auth reject, reconnect, room membership, event fanout, and stale session disconnect.
 - Webphone tests cover config retrieval, permission gating, and call-log persistence without real SIP calls.
+- Current foundation tests cover realtime event payload validation, room helpers, publisher fanout boundaries, frontend realtime client commands, and webphone config serialization.
 
 Anti-pattern guards:
 
@@ -227,6 +236,7 @@ Verification:
 - Migration tests run against synthetic legacy fixtures.
 - Verification checks row counts, referential integrity, orphan records, duplicate customers, message ordering, order totals, and shipment references.
 - Migrator can be re-run without duplicating data.
+- Current foundation tests cover batch planning, dry-run reports, verification report totals, and idempotent legacy ID map upserts.
 
 Anti-pattern guards:
 

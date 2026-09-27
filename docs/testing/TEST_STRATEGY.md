@@ -50,16 +50,21 @@ Playwright scenarios should run against local compose services:
 
 ## CI Rule
 
-`npm run check` is the minimum gate. As the repo matures, it must expand to:
+`npm run check` is the minimum gate and now runs:
 
 ```text
+npm run verify:structure
 npm run lint
 npm run typecheck
 npm run test:unit
-npm run test:contract
+npm run test:contracts
 npm run test:integration
+npm run test:migrator
+npm run test:worker
+npm run test:ws
 npm run test:e2e
 npm run build
+npm run docker:build
 ```
 
 Only a passing `main` commit can receive an automatic tag.
