@@ -11,6 +11,7 @@
     "lint": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@garanti-kulucka/shared": "file:../../packages/shared"
+    "@garanti-kulucka/shared": "file:../../packages/shared",
+    "socket.io-client": "^4.8.4"
   }
 }
