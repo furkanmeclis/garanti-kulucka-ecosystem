@@ -84,6 +84,30 @@ describe("provider transport payload builder", () => {
       object: "instagram",
       entry: [],
     });
+    expect(buildProviderTransportPayload(readFixture("whatsapp", "message_webhook_minimal.json")).body).toMatchObject({
+      object: "whatsapp_business_account",
+      entry: [
+        {
+          id: "waba_fixture_1",
+        },
+      ],
+    });
+    expect(buildProviderTransportPayload(readFixture("instagram", "message_webhook_minimal.json")).body).toMatchObject({
+      object: "instagram",
+      entry: [
+        {
+          id: "ig_fixture_account_1",
+        },
+      ],
+    });
+    expect(buildProviderTransportPayload(readFixture("messenger", "message_webhook_minimal.json")).body).toMatchObject({
+      object: "page",
+      entry: [
+        {
+          id: "page_fixture_1",
+        },
+      ],
+    });
     expect(buildProviderTransportPayload(readFixture("vapi", "call_webhook_minimal.json")).body).toEqual({
       type: "call-ended",
       call: {

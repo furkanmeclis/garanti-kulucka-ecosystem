@@ -1,0 +1,35 @@
+{
+  "request_id": "req_messenger_message_webhook_minimal",
+  "provider": "messenger",
+  "operation": "message.webhook",
+  "direction": "inbound",
+  "channel": "messenger",
+  "account_public_id": "iac_messenger_demo",
+  "occurred_at": "2026-01-01T00:00:00.000Z",
+  "payload": {
+    "object": "page",
+    "entry": [
+      {
+        "id": "page_fixture_1",
+        "messaging": [
+          {
+            "sender": {
+              "id": "psid_messenger_demo"
+            },
+            "recipient": {
+              "id": "page_fixture_1"
+            },
+            "message": {
+              "mid": "mid_messenger_fixture_1",
+              "text": "Merhaba"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "legacy_contract": {
+    "source": "fixture-only direct Messenger inbound webhook contract",
+    "fixture_name": "message_webhook_minimal"
+  }
+}

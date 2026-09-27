@@ -46,8 +46,8 @@
       "provider": "whatsapp",
       "operation": "message.webhook",
       "direction": "inbound",
-      "status": "pending_legacy_fixture",
-      "reason": "Direct WhatsApp webhook fixture must be extracted separately from Meta aggregate fixture."
+      "status": "covered",
+      "fixture_file": "whatsapp/fixtures/message_webhook_minimal.json"
     },
     {
       "provider": "whatsapp",
@@ -60,8 +60,8 @@
       "provider": "instagram",
       "operation": "message.webhook",
       "direction": "inbound",
-      "status": "pending_legacy_fixture",
-      "reason": "Direct Instagram webhook fixture must be extracted separately from Meta aggregate fixture."
+      "status": "covered",
+      "fixture_file": "instagram/fixtures/message_webhook_minimal.json"
     },
     {
       "provider": "instagram",
@@ -74,8 +74,8 @@
       "provider": "messenger",
       "operation": "message.webhook",
       "direction": "inbound",
-      "status": "pending_legacy_fixture",
-      "reason": "Direct Messenger webhook fixture must be extracted separately from Meta aggregate fixture."
+      "status": "covered",
+      "fixture_file": "messenger/fixtures/message_webhook_minimal.json"
     },
     {
       "provider": "messenger",
