@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 describe("e2e gate", () => {
@@ -37,5 +38,12 @@ describe("e2e gate", () => {
     ];
 
     expect(forbiddenLiveSecrets.every((name) => process.env[name] === undefined)).toBe(true);
+  });
+
+  it("keeps the migrator container manual-only in compose", () => {
+    const compose = readFileSync("compose.yaml", "utf8");
+
+    expect(compose).toMatch(/migrator:\n(?:.*\n)*?\s+profiles:\n\s+- tools/);
+    expect(compose).not.toMatch(/api:\n(?:.*\n)*?garanti-migrator/);
   });
 });
