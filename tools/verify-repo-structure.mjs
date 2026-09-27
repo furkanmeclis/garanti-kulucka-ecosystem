@@ -103,6 +103,10 @@ for (const file of files) {
     failures.push(`API must not invoke migrator commands: ${rel}`);
   }
 
+  if (rel.startsWith("apps/web/src") && /supabase\.(from|auth|channel)|createClient\([^)]*supabase/i.test(text)) {
+    failures.push(`Frontend must use backend API clients instead of direct Supabase calls: ${rel}`);
+  }
+
   if (rel.includes("migrations") || rel.includes("schema")) {
     for (const forbidden of forbiddenNewSchemaNames) {
       if (text.includes(forbidden)) {

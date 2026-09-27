@@ -1,15 +1,22 @@
 import type { HealthStatus } from "@garanti-kulucka/shared";
+import { createAdminClient } from "./api/admin-client.js";
+import { createAuthClient } from "./api/auth-client.js";
+import { createBackendHttpClient, type BackendHttpClientOptions } from "./api/http-client.js";
 
 export type BackendApiClient = {
   health(): Promise<HealthStatus>;
+  auth: ReturnType<typeof createAuthClient>;
+  admin: ReturnType<typeof createAdminClient>;
 };
 
-export function createApiClient(baseUrl: string): BackendApiClient {
+export function createApiClient(baseUrl: string, options: Omit<BackendHttpClientOptions, "baseUrl"> = {}): BackendApiClient {
+  const http = createBackendHttpClient({ baseUrl, ...options });
+
   return {
     async health() {
-      const response = await fetch(new URL("/health/ready", baseUrl));
-      if (!response.ok) throw new Error("Backend health check failed");
-      return response.json() as Promise<HealthStatus>;
+      return http.request<HealthStatus>("/health/ready");
     },
+    auth: createAuthClient(http),
+    admin: createAdminClient(http),
   };
 }
