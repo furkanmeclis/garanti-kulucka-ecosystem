@@ -12,7 +12,7 @@ This roadmap is the execution source of truth for the Garanti Kulucka ecosystem 
 - Phase 5 provider contracts are fixture-only and worker-routed. Worker provider attempt persistence is wired to PostgreSQL when `DATABASE_URL` is configured, generated transport payloads are checked against frozen provider fixtures, and provider attempts are exposed through secret-redacted admin APIs. Live provider calls remain disabled until legacy payload fixtures are fully replayed.
 - Phase 6 realtime and webphone boundaries are implemented with Socket.IO event contracts, Redis fanout support, and SIP/WebRTC kept outside API media routing.
 - Phase 7 migrator foundation is implemented with manual commands, PostgreSQL legacy source reader, canonical target writer, source/target ports, batch planning, batch apply ports, legacy ID map helpers, synthetic verification reports, and optional secret-free command report files.
-- Current CI/tag state: latest passing checkpoint is `v0.1.32`.
+- Current CI/tag state: latest passing checkpoint is `v0.1.33`.
 
 ## Non-Negotiables
 
