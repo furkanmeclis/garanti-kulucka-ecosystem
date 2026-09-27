@@ -11,8 +11,8 @@ This roadmap is the execution source of truth for the Garanti Kulucka ecosystem 
 - Phase 4 has backend/frontend typed client boundaries for auth, domain data, files, realtime, webphone, settings, integrations, and integration account snapshots. Direct Supabase usage is blocked by repository guards.
 - Phase 5 provider contracts are fixture-only and worker-routed. Worker provider attempt persistence is wired to PostgreSQL when `DATABASE_URL` is configured. Live provider calls remain disabled until legacy payload fixtures are fully replayed.
 - Phase 6 realtime and webphone boundaries are implemented with Socket.IO event contracts, Redis fanout support, and SIP/WebRTC kept outside API media routing.
-- Phase 7 migrator foundation is implemented with manual commands, source/target ports, batch planning, batch apply ports, legacy ID map helpers, and synthetic verification reports.
-- Current CI/tag state: latest passing checkpoint is `v0.1.16`.
+- Phase 7 migrator foundation is implemented with manual commands, PostgreSQL legacy source reader, canonical target writer, source/target ports, batch planning, batch apply ports, legacy ID map helpers, and synthetic verification reports.
+- Current CI/tag state: latest passing checkpoint is `v0.1.19`.
 
 ## Non-Negotiables
 
@@ -236,7 +236,7 @@ Verification:
 - Migration tests run against synthetic legacy fixtures.
 - Verification checks row counts, referential integrity, orphan records, duplicate customers, message ordering, order totals, and shipment references.
 - Migrator can be re-run without duplicating data.
-- Current foundation tests cover batch planning, dry-run reports, verification report totals, batch apply ports, and idempotent legacy ID map upserts.
+- Current foundation tests cover batch planning, dry-run reports, verification report totals, PostgreSQL legacy source reads, canonical target writes, batch apply ports, and idempotent legacy ID map upserts.
 
 Anti-pattern guards:
 
