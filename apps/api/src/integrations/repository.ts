@@ -130,7 +130,7 @@ export class IntegrationsRepository {
       const existing = input.externalAccountId
         ? await transaction
             .selectFrom("integration_accounts")
-            .select("id")
+            .selectAll()
             .where("provider_id", "=", provider.id)
             .where("external_account_id", "=", input.externalAccountId)
             .executeTakeFirst()
@@ -168,12 +168,8 @@ export class IntegrationsRepository {
           action: "settings_change",
           entity_type: "integration_accounts",
           entity_id: account.public_id,
-          old_value: null,
-          new_value: {
-            provider_key: provider.key,
-            display_name: account.display_name,
-            external_account_id: account.external_account_id,
-          },
+          old_value: existing ? auditIntegrationAccountValue(existing, provider.key) : null,
+          new_value: auditIntegrationAccountValue(account, provider.key),
           ip_address: input.ipAddress,
           user_agent: input.userAgent,
         })
@@ -199,6 +195,13 @@ export class IntegrationsRepository {
         throw new Error(`Unknown integration account: ${input.accountPublicId}`);
       }
 
+      const previous = await transaction
+        .selectFrom("integration_settings")
+        .selectAll()
+        .where("provider_id", "=", account.provider_id)
+        .where("account_id", "=", account.id)
+        .where("key", "=", input.key)
+        .executeTakeFirst();
       const storedValue = input.isSecret ? this.encryptor.encryptJson(input.value) : input.value;
 
       const setting = await transaction
@@ -228,12 +231,8 @@ export class IntegrationsRepository {
           action: "settings_change",
           entity_type: "integration_settings",
           entity_id: setting.public_id,
-          old_value: null,
-          new_value: {
-            key: input.key,
-            value: input.isSecret ? "[redacted]" : storedValue,
-            is_secret: input.isSecret,
-          },
+          old_value: previous ? auditIntegrationSettingValue(previous) : null,
+          new_value: auditIntegrationSettingValue(setting),
           ip_address: input.ipAddress,
           user_agent: input.userAgent,
         })
@@ -259,7 +258,7 @@ export class IntegrationsRepository {
 
       const existing = await transaction
         .selectFrom("integration_tokens")
-        .select("id")
+        .selectAll()
         .where("account_id", "=", account.id)
         .where("token_type", "=", input.tokenType)
         .executeTakeFirst();
@@ -296,12 +295,8 @@ export class IntegrationsRepository {
           action: "settings_change",
           entity_type: "integration_tokens",
           entity_id: token.public_id,
-          old_value: null,
-          new_value: {
-            token_type: token.token_type,
-            value: "[redacted]",
-            expires_at: token.expires_at,
-          },
+          old_value: existing ? auditIntegrationTokenValue(existing) : null,
+          new_value: auditIntegrationTokenValue(token),
           ip_address: input.ipAddress,
           user_agent: input.userAgent,
         })
@@ -359,5 +354,42 @@ export function serializeAccountSnapshot(snapshot: IntegrationAccountSnapshot) {
     account: serializeAccount(snapshot.account),
     settings: snapshot.settings.map(serializeIntegrationSetting),
     tokens: snapshot.tokens.map(serializeIntegrationToken),
+  };
+}
+
+export function auditIntegrationAccountValue(
+  account: Pick<
+    IntegrationAccountRecord | Selectable<IntegrationAccountsTable>,
+    "display_name" | "external_account_id" | "metadata" | "status"
+  >,
+  providerKey: string,
+) {
+  return {
+    provider_key: providerKey,
+    display_name: account.display_name,
+    external_account_id: account.external_account_id,
+    status: account.status,
+    metadata: account.metadata,
+  };
+}
+
+export function auditIntegrationSettingValue(
+  setting: Pick<IntegrationSettingRecord, "key" | "value" | "is_secret">,
+) {
+  return {
+    key: setting.key,
+    value: setting.is_secret ? "[redacted]" : setting.value,
+    is_secret: setting.is_secret,
+  };
+}
+
+export function auditIntegrationTokenValue(
+  token: Pick<IntegrationTokenRecord, "token_type" | "expires_at" | "last_refreshed_at">,
+) {
+  return {
+    token_type: token.token_type,
+    value: "[redacted]",
+    expires_at: token.expires_at,
+    last_refreshed_at: token.last_refreshed_at,
   };
 }
