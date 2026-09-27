@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { AppBindings } from "./types.js";
 import { authenticate, requireDatabase } from "./middleware.js";
 import { createRefreshToken, verifyPassword } from "../auth/crypto.js";
-import { AuthRepository } from "../auth/repository.js";
+import { AuthRepository, serializeAuthUser } from "../auth/repository.js";
 import { signAccessToken } from "../auth/tokens.js";
 
 const loginRequestSchema = z.object({
@@ -79,13 +79,7 @@ export function createAuthRoutes() {
       refresh_token: refreshToken,
       token_type: "Bearer",
       expires_in: context.get("config").accessTokenTtlSeconds,
-      user: {
-        public_id: user.public_id,
-        email: user.email,
-        first_name: user.first_name,
-        last_name: user.last_name,
-        role: user.role_name,
-      },
+      user: serializeAuthUser(user, await repository.listUserPermissions(user.id)),
     });
   });
 
@@ -146,19 +140,13 @@ export function createAuthRoutes() {
       return context.json({ error: { code: "unauthorized", message: "Session is not available" } }, 401);
     }
 
-    const user = await new AuthRepository(db).findUserByPublicId(auth.user_public_id);
+    const repository = new AuthRepository(db);
+    const user = await repository.findUserByPublicId(auth.user_public_id);
     if (!user) {
       return context.json({ error: { code: "unauthorized", message: "Session is not available" } }, 401);
     }
 
-    return context.json({
-      public_id: user.public_id,
-      email: user.email,
-      first_name: user.first_name,
-      last_name: user.last_name,
-      role: user.role_name,
-      sip_username: user.sip_username,
-    });
+    return context.json(serializeAuthUser(user, await repository.listUserPermissions(user.id)));
   });
 
   return routes;

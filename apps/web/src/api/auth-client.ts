@@ -11,6 +11,8 @@ export interface LoginResponse {
     first_name: string;
     last_name: string;
     role: string;
+    permissions: string[];
+    sip_username?: string | null;
   };
 }
 
@@ -37,7 +39,6 @@ export function createAuthClient(http: BackendHttpClient) {
       http.request<{ status: "ok" }>("/auth/logout", {
         method: "POST",
       }),
-    me: () =>
-      http.request<LoginResponse["user"] & { sip_username: string | null }>("/auth/me"),
+    me: () => http.request<LoginResponse["user"]>("/auth/me"),
   };
 }

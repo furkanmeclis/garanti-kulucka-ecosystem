@@ -56,6 +56,19 @@ export class AuthRepository {
     return session ?? null;
   }
 
+  async listUserPermissions(userId: number): Promise<string[]> {
+    const rows = await this.db
+      .selectFrom("users")
+      .innerJoin("role_permissions", "role_permissions.role_id", "users.role_id")
+      .innerJoin("permissions", "permissions.id", "role_permissions.permission_id")
+      .select("permissions.key")
+      .where("users.id", "=", userId)
+      .orderBy("permissions.key", "asc")
+      .execute();
+
+    return rows.map((row) => row.key);
+  }
+
   async createSession(input: CreateSessionInput): Promise<AuthSessionRecord> {
     return this.db.transaction().execute(async (transaction) => {
       const session = await transaction
@@ -151,4 +164,16 @@ export class AuthRepository {
 
 export function isAdminRole(role: Selectable<RolesTable>["name"] | string): boolean {
   return role === "admin" || role === "owner";
+}
+
+export function serializeAuthUser(user: AuthUserRecord, permissions: string[]) {
+  return {
+    public_id: user.public_id,
+    email: user.email,
+    first_name: user.first_name,
+    last_name: user.last_name,
+    role: user.role_name,
+    permissions,
+    sip_username: user.sip_username,
+  };
 }
