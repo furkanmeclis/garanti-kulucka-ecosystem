@@ -1,23 +1,54 @@
 import { describe, expect, it } from "vitest";
+import { applyMigrationBatch } from "../src/apply.js";
 import { createDryRunReport } from "../src/reports.js";
 import { createMigrationPlan } from "../src/plan.js";
 import { legacyIdMapKey, upsertLegacyIdMap } from "../src/id-map.js";
-import type { LegacyIdMapEntry, LegacyIdMapKey, LegacyIdMapWrite, LegacySource, MigrationTarget } from "../src/types.js";
+import type {
+  CanonicalRecord,
+  CanonicalWriteResult,
+  LegacyIdMapEntry,
+  LegacyIdMapKey,
+  LegacyIdMapWrite,
+  LegacyRecord,
+  LegacySource,
+  MigrationEntity,
+  MigrationTarget,
+} from "../src/types.js";
 
 class FixtureSource implements LegacySource {
-  constructor(private readonly counts: Record<string, number>) {}
+  constructor(
+    private readonly counts: Record<string, number>,
+    private readonly records: Partial<Record<MigrationEntity, LegacyRecord[]>> = {},
+  ) {}
 
   async count(entity: keyof FixtureSource["counts"]): Promise<number> {
     return this.counts[entity] ?? 0;
   }
 
-  async readBatch(): Promise<[]> {
-    return [];
+  async readBatch(entity: MigrationEntity, options: { limit: number; afterSourceId?: string }): Promise<LegacyRecord[]> {
+    const offset = options.afterSourceId ? Number.parseInt(options.afterSourceId, 10) : 0;
+    return (this.records[entity] ?? []).slice(offset, offset + options.limit);
   }
 }
 
 class MemoryTarget implements MigrationTarget {
   private readonly entries = new Map<string, LegacyIdMapEntry>();
+  private readonly records = new Map<string, CanonicalRecord>();
+
+  get writtenRecords(): CanonicalRecord[] {
+    return [...this.records.values()];
+  }
+
+  async writeCanonicalRecord(input: CanonicalRecord): Promise<CanonicalWriteResult> {
+    const key = `${input.targetTable}:${input.targetId}`;
+    const existing = this.records.get(key);
+    this.records.set(key, input);
+
+    return {
+      status: existing ? (existing.checksum === input.checksum ? "unchanged" : "updated") : "created",
+      record: input,
+    };
+  }
 
   async findLegacyIdMap(input: LegacyIdMapKey): Promise<LegacyIdMapEntry | null> {
     return this.entries.get(legacyIdMapKey(input)) ?? null;
@@ -107,5 +138,56 @@ describe("migration foundation", () => {
       status: "updated",
       entry: { checksum: "sha256:changed" },
     });
+  });
+
+  it("applies batches through source and target ports idempotently", async () => {
+    const source = new FixtureSource(
+      { customers: 2 },
+      {
+        customers: [
+          {
+            sourceSystem: "legacy_supabase",
+            sourceTable: "customers",
+            sourceId: "1",
+            payload: { full_name: "Ada Lovelace" },
+            checksum: "sha256:ada",
+          },
+          {
+            sourceSystem: "legacy_supabase",
+            sourceTable: "customers",
+            sourceId: "2",
+            payload: { full_name: "Grace Hopper" },
+            checksum: "sha256:grace",
+          },
+        ],
+      },
+    );
+    const target = new MemoryTarget();
+    const batch = {
+      entity: "customers",
+      batchNumber: 1,
+      limit: 10,
+      offset: 0,
+      expectedRows: 2,
+    } as const;
+
+    await expect(applyMigrationBatch({ source, target, batch })).resolves.toMatchObject({
+      readRows: 2,
+      writtenRows: 2,
+      skippedRows: 0,
+      idMapCreated: 2,
+      idMapUpdated: 0,
+      idMapUnchanged: 0,
+    });
+
+    await expect(applyMigrationBatch({ source, target, batch })).resolves.toMatchObject({
+      readRows: 2,
+      writtenRows: 2,
+      skippedRows: 0,
+      idMapCreated: 0,
+      idMapUpdated: 0,
+      idMapUnchanged: 2,
+    });
+    expect(target.writtenRecords).toHaveLength(2);
   });
 });

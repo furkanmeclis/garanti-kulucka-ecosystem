@@ -1,3 +1,4 @@
+export * from "./apply.js";
 export * from "./commands.js";
 export * from "./id-map.js";
 export * from "./plan.js";

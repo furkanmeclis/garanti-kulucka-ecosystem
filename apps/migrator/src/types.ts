@@ -57,8 +57,16 @@ export interface BatchReadOptions {
 }
 
 export interface MigrationTarget {
+  writeCanonicalRecord(input: CanonicalRecord): Promise<CanonicalWriteResult>;
   findLegacyIdMap(input: LegacyIdMapKey): Promise<LegacyIdMapEntry | null>;
   upsertLegacyIdMap(input: LegacyIdMapWrite): Promise<LegacyIdMapEntry>;
+}
+
+export type CanonicalWriteStatus = "created" | "updated" | "unchanged";
+
+export interface CanonicalWriteResult {
+  readonly status: CanonicalWriteStatus;
+  readonly record: CanonicalRecord;
 }
 
 export interface LegacyIdMapKey {
@@ -79,6 +87,18 @@ export interface MigrationBatch {
   readonly limit: number;
   readonly offset: number;
   readonly expectedRows: number;
+}
+
+export interface MigrationBatchApplyResult {
+  readonly entity: MigrationEntity;
+  readonly batchNumber: number;
+  readonly readRows: number;
+  readonly writtenRows: number;
+  readonly skippedRows: number;
+  readonly idMapCreated: number;
+  readonly idMapUpdated: number;
+  readonly idMapUnchanged: number;
+  readonly warnings: MigrationWarning[];
 }
 
 export interface MigrationPlan {
