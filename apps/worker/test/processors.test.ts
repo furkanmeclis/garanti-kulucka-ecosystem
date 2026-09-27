@@ -4,7 +4,8 @@ import {
   workerQueueNames,
   type WorkerLifecycleEvent,
 } from "../src/processors.js";
-import type { QueueName } from "@garanti-kulucka/shared";
+import type { ProviderAttempt, QueueName } from "@garanti-kulucka/shared";
+import type { ProviderAttemptRepository } from "../src/providers/attempts.js";
 
 const now = new Date().toISOString();
 
@@ -118,6 +119,83 @@ describe("worker processor registry", () => {
     await expect(
       registry.dispatch("provider-webhooks", providerDeliveryJob()),
     ).rejects.toThrow("Job queue mismatch");
+  });
+
+  it("persists provider failure attempts when handler validation fails", async () => {
+    const persisted: ProviderAttempt[] = [];
+    const events: WorkerLifecycleEvent[] = [];
+    const providerAttemptRepository: ProviderAttemptRepository = {
+      persist: async (attempt) => {
+        persisted.push(attempt);
+        return {
+          id: persisted.length,
+          public_id: `pat_${persisted.length}`,
+          provider_id: 1,
+          account_id: null,
+          request_id: attempt.request_id,
+          operation: attempt.operation,
+          direction: attempt.direction,
+          status: attempt.status,
+          status_code: attempt.status_code,
+          duration_ms: attempt.duration_ms,
+          retry_decision: attempt.retry_decision,
+          next_retry_at: attempt.next_retry_at,
+          idempotency_key: attempt.idempotency_key,
+          request_metadata: attempt.request_metadata,
+          response_metadata: attempt.response_metadata,
+          error_code: attempt.error?.code ?? null,
+          error_message: attempt.error?.message ?? null,
+          started_at: attempt.started_at,
+          created_at: new Date("2026-01-01T00:00:00.000Z"),
+          updated_at: new Date("2026-01-01T00:00:00.000Z"),
+        };
+      },
+    };
+    const registry = createWorkerProcessorRegistry({
+      lifecycleRecorder: (event) => events.push(event),
+      providerAttemptRepository,
+    });
+    const job = providerDeliveryJob();
+
+    await expect(
+      registry.dispatch("provider-delivery", {
+        ...job,
+        attemptsMade: 0,
+        opts: {
+          attempts: 5,
+        },
+        data: {
+          ...job.data,
+          payload: {
+            envelope: {
+              ...(job.data.payload as { envelope: Record<string, unknown> }).envelope,
+              channel: "sms",
+            },
+          },
+        },
+      }),
+    ).rejects.toThrow("Provider channel is not registered");
+
+    expect(events.map((event) => event.event)).toEqual(["started", "failed"]);
+    expect(persisted).toHaveLength(1);
+    expect(persisted[0]).toMatchObject({
+      provider: "ptt",
+      operation: "shipment.create",
+      status: "terminal_failure",
+      retry_decision: "dead_letter",
+      status_code: null,
+      error: {
+        code: "worker_processor_error",
+      },
+      request_metadata: {
+        retry: {
+          reason: "terminal_error",
+          attempts_remaining: 4,
+          retry_delay_ms: null,
+          error_retryable: false,
+        },
+      },
+    });
   });
 
   it("fails unknown runtime queue names", async () => {

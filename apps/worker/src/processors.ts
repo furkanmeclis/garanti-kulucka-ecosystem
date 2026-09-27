@@ -1,7 +1,16 @@
 import type { Job } from "bullmq";
-import type { JobEnvelope, QueueName } from "@garanti-kulucka/shared";
+import {
+  type JobEnvelope,
+  type ProviderRequestEnvelope,
+  type QueueName,
+  providerRequestEnvelopeSchema,
+} from "@garanti-kulucka/shared";
 import { validateJobEnvelope } from "./queues.js";
-import { handleProviderDeliveryJob, handleProviderWebhookJob } from "./providers/handlers.js";
+import {
+  createProviderFailureAttempt,
+  handleProviderDeliveryJob,
+  handleProviderWebhookJob,
+} from "./providers/handlers.js";
 import type { ProviderAttemptRepository } from "./providers/attempts.js";
 
 export type WorkerLifecycleEventName = "started" | "completed" | "failed";
@@ -20,7 +29,8 @@ export type WorkerLifecycleRecorder = (
 ) => Promise<void> | void;
 
 export type WorkerProcessorResult = unknown;
-export type WorkerJob = Pick<Job<JobEnvelope>, "id" | "name" | "data">;
+export type WorkerJob = Pick<Job<JobEnvelope>, "id" | "name" | "data"> &
+  Partial<Pick<Job<JobEnvelope>, "attemptsMade" | "opts">>;
 export type QueueProcessor = (job: WorkerJob) => Promise<WorkerProcessorResult>;
 
 export interface WorkerProcessorRegistry {
@@ -76,13 +86,74 @@ function assertProviderJobName(envelope: JobEnvelope): void {
   }
 }
 
+function providerErrorCode(error: unknown): string {
+  if (error && typeof error === "object" && "code" in error) {
+    const code = (error as { code?: unknown }).code;
+    if (typeof code === "string" && code.trim().length > 0) {
+      return code;
+    }
+  }
+
+  return "worker_processor_error";
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "Unknown worker error";
+}
+
+function providerFailureInputFromJob(job: WorkerJob): {
+  attempt_number: number;
+  max_attempts: number;
+} {
+  return {
+    attempt_number: Math.max(1, (job.attemptsMade ?? 0) + 1),
+    max_attempts: Math.max(1, Number(job.opts?.attempts ?? 1)),
+  };
+}
+
+async function persistProviderFailureAttempt(
+  providerAttemptRepository: ProviderAttemptRepository | undefined,
+  envelope: ProviderRequestEnvelope,
+  jobEnvelope: JobEnvelope,
+  job: WorkerJob,
+  error: unknown,
+): Promise<void> {
+  if (!providerAttemptRepository) {
+    return;
+  }
+
+  await providerAttemptRepository.persist(
+    createProviderFailureAttempt(envelope, jobEnvelope, {
+      ...providerFailureInputFromJob(job),
+      status_code: null,
+      error_code: providerErrorCode(error),
+      error_message: errorMessage(error),
+    }),
+  );
+}
+
 function createProviderWebhookProcessor(
   providerAttemptRepository?: ProviderAttemptRepository,
 ): QueueProcessor {
   return async (job) => {
     const envelope = assertJobMatchesQueue("provider-webhooks", job);
     assertProviderJobName(envelope);
-    const result = handleProviderWebhookJob(envelope);
+    const requestEnvelope = providerRequestEnvelopeSchema.parse(
+      (envelope.payload as { envelope?: unknown }).envelope,
+    );
+    let result;
+    try {
+      result = handleProviderWebhookJob(envelope);
+    } catch (error) {
+      await persistProviderFailureAttempt(
+        providerAttemptRepository,
+        requestEnvelope,
+        envelope,
+        job,
+        error,
+      );
+      throw error;
+    }
     await providerAttemptRepository?.persist(result.attempt);
     return result;
   };
@@ -94,7 +165,22 @@ function createProviderDeliveryProcessor(
   return async (job) => {
     const envelope = assertJobMatchesQueue("provider-delivery", job);
     assertProviderJobName(envelope);
-    const result = handleProviderDeliveryJob(envelope);
+    const requestEnvelope = providerRequestEnvelopeSchema.parse(
+      (envelope.payload as { envelope?: unknown }).envelope,
+    );
+    let result;
+    try {
+      result = handleProviderDeliveryJob(envelope);
+    } catch (error) {
+      await persistProviderFailureAttempt(
+        providerAttemptRepository,
+        requestEnvelope,
+        envelope,
+        job,
+        error,
+      );
+      throw error;
+    }
     await providerAttemptRepository?.persist(result.attempt);
     return result;
   };
@@ -159,7 +245,7 @@ export function createWorkerProcessorRegistry(
           ...lifecycleBase,
           event: "failed",
           occurred_at: new Date().toISOString(),
-          error_message: error instanceof Error ? error.message : "Unknown worker error",
+          error_message: errorMessage(error),
         });
 
         throw error;
