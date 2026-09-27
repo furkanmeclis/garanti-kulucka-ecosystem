@@ -63,5 +63,10 @@ Required test:
 - `GET /auth/me`
 - `GET /admin/settings?scope=global`
 - `PUT /admin/settings/:key`
+- `GET /admin/integrations/providers`
+- `GET /admin/integrations/accounts`
+- `POST /admin/integrations/accounts`
+- `PUT /admin/integrations/accounts/:account_public_id/settings/:key`
+- `PUT /admin/integrations/accounts/:account_public_id/tokens/:token_type`
 
 Secret settings are persisted but serialized with `value: null` in API responses. Changes write `audit_logs` rows with actor, request metadata, old value, and new value.

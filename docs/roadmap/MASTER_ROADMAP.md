@@ -7,7 +7,7 @@ This roadmap is the execution source of truth for the Garanti Kulucka ecosystem 
 - Phase 0 planning and contract inventory documents are in place.
 - Phase 1 foundation is implemented with API, worker, migrator, Dockerfiles, compose, and CI/tag automation.
 - Phase 2 canonical PostgreSQL schema is implemented with role/permission/provider seed data.
-- Phase 3 has started: backend-owned auth, JWT websocket authorization, admin settings persistence, audit logging, and BullMQ queue publishing boundaries are in place.
+- Phase 3 has started: backend-owned auth, JWT websocket authorization, admin settings persistence, integration account/token APIs, audit logging, and BullMQ queue publishing boundaries are in place.
 
 ## Non-Negotiables
 
