@@ -8,8 +8,10 @@ import type { AppDatabase } from "@garanti-kulucka/database";
 import { loadConfig, type ApiConfig } from "./config.js";
 import { createAuthRoutes } from "./http/auth-routes.js";
 import { createDomainRoutes } from "./http/domain-routes.js";
+import { createFileRoutes } from "./http/file-routes.js";
 import { createIntegrationRoutes } from "./http/integration-routes.js";
 import { createSettingsRoutes } from "./http/settings-routes.js";
+import { createWebhookRoutes } from "./http/webhook-routes.js";
 import { createWebphoneRoutes } from "./http/webphone-routes.js";
 import type { AppBindings } from "./http/types.js";
 import { createSecretEncryptor, type SecretEncryptor } from "./security/encryption.js";
@@ -91,7 +93,9 @@ export function createApp(options: CreateAppOptions = {}) {
 
   app.route("/auth", createAuthRoutes());
   app.route("/api", createDomainRoutes());
+  app.route("/api/files", createFileRoutes());
   app.route("/api/webphone", createWebphoneRoutes());
+  app.route("/webhooks", createWebhookRoutes());
   app.route("/admin/settings", createSettingsRoutes());
   app.route("/admin/integrations", createIntegrationRoutes());
 

@@ -1,4 +1,5 @@
 import { S3Client } from "@aws-sdk/client-s3";
+import type { S3ClientConfig } from "@aws-sdk/client-s3";
 import { assertSafeObjectKey } from "./object-key.js";
 
 export interface MediaStorageConfig {
@@ -36,18 +37,23 @@ export function loadMediaStorageConfigFromEnv(env: NodeJS.ProcessEnv = process.e
 }
 
 export function createMediaS3Client(config: MediaStorageConfig): S3Client {
-  return new S3Client({
-    endpoint: config.endpoint ?? undefined,
+  const clientConfig: S3ClientConfig = {
     region: config.region,
     forcePathStyle: true,
-    credentials:
-      config.accessKeyId && config.secretAccessKey
-        ? {
-            accessKeyId: config.accessKeyId,
-            secretAccessKey: config.secretAccessKey,
-          }
-        : undefined,
-  });
+  };
+
+  if (config.endpoint) {
+    clientConfig.endpoint = config.endpoint;
+  }
+
+  if (config.accessKeyId && config.secretAccessKey) {
+    clientConfig.credentials = {
+      accessKeyId: config.accessKeyId,
+      secretAccessKey: config.secretAccessKey,
+    };
+  }
+
+  return new S3Client(clientConfig);
 }
 
 export class MediaStorageService {

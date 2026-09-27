@@ -13,7 +13,7 @@ describe("file storage foundation", () => {
         originalName: "../Müşteri Evrakı.JPG",
         now: date,
       }),
-    ).toBe("media/2026/01/02/fil_test/musteri-evrak.jpg");
+    ).toBe("media/2026/01/02/fil_test/musteri-evraki.jpg");
   });
 
   it("rejects unsafe object keys", () => {

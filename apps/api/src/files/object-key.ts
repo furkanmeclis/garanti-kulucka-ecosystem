@@ -28,6 +28,12 @@ function safeFileStem(originalName: string | null): string {
   const withoutPath = originalName.split(/[\\/]/u).at(-1) ?? "upload";
   const withoutExtension = withoutPath.slice(0, withoutPath.length - extname(withoutPath).length);
   const normalized = withoutExtension
+    .replace(/[çÇ]/gu, "c")
+    .replace(/[ğĞ]/gu, "g")
+    .replace(/[ıİ]/gu, "i")
+    .replace(/[öÖ]/gu, "o")
+    .replace(/[şŞ]/gu, "s")
+    .replace(/[üÜ]/gu, "u")
     .normalize("NFKD")
     .replace(/[^\w.-]+/gu, "-")
     .replace(/^-+|-+$/gu, "")

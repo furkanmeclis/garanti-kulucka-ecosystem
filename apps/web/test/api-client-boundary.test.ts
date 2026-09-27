@@ -8,6 +8,7 @@ describe("web API client boundary", () => {
     expect(createApiClient("http://localhost:3000")).toHaveProperty("auth");
     expect(createApiClient("http://localhost:3000")).toHaveProperty("admin");
     expect(createApiClient("http://localhost:3000")).toHaveProperty("domain");
+    expect(createApiClient("http://localhost:3000")).toHaveProperty("files");
     expect(createApiClient("http://localhost:3000")).toHaveProperty("webphone");
   });
 
