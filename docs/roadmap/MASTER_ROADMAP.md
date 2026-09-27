@@ -11,8 +11,8 @@ This roadmap is the execution source of truth for the Garanti Kulucka ecosystem 
 - Phase 4 has backend/frontend typed client boundaries for auth, domain data, files, realtime, webphone, settings, integrations, integration account snapshots, admin audit trails, provider attempt views, and normalized provider request preview view models. Direct Supabase usage is blocked by repository guards, and web clients reject Supabase/provider origins as backend base URLs.
 - Phase 5 provider contracts are fixture-only and worker-routed. Worker provider attempt persistence is wired to PostgreSQL when `DATABASE_URL` is configured, generated transport payloads are checked against frozen provider fixtures, provider retry/dead-letter decisions carry structured metadata, handler failures persist provider failure attempts, provider/channel boundaries are enforced, API catalog parity with worker adapters is contract-tested, provider fixture coverage is explicitly tracked at 15/15 covered, every covered fixture is replayed through the in-process worker handler without live provider calls, worker attempt metadata records fixture-only transport policy, and provider dry-run request previews expose redacted method/path/header/body metadata through admin attempt serialization, route responses, and frontend admin view models. Provider attempts are exposed through secret-redacted admin APIs. Live provider calls remain blocked by a tested worker guard until legacy payload fixtures are fully replayed against implementation adapters.
 - Phase 6 realtime and webphone boundaries are implemented with Socket.IO event contracts, Redis fanout support, and SIP/WebRTC kept outside API media routing.
-- Phase 7 migrator foundation is implemented with manual commands, PostgreSQL legacy source reader, canonical target writer, source/target ports, batch planning, batch apply ports, legacy ID map helpers, legacy ID map coverage checks, synthetic verification reports, and optional secret-free command report files.
-- Current CI/tag state: latest implementation checkpoint is `v0.1.63`; latest roadmap sync checkpoint is `v0.1.64`.
+- Phase 7 migrator foundation is implemented with manual commands, PostgreSQL legacy source reader, canonical target writer, source/target ports, batch planning, batch apply ports, legacy ID map helpers, legacy ID map coverage checks, synthetic verification reports, canonical table verification reports, and optional secret-free command report files.
+- Current CI/tag state: latest implementation checkpoint is `v0.1.65`; latest roadmap sync checkpoint is `v0.1.66`.
 
 ## Non-Negotiables
 
@@ -236,7 +236,7 @@ Verification:
 - Migration tests run against synthetic legacy fixtures.
 - Verification checks row counts, referential integrity, orphan records, duplicate customers, message ordering, order totals, shipment references, legacy ID map coverage, and dangling legacy ID map targets.
 - Migrator can be re-run without duplicating data.
-- Current foundation tests cover batch planning, dry-run reports, verification report totals, PostgreSQL legacy source reads, canonical target writes, batch apply ports, idempotent legacy ID map upserts, legacy ID map coverage verification, dangling legacy ID map target verification, and secret-free CLI command reports.
+- Current foundation tests cover batch planning, dry-run reports, verification report totals, PostgreSQL legacy source reads, canonical target writes, batch apply ports, idempotent legacy ID map upserts, legacy ID map coverage verification, dangling legacy ID map target verification, canonical table verification reports, and secret-free CLI command reports.
 
 Anti-pattern guards:
 
