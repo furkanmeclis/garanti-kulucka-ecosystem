@@ -1,9 +1,12 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 import { providerAttemptSchema, providerRequestEnvelopeSchema } from "../../packages/shared/src/index.js";
+import { providerAdapters } from "../../apps/worker/src/providers/registry.js";
 
 const providerFixtureRoot = new URL("../../contracts/providers", import.meta.url);
+const providerCoveragePath = new URL("../../contracts/providers/coverage.json", import.meta.url);
 const forbiddenSecretKeys = [
   "access_token",
   "refresh_token",
@@ -13,6 +16,27 @@ const forbiddenSecretKeys = [
   "password",
   "secret",
 ];
+
+const providerCoverageEntrySchema = z.discriminatedUnion("status", [
+  z.object({
+    provider: z.string().min(1),
+    operation: z.string().min(1),
+    direction: z.enum(["inbound", "outbound"]),
+    status: z.literal("covered"),
+    fixture_file: z.string().min(1),
+  }),
+  z.object({
+    provider: z.string().min(1),
+    operation: z.string().min(1),
+    direction: z.enum(["inbound", "outbound"]),
+    status: z.literal("pending_legacy_fixture"),
+    reason: z.string().min(1),
+  }),
+]);
+
+const providerCoverageSchema = z.object({
+  entries: z.array(providerCoverageEntrySchema).min(1),
+});
 
 function providerFixturePaths(): string[] {
   return readdirSync(providerFixtureRoot, { withFileTypes: true })
@@ -26,8 +50,35 @@ function providerFixturePaths(): string[] {
     .sort();
 }
 
+function providerFixtureRelativePaths(): string[] {
+  return providerFixturePaths().map((path) =>
+    path.slice(providerFixtureRoot.pathname.length + 1),
+  );
+}
+
 function parseJsonFile(path: string): unknown {
   return JSON.parse(readFileSync(path, "utf8")) as unknown;
+}
+
+function providerCoverage() {
+  return providerCoverageSchema.parse(parseJsonFile(providerCoveragePath.pathname));
+}
+
+function coverageKey(input: { provider: string; operation: string; direction: string }): string {
+  return `${input.provider}:${input.operation}:${input.direction}`;
+}
+
+function registeredProviderOperationKeys(): string[] {
+  return providerAdapters
+    .flatMap((adapter) => [
+      ...adapter.webhook_operations.map((operation) =>
+        coverageKey({ provider: adapter.provider, operation, direction: "inbound" }),
+      ),
+      ...adapter.delivery_operations.map((operation) =>
+        coverageKey({ provider: adapter.provider, operation, direction: "outbound" }),
+      ),
+    ])
+    .sort();
 }
 
 function collectForbiddenSecretKeys(input: unknown, path: string[] = []): string[] {
@@ -62,6 +113,36 @@ describe("provider contract gate", () => {
   it("keeps frozen provider fixtures free of secret-looking keys", () => {
     for (const path of providerFixturePaths()) {
       expect(collectForbiddenSecretKeys(parseJsonFile(path)), path).toEqual([]);
+    }
+  });
+
+  it("tracks every registered provider operation in the fixture coverage manifest", () => {
+    const entries = providerCoverage().entries;
+
+    expect(entries.map(coverageKey).sort()).toEqual(registeredProviderOperationKeys());
+    expect(new Set(entries.map(coverageKey)).size).toBe(entries.length);
+  });
+
+  it("keeps covered fixture manifest entries aligned with frozen fixtures", () => {
+    const referencedFixtures = providerCoverage().entries
+      .filter((entry) => entry.status === "covered")
+      .map((entry) => entry.fixture_file)
+      .sort();
+
+    expect(referencedFixtures).toEqual(providerFixtureRelativePaths());
+
+    for (const entry of providerCoverage().entries) {
+      if (entry.status !== "covered") {
+        continue;
+      }
+
+      const fixture = providerRequestEnvelopeSchema.parse(
+        parseJsonFile(join(providerFixtureRoot.pathname, entry.fixture_file)),
+      );
+
+      expect(fixture.provider).toBe(entry.provider);
+      expect(fixture.operation).toBe(entry.operation);
+      expect(fixture.direction).toBe(entry.direction);
     }
   });
 

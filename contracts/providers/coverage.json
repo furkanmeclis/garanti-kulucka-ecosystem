@@ -1,0 +1,109 @@
+{
+  "entries": [
+    {
+      "provider": "ptt",
+      "operation": "shipment.create",
+      "direction": "outbound",
+      "status": "covered",
+      "fixture_file": "ptt/fixtures/shipment_create_minimal.json"
+    },
+    {
+      "provider": "ptt",
+      "operation": "shipment.track",
+      "direction": "outbound",
+      "status": "pending_legacy_fixture",
+      "reason": "Awaiting working legacy PTT tracking request/response sample."
+    },
+    {
+      "provider": "surat",
+      "operation": "shipment.create",
+      "direction": "outbound",
+      "status": "pending_legacy_fixture",
+      "reason": "Awaiting working legacy Surat shipment create request/response sample."
+    },
+    {
+      "provider": "surat",
+      "operation": "shipment.track",
+      "direction": "outbound",
+      "status": "covered",
+      "fixture_file": "surat/fixtures/shipment_track_minimal.json"
+    },
+    {
+      "provider": "kolaybi",
+      "operation": "invoice.create",
+      "direction": "outbound",
+      "status": "covered",
+      "fixture_file": "kolaybi/fixtures/invoice_create_minimal.json"
+    },
+    {
+      "provider": "meta",
+      "operation": "message.webhook",
+      "direction": "inbound",
+      "status": "covered",
+      "fixture_file": "meta/fixtures/message_webhook_minimal.json"
+    },
+    {
+      "provider": "whatsapp",
+      "operation": "message.webhook",
+      "direction": "inbound",
+      "status": "pending_legacy_fixture",
+      "reason": "Direct WhatsApp webhook fixture must be extracted separately from Meta aggregate fixture."
+    },
+    {
+      "provider": "whatsapp",
+      "operation": "message.send",
+      "direction": "outbound",
+      "status": "pending_legacy_fixture",
+      "reason": "Awaiting working legacy WhatsApp outbound message payload sample."
+    },
+    {
+      "provider": "instagram",
+      "operation": "message.webhook",
+      "direction": "inbound",
+      "status": "pending_legacy_fixture",
+      "reason": "Direct Instagram webhook fixture must be extracted separately from Meta aggregate fixture."
+    },
+    {
+      "provider": "instagram",
+      "operation": "message.send",
+      "direction": "outbound",
+      "status": "pending_legacy_fixture",
+      "reason": "Awaiting working legacy Instagram outbound message payload sample."
+    },
+    {
+      "provider": "messenger",
+      "operation": "message.webhook",
+      "direction": "inbound",
+      "status": "pending_legacy_fixture",
+      "reason": "Direct Messenger webhook fixture must be extracted separately from Meta aggregate fixture."
+    },
+    {
+      "provider": "messenger",
+      "operation": "message.send",
+      "direction": "outbound",
+      "status": "pending_legacy_fixture",
+      "reason": "Awaiting working legacy Messenger outbound message payload sample."
+    },
+    {
+      "provider": "netgsm",
+      "operation": "sms.send",
+      "direction": "outbound",
+      "status": "covered",
+      "fixture_file": "netgsm/fixtures/sms_send_minimal.json"
+    },
+    {
+      "provider": "vapi",
+      "operation": "call.webhook",
+      "direction": "inbound",
+      "status": "covered",
+      "fixture_file": "vapi/fixtures/call_webhook_minimal.json"
+    },
+    {
+      "provider": "sip",
+      "operation": "sip.config.sync",
+      "direction": "outbound",
+      "status": "covered",
+      "fixture_file": "sip/fixtures/config_sync_minimal.json"
+    }
+  ]
+}
