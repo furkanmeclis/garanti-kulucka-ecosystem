@@ -2,9 +2,24 @@
   "name": "@garanti-kulucka/worker",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
+  "main": "dist/index.js",
   "scripts": {
-    "build": "echo worker build placeholder",
-    "test": "echo worker test placeholder",
-    "lint": "echo worker lint placeholder"
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:unit": "vitest run",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@garanti-kulucka/shared": "file:../../packages/shared",
+    "bullmq": "^5.63.0",
+    "ioredis": "^5.8.1",
+    "pino": "^10.1.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.20.6"
   }
 }

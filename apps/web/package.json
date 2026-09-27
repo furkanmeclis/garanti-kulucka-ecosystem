@@ -2,9 +2,15 @@
   "name": "@garanti-kulucka/web",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
-    "build": "echo web build placeholder",
-    "test": "echo web test placeholder",
-    "lint": "echo web lint placeholder"
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:unit": "vitest run",
+    "lint": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@garanti-kulucka/shared": "file:../../packages/shared"
   }
 }

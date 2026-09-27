@@ -2,9 +2,24 @@
   "name": "@garanti-kulucka/api",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
+  "main": "dist/server.js",
   "scripts": {
-    "build": "echo api build placeholder",
-    "test": "echo api test placeholder",
-    "lint": "echo api lint placeholder"
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:unit": "vitest run",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "dev": "tsx src/server.ts",
+    "start": "node dist/server.js"
+  },
+  "dependencies": {
+    "@garanti-kulucka/shared": "file:../../packages/shared",
+    "@hono/node-server": "^1.19.6",
+    "hono": "^4.10.5",
+    "pino": "^10.1.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.20.6"
   }
 }

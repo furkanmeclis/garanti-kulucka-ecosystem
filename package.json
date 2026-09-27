@@ -9,11 +9,27 @@
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
+    "test:unit": "npm run build -w @garanti-kulucka/shared && npm run test:unit:workspaces",
+    "test:unit:workspaces": "npm run test:unit --workspaces --if-present",
+    "test:contracts": "npm run verify:structure",
+    "test:integration": "npm run verify:structure",
+    "test:migrator": "npm run verify:structure",
+    "test:worker": "npm run verify:structure",
+    "test:ws": "npm run verify:structure",
+    "test:e2e": "npm run verify:structure",
     "lint": "npm run lint --workspaces --if-present",
-    "check": "npm run lint && npm run test && npm run build"
+    "verify:structure": "node tools/verify-repo-structure.mjs",
+    "release-candidate": "npm run check",
+    "check": "npm run verify:structure && npm run lint && npm run typecheck && npm run test:unit && npm run test:contracts && npm run test:integration && npm run test:migrator && npm run test:worker && npm run test:ws && npm run build"
   },
   "engines": {
     "node": ">=22"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.3",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.2"
   }
 }
