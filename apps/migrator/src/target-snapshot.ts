@@ -96,12 +96,14 @@ async function selectOrders(client: Client) {
 
 async function selectOrderItems(client: Client) {
   const result = await client.query<{
+    public_id: string;
     order_public_id: string;
     quantity: string | number;
     unit_price: string;
     total_amount: string;
   }>(`
-    select orders.public_id as order_public_id,
+    select order_items.public_id,
+           orders.public_id as order_public_id,
            order_items.quantity,
            order_items.unit_price::text as unit_price,
            order_items.total_amount::text as total_amount

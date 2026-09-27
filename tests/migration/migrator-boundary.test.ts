@@ -55,6 +55,7 @@ describe("migration gate", () => {
           return {
             rows: [
               {
+                public_id: "oit_1",
                 order_public_id: "ord_1",
                 quantity: 1,
                 unit_price: "10.00",
@@ -83,6 +84,13 @@ describe("migration gate", () => {
                 target_table: "orders",
                 target_id: "ord_1",
               },
+              {
+                source_system: "legacy",
+                source_table: "legacy.siparis_kalemleri",
+                source_id: "11",
+                target_table: "order_items",
+                target_id: "oit_1",
+              },
             ],
           };
         }
@@ -103,6 +111,12 @@ describe("migration gate", () => {
     expect(report.checks).toContainEqual(
       expect.objectContaining({
         name: "totals.orders",
+        status: "passed",
+      }),
+    );
+    expect(report.checks).toContainEqual(
+      expect.objectContaining({
+        name: "legacy_id_map.order_items",
         status: "passed",
       }),
     );

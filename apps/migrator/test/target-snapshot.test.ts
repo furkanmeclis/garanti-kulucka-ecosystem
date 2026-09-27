@@ -31,6 +31,7 @@ describe("target verification snapshot", () => {
           return {
             rows: [
               {
+                public_id: "oit_1",
                 order_public_id: "ord_1",
                 quantity: "1",
                 unit_price: "10.00",
@@ -80,6 +81,7 @@ describe("target verification snapshot", () => {
       shipments: 1,
     });
     expect(snapshot.messages[0]?.sent_at).toBe("2026-01-01T00:00:00.000Z");
+    expect(snapshot.orderItems[0]?.public_id).toBe("oit_1");
     expect(snapshot.orderItems[0]?.quantity).toBe(1);
     expect(snapshot.legacyIdMaps).toHaveLength(2);
   });

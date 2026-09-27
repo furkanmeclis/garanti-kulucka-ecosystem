@@ -38,6 +38,7 @@ export interface VerificationOrder {
 }
 
 export interface VerificationOrderItem {
+  readonly public_id: string;
   readonly order_public_id: string;
   readonly quantity: number;
   readonly unit_price: string;
@@ -210,6 +211,7 @@ function verifyLegacyIdMapTargetReferences(snapshot: MigrationVerificationSnapsh
     ["conversations", new Set(snapshot.conversations.map((conversation) => conversation.public_id))],
     ["messages", new Set(snapshot.messages.map((message) => message.public_id))],
     ["orders", new Set(snapshot.orders.map((order) => order.public_id))],
+    ["order_items", new Set(snapshot.orderItems.map((item) => item.public_id))],
     ["shipments", new Set(snapshot.shipments.map((shipment) => shipment.public_id))],
   ]);
 

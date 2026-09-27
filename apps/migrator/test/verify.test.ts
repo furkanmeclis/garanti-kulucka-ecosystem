@@ -79,12 +79,14 @@ describe("migration verification", () => {
         [{ public_id: "ord_1", customer_public_id: "cus_1", total_amount: "100.00" }],
         [
           {
+            public_id: "oit_1",
             order_public_id: "ord_1",
             quantity: 1,
             unit_price: "40.00",
             total_amount: "40.00",
           },
           {
+            public_id: "oit_2",
             order_public_id: "ord_1",
             quantity: 2,
             unit_price: "20.00",
@@ -101,13 +103,21 @@ describe("migration verification", () => {
 
   it("detects missing legacy id map coverage and dangling target references", () => {
     const checks = verifyLegacyIdMapCoverage({
-      sourceCounts: { customers: 2, orders: 1 },
-      targetCounts: { customers: 2, orders: 1 },
+      sourceCounts: { customers: 2, orders: 1, order_items: 1 },
+      targetCounts: { customers: 2, orders: 1, order_items: 1 },
       customers: [{ public_id: "cus_1", phone: null, email: "customer@example.com" }],
       conversations: [],
       messages: [],
       orders: [{ public_id: "ord_1", customer_public_id: "cus_1", total_amount: "10.00" }],
-      orderItems: [{ order_public_id: "ord_1", quantity: 1, unit_price: "10.00", total_amount: "10.00" }],
+      orderItems: [
+        {
+          public_id: "oit_1",
+          order_public_id: "ord_1",
+          quantity: 1,
+          unit_price: "10.00",
+          total_amount: "10.00",
+        },
+      ],
       shipments: [],
       legacyIdMaps: [
         {
@@ -123,6 +133,13 @@ describe("migration verification", () => {
           source_id: "10",
           target_table: "orders",
           target_id: "ord_missing",
+        },
+        {
+          source_system: "legacy",
+          source_table: "legacy.siparis_kalemleri",
+          source_id: "11",
+          target_table: "order_items",
+          target_id: "oit_missing",
         },
       ],
     });
@@ -143,9 +160,15 @@ describe("migration verification", () => {
     );
     expect(checks).toContainEqual(
       expect.objectContaining({
+        name: "legacy_id_map.order_items",
+        status: "passed",
+      }),
+    );
+    expect(checks).toContainEqual(
+      expect.objectContaining({
         name: "legacy_id_map.target_references",
         status: "failed",
-        actual: 1,
+        actual: 2,
       }),
     );
   });
@@ -174,6 +197,7 @@ describe("migration verification", () => {
       orders: [{ public_id: "ord_1", customer_public_id: "cus_missing", total_amount: "50.00" }],
       orderItems: [
         {
+          public_id: "oit_1",
           order_public_id: "ord_1",
           quantity: 1,
           unit_price: "20.00",
