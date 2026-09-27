@@ -106,5 +106,11 @@ describe("migration gate", () => {
         status: "passed",
       }),
     );
+    expect(report.checks).toContainEqual(
+      expect.objectContaining({
+        name: "referential_integrity.messages.conversation",
+        status: "passed",
+      }),
+    );
   });
 });

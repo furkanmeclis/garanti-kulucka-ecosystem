@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   createMigrationVerificationReport,
   verifyLegacyIdMapCoverage,
+  verifyMessageConversations,
   verifyMessageOrdering,
   verifyOrderTotals,
   verifyRowCounts,
@@ -42,6 +43,31 @@ describe("migration verification", () => {
       ]),
     ).toMatchObject({
       name: "ordering.messages",
+      status: "failed",
+      actual: 1,
+    });
+  });
+
+  it("detects orphan messages without a migrated conversation", () => {
+    expect(
+      verifyMessageConversations({
+        sourceCounts: {},
+        targetCounts: {},
+        customers: [],
+        conversations: [{ public_id: "cnv_1", customer_public_id: null }],
+        messages: [
+          {
+            public_id: "msg_1",
+            conversation_public_id: "cnv_missing",
+            sent_at: "2026-01-01T00:00:00.000Z",
+          },
+        ],
+        orders: [],
+        orderItems: [],
+        shipments: [],
+      }),
+    ).toMatchObject({
+      name: "referential_integrity.messages.conversation",
       status: "failed",
       actual: 1,
     });

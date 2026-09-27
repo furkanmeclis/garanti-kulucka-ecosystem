@@ -65,6 +65,7 @@ export function createMigrationVerificationReport(
     checks: [
       ...verifyRowCounts(snapshot.sourceCounts, snapshot.targetCounts),
       verifyConversationCustomers(snapshot),
+      verifyMessageConversations(snapshot),
       verifyOrderCustomers(snapshot),
       verifyShipmentReferences(snapshot),
       verifyDuplicateCustomers(snapshot.customers),
@@ -100,6 +101,15 @@ export function verifyConversationCustomers(snapshot: MigrationVerificationSnaps
   ).length;
 
   return countCheck("referential_integrity.conversations.customer", 0, orphanCount);
+}
+
+export function verifyMessageConversations(snapshot: MigrationVerificationSnapshot): VerificationCheck {
+  const conversationIds = new Set(snapshot.conversations.map((conversation) => conversation.public_id));
+  const orphanCount = snapshot.messages.filter(
+    (message) => !conversationIds.has(message.conversation_public_id),
+  ).length;
+
+  return countCheck("referential_integrity.messages.conversation", 0, orphanCount);
 }
 
 export function verifyOrderCustomers(snapshot: MigrationVerificationSnapshot): VerificationCheck {
