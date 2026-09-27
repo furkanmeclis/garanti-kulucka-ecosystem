@@ -5,10 +5,12 @@ import { AuditRepository, parseAuditLimit, serializeAuditLog } from "../audit/re
 import { authenticate, requireAdmin, requireDatabase } from "./middleware.js";
 import {
   IntegrationsRepository,
+  parseProviderAttemptLimit,
   serializeAccount,
   serializeAccountSnapshot,
   serializeIntegrationSetting,
   serializeIntegrationToken,
+  serializeProviderAttempt,
   serializeProvider,
 } from "../integrations/repository.js";
 
@@ -68,6 +70,21 @@ export function createIntegrationRoutes() {
       limit: parseAuditLimit(context.req.query("limit")),
     });
     return context.json({ data: logs.map(serializeAuditLog) });
+  });
+
+  routes.get("/provider-attempts", async (context) => {
+    const db = context.get("db");
+    if (!db) {
+      return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
+    }
+
+    const attempts = await new IntegrationsRepository(db, context.get("encryptor")).listProviderAttempts({
+      providerKey: context.req.query("provider_key") ?? null,
+      accountPublicId: context.req.query("account_public_id") ?? null,
+      limit: parseProviderAttemptLimit(context.req.query("limit")),
+    });
+
+    return context.json({ data: attempts.map(serializeProviderAttempt) });
   });
 
   routes.get("/accounts/:account_public_id", async (context) => {

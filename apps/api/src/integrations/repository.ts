@@ -5,6 +5,7 @@ import type {
   IntegrationProvidersTable,
   IntegrationSettingsTable,
   IntegrationTokensTable,
+  ProviderAttemptsTable,
 } from "@garanti-kulucka/database";
 import { newPublicId } from "../auth/crypto.js";
 import type { SecretEncryptor } from "../security/encryption.js";
@@ -16,6 +17,10 @@ export type IntegrationAccountRecord = Selectable<IntegrationAccountsTable> & {
 };
 export type IntegrationSettingRecord = Selectable<IntegrationSettingsTable>;
 export type IntegrationTokenRecord = Selectable<IntegrationTokensTable>;
+export type ProviderAttemptRecord = Selectable<ProviderAttemptsTable> & {
+  provider_key: string;
+  account_public_id: string | null;
+};
 
 export interface IntegrationAccountSnapshot {
   account: IntegrationAccountRecord;
@@ -53,6 +58,12 @@ export interface UpsertTokenInput {
   userAgent: string | null;
 }
 
+export interface ListProviderAttemptsInput {
+  providerKey: string | null;
+  accountPublicId: string | null;
+  limit: number;
+}
+
 export class IntegrationsRepository {
   constructor(
     private readonly db: AppDatabase,
@@ -78,6 +89,31 @@ export class IntegrationsRepository {
       ])
       .orderBy("integration_accounts.display_name", "asc")
       .execute();
+  }
+
+  async listProviderAttempts(input: ListProviderAttemptsInput): Promise<ProviderAttemptRecord[]> {
+    let query = this.db
+      .selectFrom("provider_attempts")
+      .innerJoin("integration_providers", "integration_providers.id", "provider_attempts.provider_id")
+      .leftJoin("integration_accounts", "integration_accounts.id", "provider_attempts.account_id")
+      .selectAll("provider_attempts")
+      .select([
+        "integration_providers.key as provider_key",
+        "integration_accounts.public_id as account_public_id",
+      ])
+      .orderBy("provider_attempts.started_at", "desc")
+      .orderBy("provider_attempts.id", "desc")
+      .limit(Math.max(1, Math.min(input.limit, 100)));
+
+    if (input.providerKey) {
+      query = query.where("integration_providers.key", "=", input.providerKey);
+    }
+
+    if (input.accountPublicId) {
+      query = query.where("integration_accounts.public_id", "=", input.accountPublicId);
+    }
+
+    return query.execute();
   }
 
   async getAccountSnapshot(accountPublicId: string): Promise<IntegrationAccountSnapshot | null> {
@@ -349,12 +385,70 @@ export function serializeIntegrationToken(token: IntegrationTokenRecord) {
   };
 }
 
+export function serializeProviderAttempt(attempt: ProviderAttemptRecord) {
+  return {
+    public_id: attempt.public_id,
+    provider_key: attempt.provider_key,
+    account_public_id: attempt.account_public_id,
+    request_id: attempt.request_id,
+    operation: attempt.operation,
+    direction: attempt.direction,
+    status: attempt.status,
+    status_code: attempt.status_code,
+    duration_ms: attempt.duration_ms,
+    retry_decision: attempt.retry_decision,
+    next_retry_at: attempt.next_retry_at,
+    idempotency_key: attempt.idempotency_key,
+    request_metadata: redactProviderAttemptMetadata(attempt.request_metadata),
+    response_metadata: redactProviderAttemptMetadata(attempt.response_metadata),
+    error_code: attempt.error_code,
+    error_message: attempt.error_message,
+    started_at: attempt.started_at,
+    updated_at: attempt.updated_at,
+  };
+}
+
 export function serializeAccountSnapshot(snapshot: IntegrationAccountSnapshot) {
   return {
     account: serializeAccount(snapshot.account),
     settings: snapshot.settings.map(serializeIntegrationSetting),
     tokens: snapshot.tokens.map(serializeIntegrationToken),
   };
+}
+
+const providerAttemptSecretKeyPattern =
+  /(^|_|\.)((access|refresh|verify)?_?token|authorization|api_?key|password|secret)$/i;
+
+export function parseProviderAttemptLimit(value: string | undefined, fallback = 50) {
+  if (!value) {
+    return fallback;
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+
+  return Math.max(1, Math.min(parsed, 100));
+}
+
+export function redactProviderAttemptMetadata(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(redactProviderAttemptMetadata);
+  }
+
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+
+  return Object.fromEntries(
+    Object.entries(value).map(([key, nestedValue]) => [
+      key,
+      providerAttemptSecretKeyPattern.test(key)
+        ? "[redacted]"
+        : redactProviderAttemptMetadata(nestedValue),
+    ]),
+  );
 }
 
 export function auditIntegrationAccountValue(
