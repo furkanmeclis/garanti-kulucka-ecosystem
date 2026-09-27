@@ -1,3 +1,5 @@
+import { assertBackendBaseUrl } from "./backend-boundary.js";
+
 export interface BackendHttpClientOptions {
   baseUrl: string;
   getAccessToken?: () => string | null;
@@ -14,6 +16,7 @@ export interface BackendHttpClient {
 }
 
 export function createBackendHttpClient(options: BackendHttpClientOptions): BackendHttpClient {
+  assertBackendBaseUrl(options.baseUrl);
   const fetchImpl = options.fetchImpl ?? fetch;
 
   return {

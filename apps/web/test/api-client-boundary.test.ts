@@ -12,6 +12,15 @@ describe("web API client boundary", () => {
     expect(createApiClient("http://localhost:3000")).toHaveProperty("webphone");
   });
 
+  it("rejects direct Supabase or provider origins as backend URLs", () => {
+    expect(() => createApiClient("https://project.supabase.co")).toThrow(
+      "Web clients must talk to the backend API",
+    );
+    expect(() => createApiClient("https://graph.instagram.com")).toThrow(
+      "Web clients must talk to the backend API",
+    );
+  });
+
   it("sends bearer tokens through the backend HTTP client", async () => {
     const requests: Request[] = [];
     const http = createBackendHttpClient({

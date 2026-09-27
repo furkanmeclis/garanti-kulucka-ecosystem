@@ -2,6 +2,18 @@ import { describe, expect, it } from "vitest";
 import { createRealtimeClient } from "../src/api/realtime-client.js";
 
 describe("realtime client", () => {
+  it("rejects direct external realtime origins", () => {
+    expect(() =>
+      createRealtimeClient({
+        baseUrl: "https://project.supabase.co",
+        getAccessToken: () => "access-token",
+        socketFactory: (() => {
+          throw new Error("socket factory should not be called");
+        }) as never,
+      }),
+    ).toThrow("Web clients must talk to the backend API");
+  });
+
   it("connects with bearer token auth and emits canonical conversation commands", () => {
     const emitted: Array<{ event: string; payload: unknown }> = [];
     const listeners = new Map<string, (payload: unknown) => void>();

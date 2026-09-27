@@ -5,6 +5,7 @@ import {
   type RealtimeEnvelope,
   type RealtimeEventName,
 } from "@garanti-kulucka/shared";
+import { assertBackendBaseUrl } from "./backend-boundary.js";
 
 export interface RealtimeClientOptions {
   baseUrl: string;
@@ -22,6 +23,7 @@ export interface RealtimeClient {
 }
 
 export function createRealtimeClient(options: RealtimeClientOptions): RealtimeClient {
+  assertBackendBaseUrl(options.baseUrl);
   const socketFactory = options.socketFactory ?? io;
   const socket = socketFactory(options.baseUrl, {
     autoConnect: false,
