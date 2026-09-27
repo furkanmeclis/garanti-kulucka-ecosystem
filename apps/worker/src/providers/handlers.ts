@@ -35,7 +35,18 @@ export type ProviderRetryDecision = Pick<
   "status" | "retry_decision" | "next_retry_at"
 > & {
   error_retryable: boolean;
+  reason: ProviderRetryReason;
+  attempts_remaining: number;
+  retry_delay_ms: number | null;
 };
+
+export type ProviderRetryReason =
+  | "retryable_status_code"
+  | "retryable_error_code"
+  | "missing_idempotency_key"
+  | "attempts_exhausted"
+  | "terminal_status_code"
+  | "terminal_error";
 
 const nonIdempotentOperations = new Set<ProviderOperation>([
   "invoice.create",
@@ -43,27 +54,38 @@ const nonIdempotentOperations = new Set<ProviderOperation>([
   "sms.send",
 ]);
 
-function isRetryableProviderFailure(input: ProviderFailureInput): boolean {
+function classifyProviderFailure(input: ProviderFailureInput): {
+  retryable: boolean;
+  reason: ProviderRetryReason;
+} {
   if (
     nonIdempotentOperations.has(input.operation) &&
     (!input.idempotency_key || input.idempotency_key.trim().length === 0)
   ) {
-    return false;
+    return { retryable: false, reason: "missing_idempotency_key" };
   }
 
   if (input.status_code === 408 || input.status_code === 429) {
-    return true;
+    return { retryable: true, reason: "retryable_status_code" };
   }
 
   if (typeof input.status_code === "number" && input.status_code >= 500) {
-    return true;
+    return { retryable: true, reason: "retryable_status_code" };
   }
 
-  return input.error_code === "timeout" || input.error_code === "network_error";
+  if (input.error_code === "timeout" || input.error_code === "network_error") {
+    return { retryable: true, reason: "retryable_error_code" };
+  }
+
+  if (typeof input.status_code === "number") {
+    return { retryable: false, reason: "terminal_status_code" };
+  }
+
+  return { retryable: false, reason: "terminal_error" };
 }
 
 export function decideProviderRetry(input: ProviderFailureInput, now = new Date()): ProviderRetryDecision {
-  const retryable = isRetryableProviderFailure(input);
+  const { retryable, reason } = classifyProviderFailure(input);
   const attemptsRemaining = input.attempt_number < input.max_attempts;
 
   if (retryable && attemptsRemaining) {
@@ -73,6 +95,9 @@ export function decideProviderRetry(input: ProviderFailureInput, now = new Date(
       retry_decision: "retry",
       next_retry_at: new Date(now.getTime() + delayMs).toISOString(),
       error_retryable: true,
+      reason,
+      attempts_remaining: Math.max(0, input.max_attempts - input.attempt_number),
+      retry_delay_ms: delayMs,
     };
   }
 
@@ -81,7 +106,66 @@ export function decideProviderRetry(input: ProviderFailureInput, now = new Date(
     retry_decision: "dead_letter",
     next_retry_at: null,
     error_retryable: retryable,
+    reason: retryable ? "attempts_exhausted" : reason,
+    attempts_remaining: Math.max(0, input.max_attempts - input.attempt_number),
+    retry_delay_ms: null,
   };
+}
+
+export function createProviderFailureAttempt(
+  envelope: ProviderRequestEnvelope,
+  job: JobEnvelope,
+  input: Omit<ProviderFailureInput, "operation" | "idempotency_key"> & {
+    status_code?: number | null;
+    error_code: string;
+    error_message: string;
+  },
+  now = new Date(),
+): ProviderAttempt {
+  const idempotencyKey =
+    typeof envelope.payload.idempotency_key === "string" ? envelope.payload.idempotency_key : null;
+  const decision = decideProviderRetry(
+    {
+      ...input,
+      operation: envelope.operation,
+      idempotency_key: idempotencyKey,
+    },
+    now,
+  );
+
+  return providerAttemptSchema.parse({
+    provider: envelope.provider,
+    operation: envelope.operation,
+    direction: envelope.direction,
+    request_id: envelope.request_id,
+    account_public_id: envelope.account_public_id,
+    started_at: new Date(job.requested_at).toISOString(),
+    duration_ms: Math.max(0, now.getTime() - new Date(job.requested_at).getTime()),
+    status: decision.status,
+    status_code: input.status_code ?? null,
+    retry_decision: decision.retry_decision,
+    next_retry_at: decision.next_retry_at,
+    idempotency_key: idempotencyKey,
+    request_metadata: {
+      queue: job.queue,
+      job_id: job.job_id,
+      channel: envelope.channel,
+      retry: {
+        reason: decision.reason,
+        attempts_remaining: decision.attempts_remaining,
+        retry_delay_ms: decision.retry_delay_ms,
+        error_retryable: decision.error_retryable,
+      },
+    },
+    response_metadata: {
+      accepted: false,
+      live_call_performed: false,
+    },
+    error: {
+      code: input.error_code,
+      message: input.error_message,
+    },
+  });
 }
 
 function createFixtureAttempt(

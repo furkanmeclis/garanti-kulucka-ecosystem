@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { queueNameSchema } from "../../packages/shared/src/index.js";
 import {
+  createProviderFailureAttempt,
   decideProviderRetry,
   handleProviderDeliveryJob,
 } from "../../apps/worker/src/providers/handlers.js";
@@ -45,9 +46,9 @@ describe("worker gate", () => {
   });
 
   it.each([
-    { status_code: 429, error_code: null },
-    { status_code: 503, error_code: null },
-    { status_code: null, error_code: "timeout" },
+    { status_code: 429, error_code: null, reason: "retryable_status_code" },
+    { status_code: 503, error_code: null, reason: "retryable_status_code" },
+    { status_code: null, error_code: "timeout", reason: "retryable_error_code" },
   ])("retries transient idempotent provider failures %#", (input) => {
     const decision = decideProviderRetry({
       operation: "shipment.create",
@@ -62,6 +63,9 @@ describe("worker gate", () => {
       status: "retryable_failure",
       retry_decision: "retry",
       error_retryable: true,
+      reason: input.reason,
+      attempts_remaining: 4,
+      retry_delay_ms: 2000,
       next_retry_at: "2026-01-01T00:00:02.000Z",
     });
   });
@@ -80,7 +84,59 @@ describe("worker gate", () => {
       status: "terminal_failure",
       retry_decision: "dead_letter",
       error_retryable: false,
+      reason: "missing_idempotency_key",
+      attempts_remaining: 4,
+      retry_delay_ms: null,
       next_retry_at: null,
+    });
+  });
+
+  it("creates structured dead-letter attempts for exhausted provider retries", () => {
+    const attempt = createProviderFailureAttempt(
+      {
+        request_id: "req_delivery_failed",
+        provider: "ptt",
+        operation: "shipment.create",
+        direction: "outbound",
+        channel: "cargo",
+        occurred_at: "2026-01-01T00:00:00.000Z",
+        payload: {
+          idempotency_key: "shipment_1",
+        },
+      },
+      {
+        job_id: "job_delivery_failed",
+        queue: "provider-delivery",
+        name: "ptt.shipment.create",
+        requested_at: "2026-01-01T00:00:00.000Z",
+        payload: {},
+      },
+      {
+        status_code: 503,
+        error_code: "provider_unavailable",
+        error_message: "Provider returned 503",
+        attempt_number: 5,
+        max_attempts: 5,
+      },
+      new Date("2026-01-01T00:00:03.000Z"),
+    );
+
+    expect(attempt).toMatchObject({
+      status: "terminal_failure",
+      retry_decision: "dead_letter",
+      next_retry_at: null,
+      status_code: 503,
+      error: {
+        code: "provider_unavailable",
+      },
+      request_metadata: {
+        retry: {
+          reason: "attempts_exhausted",
+          attempts_remaining: 0,
+          retry_delay_ms: null,
+          error_retryable: true,
+        },
+      },
     });
   });
 });
