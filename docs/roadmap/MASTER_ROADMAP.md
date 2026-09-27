@@ -7,12 +7,12 @@ This roadmap is the execution source of truth for the Garanti Kulucka ecosystem 
 - Phase 0 planning and contract inventory documents are in place.
 - Phase 1 foundation is implemented with API, worker, migrator, Dockerfiles, compose, and CI/tag automation.
 - Phase 2 canonical PostgreSQL schema is implemented with role/permission/provider seed data.
-- Phase 3 backend-owned auth and admin-managed persistence foundations are implemented: sessions, permissions, encrypted settings/tokens, restart-hydratable integration snapshots, admin integration APIs, webphone config, file metadata, and audit boundaries. Auth lifecycle tests cover refresh rotation, logout revocation, disabled users, and role denial.
+- Phase 3 backend-owned auth and admin-managed persistence foundations are implemented: sessions, permissions, encrypted settings/tokens, restart-hydratable integration snapshots, admin integration APIs, admin audit trails, webphone config, file metadata, and audit boundaries. Auth lifecycle tests cover refresh rotation, logout revocation, disabled users, and role denial.
 - Phase 4 has backend/frontend typed client boundaries for auth, domain data, files, realtime, webphone, settings, integrations, and integration account snapshots. Direct Supabase usage is blocked by repository guards, and web clients reject Supabase/provider origins as backend base URLs.
 - Phase 5 provider contracts are fixture-only and worker-routed. Worker provider attempt persistence is wired to PostgreSQL when `DATABASE_URL` is configured, and generated transport payloads are checked against frozen provider fixtures. Live provider calls remain disabled until legacy payload fixtures are fully replayed.
 - Phase 6 realtime and webphone boundaries are implemented with Socket.IO event contracts, Redis fanout support, and SIP/WebRTC kept outside API media routing.
 - Phase 7 migrator foundation is implemented with manual commands, PostgreSQL legacy source reader, canonical target writer, source/target ports, batch planning, batch apply ports, legacy ID map helpers, synthetic verification reports, and optional secret-free command report files.
-- Current CI/tag state: latest passing checkpoint is `v0.1.25`.
+- Current CI/tag state: latest passing checkpoint is `v0.1.28`.
 
 ## Non-Negotiables
 
@@ -136,7 +136,7 @@ Verification:
 - E2E auth test covers login, refresh, logout, revoked token, disabled user, and role-denied cases.
 - Restart test proves Instagram/Messenger/WhatsApp accounts survive API and worker restarts.
 - Audit log test proves admin setting changes are recorded.
-- Current foundation tests cover token claims, admin bootstrap, secret encryption, auth serialization, auth lifecycle, settings masking, integration token masking, and restart-hydration snapshots.
+- Current foundation tests cover token claims, admin bootstrap, secret encryption, auth serialization, auth lifecycle, settings masking, integration token masking, integration audit redaction, update old/new audit values, admin audit listing, and restart-hydration snapshots.
 
 Anti-pattern guards:
 
