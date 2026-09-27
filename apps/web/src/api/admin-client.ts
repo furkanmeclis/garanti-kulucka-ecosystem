@@ -8,6 +8,19 @@ export interface AdminSetting {
   updated_at: string;
 }
 
+export interface AdminAuditLog {
+  id: number;
+  actor_user_id: number | null;
+  action: string;
+  entity_type: string;
+  entity_id: string | null;
+  old_value: unknown;
+  new_value: unknown;
+  ip_address: string | null;
+  user_agent: string | null;
+  created_at: string;
+}
+
 export interface IntegrationProvider {
   key: string;
   name: string;
@@ -48,10 +61,30 @@ export interface IntegrationAccountSnapshot {
   tokens: IntegrationToken[];
 }
 
+export interface AuditListOptions {
+  entity_id?: string;
+  limit?: number;
+}
+
+function auditQuery(options: AuditListOptions = {}) {
+  const params = new URLSearchParams();
+  if (options.entity_id) {
+    params.set("entity_id", options.entity_id);
+  }
+  if (typeof options.limit === "number") {
+    params.set("limit", String(options.limit));
+  }
+
+  const query = params.toString();
+  return query ? `?${query}` : "";
+}
+
 export function createAdminClient(http: BackendHttpClient) {
   return {
     listSettings: (scope = "global") =>
       http.request<{ data: AdminSetting[] }>(`/admin/settings?scope=${encodeURIComponent(scope)}`),
+    listSettingsAudit: (options?: AuditListOptions) =>
+      http.request<{ data: AdminAuditLog[] }>(`/admin/settings/audit${auditQuery(options)}`),
     upsertSetting: (key: string, value: unknown, isSecret = false, scope = "global") =>
       http.request<AdminSetting>(`/admin/settings/${encodeURIComponent(key)}`, {
         method: "PUT",
@@ -65,6 +98,8 @@ export function createAdminClient(http: BackendHttpClient) {
       http.request<{ data: IntegrationProvider[] }>("/admin/integrations/providers"),
     listIntegrationAccounts: () =>
       http.request<{ data: IntegrationAccount[] }>("/admin/integrations/accounts"),
+    listIntegrationAudit: (options?: AuditListOptions) =>
+      http.request<{ data: AdminAuditLog[] }>(`/admin/integrations/audit${auditQuery(options)}`),
     getIntegrationAccount: (accountPublicId: string) =>
       http.request<IntegrationAccountSnapshot>(
         `/admin/integrations/accounts/${encodeURIComponent(accountPublicId)}`,

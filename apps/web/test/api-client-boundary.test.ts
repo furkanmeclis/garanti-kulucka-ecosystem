@@ -116,6 +116,26 @@ describe("web API client boundary", () => {
     expect(requests[0]?.url).toBe("http://localhost:3000/admin/integrations/accounts/iac_instagram");
   });
 
+  it("maps admin audit trail reads to backend routes", async () => {
+    const requests: Request[] = [];
+    const client = createApiClient("http://localhost:3000", {
+      fetchImpl: async (input, init) => {
+        requests.push(new Request(input, init));
+        return Response.json({ data: [] });
+      },
+    });
+
+    await client.admin.listSettingsAudit({ entity_id: "set_global", limit: 10 });
+    await client.admin.listIntegrationAudit({ entity_id: "iac_instagram", limit: 25 });
+
+    expect(requests[0]?.url).toBe(
+      "http://localhost:3000/admin/settings/audit?entity_id=set_global&limit=10",
+    );
+    expect(requests[1]?.url).toBe(
+      "http://localhost:3000/admin/integrations/audit?entity_id=iac_instagram&limit=25",
+    );
+  });
+
   it("maps domain conversation reads to backend routes", async () => {
     const requests: Request[] = [];
     const client = createApiClient("http://localhost:3000", {
