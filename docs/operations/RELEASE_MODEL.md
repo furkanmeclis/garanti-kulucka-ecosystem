@@ -19,6 +19,7 @@ If checks pass:
 - Find latest `vMAJOR.MINOR.PATCH`
 - Increment patch
 - Create annotated tag on the exact passing commit
+- API, worker, and migrator Dockerfiles must build before tagging.
 
 If checks fail:
 

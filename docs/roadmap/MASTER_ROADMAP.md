@@ -70,6 +70,7 @@ Verification:
 
 - `npm run check` passes locally and in GitHub Actions.
 - Containers boot locally with health checks.
+- API, worker, and migrator Docker images build successfully.
 - API `/health/live` and `/health/ready` pass.
 - Worker starts without processing jobs when no queues exist.
 - Migrator dry-run exits successfully against empty/stub databases.

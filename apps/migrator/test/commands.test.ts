@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseMigratorCommand } from "../src/commands.js";
+import { parseMigratorCommand, runMigratorCommand } from "../src/commands.js";
 
 describe("migrator commands", () => {
   it("parses dry-run", () => {
@@ -12,5 +12,9 @@ describe("migrator commands", () => {
 
   it("parses verify", () => {
     expect(parseMigratorCommand(["verify"])).toBe("verify");
+  });
+
+  it("requires DATABASE_URL before running", async () => {
+    await expect(runMigratorCommand("migrate:dry-run", {})).rejects.toThrow("DATABASE_URL is required");
   });
 });

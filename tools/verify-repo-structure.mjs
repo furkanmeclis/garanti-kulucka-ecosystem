@@ -17,13 +17,19 @@ const requiredPaths = [
   "docs/adr/0002-admin-managed-settings.md",
   "docs/adr/0003-contract-first-migration.md",
   "apps/api",
+  "apps/api/Dockerfile",
   "apps/web",
+  "apps/web/Dockerfile",
   "apps/worker",
+  "apps/worker/Dockerfile",
   "apps/migrator",
+  "apps/migrator/Dockerfile",
   "packages/shared/src/contracts/http",
   "packages/shared/src/contracts/ws",
   "packages/shared/src/contracts/queue",
   "packages/shared/src/contracts/providers",
+  "packages/database/migrations/001_initial_canonical_schema.sql",
+  "packages/database/src/schema.ts",
   "contracts/openapi",
   "contracts/providers/ptt/fixtures",
   "contracts/providers/ptt/schemas",
@@ -41,6 +47,8 @@ const requiredPaths = [
   "tests/migration",
   "tests/websocket",
   "tests/worker",
+  "compose.yaml",
+  ".env.example",
 ];
 
 const forbiddenNewSchemaNames = [
@@ -53,6 +61,15 @@ const forbiddenNewSchemaNames = [
   "kargo_gonderimleri",
   "bakiye_hareketleri",
   "ayarlar",
+];
+
+const forbiddenSchemaPatterns = [
+  /\btimestamp\s+without\s+time\s+zone\b/i,
+  /\bserial\b/i,
+  /\bbigserial\b/i,
+  /\bvarchar\s*\(/i,
+  /\bchar\s*\(/i,
+  /\bmoney\b/i,
 ];
 
 const failures = [];
@@ -90,6 +107,12 @@ for (const file of files) {
     for (const forbidden of forbiddenNewSchemaNames) {
       if (text.includes(forbidden)) {
         failures.push(`New schema file contains legacy identifier "${forbidden}": ${rel}`);
+      }
+    }
+
+    for (const pattern of forbiddenSchemaPatterns) {
+      if (pattern.test(text)) {
+        failures.push(`New schema file contains forbidden PostgreSQL pattern ${pattern}: ${rel}`);
       }
     }
   }
