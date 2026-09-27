@@ -28,7 +28,7 @@ export async function applyMigrationBatch(
 ): Promise<MigrationBatchApplyResult> {
   const readOptions: BatchReadOptions = {
     limit: input.batch.limit,
-    ...(input.batch.offset > 0 ? { afterSourceId: String(input.batch.offset) } : {}),
+    ...(input.batch.offset > 0 ? { offset: input.batch.offset } : {}),
   };
   const records = await input.source.readBatch(input.batch.entity, readOptions);
   const transform = input.transform ?? defaultLegacyRecordTransformer;

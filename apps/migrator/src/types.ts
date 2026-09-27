@@ -53,6 +53,7 @@ export interface LegacySource {
 
 export interface BatchReadOptions {
   readonly limit: number;
+  readonly offset?: number;
   readonly afterSourceId?: string;
 }
 

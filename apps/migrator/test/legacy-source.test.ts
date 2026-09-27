@@ -87,6 +87,55 @@ describe("LegacyDatabaseSource", () => {
     ]);
   });
 
+  it("reads planned offset batches without treating offsets as source ids", async () => {
+    const db = new FakeDatabase([{ legacy_id: 9, name: "Grace" }]);
+    const source = new LegacyDatabaseSource({
+      db,
+      sourceSystem: "legacy_supabase",
+      tables: {
+        customers: { tableName: "legacy.musteriler", idColumn: "legacy_id" },
+      },
+    });
+
+    const records = await source.readBatch("customers", { limit: 2, offset: 2 });
+
+    expect(db.queries).toEqual([
+      {
+        sql: 'select * from "legacy"."musteriler" order by "legacy_id" asc limit $1 offset $2',
+        parameters: [2, 2],
+      },
+    ]);
+    expect(records).toEqual([
+      {
+        sourceSystem: "legacy_supabase",
+        sourceTable: "legacy.musteriler",
+        sourceId: "9",
+        payload: {
+          legacy_id: 9,
+          name: "Grace",
+        },
+        checksum: expect.stringMatching(/^sha256:[a-f0-9]{64}$/),
+      },
+    ]);
+  });
+
+  it("rejects invalid batch read windows", async () => {
+    const source = new LegacyDatabaseSource({
+      db: new FakeDatabase(),
+      sourceSystem: "legacy_supabase",
+      tables: {
+        customers: { tableName: "legacy.musteriler", idColumn: "legacy_id" },
+      },
+    });
+
+    await expect(source.readBatch("customers", { limit: 2, offset: -1 })).rejects.toThrow(
+      "offset must be a non-negative integer",
+    );
+    await expect(
+      source.readBatch("customers", { limit: 2, offset: 1, afterSourceId: "10" }),
+    ).rejects.toThrow("offset and afterSourceId cannot be combined");
+  });
+
   it("supports table maps with a default source id column", () => {
     expect(
       resolveTableMap(

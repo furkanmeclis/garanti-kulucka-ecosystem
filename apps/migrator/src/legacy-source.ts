@@ -63,19 +63,28 @@ export class LegacyDatabaseSource implements LegacySource {
     if (!Number.isInteger(options.limit) || options.limit < 1) {
       throw new Error("limit must be a positive integer");
     }
+    if (options.offset !== undefined && (!Number.isInteger(options.offset) || options.offset < 0)) {
+      throw new Error("offset must be a non-negative integer");
+    }
+    if (options.offset !== undefined && options.afterSourceId !== undefined) {
+      throw new Error("offset and afterSourceId cannot be combined");
+    }
 
     const table = this.resolveTable(entity);
     const tableName = quoteQualifiedIdentifier(table.tableName);
     const idColumn = quoteIdentifier(table.idColumn);
     const parameters: unknown[] = [options.limit];
-    const cursorPredicate = options.afterSourceId ? `where ${idColumn}::text > $2` : "";
+    const cursorPredicate = options.afterSourceId ? ` where ${idColumn}::text > $2` : "";
+    const offsetClause = options.offset !== undefined && options.offset > 0 ? " offset $2" : "";
 
     if (options.afterSourceId) {
       parameters.push(options.afterSourceId);
+    } else if (options.offset !== undefined && options.offset > 0) {
+      parameters.push(options.offset);
     }
 
     const result = await this.db.query(
-      `select * from ${tableName} ${cursorPredicate} order by ${idColumn} asc limit $1`,
+      `select * from ${tableName}${cursorPredicate} order by ${idColumn} asc limit $1${offsetClause}`,
       parameters,
     );
 

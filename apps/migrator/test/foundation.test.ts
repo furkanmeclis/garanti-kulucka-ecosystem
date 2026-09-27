@@ -16,6 +16,8 @@ import type {
 } from "../src/types.js";
 
 class FixtureSource implements LegacySource {
+  readonly reads: { entity: MigrationEntity; options: { limit: number; offset?: number; afterSourceId?: string } }[] = [];
+
   constructor(
     private readonly counts: Record<string, number>,
     private readonly records: Partial<Record<MigrationEntity, LegacyRecord[]>> = {},
@@ -25,8 +27,12 @@ class FixtureSource implements LegacySource {
     return this.counts[entity] ?? 0;
   }
 
-  async readBatch(entity: MigrationEntity, options: { limit: number; afterSourceId?: string }): Promise<LegacyRecord[]> {
-    const offset = options.afterSourceId ? Number.parseInt(options.afterSourceId, 10) : 0;
+  async readBatch(
+    entity: MigrationEntity,
+    options: { limit: number; offset?: number; afterSourceId?: string },
+  ): Promise<LegacyRecord[]> {
+    this.reads.push({ entity, options });
+    const offset = options.offset ?? 0;
     return (this.records[entity] ?? []).slice(offset, offset + options.limit);
   }
 }
@@ -189,5 +195,67 @@ describe("migration foundation", () => {
       idMapUnchanged: 2,
     });
     expect(target.writtenRecords).toHaveLength(2);
+  });
+
+  it("uses batch offsets without converting them into source id cursors", async () => {
+    const source = new FixtureSource(
+      { customers: 3 },
+      {
+        customers: [
+          {
+            sourceSystem: "legacy_supabase",
+            sourceTable: "customers",
+            sourceId: "10",
+            payload: { full_name: "Ada Lovelace" },
+            checksum: "sha256:ada",
+          },
+          {
+            sourceSystem: "legacy_supabase",
+            sourceTable: "customers",
+            sourceId: "20",
+            payload: { full_name: "Grace Hopper" },
+            checksum: "sha256:grace",
+          },
+          {
+            sourceSystem: "legacy_supabase",
+            sourceTable: "customers",
+            sourceId: "30",
+            payload: { full_name: "Katherine Johnson" },
+            checksum: "sha256:katherine",
+          },
+        ],
+      },
+    );
+    const target = new MemoryTarget();
+
+    await expect(
+      applyMigrationBatch({
+        source,
+        target,
+        batch: {
+          entity: "customers",
+          batchNumber: 2,
+          limit: 2,
+          offset: 2,
+          expectedRows: 1,
+        },
+      }),
+    ).resolves.toMatchObject({
+      batchNumber: 2,
+      readRows: 1,
+      writtenRows: 1,
+    });
+
+    expect(source.reads).toEqual([
+      {
+        entity: "customers",
+        options: { limit: 2, offset: 2 },
+      },
+    ]);
+    expect(target.writtenRecords).toEqual([
+      expect.objectContaining({
+        payload: { full_name: "Katherine Johnson" },
+      }),
+    ]);
   });
 });
