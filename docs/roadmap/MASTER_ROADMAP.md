@@ -9,10 +9,10 @@ This roadmap is the execution source of truth for the Garanti Kulucka ecosystem 
 - Phase 2 canonical PostgreSQL schema is implemented with role/permission/provider seed data.
 - Phase 3 backend-owned auth and admin-managed persistence foundations are implemented: sessions, permissions, encrypted settings/tokens, restart-hydratable integration snapshots, admin integration APIs, admin audit trails, webphone config, file metadata, and audit boundaries. Auth lifecycle tests cover refresh rotation, logout revocation, disabled users, and role denial.
 - Phase 4 has backend/frontend typed client boundaries for auth, domain data, files, realtime, webphone, settings, integrations, integration account snapshots, admin audit trails, and provider attempt views. Direct Supabase usage is blocked by repository guards, and web clients reject Supabase/provider origins as backend base URLs.
-- Phase 5 provider contracts are fixture-only and worker-routed. Worker provider attempt persistence is wired to PostgreSQL when `DATABASE_URL` is configured, generated transport payloads are checked against frozen provider fixtures, provider retry/dead-letter decisions carry structured metadata, handler failures persist provider failure attempts, provider/channel boundaries are enforced, and API catalog parity with worker adapters is contract-tested. Provider attempts are exposed through secret-redacted admin APIs. Live provider calls remain disabled until legacy payload fixtures are fully replayed.
+- Phase 5 provider contracts are fixture-only and worker-routed. Worker provider attempt persistence is wired to PostgreSQL when `DATABASE_URL` is configured, generated transport payloads are checked against frozen provider fixtures, provider retry/dead-letter decisions carry structured metadata, handler failures persist provider failure attempts, provider/channel boundaries are enforced, API catalog parity with worker adapters is contract-tested, and provider fixture coverage is explicitly tracked with pending legacy fixture gaps. Provider attempts are exposed through secret-redacted admin APIs. Live provider calls remain disabled until legacy payload fixtures are fully replayed.
 - Phase 6 realtime and webphone boundaries are implemented with Socket.IO event contracts, Redis fanout support, and SIP/WebRTC kept outside API media routing.
 - Phase 7 migrator foundation is implemented with manual commands, PostgreSQL legacy source reader, canonical target writer, source/target ports, batch planning, batch apply ports, legacy ID map helpers, synthetic verification reports, and optional secret-free command report files.
-- Current CI/tag state: latest implementation checkpoint is `v0.1.41`; latest roadmap sync checkpoint is `v0.1.40`.
+- Current CI/tag state: latest implementation checkpoint is `v0.1.43`; latest roadmap sync checkpoint is `v0.1.42`.
 
 ## Non-Negotiables
 
@@ -186,7 +186,7 @@ Verification:
 - Provider contract tests compare generated payloads to frozen fixtures.
 - Worker retry tests cover timeout, 429, 5xx, malformed response, and provider success after retry.
 - No CI test requires live credentials.
-- Current foundation tests cover provider envelopes, fixture-only handlers, provider catalog, provider/channel boundary validation, API/worker provider catalog parity, generated transport payloads, webhook ingestion, payload hashing, queue envelope creation, provider attempt retry/dead-letter metadata decisions, handler failure attempt persistence, PostgreSQL attempt persistence, provider attempt admin serialization, fixture validation, and secret-free responses.
+- Current foundation tests cover provider envelopes, fixture-only handlers, provider catalog, provider/channel boundary validation, API/worker provider catalog parity, provider fixture coverage manifest validation, generated transport payloads, webhook ingestion, payload hashing, queue envelope creation, provider attempt retry/dead-letter metadata decisions, handler failure attempt persistence, PostgreSQL attempt persistence, provider attempt admin serialization, fixture validation, and secret-free responses.
 
 Anti-pattern guards:
 
