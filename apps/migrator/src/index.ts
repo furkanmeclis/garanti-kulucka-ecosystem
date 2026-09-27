@@ -6,3 +6,4 @@ export * from "./plan.js";
 export * from "./reports.js";
 export * from "./target.js";
 export * from "./types.js";
+export * from "./verify.js";
