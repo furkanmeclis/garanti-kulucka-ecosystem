@@ -10,6 +10,7 @@ import {
   providerWebhookJobPayloadSchema,
 } from "@garanti-kulucka/shared";
 import { assertProviderOperation } from "./registry.js";
+import { buildProviderTransportPayload } from "./payloads.js";
 
 export interface ProviderJobHandlingResult {
   provider: ProviderName;
@@ -110,6 +111,7 @@ function createFixtureAttempt(
       job_id: job.job_id,
       channel: envelope.channel,
       fixture_only: true,
+      transport_payload: buildProviderTransportPayload(envelope),
     },
     response_metadata: {
       accepted: true,
