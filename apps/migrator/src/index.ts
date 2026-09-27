@@ -4,4 +4,5 @@ export * from "./id-map.js";
 export * from "./legacy-source.js";
 export * from "./plan.js";
 export * from "./reports.js";
+export * from "./target.js";
 export * from "./types.js";
