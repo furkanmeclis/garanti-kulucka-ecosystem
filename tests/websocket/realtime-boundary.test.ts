@@ -8,7 +8,11 @@ describe("websocket gate", () => {
         event: "message.created",
         id: "evt_ws",
         occurred_at: new Date("2026-01-01T00:00:00.000Z").toISOString(),
-        payload: { conversation_public_id: "cnv_test" },
+        payload: {
+          message_public_id: "msg_test",
+          conversation_public_id: "cnv_test",
+          sender_type: "customer",
+        },
       }).success,
     ).toBe(true);
   });

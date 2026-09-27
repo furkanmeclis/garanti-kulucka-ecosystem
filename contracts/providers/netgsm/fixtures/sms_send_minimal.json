@@ -1,0 +1,16 @@
+{
+  "request_id": "req_netgsm_fixture_1",
+  "provider": "netgsm",
+  "operation": "sms.send",
+  "direction": "outbound",
+  "channel": "sms",
+  "occurred_at": "2026-09-27T00:00:00.000Z",
+  "payload": {
+    "recipient_phone": "+905550000000",
+    "message": "Fixture SMS"
+  },
+  "legacy_contract": {
+    "source": "legacy-sms-service",
+    "fixture_name": "netgsm_sms_send_minimal"
+  }
+}

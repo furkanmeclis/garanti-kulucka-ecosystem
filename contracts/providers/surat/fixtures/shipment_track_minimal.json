@@ -1,0 +1,15 @@
+{
+  "request_id": "req_surat_fixture_1",
+  "provider": "surat",
+  "operation": "shipment.track",
+  "direction": "outbound",
+  "channel": "cargo",
+  "occurred_at": "2026-09-27T00:00:00.000Z",
+  "payload": {
+    "tracking_number": "SR fixture tracking"
+  },
+  "legacy_contract": {
+    "source": "legacy-shipment-service",
+    "fixture_name": "surat_shipment_track_minimal"
+  }
+}

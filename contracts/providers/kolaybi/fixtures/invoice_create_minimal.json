@@ -1,0 +1,17 @@
+{
+  "request_id": "req_kolaybi_fixture_1",
+  "provider": "kolaybi",
+  "operation": "invoice.create",
+  "direction": "outbound",
+  "channel": "accounting",
+  "occurred_at": "2026-09-27T00:00:00.000Z",
+  "payload": {
+    "order_public_id": "ord_fixture_1",
+    "currency": "TRY",
+    "total_amount": "100.00"
+  },
+  "legacy_contract": {
+    "source": "legacy-invoice-service",
+    "fixture_name": "kolaybi_invoice_create_minimal"
+  }
+}

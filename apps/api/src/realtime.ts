@@ -1,13 +1,53 @@
 import type { ServerType } from "@hono/node-server";
 import { createAdapter } from "@socket.io/redis-streams-adapter";
+import {
+  parseRealtimeEnvelope,
+  realtimeConversationRoom,
+  realtimeUserRoom,
+  type RealtimeEnvelope,
+  type RealtimeRoom,
+} from "@garanti-kulucka/shared";
 import { createClient, type RedisClientType } from "redis";
 import { Server } from "socket.io";
 import type { ApiConfig } from "./config.js";
 import { verifyAccessToken } from "./auth/tokens.js";
 
+export interface RealtimePublisher {
+  publish: (room: RealtimeRoom, envelope: RealtimeEnvelope) => void;
+  publishToUser: (userPublicId: string, envelope: RealtimeEnvelope) => void;
+  publishToConversation: (conversationPublicId: string, envelope: RealtimeEnvelope) => void;
+  broadcast: (envelope: RealtimeEnvelope) => void;
+}
+
 export interface RealtimeHandle {
   io: Server;
+  publisher: RealtimePublisher;
   close: () => Promise<void>;
+}
+
+export function createRealtimePublisher(io: Pick<Server, "emit" | "to">): RealtimePublisher {
+  const emitEnvelope = (room: RealtimeRoom, envelope: RealtimeEnvelope) => {
+    const parsed = parseRealtimeEnvelope(envelope);
+    if (room === "broadcast") {
+      io.emit(parsed.event, parsed);
+      return;
+    }
+
+    io.to(room).emit(parsed.event, parsed);
+  };
+
+  return {
+    publish: emitEnvelope,
+    publishToUser: (userPublicId, envelope) => {
+      emitEnvelope(realtimeUserRoom(userPublicId), envelope);
+    },
+    publishToConversation: (conversationPublicId, envelope) => {
+      emitEnvelope(realtimeConversationRoom(conversationPublicId), envelope);
+    },
+    broadcast: (envelope) => {
+      emitEnvelope("broadcast", envelope);
+    },
+  };
 }
 
 export async function attachRealtime(server: ServerType, config: ApiConfig): Promise<RealtimeHandle> {
@@ -54,7 +94,7 @@ export async function attachRealtime(server: ServerType, config: ApiConfig): Pro
   });
 
   io.on("connection", (socket) => {
-    const userRoom = `user:${socket.data.user_public_id}`;
+    const userRoom = realtimeUserRoom(socket.data.user_public_id);
     socket.join(userRoom);
     socket.emit("presence.updated", {
       event: "presence.updated",
@@ -68,19 +108,20 @@ export async function attachRealtime(server: ServerType, config: ApiConfig): Pro
 
     socket.on("conversation.join", (conversationPublicId: string) => {
       if (typeof conversationPublicId === "string" && conversationPublicId.length > 0) {
-        socket.join(`conversation:${conversationPublicId}`);
+        socket.join(realtimeConversationRoom(conversationPublicId));
       }
     });
 
     socket.on("conversation.leave", (conversationPublicId: string) => {
       if (typeof conversationPublicId === "string" && conversationPublicId.length > 0) {
-        socket.leave(`conversation:${conversationPublicId}`);
+        socket.leave(realtimeConversationRoom(conversationPublicId));
       }
     });
   });
 
   return {
     io,
+    publisher: createRealtimePublisher(io),
     close: async () => {
       await io.close();
       if (redisClient) {

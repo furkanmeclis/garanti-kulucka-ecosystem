@@ -1,0 +1,17 @@
+{
+  "request_id": "req_ptt_fixture_1",
+  "provider": "ptt",
+  "operation": "shipment.create",
+  "direction": "outbound",
+  "channel": "cargo",
+  "occurred_at": "2026-09-27T00:00:00.000Z",
+  "payload": {
+    "order_public_id": "ord_fixture_1",
+    "recipient_name": "Fixture Customer",
+    "recipient_phone": "+905550000000"
+  },
+  "legacy_contract": {
+    "source": "legacy-shipment-service",
+    "fixture_name": "ptt_shipment_create_minimal"
+  }
+}

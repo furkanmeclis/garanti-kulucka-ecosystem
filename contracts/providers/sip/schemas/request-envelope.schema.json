@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SIP provider request envelope",
+  "type": "object",
+  "required": ["request_id", "provider", "operation", "direction", "channel", "occurred_at", "payload"],
+  "properties": {
+    "request_id": { "type": "string", "minLength": 1 },
+    "provider": { "const": "sip" },
+    "operation": { "const": "sip.config.sync" },
+    "direction": { "const": "outbound" },
+    "channel": { "const": "sip" },
+    "occurred_at": { "type": "string", "format": "date-time" },
+    "payload": { "type": "object" },
+    "legacy_contract": { "type": "object" }
+  },
+  "additionalProperties": false
+}

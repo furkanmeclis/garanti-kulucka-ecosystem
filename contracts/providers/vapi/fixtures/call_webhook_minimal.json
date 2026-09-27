@@ -1,0 +1,18 @@
+{
+  "request_id": "req_vapi_fixture_1",
+  "provider": "vapi",
+  "operation": "call.webhook",
+  "direction": "inbound",
+  "channel": "voice",
+  "occurred_at": "2026-09-27T00:00:00.000Z",
+  "payload": {
+    "type": "call-ended",
+    "call": {
+      "id": "call_fixture_1"
+    }
+  },
+  "legacy_contract": {
+    "source": "legacy-voice-webhook",
+    "fixture_name": "vapi_call_webhook_minimal"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "request_id": "req_sip_fixture_1",
+  "provider": "sip",
+  "operation": "sip.config.sync",
+  "direction": "outbound",
+  "channel": "sip",
+  "occurred_at": "2026-09-27T00:00:00.000Z",
+  "payload": {
+    "user_public_id": "usr_fixture_1",
+    "sip_username": "fixture-extension",
+    "password_state": "encrypted"
+  },
+  "legacy_contract": {
+    "source": "legacy-webphone-config",
+    "fixture_name": "sip_config_sync_minimal"
+  }
+}

@@ -8,6 +8,7 @@ describe("web API client boundary", () => {
     expect(createApiClient("http://localhost:3000")).toHaveProperty("auth");
     expect(createApiClient("http://localhost:3000")).toHaveProperty("admin");
     expect(createApiClient("http://localhost:3000")).toHaveProperty("domain");
+    expect(createApiClient("http://localhost:3000")).toHaveProperty("webphone");
   });
 
   it("sends bearer tokens through the backend HTTP client", async () => {
@@ -88,5 +89,28 @@ describe("web API client boundary", () => {
 
     expect(requests[0]?.url).toBe("http://localhost:3000/api/conversations?channel=instagram&limit=25");
     expect(requests[1]?.url).toBe("http://localhost:3000/api/conversations/cnv_test/messages?limit=100");
+  });
+
+  it("maps webphone config reads to backend routes", async () => {
+    const requests: Request[] = [];
+    const client = createApiClient("http://localhost:3000", {
+      fetchImpl: async (input, init) => {
+        requests.push(new Request(input, init));
+        return Response.json({
+          enabled: true,
+          sip_websocket_url: "wss://sip.example.com/ws",
+          sip_domain: "sip.example.com",
+          sip_username: "agent100",
+          sip_password: "secret",
+          ice_servers: [],
+          media_proxy_enabled: false,
+          transport: "direct_sip_over_webrtc",
+        });
+      },
+    });
+
+    await client.webphone.getConfig();
+
+    expect(requests[0]?.url).toBe("http://localhost:3000/api/webphone/config");
   });
 });

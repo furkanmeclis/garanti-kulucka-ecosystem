@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "KolayBi provider request envelope",
+  "type": "object",
+  "required": ["request_id", "provider", "operation", "direction", "channel", "occurred_at", "payload"],
+  "properties": {
+    "request_id": { "type": "string", "minLength": 1 },
+    "provider": { "const": "kolaybi" },
+    "operation": { "const": "invoice.create" },
+    "direction": { "const": "outbound" },
+    "channel": { "const": "accounting" },
+    "occurred_at": { "type": "string", "format": "date-time" },
+    "payload": { "type": "object" },
+    "legacy_contract": { "type": "object" }
+  },
+  "additionalProperties": false
+}

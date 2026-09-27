@@ -49,6 +49,18 @@ The migrator writes:
 - `row-counts.json`
 - `verification-report.json`
 
+## Foundation Modules
+
+The migrator is split into testable ports before any live legacy connection is added:
+
+- `LegacySource`: read-only source interface for counts and paged batches.
+- `MigrationTarget`: target interface for canonical writes and `legacy_id_map` lookups/upserts.
+- `createMigrationPlan`: builds deterministic batch plans for dry-run and apply modes.
+- `upsertLegacyIdMap`: enforces idempotency around `(source_system, source_table, source_id)`.
+- `createDryRunReport` and `createVerificationReport`: report models used by manual CLI commands.
+
+Synthetic fixtures cover the foundation. Live Supabase access is intentionally not part of this slice.
+
 ## Verification
 
 Checks include:

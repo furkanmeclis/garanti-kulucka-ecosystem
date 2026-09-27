@@ -23,7 +23,7 @@ describe("shared contracts", () => {
         event: "settings.changed",
         id: "evt_1",
         occurred_at: new Date().toISOString(),
-        payload: { setting: "instagram" },
+        payload: { scope: "global", key: "instagram.access_token" },
       }),
     ).not.toThrow();
   });
