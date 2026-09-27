@@ -7,6 +7,7 @@ import { healthStatusSchema } from "@garanti-kulucka/shared";
 import type { AppDatabase } from "@garanti-kulucka/database";
 import { loadConfig, type ApiConfig } from "./config.js";
 import { createAuthRoutes } from "./http/auth-routes.js";
+import { createDomainRoutes } from "./http/domain-routes.js";
 import { createIntegrationRoutes } from "./http/integration-routes.js";
 import { createSettingsRoutes } from "./http/settings-routes.js";
 import type { AppBindings } from "./http/types.js";
@@ -88,6 +89,7 @@ export function createApp(options: CreateAppOptions = {}) {
   });
 
   app.route("/auth", createAuthRoutes());
+  app.route("/api", createDomainRoutes());
   app.route("/admin/settings", createSettingsRoutes());
   app.route("/admin/integrations", createIntegrationRoutes());
 

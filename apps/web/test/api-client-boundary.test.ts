@@ -7,6 +7,7 @@ describe("web API client boundary", () => {
     expect(createApiClient("http://localhost:3000")).toHaveProperty("health");
     expect(createApiClient("http://localhost:3000")).toHaveProperty("auth");
     expect(createApiClient("http://localhost:3000")).toHaveProperty("admin");
+    expect(createApiClient("http://localhost:3000")).toHaveProperty("domain");
   });
 
   it("sends bearer tokens through the backend HTTP client", async () => {
@@ -71,5 +72,21 @@ describe("web API client boundary", () => {
       token_type: "access_token",
       value: null,
     });
+  });
+
+  it("maps domain conversation reads to backend routes", async () => {
+    const requests: Request[] = [];
+    const client = createApiClient("http://localhost:3000", {
+      fetchImpl: async (input, init) => {
+        requests.push(new Request(input, init));
+        return Response.json({ data: [] });
+      },
+    });
+
+    await client.domain.listConversations({ channel: "instagram", limit: 25 });
+    await client.domain.listMessages("cnv_test");
+
+    expect(requests[0]?.url).toBe("http://localhost:3000/api/conversations?channel=instagram&limit=25");
+    expect(requests[1]?.url).toBe("http://localhost:3000/api/conversations/cnv_test/messages?limit=100");
   });
 });
