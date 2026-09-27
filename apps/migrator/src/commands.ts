@@ -2,7 +2,8 @@ import { spawn } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { Client } from "pg";
-import type { MigratorCommandReport, MigratorCommandReportError } from "./types.js";
+import { createVerificationReport } from "./reports.js";
+import type { MigratorCommandReport, MigratorCommandReportError, VerificationReport } from "./types.js";
 
 export type MigratorCommand = "migrate:dry-run" | "migrate:apply" | "verify";
 
@@ -14,6 +15,20 @@ export interface ParsedMigratorCommand {
 export interface MigratorCommandOptions {
   readonly reportFile?: string;
 }
+
+const requiredCanonicalTables = [
+  "users",
+  "roles",
+  "customers",
+  "conversations",
+  "messages",
+  "orders",
+  "shipments",
+  "integration_providers",
+  "integration_accounts",
+  "settings",
+  "legacy_id_map",
+];
 
 export function parseMigratorCommand(args: string[]): MigratorCommand {
   return parseMigratorCliCommand(args).command;
@@ -44,8 +59,14 @@ export async function runMigratorCommand(
     }
 
     if (command === "verify") {
-      await verifyTargetDatabase(databaseUrl);
-      await writeMigratorCommandReport(options, createCommandReport(command, "passed", startedAt));
+      const verification = await verifyTargetDatabase(databaseUrl);
+      if (verification.status === "failed") {
+        const error = new Error("Canonical database verification failed");
+        await writeMigratorCommandReport(options, createCommandReport(command, "failed", startedAt, error, verification));
+        throw error;
+      }
+
+      await writeMigratorCommandReport(options, createCommandReport(command, "passed", startedAt, undefined, verification));
       return;
     }
 
@@ -126,6 +147,7 @@ function createCommandReport(
   status: MigratorCommandReport["status"],
   startedAt: Date,
   error?: unknown,
+  verification?: VerificationReport,
 ): MigratorCommandReport {
   const finishedAt = new Date();
   return {
@@ -134,6 +156,7 @@ function createCommandReport(
     startedAt: startedAt.toISOString(),
     finishedAt: finishedAt.toISOString(),
     durationMs: Math.max(0, finishedAt.getTime() - startedAt.getTime()),
+    ...(verification ? { verification } : {}),
     ...(error ? { error: createReportError(error) } : {}),
   };
 }
@@ -146,25 +169,11 @@ function createReportError(error: unknown): MigratorCommandReportError {
   return { message: "Unknown migrator error" };
 }
 
-async function verifyTargetDatabase(databaseUrl: string): Promise<void> {
+async function verifyTargetDatabase(databaseUrl: string): Promise<VerificationReport> {
   const client = new Client({ connectionString: databaseUrl });
   await client.connect();
 
   try {
-    const requiredTables = [
-      "users",
-      "roles",
-      "customers",
-      "conversations",
-      "messages",
-      "orders",
-      "shipments",
-      "integration_providers",
-      "integration_accounts",
-      "settings",
-      "legacy_id_map",
-    ];
-
     const result = await client.query<{ table_name: string }>(
       `
         select table_name
@@ -172,18 +181,27 @@ async function verifyTargetDatabase(databaseUrl: string): Promise<void> {
         where table_schema = 'public'
           and table_name = any($1::text[])
       `,
-      [requiredTables],
+      [requiredCanonicalTables],
     );
 
-    const existing = new Set(result.rows.map((row) => row.table_name));
-    const missing = requiredTables.filter((table) => !existing.has(table));
-
-    if (missing.length > 0) {
-      throw new Error(`Missing canonical tables: ${missing.join(", ")}`);
-    }
+    return createCanonicalTableVerificationReport(result.rows.map((row) => row.table_name));
   } finally {
     await client.end();
   }
+}
+
+export function createCanonicalTableVerificationReport(existingTables: string[]): VerificationReport {
+  const existing = new Set(existingTables);
+
+  return createVerificationReport({
+    checks: requiredCanonicalTables.map((table) => ({
+      name: `canonical_table.${table}`,
+      status: existing.has(table) ? "passed" : "failed",
+      expected: 1,
+      actual: existing.has(table) ? 1 : 0,
+      ...(existing.has(table) ? {} : { message: `Missing canonical table: ${table}` }),
+    })),
+  });
 }
 
 const usage =

@@ -172,6 +172,7 @@ export interface MigratorCommandReport {
   readonly startedAt: string;
   readonly finishedAt: string;
   readonly durationMs: number;
+  readonly verification?: VerificationReport;
   readonly error?: MigratorCommandReportError;
 }
 

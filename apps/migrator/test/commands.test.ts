@@ -2,7 +2,12 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { parseMigratorCliCommand, parseMigratorCommand, runMigratorCommand } from "../src/commands.js";
+import {
+  createCanonicalTableVerificationReport,
+  parseMigratorCliCommand,
+  parseMigratorCommand,
+  runMigratorCommand,
+} from "../src/commands.js";
 
 describe("migrator commands", () => {
   it("parses dry-run", () => {
@@ -55,5 +60,32 @@ describe("migrator commands", () => {
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }
+  });
+
+  it("creates canonical table verification reports without leaking connection details", () => {
+    const report = createCanonicalTableVerificationReport([
+      "users",
+      "roles",
+      "customers",
+      "conversations",
+      "messages",
+      "orders",
+      "shipments",
+      "integration_providers",
+      "integration_accounts",
+      "settings",
+    ]);
+
+    expect(report.status).toBe("failed");
+    expect(report.checks).toContainEqual(
+      expect.objectContaining({
+        name: "canonical_table.legacy_id_map",
+        status: "failed",
+        expected: 1,
+        actual: 0,
+      }),
+    );
+    expect(JSON.stringify(report)).not.toContain("DATABASE_URL");
+    expect(JSON.stringify(report)).not.toContain("postgres://");
   });
 });
