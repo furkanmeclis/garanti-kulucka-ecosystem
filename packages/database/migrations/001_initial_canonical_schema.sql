@@ -429,6 +429,30 @@ CREATE TABLE legacy_id_map (
 );
 CREATE INDEX legacy_id_map_target_idx ON legacy_id_map(target_table, target_id);
 
+INSERT INTO roles (public_id, name, description, is_system)
+VALUES
+  ('rol_owner', 'owner', 'System owner with full access', true),
+  ('rol_admin', 'admin', 'Administrator with operational access', true),
+  ('rol_agent', 'agent', 'Support and sales agent', true)
+ON CONFLICT (name) DO NOTHING;
+
+INSERT INTO permissions (public_id, key, description)
+VALUES
+  ('per_settings_read', 'settings:read', 'Read admin-managed settings'),
+  ('per_settings_write', 'settings:write', 'Update admin-managed settings'),
+  ('per_integrations_read', 'integrations:read', 'Read provider integration configuration'),
+  ('per_integrations_write', 'integrations:write', 'Update provider integration configuration'),
+  ('per_conversations_manage', 'conversations:manage', 'Manage conversations and assignments'),
+  ('per_orders_manage', 'orders:manage', 'Manage orders and shipments')
+ON CONFLICT (key) DO NOTHING;
+
+INSERT INTO role_permissions (role_id, permission_id)
+SELECT roles.id, permissions.id
+FROM roles
+CROSS JOIN permissions
+WHERE roles.name IN ('owner', 'admin')
+ON CONFLICT (role_id, permission_id) DO NOTHING;
+
 INSERT INTO integration_providers (public_id, key, name)
 VALUES
   ('prv_ptt', 'ptt', 'PTT Kargo'),

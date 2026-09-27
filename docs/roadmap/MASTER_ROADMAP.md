@@ -2,6 +2,13 @@
 
 This roadmap is the execution source of truth for the Garanti Kulucka ecosystem rebuild.
 
+## Current Status
+
+- Phase 0 planning and contract inventory documents are in place.
+- Phase 1 foundation is implemented with API, worker, migrator, Dockerfiles, compose, and CI/tag automation.
+- Phase 2 canonical PostgreSQL schema is implemented with role/permission/provider seed data.
+- Phase 3 has started: backend-owned auth, JWT websocket authorization, admin settings persistence, audit logging, and BullMQ queue publishing boundaries are in place.
+
 ## Non-Negotiables
 
 - Keep the customer-facing frontend experience stable.
@@ -98,7 +105,7 @@ Verification:
 
 - Schema lint rejects quoted identifiers, Turkish table names, `timestamp without time zone`, `varchar`, `serial`, and missing FK indexes.
 - Migration tests create a fresh database from zero.
-- Seed data creates the first admin without Supabase.
+- Seed data creates system roles, permissions, and providers without Supabase; first admin creation must use a dedicated bootstrap path so no password lands in migrations.
 
 Anti-pattern guards:
 

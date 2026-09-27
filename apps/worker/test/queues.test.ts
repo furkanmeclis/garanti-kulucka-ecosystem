@@ -18,4 +18,16 @@ describe("worker queue contracts", () => {
       }),
     ).not.toThrow();
   });
+
+  it("rejects unknown queues before work is published", () => {
+    expect(() =>
+      validateJobEnvelope({
+        job_id: "job_2",
+        queue: "legacy-random-queue",
+        name: "legacy.unknown",
+        payload: {},
+        requested_at: new Date().toISOString(),
+      }),
+    ).toThrow();
+  });
 });

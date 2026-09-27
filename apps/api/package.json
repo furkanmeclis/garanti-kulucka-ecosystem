@@ -17,8 +17,14 @@
     "@garanti-kulucka/database": "file:../../packages/database",
     "@garanti-kulucka/shared": "file:../../packages/shared",
     "@hono/node-server": "^1.19.6",
+    "@socket.io/redis-streams-adapter": "^0.3.1",
+    "argon2": "^0.45.1",
     "hono": "^4.10.5",
-    "pino": "^10.1.0"
+    "jose": "^6.2.12",
+    "pg": "^8.23.0",
+    "pino": "^10.1.0",
+    "redis": "^6.2.1",
+    "socket.io": "^4.8.4"
   },
   "devDependencies": {
     "tsx": "^4.20.6"

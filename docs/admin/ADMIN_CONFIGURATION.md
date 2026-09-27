@@ -54,3 +54,14 @@ Required test:
 2. Restart API and worker.
 3. Send a simulated webhook.
 4. Verify the correct account/token/config is resolved from PostgreSQL.
+
+## Implemented API Boundary
+
+- `POST /auth/login`
+- `POST /auth/refresh`
+- `POST /auth/logout`
+- `GET /auth/me`
+- `GET /admin/settings?scope=global`
+- `PUT /admin/settings/:key`
+
+Secret settings are persisted but serialized with `value: null` in API responses. Changes write `audit_logs` rows with actor, request metadata, old value, and new value.
