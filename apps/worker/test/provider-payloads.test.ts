@@ -34,6 +34,9 @@ describe("provider transport payload builder", () => {
   });
 
   it("builds outbound provider bodies without provider credentials", () => {
+    expect(buildProviderTransportPayload(readFixture("ptt", "shipment_track_minimal.json")).body).toEqual({
+      tracking_number: "PTT fixture tracking",
+    });
     expect(buildProviderTransportPayload(readFixture("surat", "shipment_track_minimal.json")).body).toEqual({
       tracking_number: "SR fixture tracking",
     });

@@ -11,8 +11,8 @@
       "provider": "ptt",
       "operation": "shipment.track",
       "direction": "outbound",
-      "status": "pending_legacy_fixture",
-      "reason": "Awaiting working legacy PTT tracking request/response sample."
+      "status": "covered",
+      "fixture_file": "ptt/fixtures/shipment_track_minimal.json"
     },
     {
       "provider": "surat",
