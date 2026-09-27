@@ -1,4 +1,9 @@
-import type { ProviderChannel, ProviderName, ProviderOperation } from "@garanti-kulucka/shared";
+import type {
+  ProviderChannel,
+  ProviderName,
+  ProviderOperation,
+  ProviderRequestEnvelope,
+} from "@garanti-kulucka/shared";
 
 export interface ProviderAdapterDefinition {
   provider: ProviderName;
@@ -112,6 +117,19 @@ export function assertProviderOperation(
 
   if (!allowed.includes(operation)) {
     throw new Error(`Provider operation is not registered: ${provider}.${operation}`);
+  }
+
+  return adapter;
+}
+
+export function assertProviderEnvelope(
+  envelope: Pick<ProviderRequestEnvelope, "provider" | "operation" | "channel">,
+  direction: "webhook" | "delivery",
+): ProviderAdapterDefinition {
+  const adapter = assertProviderOperation(envelope.provider, envelope.operation, direction);
+
+  if (!adapter.channels.includes(envelope.channel)) {
+    throw new Error(`Provider channel is not registered: ${envelope.provider}.${envelope.channel}`);
   }
 
   return adapter;

@@ -82,4 +82,15 @@ describe("provider transport payload builder", () => {
       }),
     ).toThrow("secret-looking key");
   });
+
+  it("rejects transport payloads for channels outside the provider boundary", () => {
+    const envelope = readFixture("ptt", "shipment_create_minimal.json");
+
+    expect(() =>
+      buildProviderTransportPayload({
+        ...envelope,
+        channel: "sms",
+      }),
+    ).toThrow("Provider channel is not registered");
+  });
 });

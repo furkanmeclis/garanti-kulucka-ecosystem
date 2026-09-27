@@ -1,5 +1,5 @@
 import type { ProviderRequestEnvelope } from "@garanti-kulucka/shared";
-import { assertProviderOperation } from "./registry.js";
+import { assertProviderEnvelope } from "./registry.js";
 
 export interface ProviderTransportPayload {
   provider: ProviderRequestEnvelope["provider"];
@@ -80,11 +80,7 @@ function buildBody(envelope: ProviderRequestEnvelope): Record<string, unknown> {
 export function buildProviderTransportPayload(
   envelope: ProviderRequestEnvelope,
 ): ProviderTransportPayload {
-  assertProviderOperation(
-    envelope.provider,
-    envelope.operation,
-    envelope.direction === "inbound" ? "webhook" : "delivery",
-  );
+  assertProviderEnvelope(envelope, envelope.direction === "inbound" ? "webhook" : "delivery");
   assertNoSecretPayloadKeys(envelope.payload);
 
   return {

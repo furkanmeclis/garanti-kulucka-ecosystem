@@ -125,6 +125,28 @@ describe("provider job handlers", () => {
     ).toThrow("Provider operation is not registered");
   });
 
+  it("rejects channels that are not registered for the provider", () => {
+    expect(() =>
+      handleProviderDeliveryJob({
+        job_id: "job_ptt_bad_channel",
+        queue: "provider-delivery",
+        name: "ptt.shipment.create",
+        requested_at: now,
+        payload: {
+          envelope: {
+            request_id: "req_ptt_bad_channel",
+            provider: "ptt",
+            operation: "shipment.create",
+            direction: "outbound",
+            channel: "sms",
+            occurred_at: now,
+            payload: {},
+          },
+        },
+      }),
+    ).toThrow("Provider channel is not registered");
+  });
+
   it("persists provider attempts after processor success when repository is configured", async () => {
     const persisted: unknown[] = [];
     const providerAttemptRepository: ProviderAttemptRepository = {

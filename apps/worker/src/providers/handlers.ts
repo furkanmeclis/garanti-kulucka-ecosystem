@@ -9,7 +9,7 @@ import {
   providerResponseEnvelopeSchema,
   providerWebhookJobPayloadSchema,
 } from "@garanti-kulucka/shared";
-import { assertProviderOperation } from "./registry.js";
+import { assertProviderEnvelope } from "./registry.js";
 import { buildProviderTransportPayload } from "./payloads.js";
 
 export interface ProviderJobHandlingResult {
@@ -211,7 +211,7 @@ export function handleProviderWebhookJob(job: JobEnvelope): ProviderJobHandlingR
   }
 
   const payload = providerWebhookJobPayloadSchema.parse(job.payload);
-  assertProviderOperation(payload.envelope.provider, payload.envelope.operation, "webhook");
+  assertProviderEnvelope(payload.envelope, "webhook");
 
   providerResponseEnvelopeSchema.parse({
     request_id: payload.envelope.request_id,
@@ -241,7 +241,7 @@ export function handleProviderDeliveryJob(job: JobEnvelope): ProviderJobHandling
   }
 
   const payload = providerDeliveryJobPayloadSchema.parse(job.payload);
-  assertProviderOperation(payload.envelope.provider, payload.envelope.operation, "delivery");
+  assertProviderEnvelope(payload.envelope, "delivery");
 
   providerResponseEnvelopeSchema.parse({
     request_id: payload.envelope.request_id,
