@@ -3,7 +3,9 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { Client } from "pg";
 import { createVerificationReport } from "./reports.js";
+import { createTargetVerificationSnapshot } from "./target-snapshot.js";
 import type { MigratorCommandReport, MigratorCommandReportError, VerificationReport } from "./types.js";
+import { createMigrationVerificationReport } from "./verify.js";
 
 export type MigratorCommand = "migrate:dry-run" | "migrate:apply" | "verify";
 
@@ -184,7 +186,12 @@ async function verifyTargetDatabase(databaseUrl: string): Promise<VerificationRe
       [requiredCanonicalTables],
     );
 
-    return createCanonicalTableVerificationReport(result.rows.map((row) => row.table_name));
+    const tableVerification = createCanonicalTableVerificationReport(result.rows.map((row) => row.table_name));
+    if (tableVerification.status === "failed") {
+      return tableVerification;
+    }
+
+    return createMigrationVerificationReport(await createTargetVerificationSnapshot(client));
   } finally {
     await client.end();
   }
