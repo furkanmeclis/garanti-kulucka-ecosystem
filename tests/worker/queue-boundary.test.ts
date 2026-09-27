@@ -5,6 +5,7 @@ import {
   decideProviderRetry,
   handleProviderDeliveryJob,
 } from "../../apps/worker/src/providers/handlers.js";
+import { assertLiveProviderCallAllowed } from "../../apps/worker/src/providers/transport-policy.js";
 
 describe("worker gate", () => {
   it("allows only declared queue names", () => {
@@ -42,7 +43,31 @@ describe("worker gate", () => {
       status_code: 202,
       retry_decision: "none",
       idempotency_key: "shipment_1",
+      request_metadata: {
+        fixture_only: true,
+        transport_policy: {
+          contract_mode: "fixture_only",
+          live_call_permitted: false,
+          reason: "legacy_fixture_replay_required",
+        },
+      },
     });
+  });
+
+  it("blocks live provider calls until fixture replay promotion is explicit", () => {
+    expect(() =>
+      assertLiveProviderCallAllowed({
+        request_id: "req_live_guard",
+        provider: "netgsm",
+        operation: "sms.send",
+        direction: "outbound",
+        channel: "sms",
+        occurred_at: "2026-01-01T00:00:00.000Z",
+        payload: {
+          idempotency_key: "sms_1",
+        },
+      }),
+    ).toThrow("Live provider calls are disabled for netgsm.sms.send");
   });
 
   it.each([

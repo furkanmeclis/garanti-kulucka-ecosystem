@@ -16,7 +16,7 @@
     "test:contracts": "npm run build -w @garanti-kulucka/shared && vitest run tests/contract && npm run provider:coverage && npm run verify:structure",
     "test:integration": "vitest run tests/integration && npm run verify:structure",
     "test:migrator": "vitest run tests/migration && npm run verify:structure",
-    "test:worker": "vitest run tests/worker && npm run verify:structure",
+    "test:worker": "npm run build -w @garanti-kulucka/shared && vitest run tests/worker && npm run verify:structure",
     "test:ws": "vitest run tests/websocket && npm run verify:structure",
     "test:e2e": "vitest run tests/e2e && npm run verify:structure",
     "db:migrate:up": "npm run migrate:up -w @garanti-kulucka/database",

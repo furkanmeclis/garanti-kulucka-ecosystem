@@ -11,6 +11,7 @@ import {
 } from "@garanti-kulucka/shared";
 import { assertProviderEnvelope } from "./registry.js";
 import { buildProviderTransportPayload } from "./payloads.js";
+import { providerTransportPolicyFor } from "./transport-policy.js";
 
 export interface ProviderJobHandlingResult {
   provider: ProviderName;
@@ -195,6 +196,7 @@ function createFixtureAttempt(
       job_id: job.job_id,
       channel: envelope.channel,
       fixture_only: true,
+      transport_policy: providerTransportPolicyFor(envelope),
       transport_payload: buildProviderTransportPayload(envelope),
     },
     response_metadata: {
