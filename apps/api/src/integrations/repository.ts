@@ -17,6 +17,12 @@ export type IntegrationAccountRecord = Selectable<IntegrationAccountsTable> & {
 export type IntegrationSettingRecord = Selectable<IntegrationSettingsTable>;
 export type IntegrationTokenRecord = Selectable<IntegrationTokensTable>;
 
+export interface IntegrationAccountSnapshot {
+  account: IntegrationAccountRecord;
+  settings: IntegrationSettingRecord[];
+  tokens: IntegrationTokenRecord[];
+}
+
 export interface UpsertAccountInput {
   providerKey: string;
   displayName: string;
@@ -72,6 +78,40 @@ export class IntegrationsRepository {
       ])
       .orderBy("integration_accounts.display_name", "asc")
       .execute();
+  }
+
+  async getAccountSnapshot(accountPublicId: string): Promise<IntegrationAccountSnapshot | null> {
+    const account = await this.db
+      .selectFrom("integration_accounts")
+      .innerJoin("integration_providers", "integration_providers.id", "integration_accounts.provider_id")
+      .selectAll("integration_accounts")
+      .select([
+        "integration_providers.key as provider_key",
+        "integration_providers.name as provider_name",
+      ])
+      .where("integration_accounts.public_id", "=", accountPublicId)
+      .executeTakeFirst();
+
+    if (!account) {
+      return null;
+    }
+
+    const [settings, tokens] = await Promise.all([
+      this.db
+        .selectFrom("integration_settings")
+        .selectAll()
+        .where("account_id", "=", account.id)
+        .orderBy("key", "asc")
+        .execute(),
+      this.db
+        .selectFrom("integration_tokens")
+        .selectAll()
+        .where("account_id", "=", account.id)
+        .orderBy("token_type", "asc")
+        .execute(),
+    ]);
+
+    return { account, settings, tokens };
   }
 
   async upsertAccount(input: UpsertAccountInput): Promise<IntegrationAccountRecord> {
@@ -311,5 +351,13 @@ export function serializeIntegrationToken(token: IntegrationTokenRecord) {
     expires_at: token.expires_at,
     last_refreshed_at: token.last_refreshed_at,
     updated_at: token.updated_at,
+  };
+}
+
+export function serializeAccountSnapshot(snapshot: IntegrationAccountSnapshot) {
+  return {
+    account: serializeAccount(snapshot.account),
+    settings: snapshot.settings.map(serializeIntegrationSetting),
+    tokens: snapshot.tokens.map(serializeIntegrationToken),
   };
 }

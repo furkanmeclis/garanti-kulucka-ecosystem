@@ -5,6 +5,7 @@ import { authenticate, requireAdmin, requireDatabase } from "./middleware.js";
 import {
   IntegrationsRepository,
   serializeAccount,
+  serializeAccountSnapshot,
   serializeIntegrationSetting,
   serializeIntegrationToken,
   serializeProvider,
@@ -52,6 +53,22 @@ export function createIntegrationRoutes() {
 
     const accounts = await new IntegrationsRepository(db, context.get("encryptor")).listAccounts();
     return context.json({ data: accounts.map(serializeAccount) });
+  });
+
+  routes.get("/accounts/:account_public_id", async (context) => {
+    const db = context.get("db");
+    if (!db) {
+      return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
+    }
+
+    const snapshot = await new IntegrationsRepository(db, context.get("encryptor")).getAccountSnapshot(
+      context.req.param("account_public_id"),
+    );
+    if (!snapshot) {
+      return context.json({ error: { code: "integration_account_not_found", message: "Integration account not found" } }, 404);
+    }
+
+    return context.json(serializeAccountSnapshot(snapshot));
   });
 
   routes.post("/accounts", async (context) => {

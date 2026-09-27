@@ -25,6 +25,29 @@ export interface IntegrationAccount {
   updated_at: string;
 }
 
+export interface IntegrationSetting {
+  public_id: string;
+  key: string;
+  value: unknown;
+  is_secret: boolean;
+  updated_at: string;
+}
+
+export interface IntegrationToken {
+  public_id: string;
+  token_type: string;
+  value: null;
+  expires_at: string | null;
+  last_refreshed_at: string | null;
+  updated_at: string;
+}
+
+export interface IntegrationAccountSnapshot {
+  account: IntegrationAccount;
+  settings: IntegrationSetting[];
+  tokens: IntegrationToken[];
+}
+
 export function createAdminClient(http: BackendHttpClient) {
   return {
     listSettings: (scope = "global") =>
@@ -42,6 +65,10 @@ export function createAdminClient(http: BackendHttpClient) {
       http.request<{ data: IntegrationProvider[] }>("/admin/integrations/providers"),
     listIntegrationAccounts: () =>
       http.request<{ data: IntegrationAccount[] }>("/admin/integrations/accounts"),
+    getIntegrationAccount: (accountPublicId: string) =>
+      http.request<IntegrationAccountSnapshot>(
+        `/admin/integrations/accounts/${encodeURIComponent(accountPublicId)}`,
+      ),
     upsertIntegrationAccount: (input: {
       provider_key: string;
       display_name: string;

@@ -76,6 +76,37 @@ describe("web API client boundary", () => {
     });
   });
 
+  it("maps admin integration account snapshots to backend routes", async () => {
+    const requests: Request[] = [];
+    const client = createApiClient("http://localhost:3000", {
+      fetchImpl: async (input, init) => {
+        requests.push(new Request(input, init));
+        return Response.json({
+          account: {
+            public_id: "iac_instagram",
+            provider_key: "instagram",
+            provider_name: "Instagram Graph API",
+            display_name: "Instagram Main",
+            external_account_id: "17841400000000000",
+            status: "active",
+            metadata: {},
+            updated_at: "2026-01-01T00:00:00.000Z",
+          },
+          settings: [],
+          tokens: [{ public_id: "itk_test", token_type: "access_token", value: null }],
+        });
+      },
+    });
+
+    await expect(client.admin.getIntegrationAccount("iac_instagram")).resolves.toMatchObject({
+      account: {
+        provider_key: "instagram",
+      },
+      tokens: [{ token_type: "access_token", value: null }],
+    });
+    expect(requests[0]?.url).toBe("http://localhost:3000/admin/integrations/accounts/iac_instagram");
+  });
+
   it("maps domain conversation reads to backend routes", async () => {
     const requests: Request[] = [];
     const client = createApiClient("http://localhost:3000", {
