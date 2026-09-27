@@ -83,6 +83,18 @@ export interface ProviderAttempt {
   updated_at: string;
 }
 
+export interface ProviderRequestPreview {
+  method: string;
+  path: string;
+  headers: Record<string, string>;
+  body: unknown;
+  live_call_performed: false;
+}
+
+export interface ProviderAttemptViewModel extends Omit<ProviderAttempt, "provider_request_preview"> {
+  provider_request_preview: ProviderRequestPreview | null;
+}
+
 export interface AuditListOptions {
   entity_id?: string;
   limit?: number;
@@ -121,6 +133,49 @@ function providerAttemptQuery(options: ProviderAttemptListOptions = {}) {
 
   const query = params.toString();
   return query ? `?${query}` : "";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function normalizePreviewHeaders(value: unknown) {
+  if (!isRecord(value)) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(value).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
+  );
+}
+
+export function normalizeProviderRequestPreview(value: unknown): ProviderRequestPreview | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  if (
+    typeof value.method !== "string" ||
+    typeof value.path !== "string" ||
+    value.live_call_performed !== false
+  ) {
+    return null;
+  }
+
+  return {
+    method: value.method,
+    path: value.path,
+    headers: normalizePreviewHeaders(value.headers),
+    body: value.body ?? null,
+    live_call_performed: false,
+  };
+}
+
+export function toProviderAttemptViewModel(attempt: ProviderAttempt): ProviderAttemptViewModel {
+  return {
+    ...attempt,
+    provider_request_preview: normalizeProviderRequestPreview(attempt.provider_request_preview),
+  };
 }
 
 export function createAdminClient(http: BackendHttpClient) {

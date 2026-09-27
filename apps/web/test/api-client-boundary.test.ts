@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { toProviderAttemptViewModel } from "../src/api/admin-client.js";
 import { createApiClient } from "../src/api-client-boundary.js";
 import { createBackendHttpClient } from "../src/api/http-client.js";
 
@@ -141,11 +142,45 @@ describe("web API client boundary", () => {
     const client = createApiClient("http://localhost:3000", {
       fetchImpl: async (input, init) => {
         requests.push(new Request(input, init));
-        return Response.json({ data: [] });
+        return Response.json({
+          data: [
+            {
+              public_id: "pat_instagram",
+              provider_key: "instagram",
+              account_public_id: "iac_instagram",
+              request_id: "req_123",
+              operation: "send_message",
+              direction: "outbound",
+              status: "queued",
+              status_code: null,
+              duration_ms: 0,
+              retry_decision: "none",
+              next_retry_at: null,
+              idempotency_key: "idem_123",
+              request_metadata: {
+                dry_run_request: {
+                  headers: { authorization: "[redacted]" },
+                },
+              },
+              provider_request_preview: {
+                method: "POST",
+                path: "/v18.0/me/messages",
+                headers: { authorization: "[redacted]" },
+                body: { recipient: { id: "17841400000000000" } },
+                live_call_performed: false,
+              },
+              response_metadata: {},
+              error_code: null,
+              error_message: null,
+              started_at: "2026-01-01T00:00:00.000Z",
+              updated_at: "2026-01-01T00:00:00.000Z",
+            },
+          ],
+        });
       },
     });
 
-    await client.admin.listProviderAttempts({
+    const response = await client.admin.listProviderAttempts({
       provider_key: "instagram",
       account_public_id: "iac_instagram",
       limit: 20,
@@ -154,6 +189,68 @@ describe("web API client boundary", () => {
     expect(requests[0]?.url).toBe(
       "http://localhost:3000/admin/integrations/provider-attempts?provider_key=instagram&account_public_id=iac_instagram&limit=20",
     );
+    expect(response.data[0]?.provider_request_preview).toMatchObject({
+      method: "POST",
+      path: "/v18.0/me/messages",
+      headers: { authorization: "[redacted]" },
+      live_call_performed: false,
+    });
+    expect(JSON.stringify(response)).not.toContain("plain-token");
+  });
+
+  it("normalizes provider request previews for admin view models", () => {
+    const attempt = {
+      public_id: "pat_ptt",
+      provider_key: "ptt_kargo",
+      account_public_id: "iac_ptt",
+      request_id: "req_123",
+      operation: "create_shipment",
+      direction: "outbound",
+      status: "queued",
+      status_code: null,
+      duration_ms: 0,
+      retry_decision: "none",
+      next_retry_at: null,
+      idempotency_key: null,
+      request_metadata: {},
+      provider_request_preview: {
+        method: "POST",
+        path: "/services/Sorgu",
+        headers: {
+          authorization: "[redacted]",
+          "content-type": "application/json",
+          "x-invalid": 123,
+        },
+        body: { barcode: "KP123" },
+        live_call_performed: false,
+      },
+      response_metadata: {},
+      error_code: null,
+      error_message: null,
+      started_at: "2026-01-01T00:00:00.000Z",
+      updated_at: "2026-01-01T00:00:00.000Z",
+    };
+
+    expect(toProviderAttemptViewModel(attempt).provider_request_preview).toEqual({
+      method: "POST",
+      path: "/services/Sorgu",
+      headers: {
+        authorization: "[redacted]",
+        "content-type": "application/json",
+      },
+      body: { barcode: "KP123" },
+      live_call_performed: false,
+    });
+
+    expect(
+      toProviderAttemptViewModel({
+        ...attempt,
+        provider_request_preview: {
+          ...attempt.provider_request_preview,
+          live_call_performed: true,
+        },
+      }).provider_request_preview,
+    ).toBeNull();
   });
 
   it("maps domain conversation reads to backend routes", async () => {
