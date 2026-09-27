@@ -1,5 +1,5 @@
 import { createVerificationReport } from "./reports.js";
-import type { VerificationCheck, VerificationReport } from "./types.js";
+import type { MigrationEntity, VerificationCheck, VerificationReport } from "./types.js";
 
 export interface MigrationVerificationSnapshot {
   readonly sourceCounts: Record<string, number>;
@@ -10,6 +10,7 @@ export interface MigrationVerificationSnapshot {
   readonly orders: VerificationOrder[];
   readonly orderItems: VerificationOrderItem[];
   readonly shipments: VerificationShipment[];
+  readonly legacyIdMaps?: VerificationLegacyIdMapEntry[];
   readonly now?: Date;
 }
 
@@ -49,6 +50,14 @@ export interface VerificationShipment {
   readonly customer_public_id: string | null;
 }
 
+export interface VerificationLegacyIdMapEntry {
+  readonly source_system: string;
+  readonly source_table: string;
+  readonly source_id: string;
+  readonly target_table: string;
+  readonly target_id: string;
+}
+
 export function createMigrationVerificationReport(
   snapshot: MigrationVerificationSnapshot,
 ): VerificationReport {
@@ -61,6 +70,7 @@ export function createMigrationVerificationReport(
       verifyDuplicateCustomers(snapshot.customers),
       verifyMessageOrdering(snapshot.messages),
       verifyOrderTotals(snapshot.orders, snapshot.orderItems),
+      ...verifyLegacyIdMapCoverage(snapshot),
     ],
     ...(snapshot.now ? { now: snapshot.now } : {}),
   });
@@ -168,6 +178,59 @@ export function verifyOrderTotals(
   }
 
   return countCheck("totals.orders", 0, mismatchCount);
+}
+
+export function verifyLegacyIdMapCoverage(snapshot: MigrationVerificationSnapshot): VerificationCheck[] {
+  if (!snapshot.legacyIdMaps) {
+    return [];
+  }
+
+  const countChecks = Object.entries(snapshot.sourceCounts).map(([entity, expected]) => {
+    const targetTable = legacyEntityTargetTable(entity);
+    const actual = snapshot.legacyIdMaps?.filter((entry) => entry.target_table === targetTable).length ?? 0;
+    return countCheck(`legacy_id_map.${entity}`, expected, actual);
+  });
+
+  return [...countChecks, verifyLegacyIdMapTargetReferences(snapshot)];
+}
+
+function verifyLegacyIdMapTargetReferences(snapshot: MigrationVerificationSnapshot): VerificationCheck {
+  const targetIds = new Map<string, Set<string>>([
+    ["customers", new Set(snapshot.customers.map((customer) => customer.public_id))],
+    ["conversations", new Set(snapshot.conversations.map((conversation) => conversation.public_id))],
+    ["messages", new Set(snapshot.messages.map((message) => message.public_id))],
+    ["orders", new Set(snapshot.orders.map((order) => order.public_id))],
+    ["shipments", new Set(snapshot.shipments.map((shipment) => shipment.public_id))],
+  ]);
+
+  const danglingCount =
+    snapshot.legacyIdMaps?.filter((entry) => {
+      const ids = targetIds.get(entry.target_table);
+      return ids !== undefined && !ids.has(entry.target_id);
+    }).length ?? 0;
+
+  return countCheck("legacy_id_map.target_references", 0, danglingCount);
+}
+
+function legacyEntityTargetTable(entity: string): string {
+  const targetTables = {
+    customers: "customers",
+    customer_addresses: "customer_addresses",
+    conversations: "conversations",
+    messages: "messages",
+    products: "products",
+    orders: "orders",
+    order_items: "order_items",
+    shipments: "shipments",
+    shipment_tracking_events: "shipment_tracking_events",
+    integration_accounts: "integration_accounts",
+    integration_settings: "integration_settings",
+    webhook_subscriptions: "webhook_subscriptions",
+    files: "files",
+    settings: "settings",
+  } satisfies Record<MigrationEntity, string>;
+
+  return targetTables[entity as MigrationEntity] ?? entity;
 }
 
 function countCheck(name: string, expected: number, actual: number): VerificationCheck {
