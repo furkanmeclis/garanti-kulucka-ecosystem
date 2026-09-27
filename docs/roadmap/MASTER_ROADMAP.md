@@ -8,11 +8,11 @@ This roadmap is the execution source of truth for the Garanti Kulucka ecosystem 
 - Phase 1 foundation is implemented with API, worker, migrator, Dockerfiles, compose, and CI/tag automation.
 - Phase 2 canonical PostgreSQL schema is implemented with role/permission/provider seed data.
 - Phase 3 backend-owned auth and admin-managed persistence foundations are implemented: sessions, permissions, encrypted settings/tokens, restart-hydratable integration snapshots, admin integration APIs, admin audit trails, webphone config, file metadata, and audit boundaries. Auth lifecycle tests cover refresh rotation, logout revocation, disabled users, and role denial.
-- Phase 4 has backend/frontend typed client boundaries for auth, domain data, files, realtime, webphone, settings, integrations, and integration account snapshots. Direct Supabase usage is blocked by repository guards, and web clients reject Supabase/provider origins as backend base URLs.
-- Phase 5 provider contracts are fixture-only and worker-routed. Worker provider attempt persistence is wired to PostgreSQL when `DATABASE_URL` is configured, and generated transport payloads are checked against frozen provider fixtures. Live provider calls remain disabled until legacy payload fixtures are fully replayed.
+- Phase 4 has backend/frontend typed client boundaries for auth, domain data, files, realtime, webphone, settings, integrations, integration account snapshots, admin audit trails, and provider attempt views. Direct Supabase usage is blocked by repository guards, and web clients reject Supabase/provider origins as backend base URLs.
+- Phase 5 provider contracts are fixture-only and worker-routed. Worker provider attempt persistence is wired to PostgreSQL when `DATABASE_URL` is configured, generated transport payloads are checked against frozen provider fixtures, and provider attempts are exposed through secret-redacted admin APIs. Live provider calls remain disabled until legacy payload fixtures are fully replayed.
 - Phase 6 realtime and webphone boundaries are implemented with Socket.IO event contracts, Redis fanout support, and SIP/WebRTC kept outside API media routing.
 - Phase 7 migrator foundation is implemented with manual commands, PostgreSQL legacy source reader, canonical target writer, source/target ports, batch planning, batch apply ports, legacy ID map helpers, synthetic verification reports, and optional secret-free command report files.
-- Current CI/tag state: latest passing checkpoint is `v0.1.28`.
+- Current CI/tag state: latest passing checkpoint is `v0.1.32`.
 
 ## Non-Negotiables
 
@@ -161,7 +161,7 @@ Verification:
 - Grep check finds no frontend `supabase.from`, `supabase.auth`, or Supabase channel usage outside temporary migration shims.
 - Playwright e2e tests cover message inbox, order flow, shipment flow, admin settings, and webphone config.
 - API contract tests ensure frontend receives the same response shapes it expects.
-- Current typed client tests cover auth, admin settings, integrations, domain data, files, realtime, webphone route mapping, and backend-only base URL guards.
+- Current typed client tests cover auth, admin settings, integrations, admin audit trails, provider attempts, domain data, files, realtime, webphone route mapping, and backend-only base URL guards.
 
 Anti-pattern guards:
 
@@ -186,7 +186,7 @@ Verification:
 - Provider contract tests compare generated payloads to frozen fixtures.
 - Worker retry tests cover timeout, 429, 5xx, malformed response, and provider success after retry.
 - No CI test requires live credentials.
-- Current foundation tests cover provider envelopes, fixture-only handlers, provider catalog, generated transport payloads, webhook ingestion, payload hashing, queue envelope creation, provider attempt retry decisions, PostgreSQL attempt persistence, fixture validation, and secret-free responses.
+- Current foundation tests cover provider envelopes, fixture-only handlers, provider catalog, generated transport payloads, webhook ingestion, payload hashing, queue envelope creation, provider attempt retry decisions, PostgreSQL attempt persistence, provider attempt admin serialization, fixture validation, and secret-free responses.
 
 Anti-pattern guards:
 
