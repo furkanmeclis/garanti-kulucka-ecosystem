@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import type { AppBindings } from "./types.js";
+import { AuditRepository, parseAuditLimit, serializeAuditLog } from "../audit/repository.js";
 import { authenticate, requireAdmin, requireDatabase } from "./middleware.js";
 import {
   IntegrationsRepository,
@@ -53,6 +54,20 @@ export function createIntegrationRoutes() {
 
     const accounts = await new IntegrationsRepository(db, context.get("encryptor")).listAccounts();
     return context.json({ data: accounts.map(serializeAccount) });
+  });
+
+  routes.get("/audit", async (context) => {
+    const db = context.get("db");
+    if (!db) {
+      return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
+    }
+
+    const logs = await new AuditRepository(db).list({
+      entityTypes: ["integration_accounts", "integration_settings", "integration_tokens"],
+      entityId: context.req.query("entity_id") ?? null,
+      limit: parseAuditLimit(context.req.query("limit")),
+    });
+    return context.json({ data: logs.map(serializeAuditLog) });
   });
 
   routes.get("/accounts/:account_public_id", async (context) => {
