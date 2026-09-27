@@ -86,10 +86,24 @@ export const providerDeliveryJobPayloadSchema = z.object({
 export const providerAttemptSchema = z.object({
   provider: providerNameSchema,
   operation: providerOperationSchema,
+  direction: providerDirectionSchema,
   request_id: z.string().min(1),
+  account_public_id: z.string().min(1).optional(),
   started_at: z.string().datetime(),
   duration_ms: z.number().int().nonnegative(),
   status: z.enum(["success", "retryable_failure", "terminal_failure"]),
+  status_code: z.number().int().min(100).max(599).nullable(),
+  retry_decision: z.enum(["none", "retry", "dead_letter"]),
+  next_retry_at: z.string().datetime().nullable(),
+  idempotency_key: z.string().min(1).nullable(),
+  request_metadata: z.record(z.string(), z.unknown()),
+  response_metadata: z.record(z.string(), z.unknown()),
+  error: z
+    .object({
+      code: z.string().min(1),
+      message: z.string().min(1),
+    })
+    .nullable(),
 });
 
 export type ProviderName = z.infer<typeof providerNameSchema>;

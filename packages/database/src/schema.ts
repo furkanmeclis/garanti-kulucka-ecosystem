@@ -38,6 +38,7 @@ export interface Database {
   integration_settings: IntegrationSettingsTable;
   webhook_subscriptions: WebhookSubscriptionsTable;
   webhook_events: WebhookEventsTable;
+  provider_attempts: ProviderAttemptsTable;
   files: FilesTable;
   audit_logs: AuditLogsTable;
   settings: SettingsTable;
@@ -269,6 +270,25 @@ export interface WebhookEventsTable extends BaseTable {
   status: string;
   payload_hash: string;
   raw_payload: Json;
+}
+
+export interface ProviderAttemptsTable extends BaseTable {
+  provider_id: number;
+  account_id: number | null;
+  request_id: string;
+  operation: string;
+  direction: string;
+  status: string;
+  status_code: number | null;
+  duration_ms: number;
+  retry_decision: string;
+  next_retry_at: Timestamp | null;
+  idempotency_key: string | null;
+  request_metadata: Json;
+  response_metadata: Json;
+  error_code: string | null;
+  error_message: string | null;
+  started_at: Timestamp;
 }
 
 export interface FilesTable extends BaseTable {

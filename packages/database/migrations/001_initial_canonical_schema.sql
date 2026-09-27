@@ -369,6 +369,37 @@ CREATE INDEX webhook_events_account_id_idx ON webhook_events(account_id);
 CREATE INDEX webhook_events_status_received_at_idx ON webhook_events(status, received_at);
 CREATE UNIQUE INDEX webhook_events_provider_external_event_idx ON webhook_events(provider_id, external_event_id) WHERE external_event_id IS NOT NULL;
 
+CREATE TABLE provider_attempts (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  public_id TEXT NOT NULL UNIQUE,
+  provider_id BIGINT NOT NULL REFERENCES integration_providers(id) ON DELETE CASCADE,
+  account_id BIGINT REFERENCES integration_accounts(id) ON DELETE SET NULL,
+  request_id TEXT NOT NULL,
+  operation TEXT NOT NULL,
+  direction TEXT NOT NULL CHECK (direction IN ('inbound', 'outbound')),
+  status TEXT NOT NULL CHECK (status IN ('success', 'retryable_failure', 'terminal_failure')),
+  status_code BIGINT,
+  duration_ms BIGINT NOT NULL CHECK (duration_ms >= 0),
+  retry_decision TEXT NOT NULL CHECK (retry_decision IN ('none', 'retry', 'dead_letter')),
+  next_retry_at TIMESTAMPTZ,
+  idempotency_key TEXT,
+  request_metadata JSONB NOT NULL DEFAULT '{}',
+  response_metadata JSONB NOT NULL DEFAULT '{}',
+  error_code TEXT,
+  error_message TEXT,
+  started_at TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT provider_attempts_status_code_range CHECK (status_code IS NULL OR (status_code >= 100 AND status_code <= 599)),
+  CONSTRAINT provider_attempts_request_metadata_object CHECK (jsonb_typeof(request_metadata) = 'object'),
+  CONSTRAINT provider_attempts_response_metadata_object CHECK (jsonb_typeof(response_metadata) = 'object')
+);
+CREATE INDEX provider_attempts_provider_id_idx ON provider_attempts(provider_id);
+CREATE INDEX provider_attempts_account_id_idx ON provider_attempts(account_id);
+CREATE INDEX provider_attempts_request_id_idx ON provider_attempts(request_id);
+CREATE INDEX provider_attempts_status_started_at_idx ON provider_attempts(status, started_at);
+CREATE UNIQUE INDEX provider_attempts_idempotency_key_idx ON provider_attempts(provider_id, idempotency_key) WHERE idempotency_key IS NOT NULL;
+
 CREATE TABLE audit_logs (
   id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   actor_user_id BIGINT REFERENCES users(id) ON DELETE SET NULL,

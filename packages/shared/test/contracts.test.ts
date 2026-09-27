@@ -45,10 +45,22 @@ describe("shared contracts", () => {
       providerAttemptSchema.parse({
         provider: "surat",
         operation: "shipment.create",
+        direction: "outbound",
         request_id: "req_1",
         started_at: new Date().toISOString(),
         duration_ms: 42,
         status: "success",
+        status_code: 202,
+        retry_decision: "none",
+        next_retry_at: null,
+        idempotency_key: "shipment_1",
+        request_metadata: {
+          queue: "provider-delivery",
+        },
+        response_metadata: {
+          accepted: true,
+        },
+        error: null,
       }),
     ).not.toThrow();
   });

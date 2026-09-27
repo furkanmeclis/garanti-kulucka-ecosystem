@@ -52,12 +52,23 @@ describe("provider job handlers", () => {
       },
     });
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       provider: "meta",
       request_id: "req_meta_1",
       queue: "provider-webhooks",
       status: "accepted_fixture",
       live_call_performed: false,
+      attempt: {
+        provider: "meta",
+        operation: "message.webhook",
+        direction: "inbound",
+        request_id: "req_meta_1",
+        status: "success",
+        status_code: 202,
+        retry_decision: "none",
+        idempotency_key: null,
+        error: null,
+      },
     });
   });
 
