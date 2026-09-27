@@ -13,7 +13,7 @@
     "test": "npm run test --workspaces --if-present",
     "test:unit": "npm run build -w @garanti-kulucka/shared && npm run test:unit:workspaces",
     "test:unit:workspaces": "npm run test:unit --workspaces --if-present",
-    "test:contracts": "vitest run tests/contract && npm run verify:structure",
+    "test:contracts": "vitest run tests/contract && npm run provider:coverage && npm run verify:structure",
     "test:integration": "vitest run tests/integration && npm run verify:structure",
     "test:migrator": "vitest run tests/migration && npm run verify:structure",
     "test:worker": "vitest run tests/worker && npm run verify:structure",
@@ -24,6 +24,7 @@
     "docker:build": "docker build -f apps/api/Dockerfile -t garanti-kulucka-api:local . && docker build -f apps/worker/Dockerfile -t garanti-kulucka-worker:local . && docker build -f apps/migrator/Dockerfile -t garanti-kulucka-migrator:local .",
     "lint": "npm run lint --workspaces --if-present",
     "verify:structure": "node tools/verify-repo-structure.mjs",
+    "provider:coverage": "node tools/provider-coverage-report.mjs",
     "release-candidate": "npm run check",
     "check": "npm run verify:structure && npm run lint && npm run typecheck && npm run test:unit && npm run test:contracts && npm run test:integration && npm run test:migrator && npm run test:worker && npm run test:ws && npm run test:e2e && npm run build && npm run docker:build"
   },
