@@ -136,6 +136,26 @@ describe("web API client boundary", () => {
     );
   });
 
+  it("maps provider attempt reads to backend routes", async () => {
+    const requests: Request[] = [];
+    const client = createApiClient("http://localhost:3000", {
+      fetchImpl: async (input, init) => {
+        requests.push(new Request(input, init));
+        return Response.json({ data: [] });
+      },
+    });
+
+    await client.admin.listProviderAttempts({
+      provider_key: "instagram",
+      account_public_id: "iac_instagram",
+      limit: 20,
+    });
+
+    expect(requests[0]?.url).toBe(
+      "http://localhost:3000/admin/integrations/provider-attempts?provider_key=instagram&account_public_id=iac_instagram&limit=20",
+    );
+  });
+
   it("maps domain conversation reads to backend routes", async () => {
     const requests: Request[] = [];
     const client = createApiClient("http://localhost:3000", {

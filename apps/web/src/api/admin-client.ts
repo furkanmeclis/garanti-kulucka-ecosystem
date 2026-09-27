@@ -61,8 +61,35 @@ export interface IntegrationAccountSnapshot {
   tokens: IntegrationToken[];
 }
 
+export interface ProviderAttempt {
+  public_id: string;
+  provider_key: string;
+  account_public_id: string | null;
+  request_id: string;
+  operation: string;
+  direction: string;
+  status: string;
+  status_code: number | null;
+  duration_ms: number;
+  retry_decision: string;
+  next_retry_at: string | null;
+  idempotency_key: string | null;
+  request_metadata: unknown;
+  response_metadata: unknown;
+  error_code: string | null;
+  error_message: string | null;
+  started_at: string;
+  updated_at: string;
+}
+
 export interface AuditListOptions {
   entity_id?: string;
+  limit?: number;
+}
+
+export interface ProviderAttemptListOptions {
+  provider_key?: string;
+  account_public_id?: string;
   limit?: number;
 }
 
@@ -70,6 +97,22 @@ function auditQuery(options: AuditListOptions = {}) {
   const params = new URLSearchParams();
   if (options.entity_id) {
     params.set("entity_id", options.entity_id);
+  }
+  if (typeof options.limit === "number") {
+    params.set("limit", String(options.limit));
+  }
+
+  const query = params.toString();
+  return query ? `?${query}` : "";
+}
+
+function providerAttemptQuery(options: ProviderAttemptListOptions = {}) {
+  const params = new URLSearchParams();
+  if (options.provider_key) {
+    params.set("provider_key", options.provider_key);
+  }
+  if (options.account_public_id) {
+    params.set("account_public_id", options.account_public_id);
   }
   if (typeof options.limit === "number") {
     params.set("limit", String(options.limit));
@@ -100,6 +143,10 @@ export function createAdminClient(http: BackendHttpClient) {
       http.request<{ data: IntegrationAccount[] }>("/admin/integrations/accounts"),
     listIntegrationAudit: (options?: AuditListOptions) =>
       http.request<{ data: AdminAuditLog[] }>(`/admin/integrations/audit${auditQuery(options)}`),
+    listProviderAttempts: (options?: ProviderAttemptListOptions) =>
+      http.request<{ data: ProviderAttempt[] }>(
+        `/admin/integrations/provider-attempts${providerAttemptQuery(options)}`,
+      ),
     getIntegrationAccount: (accountPublicId: string) =>
       http.request<IntegrationAccountSnapshot>(
         `/admin/integrations/accounts/${encodeURIComponent(accountPublicId)}`,
