@@ -75,6 +75,7 @@ export interface ProviderAttempt {
   next_retry_at: string | null;
   idempotency_key: string | null;
   request_metadata: unknown;
+  provider_request_preview: unknown | null;
   response_metadata: unknown;
   error_code: string | null;
   error_message: string | null;

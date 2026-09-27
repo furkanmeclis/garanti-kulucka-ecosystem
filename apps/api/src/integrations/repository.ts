@@ -386,6 +386,8 @@ export function serializeIntegrationToken(token: IntegrationTokenRecord) {
 }
 
 export function serializeProviderAttempt(attempt: ProviderAttemptRecord) {
+  const requestMetadata = redactProviderAttemptMetadata(attempt.request_metadata);
+
   return {
     public_id: attempt.public_id,
     provider_key: attempt.provider_key,
@@ -399,13 +401,27 @@ export function serializeProviderAttempt(attempt: ProviderAttemptRecord) {
     retry_decision: attempt.retry_decision,
     next_retry_at: attempt.next_retry_at,
     idempotency_key: attempt.idempotency_key,
-    request_metadata: redactProviderAttemptMetadata(attempt.request_metadata),
+    request_metadata: requestMetadata,
+    provider_request_preview: providerRequestPreviewFromMetadata(requestMetadata),
     response_metadata: redactProviderAttemptMetadata(attempt.response_metadata),
     error_code: attempt.error_code,
     error_message: attempt.error_message,
     started_at: attempt.started_at,
     updated_at: attempt.updated_at,
   };
+}
+
+export function providerRequestPreviewFromMetadata(metadata: unknown): unknown | null {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
+    return null;
+  }
+
+  const preview = (metadata as Record<string, unknown>).dry_run_request;
+  if (!preview || typeof preview !== "object" || Array.isArray(preview)) {
+    return null;
+  }
+
+  return preview;
 }
 
 export function serializeAccountSnapshot(snapshot: IntegrationAccountSnapshot) {

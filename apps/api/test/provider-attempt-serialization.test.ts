@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   parseProviderAttemptLimit,
+  providerRequestPreviewFromMetadata,
   redactProviderAttemptMetadata,
   serializeProviderAttempt,
   type ProviderAttemptRecord,
@@ -49,6 +50,17 @@ describe("provider attempt serialization", () => {
       idempotency_key: "msg_1",
       request_metadata: {
         authorization: "Bearer plain-token",
+        dry_run_request: {
+          method: "POST",
+          path: "/meta/instagram/messages",
+          headers: {
+            authorization: "Bearer plain-token",
+          },
+          body: {
+            message: "Fixture message",
+          },
+          live_call_performed: false,
+        },
       },
       response_metadata: {
         accepted: true,
@@ -68,9 +80,30 @@ describe("provider attempt serialization", () => {
       status: "success",
       request_metadata: {
         authorization: "[redacted]",
+        dry_run_request: {
+          headers: {
+            authorization: "[redacted]",
+          },
+        },
+      },
+      provider_request_preview: {
+        method: "POST",
+        path: "/meta/instagram/messages",
+        headers: {
+          authorization: "[redacted]",
+        },
+        body: {
+          message: "Fixture message",
+        },
+        live_call_performed: false,
       },
     });
     expect(JSON.stringify(serialized)).not.toContain("plain-token");
+  });
+
+  it("returns null provider request previews when dry-run metadata is absent", () => {
+    expect(providerRequestPreviewFromMetadata({ fixture_only: true })).toBeNull();
+    expect(providerRequestPreviewFromMetadata(null)).toBeNull();
   });
 
   it("clamps provider attempt list limits", () => {
