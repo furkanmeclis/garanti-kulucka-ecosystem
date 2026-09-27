@@ -3,7 +3,7 @@ import { createWorkerRuntime } from "./runtime.js";
 
 const logger = pino({ name: "worker" });
 const redisUrl = process.env.REDIS_URL ?? "redis://localhost:6379";
-const runtime = createWorkerRuntime({ redisUrl, logger });
+const runtime = createWorkerRuntime({ redisUrl, logger, databaseUrl: process.env.DATABASE_URL ?? null });
 let shuttingDown = false;
 
 logger.info({ queues: [...runtime.workers.keys()] }, "Worker runtime ready");

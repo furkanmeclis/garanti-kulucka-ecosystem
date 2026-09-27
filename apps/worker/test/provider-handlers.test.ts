@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { handleProviderDeliveryJob, handleProviderWebhookJob } from "../src/providers/handlers.js";
+import { createWorkerProcessorRegistry } from "../src/processors.js";
+import type { ProviderAttemptRepository } from "../src/providers/attempts.js";
 import { findProviderAdapter, providerAdapters } from "../src/providers/registry.js";
 
 const now = new Date().toISOString();
@@ -121,5 +123,66 @@ describe("provider job handlers", () => {
         },
       }),
     ).toThrow("Provider operation is not registered");
+  });
+
+  it("persists provider attempts after processor success when repository is configured", async () => {
+    const persisted: unknown[] = [];
+    const providerAttemptRepository: ProviderAttemptRepository = {
+      persist: async (attempt) => {
+        persisted.push(attempt);
+        return {
+          id: 1,
+          public_id: "pat_test",
+          provider_id: 1,
+          account_id: null,
+          request_id: attempt.request_id,
+          operation: attempt.operation,
+          direction: attempt.direction,
+          status: attempt.status,
+          status_code: attempt.status_code,
+          duration_ms: attempt.duration_ms,
+          retry_decision: attempt.retry_decision,
+          next_retry_at: attempt.next_retry_at,
+          idempotency_key: attempt.idempotency_key,
+          request_metadata: attempt.request_metadata,
+          response_metadata: attempt.response_metadata,
+          error_code: attempt.error?.code ?? null,
+          error_message: attempt.error?.message ?? null,
+          started_at: attempt.started_at,
+          created_at: new Date("2026-01-01T00:00:00.000Z"),
+          updated_at: new Date("2026-01-01T00:00:00.000Z"),
+        };
+      },
+    };
+    const registry = createWorkerProcessorRegistry({ providerAttemptRepository });
+
+    await registry.dispatch("provider-delivery", {
+      id: "job_ptt_1",
+      name: "ptt.shipment.create",
+      data: {
+        job_id: "job_ptt_1",
+        queue: "provider-delivery",
+        name: "ptt.shipment.create",
+        requested_at: now,
+        payload: {
+          envelope: {
+            request_id: "req_ptt_1",
+            provider: "ptt",
+            operation: "shipment.create",
+            direction: "outbound",
+            channel: "cargo",
+            occurred_at: now,
+            payload: {},
+          },
+        },
+      },
+    });
+
+    expect(persisted).toHaveLength(1);
+    expect(persisted[0]).toMatchObject({
+      provider: "ptt",
+      request_id: "req_ptt_1",
+      status: "success",
+    });
   });
 });

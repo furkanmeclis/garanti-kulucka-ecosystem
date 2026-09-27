@@ -2,6 +2,7 @@ import type { Job } from "bullmq";
 import type { JobEnvelope, QueueName } from "@garanti-kulucka/shared";
 import { validateJobEnvelope } from "./queues.js";
 import { handleProviderDeliveryJob, handleProviderWebhookJob } from "./providers/handlers.js";
+import type { ProviderAttemptRepository } from "./providers/attempts.js";
 
 export type WorkerLifecycleEventName = "started" | "completed" | "failed";
 
@@ -26,6 +27,11 @@ export interface WorkerProcessorRegistry {
   queues: readonly QueueName[];
   processors: ReadonlyMap<QueueName, QueueProcessor>;
   dispatch: (queue: QueueName, job: WorkerJob) => Promise<WorkerProcessorResult>;
+}
+
+export interface WorkerProcessorRegistryOptions {
+  lifecycleRecorder?: WorkerLifecycleRecorder;
+  providerAttemptRepository?: ProviderAttemptRepository;
 }
 
 export const workerQueueNames: QueueName[] = [
@@ -70,19 +76,27 @@ function assertProviderJobName(envelope: JobEnvelope): void {
   }
 }
 
-function createProviderWebhookProcessor(): QueueProcessor {
+function createProviderWebhookProcessor(
+  providerAttemptRepository?: ProviderAttemptRepository,
+): QueueProcessor {
   return async (job) => {
     const envelope = assertJobMatchesQueue("provider-webhooks", job);
     assertProviderJobName(envelope);
-    return handleProviderWebhookJob(envelope);
+    const result = handleProviderWebhookJob(envelope);
+    await providerAttemptRepository?.persist(result.attempt);
+    return result;
   };
 }
 
-function createProviderDeliveryProcessor(): QueueProcessor {
+function createProviderDeliveryProcessor(
+  providerAttemptRepository?: ProviderAttemptRepository,
+): QueueProcessor {
   return async (job) => {
     const envelope = assertJobMatchesQueue("provider-delivery", job);
     assertProviderJobName(envelope);
-    return handleProviderDeliveryJob(envelope);
+    const result = handleProviderDeliveryJob(envelope);
+    await providerAttemptRepository?.persist(result.attempt);
+    return result;
   };
 }
 
@@ -94,11 +108,15 @@ function createUnimplementedProcessor(queue: QueueName): QueueProcessor {
 }
 
 export function createWorkerProcessorRegistry(
-  lifecycleRecorder: WorkerLifecycleRecorder = () => undefined,
+  options: WorkerLifecycleRecorder | WorkerProcessorRegistryOptions = {},
 ): WorkerProcessorRegistry {
+  const lifecycleRecorder =
+    typeof options === "function" ? options : options.lifecycleRecorder ?? (() => undefined);
+  const providerAttemptRepository =
+    typeof options === "function" ? undefined : options.providerAttemptRepository;
   const processors = new Map<QueueName, QueueProcessor>([
-    ["provider-webhooks", createProviderWebhookProcessor()],
-    ["provider-delivery", createProviderDeliveryProcessor()],
+    ["provider-webhooks", createProviderWebhookProcessor(providerAttemptRepository)],
+    ["provider-delivery", createProviderDeliveryProcessor(providerAttemptRepository)],
     ["shipment-tracking", createUnimplementedProcessor("shipment-tracking")],
     ["ai-replies", createUnimplementedProcessor("ai-replies")],
     ["migration-reports", createUnimplementedProcessor("migration-reports")],

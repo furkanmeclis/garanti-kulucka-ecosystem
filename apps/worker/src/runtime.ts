@@ -1,4 +1,5 @@
 import { Worker } from "bullmq";
+import { createDatabase, type AppDatabase } from "@garanti-kulucka/database";
 import { Redis } from "ioredis";
 import type pino from "pino";
 import type { JobEnvelope, QueueName } from "@garanti-kulucka/shared";
@@ -7,6 +8,7 @@ import {
   type WorkerLifecycleRecorder,
   type WorkerProcessorRegistry,
 } from "./processors.js";
+import { DatabaseProviderAttemptRepository, type ProviderAttemptRepository } from "./providers/attempts.js";
 
 export interface WorkerRuntime {
   connection: Redis;
@@ -18,19 +20,28 @@ export interface WorkerRuntime {
 export interface WorkerRuntimeOptions {
   redisUrl: string;
   logger: pino.Logger;
+  databaseUrl?: string | null;
   lifecycleRecorder?: WorkerLifecycleRecorder;
+  providerAttemptRepository?: ProviderAttemptRepository;
 }
 
 export function createWorkerRuntime(options: WorkerRuntimeOptions): WorkerRuntime {
   const connection = new Redis(options.redisUrl, {
     maxRetriesPerRequest: null,
   });
-  const registry = createWorkerProcessorRegistry(
-    options.lifecycleRecorder ??
+  const db: AppDatabase | null =
+    options.providerAttemptRepository || !options.databaseUrl ? null : createDatabase(options.databaseUrl);
+  const providerAttemptRepository =
+    options.providerAttemptRepository ??
+    (db ? new DatabaseProviderAttemptRepository(db) : undefined);
+  const registry = createWorkerProcessorRegistry({
+    lifecycleRecorder:
+      options.lifecycleRecorder ??
       ((event) => {
         options.logger.info(event, "Worker job lifecycle event");
       }),
-  );
+    ...(providerAttemptRepository ? { providerAttemptRepository } : {}),
+  });
 
   const workers = new Map<QueueName, Worker<JobEnvelope>>();
 
@@ -83,6 +94,7 @@ export function createWorkerRuntime(options: WorkerRuntimeOptions): WorkerRuntim
     close: async () => {
       await Promise.all([...workers.values()].map((worker) => worker.close()));
       connection.disconnect();
+      await db?.destroy();
     },
   };
 }
