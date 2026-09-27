@@ -1,0 +1,10 @@
+{
+  "name": "@garanti-kulucka/shared",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "echo shared build placeholder",
+    "test": "echo shared test placeholder",
+    "lint": "echo shared lint placeholder"
+  }
+}

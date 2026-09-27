@@ -1,0 +1,10 @@
+{
+  "name": "@garanti-kulucka/api",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "echo api build placeholder",
+    "test": "echo api test placeholder",
+    "lint": "echo api lint placeholder"
+  }
+}

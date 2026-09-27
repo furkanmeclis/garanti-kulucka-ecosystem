@@ -1,0 +1,10 @@
+{
+  "name": "@garanti-kulucka/migrator",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "echo migrator build placeholder",
+    "test": "echo migrator test placeholder",
+    "lint": "echo migrator lint placeholder"
+  }
+}
