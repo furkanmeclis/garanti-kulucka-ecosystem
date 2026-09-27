@@ -163,3 +163,18 @@ export interface VerificationTotals {
   readonly passed: number;
   readonly failed: number;
 }
+
+export type MigratorCommandStatus = "passed" | "failed";
+
+export interface MigratorCommandReport {
+  readonly command: string;
+  readonly status: MigratorCommandStatus;
+  readonly startedAt: string;
+  readonly finishedAt: string;
+  readonly durationMs: number;
+  readonly error?: MigratorCommandReportError;
+}
+
+export interface MigratorCommandReportError {
+  readonly message: string;
+}

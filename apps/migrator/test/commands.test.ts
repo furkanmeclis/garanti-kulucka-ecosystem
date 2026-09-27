@@ -1,5 +1,8 @@
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { parseMigratorCommand, runMigratorCommand } from "../src/commands.js";
+import { parseMigratorCliCommand, parseMigratorCommand, runMigratorCommand } from "../src/commands.js";
 
 describe("migrator commands", () => {
   it("parses dry-run", () => {
@@ -14,7 +17,43 @@ describe("migrator commands", () => {
     expect(parseMigratorCommand(["verify"])).toBe("verify");
   });
 
+  it("parses optional report files without changing the command contract", () => {
+    expect(parseMigratorCliCommand(["migrate", "--dry-run", "--report-file", "reports/dry_run.json"])).toEqual({
+      command: "migrate:dry-run",
+      options: { reportFile: "reports/dry_run.json" },
+    });
+    expect(parseMigratorCliCommand(["verify", "--report-file", "reports/verify.json"])).toEqual({
+      command: "verify",
+      options: { reportFile: "reports/verify.json" },
+    });
+  });
+
   it("requires DATABASE_URL before running", async () => {
     await expect(runMigratorCommand("migrate:dry-run", {})).rejects.toThrow("DATABASE_URL is required");
+  });
+
+  it("writes a failed command report without leaking database configuration", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "garanti-migrator-"));
+    const reportFile = join(tempDir, "nested", "report.json");
+
+    try {
+      await expect(runMigratorCommand("migrate:dry-run", {}, { reportFile })).rejects.toThrow(
+        "DATABASE_URL is required",
+      );
+
+      const report = JSON.parse(await readFile(reportFile, "utf8")) as Record<string, unknown>;
+      expect(report).toMatchObject({
+        command: "migrate:dry-run",
+        status: "failed",
+        error: { message: "DATABASE_URL is required" },
+      });
+      expect(report).not.toHaveProperty("databaseUrl");
+      expect(report).not.toHaveProperty("DATABASE_URL");
+      expect(typeof report.startedAt).toBe("string");
+      expect(typeof report.finishedAt).toBe("string");
+      expect(typeof report.durationMs).toBe("number");
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
   });
 });

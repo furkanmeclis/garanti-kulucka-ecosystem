@@ -1,15 +1,15 @@
 import pino from "pino";
-import { parseMigratorCommand, runMigratorCommand } from "./commands.js";
+import { parseMigratorCliCommand, runMigratorCommand } from "./commands.js";
 
 const logger = pino({ name: "migrator" });
-const command = parseMigratorCommand(process.argv.slice(2));
+const { command, options } = parseMigratorCliCommand(process.argv.slice(2));
 
-logger.info({ command }, "Migrator command accepted");
+logger.info({ command, reportFile: options.reportFile }, "Migrator command accepted");
 
 try {
-  await runMigratorCommand(command);
-  logger.info({ command }, "Migrator command completed");
+  await runMigratorCommand(command, process.env, options);
+  logger.info({ command, reportFile: options.reportFile }, "Migrator command completed");
 } catch (error) {
-  logger.error({ err: error, command }, "Migrator command failed");
+  logger.error({ err: error, command, reportFile: options.reportFile }, "Migrator command failed");
   process.exit(1);
 }

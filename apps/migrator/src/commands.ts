@@ -1,43 +1,96 @@
 import { spawn } from "node:child_process";
+import { mkdir, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
 import { Client } from "pg";
+import type { MigratorCommandReport, MigratorCommandReportError } from "./types.js";
 
 export type MigratorCommand = "migrate:dry-run" | "migrate:apply" | "verify";
 
-export function parseMigratorCommand(args: string[]): MigratorCommand {
-  const [command, flag] = args;
-
-  if (command === "verify") return "verify";
-  if (command === "migrate" && flag === "--dry-run") return "migrate:dry-run";
-  if (command === "migrate" && flag === "--apply") return "migrate:apply";
-
-  throw new Error("Usage: garanti-migrator migrate --dry-run | migrate --apply | verify");
+export interface ParsedMigratorCommand {
+  readonly command: MigratorCommand;
+  readonly options: MigratorCommandOptions;
 }
 
-export async function runMigratorCommand(command: MigratorCommand, env = process.env): Promise<void> {
-  const databaseUrl = env.DATABASE_URL;
-  if (!databaseUrl) {
-    throw new Error("DATABASE_URL is required");
+export interface MigratorCommandOptions {
+  readonly reportFile?: string;
+}
+
+export function parseMigratorCommand(args: string[]): MigratorCommand {
+  return parseMigratorCliCommand(args).command;
+}
+
+export function parseMigratorCliCommand(args: string[]): ParsedMigratorCommand {
+  const [command, flag, ...rest] = args;
+  const options = parseMigratorOptions(command === "verify" ? [flag, ...rest] : rest);
+
+  if (command === "verify") return { command: "verify", options };
+  if (command === "migrate" && flag === "--dry-run") return { command: "migrate:dry-run", options };
+  if (command === "migrate" && flag === "--apply") return { command: "migrate:apply", options };
+
+  throw new Error(usage);
+}
+
+export async function runMigratorCommand(
+  command: MigratorCommand,
+  env = process.env,
+  options: MigratorCommandOptions = {},
+): Promise<void> {
+  const startedAt = new Date();
+
+  try {
+    const databaseUrl = env.DATABASE_URL;
+    if (!databaseUrl) {
+      throw new Error("DATABASE_URL is required");
+    }
+
+    if (command === "verify") {
+      await verifyTargetDatabase(databaseUrl);
+      await writeMigratorCommandReport(options, createCommandReport(command, "passed", startedAt));
+      return;
+    }
+
+    const args = [
+      "node_modules/node-pg-migrate/bin/node-pg-migrate.js",
+      "up",
+      "--migrations-dir",
+      "packages/database/migrations",
+      "--database-url",
+      databaseUrl,
+    ];
+
+    if (command === "migrate:dry-run") {
+      args.push("--dry-run");
+    }
+
+    await runNodeCommand(args);
+    await writeMigratorCommandReport(options, createCommandReport(command, "passed", startedAt));
+  } catch (error) {
+    await writeMigratorCommandReport(options, createCommandReport(command, "failed", startedAt, error));
+    throw error;
+  }
+}
+
+function parseMigratorOptions(args: (string | undefined)[]): MigratorCommandOptions {
+  const options: { reportFile?: string } = {};
+
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg === undefined) continue;
+
+    if (arg !== "--report-file") {
+      throw new Error(usage);
+    }
+
+    const reportFile = args[index + 1];
+    if (!reportFile || reportFile.startsWith("--")) {
+      throw new Error("--report-file requires a path");
+    }
+
+    options.reportFile = reportFile;
+    index += 1;
   }
 
-  if (command === "verify") {
-    await verifyTargetDatabase(databaseUrl);
-    return;
-  }
-
-  const args = [
-    "node_modules/node-pg-migrate/bin/node-pg-migrate.js",
-    "up",
-    "--migrations-dir",
-    "packages/database/migrations",
-    "--database-url",
-    databaseUrl,
-  ];
-
-  if (command === "migrate:dry-run") {
-    args.push("--dry-run");
-  }
-
-  await runNodeCommand(args);
+  return options;
 }
 
 async function runNodeCommand(args: string[]): Promise<void> {
@@ -54,6 +107,43 @@ async function runNodeCommand(args: string[]): Promise<void> {
       else reject(new Error(`Command failed with exit code ${code ?? "unknown"}`));
     });
   });
+}
+
+async function writeMigratorCommandReport(
+  options: MigratorCommandOptions,
+  report: MigratorCommandReport,
+): Promise<void> {
+  if (!options.reportFile) {
+    return;
+  }
+
+  await mkdir(dirname(options.reportFile), { recursive: true });
+  await writeFile(options.reportFile, `${JSON.stringify(report, null, 2)}\n`);
+}
+
+function createCommandReport(
+  command: MigratorCommand,
+  status: MigratorCommandReport["status"],
+  startedAt: Date,
+  error?: unknown,
+): MigratorCommandReport {
+  const finishedAt = new Date();
+  return {
+    command,
+    status,
+    startedAt: startedAt.toISOString(),
+    finishedAt: finishedAt.toISOString(),
+    durationMs: Math.max(0, finishedAt.getTime() - startedAt.getTime()),
+    ...(error ? { error: createReportError(error) } : {}),
+  };
+}
+
+function createReportError(error: unknown): MigratorCommandReportError {
+  if (error instanceof Error) {
+    return { message: error.message };
+  }
+
+  return { message: "Unknown migrator error" };
 }
 
 async function verifyTargetDatabase(databaseUrl: string): Promise<void> {
@@ -95,3 +185,6 @@ async function verifyTargetDatabase(databaseUrl: string): Promise<void> {
     await client.end();
   }
 }
+
+const usage =
+  "Usage: garanti-migrator migrate --dry-run [--report-file path] | migrate --apply [--report-file path] | verify [--report-file path]";
