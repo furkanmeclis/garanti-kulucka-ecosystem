@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyMigrationBatch } from "../src/apply.js";
+import { applyMigrationBatch, applyMigrationBatchWithState } from "../src/apply.js";
 import { createDryRunReport } from "../src/reports.js";
 import { createMigrationPlan } from "../src/plan.js";
 import { legacyIdMapKey, upsertLegacyIdMap } from "../src/id-map.js";
@@ -12,6 +12,10 @@ import type {
   LegacyRecord,
   LegacySource,
   MigrationEntity,
+  MigrationBatchState,
+  MigrationBatchStateFailure,
+  MigrationBatchStateStart,
+  MigrationBatchStateSuccess,
   MigrationTarget,
 } from "../src/types.js";
 
@@ -40,6 +44,7 @@ class FixtureSource implements LegacySource {
 class MemoryTarget implements MigrationTarget {
   private readonly entries = new Map<string, LegacyIdMapEntry>();
   private readonly records = new Map<string, CanonicalRecord>();
+  readonly batchStates: MigrationBatchState[] = [];
 
   get writtenRecords(): CanonicalRecord[] {
     return [...this.records.values()];
@@ -67,6 +72,66 @@ class MemoryTarget implements MigrationTarget {
     };
     this.entries.set(legacyIdMapKey(input), entry);
     return entry;
+  }
+
+  async recordMigrationBatchStarted(input: MigrationBatchStateStart): Promise<MigrationBatchState> {
+    const state = this.batchState(input.runId, input.batch, "running", {
+      startedAt: input.startedAt ?? new Date("2026-01-02T03:04:05.000Z"),
+    });
+    this.batchStates.push(state);
+    return state;
+  }
+
+  async recordMigrationBatchSucceeded(input: MigrationBatchStateSuccess): Promise<MigrationBatchState> {
+    const state = this.batchState(input.runId, input.batch, "succeeded", {
+      readRows: input.result.readRows,
+      writtenRows: input.result.writtenRows,
+      skippedRows: input.result.skippedRows,
+      idMapCreated: input.result.idMapCreated,
+      idMapUpdated: input.result.idMapUpdated,
+      idMapUnchanged: input.result.idMapUnchanged,
+      warnings: input.result.warnings,
+      finishedAt: input.finishedAt ?? new Date("2026-01-02T03:05:05.000Z"),
+    });
+    this.batchStates.push(state);
+    return state;
+  }
+
+  async recordMigrationBatchFailed(input: MigrationBatchStateFailure): Promise<MigrationBatchState> {
+    const state = this.batchState(input.runId, input.batch, "failed", {
+      errorMessage: input.error.message,
+      finishedAt: input.finishedAt ?? new Date("2026-01-02T03:05:05.000Z"),
+    });
+    this.batchStates.push(state);
+    return state;
+  }
+
+  private batchState(
+    runId: string,
+    batch: { entity: MigrationEntity; batchNumber: number; limit: number; offset: number; expectedRows: number },
+    status: MigrationBatchState["status"],
+    overrides: Partial<MigrationBatchState>,
+  ): MigrationBatchState {
+    return {
+      runId,
+      entity: batch.entity,
+      batchNumber: batch.batchNumber,
+      status,
+      limit: batch.limit,
+      offset: batch.offset,
+      expectedRows: batch.expectedRows,
+      readRows: 0,
+      writtenRows: 0,
+      skippedRows: 0,
+      idMapCreated: 0,
+      idMapUpdated: 0,
+      idMapUnchanged: 0,
+      warnings: [],
+      errorMessage: null,
+      startedAt: null,
+      finishedAt: null,
+      ...overrides,
+    };
   }
 }
 
@@ -257,5 +322,96 @@ describe("migration foundation", () => {
         payload: { full_name: "Katherine Johnson" },
       }),
     ]);
+  });
+
+  it("records batch state around a successful apply", async () => {
+    const source = new FixtureSource(
+      { customers: 1 },
+      {
+        customers: [
+          {
+            sourceSystem: "legacy_supabase",
+            sourceTable: "customers",
+            sourceId: "10",
+            payload: { full_name: "Ada Lovelace" },
+            checksum: "sha256:ada",
+          },
+        ],
+      },
+    );
+    const target = new MemoryTarget();
+
+    await expect(
+      applyMigrationBatchWithState({
+        runId: "run_2026_01_01",
+        source,
+        target,
+        batch: {
+          entity: "customers",
+          batchNumber: 1,
+          limit: 10,
+          offset: 0,
+          expectedRows: 1,
+        },
+      }),
+    ).resolves.toMatchObject({
+      readRows: 1,
+      writtenRows: 1,
+    });
+
+    expect(target.batchStates.map((state) => state.status)).toEqual(["running", "succeeded"]);
+    expect(target.batchStates[1]).toMatchObject({
+      runId: "run_2026_01_01",
+      entity: "customers",
+      batchNumber: 1,
+      readRows: 1,
+      writtenRows: 1,
+      idMapCreated: 1,
+    });
+  });
+
+  it("records failed batch state and rethrows the apply error", async () => {
+    const source = new FixtureSource(
+      { customers: 1 },
+      {
+        customers: [
+          {
+            sourceSystem: "legacy_supabase",
+            sourceTable: "customers",
+            sourceId: "10",
+            payload: { full_name: "Ada Lovelace" },
+            checksum: "sha256:ada",
+          },
+        ],
+      },
+    );
+    const target = new MemoryTarget();
+    const error = new Error("cannot map legacy customer");
+
+    await expect(
+      applyMigrationBatchWithState({
+        runId: "run_2026_01_01",
+        source,
+        target,
+        batch: {
+          entity: "customers",
+          batchNumber: 1,
+          limit: 10,
+          offset: 0,
+          expectedRows: 1,
+        },
+        transform: () => {
+          throw error;
+        },
+      }),
+    ).rejects.toThrow("cannot map legacy customer");
+
+    expect(target.batchStates.map((state) => state.status)).toEqual(["running", "failed"]);
+    expect(target.batchStates[1]).toMatchObject({
+      runId: "run_2026_01_01",
+      entity: "customers",
+      batchNumber: 1,
+      errorMessage: "cannot map legacy customer",
+    });
   });
 });

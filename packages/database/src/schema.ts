@@ -43,6 +43,7 @@ export interface Database {
   audit_logs: AuditLogsTable;
   settings: SettingsTable;
   job_runs: JobRunsTable;
+  migration_batches: MigrationBatchesTable;
   legacy_id_map: LegacyIdMapTable;
 }
 
@@ -328,6 +329,26 @@ export interface JobRunsTable extends BaseTable {
   status: string;
   attempts: number;
   payload: Json;
+  error_message: string | null;
+  started_at: Timestamp | null;
+  finished_at: Timestamp | null;
+}
+
+export interface MigrationBatchesTable extends BaseTable {
+  run_id: string;
+  entity: string;
+  batch_number: number;
+  status: string;
+  limit_rows: number;
+  offset_rows: number;
+  expected_rows: number;
+  read_rows: number;
+  written_rows: number;
+  skipped_rows: number;
+  id_map_created: number;
+  id_map_updated: number;
+  id_map_unchanged: number;
+  warnings: Json;
   error_message: string | null;
   started_at: Timestamp | null;
   finished_at: Timestamp | null;

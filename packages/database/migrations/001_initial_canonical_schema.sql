@@ -447,6 +447,35 @@ CREATE TABLE job_runs (
 CREATE INDEX job_runs_queue_status_idx ON job_runs(queue_name, status);
 CREATE INDEX job_runs_external_job_id_idx ON job_runs(external_job_id) WHERE external_job_id IS NOT NULL;
 
+CREATE TABLE migration_batches (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  public_id TEXT NOT NULL UNIQUE,
+  run_id TEXT NOT NULL,
+  entity TEXT NOT NULL,
+  batch_number BIGINT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  limit_rows BIGINT NOT NULL,
+  offset_rows BIGINT NOT NULL,
+  expected_rows BIGINT NOT NULL,
+  read_rows BIGINT NOT NULL DEFAULT 0,
+  written_rows BIGINT NOT NULL DEFAULT 0,
+  skipped_rows BIGINT NOT NULL DEFAULT 0,
+  id_map_created BIGINT NOT NULL DEFAULT 0,
+  id_map_updated BIGINT NOT NULL DEFAULT 0,
+  id_map_unchanged BIGINT NOT NULL DEFAULT 0,
+  warnings JSONB NOT NULL DEFAULT '[]',
+  error_message TEXT,
+  started_at TIMESTAMPTZ,
+  finished_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (run_id, entity, batch_number),
+  CONSTRAINT migration_batches_status_check CHECK (status IN ('pending', 'running', 'succeeded', 'failed')),
+  CONSTRAINT migration_batches_warnings_array CHECK (jsonb_typeof(warnings) = 'array')
+);
+CREATE INDEX migration_batches_run_status_idx ON migration_batches(run_id, status);
+CREATE INDEX migration_batches_entity_status_idx ON migration_batches(entity, status);
+
 CREATE TABLE legacy_id_map (
   id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   source_system TEXT NOT NULL,

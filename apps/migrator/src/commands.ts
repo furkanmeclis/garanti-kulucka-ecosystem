@@ -29,6 +29,7 @@ const requiredCanonicalTables = [
   "integration_providers",
   "integration_accounts",
   "settings",
+  "migration_batches",
   "legacy_id_map",
 ];
 

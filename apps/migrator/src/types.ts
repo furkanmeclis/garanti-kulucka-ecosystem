@@ -61,6 +61,9 @@ export interface MigrationTarget {
   writeCanonicalRecord(input: CanonicalRecord): Promise<CanonicalWriteResult>;
   findLegacyIdMap(input: LegacyIdMapKey): Promise<LegacyIdMapEntry | null>;
   upsertLegacyIdMap(input: LegacyIdMapWrite): Promise<LegacyIdMapEntry>;
+  recordMigrationBatchStarted(input: MigrationBatchStateStart): Promise<MigrationBatchState>;
+  recordMigrationBatchSucceeded(input: MigrationBatchStateSuccess): Promise<MigrationBatchState>;
+  recordMigrationBatchFailed(input: MigrationBatchStateFailure): Promise<MigrationBatchState>;
 }
 
 export type CanonicalWriteStatus = "created" | "updated" | "unchanged";
@@ -100,6 +103,48 @@ export interface MigrationBatchApplyResult {
   readonly idMapUpdated: number;
   readonly idMapUnchanged: number;
   readonly warnings: MigrationWarning[];
+}
+
+export type MigrationBatchStatus = "pending" | "running" | "succeeded" | "failed";
+
+export interface MigrationBatchState {
+  readonly runId: string;
+  readonly entity: MigrationEntity;
+  readonly batchNumber: number;
+  readonly status: MigrationBatchStatus;
+  readonly limit: number;
+  readonly offset: number;
+  readonly expectedRows: number;
+  readonly readRows: number;
+  readonly writtenRows: number;
+  readonly skippedRows: number;
+  readonly idMapCreated: number;
+  readonly idMapUpdated: number;
+  readonly idMapUnchanged: number;
+  readonly warnings: MigrationWarning[];
+  readonly errorMessage: string | null;
+  readonly startedAt: Date | null;
+  readonly finishedAt: Date | null;
+}
+
+export interface MigrationBatchStateStart {
+  readonly runId: string;
+  readonly batch: MigrationBatch;
+  readonly startedAt?: Date;
+}
+
+export interface MigrationBatchStateSuccess {
+  readonly runId: string;
+  readonly batch: MigrationBatch;
+  readonly result: MigrationBatchApplyResult;
+  readonly finishedAt?: Date;
+}
+
+export interface MigrationBatchStateFailure {
+  readonly runId: string;
+  readonly batch: MigrationBatch;
+  readonly error: Error;
+  readonly finishedAt?: Date;
 }
 
 export interface MigrationPlan {

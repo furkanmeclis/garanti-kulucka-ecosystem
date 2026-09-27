@@ -85,6 +85,14 @@ describe("migrator commands", () => {
         actual: 0,
       }),
     );
+    expect(report.checks).toContainEqual(
+      expect.objectContaining({
+        name: "canonical_table.migration_batches",
+        status: "failed",
+        expected: 1,
+        actual: 0,
+      }),
+    );
     expect(JSON.stringify(report)).not.toContain("DATABASE_URL");
     expect(JSON.stringify(report)).not.toContain("postgres://");
   });

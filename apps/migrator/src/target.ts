@@ -1,4 +1,5 @@
-import type { AppDatabase, LegacyIdMapTable } from "@garanti-kulucka/database";
+import { createHash } from "node:crypto";
+import type { AppDatabase, LegacyIdMapTable, MigrationBatchesTable } from "@garanti-kulucka/database";
 import type { Insertable } from "kysely";
 import type {
   CanonicalRecord,
@@ -6,6 +7,10 @@ import type {
   LegacyIdMapEntry,
   LegacyIdMapKey,
   LegacyIdMapWrite,
+  MigrationBatchState,
+  MigrationBatchStateFailure,
+  MigrationBatchStateStart,
+  MigrationBatchStateSuccess,
   MigrationEntity,
   MigrationTarget,
 } from "./types.js";
@@ -111,6 +116,138 @@ export class DatabaseMigrationTarget implements MigrationTarget {
 
     return mapLegacyIdMapRow(row);
   }
+
+  async recordMigrationBatchStarted(input: MigrationBatchStateStart): Promise<MigrationBatchState> {
+    const startedAt = input.startedAt ?? new Date();
+    const row = await this.db
+      .insertInto("migration_batches")
+      .values({
+        public_id: migrationBatchPublicId(input.runId, input.batch.entity, input.batch.batchNumber),
+        run_id: input.runId,
+        entity: input.batch.entity,
+        batch_number: input.batch.batchNumber,
+        status: "running",
+        limit_rows: input.batch.limit,
+        offset_rows: input.batch.offset,
+        expected_rows: input.batch.expectedRows,
+        read_rows: 0,
+        written_rows: 0,
+        skipped_rows: 0,
+        id_map_created: 0,
+        id_map_updated: 0,
+        id_map_unchanged: 0,
+        warnings: [],
+        error_message: null,
+        started_at: startedAt,
+        finished_at: null,
+      })
+      .onConflict((conflict) =>
+        conflict.columns(["run_id", "entity", "batch_number"]).doUpdateSet({
+          status: "running",
+          limit_rows: input.batch.limit,
+          offset_rows: input.batch.offset,
+          expected_rows: input.batch.expectedRows,
+          read_rows: 0,
+          written_rows: 0,
+          skipped_rows: 0,
+          id_map_created: 0,
+          id_map_updated: 0,
+          id_map_unchanged: 0,
+          warnings: [],
+          error_message: null,
+          started_at: startedAt,
+          finished_at: null,
+          updated_at: startedAt,
+        }),
+      )
+      .returningAll()
+      .executeTakeFirstOrThrow();
+
+    return mapMigrationBatchStateRow(row);
+  }
+
+  async recordMigrationBatchSucceeded(input: MigrationBatchStateSuccess): Promise<MigrationBatchState> {
+    const finishedAt = input.finishedAt ?? new Date();
+    const row = await this.db
+      .insertInto("migration_batches")
+      .values({
+        public_id: migrationBatchPublicId(input.runId, input.batch.entity, input.batch.batchNumber),
+        run_id: input.runId,
+        entity: input.batch.entity,
+        batch_number: input.batch.batchNumber,
+        status: "succeeded",
+        limit_rows: input.batch.limit,
+        offset_rows: input.batch.offset,
+        expected_rows: input.batch.expectedRows,
+        read_rows: input.result.readRows,
+        written_rows: input.result.writtenRows,
+        skipped_rows: input.result.skippedRows,
+        id_map_created: input.result.idMapCreated,
+        id_map_updated: input.result.idMapUpdated,
+        id_map_unchanged: input.result.idMapUnchanged,
+        warnings: input.result.warnings,
+        error_message: null,
+        started_at: null,
+        finished_at: finishedAt,
+      })
+      .onConflict((conflict) =>
+        conflict.columns(["run_id", "entity", "batch_number"]).doUpdateSet({
+          status: "succeeded",
+          read_rows: input.result.readRows,
+          written_rows: input.result.writtenRows,
+          skipped_rows: input.result.skippedRows,
+          id_map_created: input.result.idMapCreated,
+          id_map_updated: input.result.idMapUpdated,
+          id_map_unchanged: input.result.idMapUnchanged,
+          warnings: input.result.warnings,
+          error_message: null,
+          finished_at: finishedAt,
+          updated_at: finishedAt,
+        }),
+      )
+      .returningAll()
+      .executeTakeFirstOrThrow();
+
+    return mapMigrationBatchStateRow(row);
+  }
+
+  async recordMigrationBatchFailed(input: MigrationBatchStateFailure): Promise<MigrationBatchState> {
+    const finishedAt = input.finishedAt ?? new Date();
+    const row = await this.db
+      .insertInto("migration_batches")
+      .values({
+        public_id: migrationBatchPublicId(input.runId, input.batch.entity, input.batch.batchNumber),
+        run_id: input.runId,
+        entity: input.batch.entity,
+        batch_number: input.batch.batchNumber,
+        status: "failed",
+        limit_rows: input.batch.limit,
+        offset_rows: input.batch.offset,
+        expected_rows: input.batch.expectedRows,
+        read_rows: 0,
+        written_rows: 0,
+        skipped_rows: 0,
+        id_map_created: 0,
+        id_map_updated: 0,
+        id_map_unchanged: 0,
+        warnings: [],
+        error_message: input.error.message,
+        started_at: null,
+        finished_at: finishedAt,
+      })
+      .onConflict((conflict) =>
+        conflict.columns(["run_id", "entity", "batch_number"]).doUpdateSet({
+          status: "failed",
+          error_message: input.error.message,
+          finished_at: finishedAt,
+          updated_at: finishedAt,
+        }),
+      )
+      .returningAll()
+      .executeTakeFirstOrThrow();
+
+    return mapMigrationBatchStateRow(row);
+  }
 }
 
 interface DynamicMigrationDatabase {
@@ -149,4 +286,36 @@ function mapLegacyIdMapRow(row: Insertable<LegacyIdMapTable> & { migrated_at?: D
     checksum: row.checksum ?? null,
     migratedAt: row.migrated_at ? new Date(row.migrated_at) : new Date(),
   };
+}
+
+type MigrationBatchStateRow = Insertable<MigrationBatchesTable> & {
+  started_at?: Date | string | null;
+  finished_at?: Date | string | null;
+};
+
+function mapMigrationBatchStateRow(row: MigrationBatchStateRow): MigrationBatchState {
+  return {
+    runId: row.run_id,
+    entity: row.entity as MigrationEntity,
+    batchNumber: Number(row.batch_number),
+    status: row.status as MigrationBatchState["status"],
+    limit: Number(row.limit_rows),
+    offset: Number(row.offset_rows),
+    expectedRows: Number(row.expected_rows),
+    readRows: Number(row.read_rows),
+    writtenRows: Number(row.written_rows),
+    skippedRows: Number(row.skipped_rows),
+    idMapCreated: Number(row.id_map_created),
+    idMapUpdated: Number(row.id_map_updated),
+    idMapUnchanged: Number(row.id_map_unchanged),
+    warnings: Array.isArray(row.warnings) ? row.warnings : [],
+    errorMessage: row.error_message ?? null,
+    startedAt: row.started_at ? new Date(row.started_at) : null,
+    finishedAt: row.finished_at ? new Date(row.finished_at) : null,
+  };
+}
+
+function migrationBatchPublicId(runId: string, entity: MigrationEntity, batchNumber: number): string {
+  const hash = createHash("sha256").update(`${runId}:${entity}:${batchNumber}`).digest("hex").slice(0, 24);
+  return `mbt_${hash}`;
 }

@@ -17,6 +17,10 @@ export interface ApplyMigrationBatchInput {
   readonly transform?: LegacyRecordTransformer;
 }
 
+export interface ApplyMigrationBatchWithStateInput extends ApplyMigrationBatchInput {
+  readonly runId: string;
+}
+
 export type LegacyRecordTransformer = (record: LegacyRecord) => CanonicalRecord | null;
 
 type MutableMigrationBatchApplyResult = {
@@ -74,6 +78,32 @@ export async function applyMigrationBatch(
   }
 
   return result;
+}
+
+export async function applyMigrationBatchWithState(
+  input: ApplyMigrationBatchWithStateInput,
+): Promise<MigrationBatchApplyResult> {
+  await input.target.recordMigrationBatchStarted({
+    runId: input.runId,
+    batch: input.batch,
+  });
+
+  try {
+    const result = await applyMigrationBatch(input);
+    await input.target.recordMigrationBatchSucceeded({
+      runId: input.runId,
+      batch: input.batch,
+      result,
+    });
+    return result;
+  } catch (error) {
+    await input.target.recordMigrationBatchFailed({
+      runId: input.runId,
+      batch: input.batch,
+      error: error instanceof Error ? error : new Error(String(error)),
+    });
+    throw error;
+  }
 }
 
 export function defaultLegacyRecordTransformer(record: LegacyRecord): CanonicalRecord {
