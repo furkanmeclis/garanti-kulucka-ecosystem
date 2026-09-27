@@ -48,6 +48,8 @@ services:
       PORT: 3000
       DATABASE_URL: postgres://garanti:garanti@postgres:5432/garanti
       REDIS_URL: redis://redis:6379
+      APP_ENCRYPTION_KEY: local-dev-change-me-32-bytes-minimum
+      JWT_ACCESS_SECRET: local-dev-access-secret-change-me
     ports:
       - "3000:3000"
     depends_on:
@@ -63,6 +65,7 @@ services:
     environment:
       DATABASE_URL: postgres://garanti:garanti@postgres:5432/garanti
       REDIS_URL: redis://redis:6379
+      APP_ENCRYPTION_KEY: local-dev-change-me-32-bytes-minimum
     depends_on:
       postgres:
         condition: service_healthy

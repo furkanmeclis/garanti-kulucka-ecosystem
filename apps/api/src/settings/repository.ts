@@ -2,6 +2,7 @@ import type { AppDatabase } from "@garanti-kulucka/database";
 import type { Selectable } from "kysely";
 import type { SettingsTable } from "@garanti-kulucka/database";
 import { newPublicId } from "../auth/crypto.js";
+import type { SecretEncryptor } from "../security/encryption.js";
 
 export type SettingRecord = Selectable<SettingsTable>;
 
@@ -16,7 +17,10 @@ export interface UpsertSettingInput {
 }
 
 export class SettingsRepository {
-  constructor(private readonly db: AppDatabase) {}
+  constructor(
+    private readonly db: AppDatabase,
+    private readonly encryptor: SecretEncryptor,
+  ) {}
 
   async list(scope: string): Promise<SettingRecord[]> {
     return this.db
@@ -35,6 +39,7 @@ export class SettingsRepository {
         .where("scope", "=", input.scope)
         .where("key", "=", input.key)
         .executeTakeFirst();
+      const storedValue = input.isSecret ? this.encryptor.encryptJson(input.value) : input.value;
 
       const setting = await transaction
         .insertInto("settings")
@@ -42,12 +47,12 @@ export class SettingsRepository {
           public_id: newPublicId("set"),
           key: input.key,
           scope: input.scope,
-          value: input.value,
+          value: storedValue,
           is_secret: input.isSecret,
         })
         .onConflict((conflict) =>
           conflict.columns(["scope", "key"]).doUpdateSet({
-            value: input.value,
+            value: storedValue,
             is_secret: input.isSecret,
             updated_at: new Date(),
           }),
@@ -62,8 +67,8 @@ export class SettingsRepository {
           action: "settings_change",
           entity_type: "settings",
           entity_id: setting.public_id,
-          old_value: previous ? { value: previous.value, is_secret: previous.is_secret } : null,
-          new_value: { value: setting.value, is_secret: setting.is_secret },
+          old_value: previous ? auditValue(previous.value, previous.is_secret) : null,
+          new_value: auditValue(setting.value, setting.is_secret),
           ip_address: input.ipAddress,
           user_agent: input.userAgent,
         })
@@ -81,5 +86,12 @@ export function serializeSetting(setting: SettingRecord) {
     value: setting.is_secret ? null : setting.value,
     is_secret: setting.is_secret,
     updated_at: setting.updated_at,
+  };
+}
+
+function auditValue(value: unknown, isSecret: boolean) {
+  return {
+    value: isSecret ? "[redacted]" : value,
+    is_secret: isSecret,
   };
 }

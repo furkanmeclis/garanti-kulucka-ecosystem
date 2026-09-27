@@ -22,7 +22,7 @@ export function createSettingsRoutes() {
       return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
     }
 
-    const settings = await new SettingsRepository(db).list(scope);
+    const settings = await new SettingsRepository(db, context.get("encryptor")).list(scope);
     return context.json({ data: settings.map(serializeSetting) });
   });
 
@@ -37,7 +37,7 @@ export function createSettingsRoutes() {
       return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
     }
 
-    const setting = await new SettingsRepository(db).upsert({
+    const setting = await new SettingsRepository(db, context.get("encryptor")).upsert({
       key: context.req.param("key"),
       scope: payload.data.scope,
       value: payload.data.value,

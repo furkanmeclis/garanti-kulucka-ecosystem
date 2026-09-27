@@ -44,6 +44,26 @@ docker compose --profile tools run --rm migrator migrate --apply
 docker compose --profile tools run --rm migrator verify
 ```
 
+## First Admin
+
+Run this after database migrations. The command is manual by design and is not exposed as an API feature.
+
+```bash
+DATABASE_URL=postgres://garanti:garanti@localhost:5432/garanti \
+FIRST_ADMIN_EMAIL=admin@example.com \
+FIRST_ADMIN_PASSWORD='change-this-long-password' \
+npm run bootstrap:admin -w @garanti-kulucka/api
+```
+
+With compose:
+
+```bash
+docker compose run --rm \
+  -e FIRST_ADMIN_EMAIL=admin@example.com \
+  -e FIRST_ADMIN_PASSWORD='change-this-long-password' \
+  api node apps/api/dist/bootstrap-admin.js
+```
+
 ## Services
 
 ```bash

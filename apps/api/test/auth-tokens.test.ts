@@ -5,6 +5,8 @@ import type { ApiConfig } from "../src/config.js";
 const config: ApiConfig = {
   databaseUrl: null,
   jwtSecret: "test-secret",
+  encryptionKey: "test-encryption-key",
+  encryptionKeyId: "test",
   accessTokenTtlSeconds: 60,
   refreshTokenTtlDays: 30,
   redisUrl: null,

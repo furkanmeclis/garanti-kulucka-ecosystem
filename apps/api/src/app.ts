@@ -9,16 +9,20 @@ import { loadConfig, type ApiConfig } from "./config.js";
 import { createAuthRoutes } from "./http/auth-routes.js";
 import { createSettingsRoutes } from "./http/settings-routes.js";
 import type { AppBindings } from "./http/types.js";
+import { createSecretEncryptor, type SecretEncryptor } from "./security/encryption.js";
 
 const logger = pino({ name: "api" });
 
 export interface CreateAppOptions {
   config?: ApiConfig;
   db?: AppDatabase | null;
+  encryptor?: SecretEncryptor;
 }
 
 export function createApp(options: CreateAppOptions = {}) {
   const config = options.config ?? loadConfig();
+  const encryptor =
+    options.encryptor ?? createSecretEncryptor(config.encryptionKey, config.encryptionKeyId);
   const app = new Hono<AppBindings>();
 
   if (config.corsOrigin) {
@@ -36,6 +40,7 @@ export function createApp(options: CreateAppOptions = {}) {
     context.header("x-request-id", requestId);
     context.set("config", config);
     context.set("db", options.db ?? null);
+    context.set("encryptor", encryptor);
     context.set("auth", null);
     context.set("actorUserId", null);
     await next();
