@@ -43,8 +43,8 @@ Each accepted callback creates one `webhook_events` row with:
 - sanitized `raw_payload`
 
 The API then builds a shared `JobEnvelope` for the `provider-webhooks` queue. The route uses an API
-queue publisher abstraction so tests and local development can use a fake/no-op publisher while the
-production publisher can be wired to BullMQ without changing the HTTP contract.
+queue publisher abstraction so tests and local development can use a fake/no-op publisher, while API
+runtime uses BullMQ to publish into Redis when `REDIS_URL` is configured.
 
 ## Verification Stub
 
