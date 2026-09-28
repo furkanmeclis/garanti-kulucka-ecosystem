@@ -51,6 +51,25 @@ export interface ShipmentTrackingProcessorResult {
   };
 }
 
+export interface MigrationReportProcessorResult {
+  queue: "migration-reports";
+  status: "accepted_report";
+  run_id: string;
+  report_type: string;
+  generated_at: string | null;
+  summary: {
+    status: string | null;
+    total_checks: number | null;
+    failed_checks: number | null;
+    planned_rows: number | null;
+    blocked_rows: number | null;
+  };
+  metadata: {
+    job_id: string;
+    secret_free: true;
+  };
+}
+
 export interface WorkerProcessorRegistry {
   queues: readonly QueueName[];
   processors: ReadonlyMap<QueueName, QueueProcessor>;
@@ -256,6 +275,77 @@ function createShipmentTrackingProcessor(): QueueProcessor {
   };
 }
 
+function asRecord(input: unknown, label: string): Record<string, unknown> {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    throw new Error(`${label} must be an object`);
+  }
+
+  return input as Record<string, unknown>;
+}
+
+function assertNoSecretLeak(input: unknown): void {
+  const serialized = JSON.stringify(input);
+  const secretPatterns = [/postgres:\/\//i, /DATABASE_URL/i, /password=/i, /secret/i, /token/i];
+  const matchedPattern = secretPatterns.find((pattern) => pattern.test(serialized));
+
+  if (matchedPattern) {
+    throw new Error(`Migration report contains secret-like content: ${matchedPattern.source}`);
+  }
+}
+
+function nullableNumber(input: unknown): number | null {
+  return typeof input === "number" && Number.isFinite(input) ? input : null;
+}
+
+function createMigrationReportProcessor(): QueueProcessor {
+  return async (job) => {
+    const envelope = assertJobMatchesQueue("migration-reports", job);
+
+    if (envelope.name !== "migration.report") {
+      throw new Error(`Unknown migration report job name: ${envelope.name}`);
+    }
+
+    const payload = asRecord(envelope.payload, "Migration report payload");
+    const runId = payload.run_id;
+    const reportType = payload.report_type;
+    const report = asRecord(payload.report, "Migration report");
+
+    if (typeof runId !== "string" || runId.trim().length === 0) {
+      throw new Error("Migration report payload is missing run_id");
+    }
+
+    if (typeof reportType !== "string" || reportType.trim().length === 0) {
+      throw new Error("Migration report payload is missing report_type");
+    }
+
+    assertNoSecretLeak(report);
+
+    const totals = asRecord(report.totals ?? {}, "Migration report totals");
+    const checks = Array.isArray(report.checks) ? report.checks : null;
+    const generatedAt = typeof report.generatedAt === "string" ? report.generatedAt : null;
+    const status = typeof report.status === "string" ? report.status : null;
+
+    return {
+      queue: "migration-reports",
+      status: "accepted_report",
+      run_id: runId,
+      report_type: reportType,
+      generated_at: generatedAt,
+      summary: {
+        status,
+        total_checks: checks?.length ?? null,
+        failed_checks: nullableNumber(totals.failed),
+        planned_rows: nullableNumber(totals.plannedRows),
+        blocked_rows: nullableNumber(totals.blockedRows),
+      },
+      metadata: {
+        job_id: envelope.job_id,
+        secret_free: true,
+      },
+    } satisfies MigrationReportProcessorResult;
+  };
+}
+
 function createUnimplementedProcessor(queue: QueueName): QueueProcessor {
   return async (job) => {
     assertJobMatchesQueue(queue, job);
@@ -275,7 +365,7 @@ export function createWorkerProcessorRegistry(
     ["provider-delivery", createProviderDeliveryProcessor(providerAttemptRepository)],
     ["shipment-tracking", createShipmentTrackingProcessor()],
     ["ai-replies", createUnimplementedProcessor("ai-replies")],
-    ["migration-reports", createUnimplementedProcessor("migration-reports")],
+    ["migration-reports", createMigrationReportProcessor()],
   ]);
 
   return {

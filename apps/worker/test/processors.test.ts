@@ -90,6 +90,43 @@ function shipmentTrackingJob(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function migrationReportJob(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "bull_job_migration_report",
+    name: "migration.report",
+    data: {
+      job_id: "job_migration_report_1",
+      queue: "migration-reports",
+      name: "migration.report",
+      requested_at: now,
+      payload: {
+        run_id: "migration_run_1",
+        report_type: "verification",
+        report: {
+          status: "failed",
+          checks: [
+            {
+              name: "canonical_table.users",
+              status: "passed",
+            },
+            {
+              name: "canonical_table.orders",
+              status: "failed",
+              message: "Missing canonical table: orders",
+            },
+          ],
+          totals: {
+            passed: 1,
+            failed: 1,
+          },
+          generatedAt: now,
+        },
+      },
+      ...overrides,
+    },
+  };
+}
+
 describe("worker processor registry", () => {
   it("exposes processors for every declared worker queue", () => {
     const registry = createWorkerProcessorRegistry();
@@ -274,5 +311,57 @@ describe("worker processor registry", () => {
         name: "shipment.track",
       }),
     ).rejects.toThrow("Unknown shipment tracking job name");
+  });
+
+  it("dispatches migration reports as secret-free worker summaries", async () => {
+    const events: WorkerLifecycleEvent[] = [];
+    const registry = createWorkerProcessorRegistry((event) => events.push(event));
+
+    await expect(
+      registry.dispatch("migration-reports", migrationReportJob()),
+    ).resolves.toMatchObject({
+      queue: "migration-reports",
+      status: "accepted_report",
+      run_id: "migration_run_1",
+      report_type: "verification",
+      generated_at: now,
+      summary: {
+        status: "failed",
+        total_checks: 2,
+        failed_checks: 1,
+        planned_rows: null,
+        blocked_rows: null,
+      },
+      metadata: {
+        job_id: "job_migration_report_1",
+        secret_free: true,
+      },
+    });
+    expect(events.map((event) => event.event)).toEqual(["started", "completed"]);
+    expect(events.every((event) => event.queue === "migration-reports")).toBe(true);
+  });
+
+  it("rejects migration reports that include secret-like content", async () => {
+    const registry = createWorkerProcessorRegistry();
+    const job = migrationReportJob({
+      payload: {
+        run_id: "migration_run_1",
+        report_type: "command",
+        report: {
+          status: "failed",
+          totals: {
+            passed: 0,
+            failed: 1,
+          },
+          error: {
+            message: "DATABASE_URL=postgres://user:pass@localhost/db",
+          },
+        },
+      },
+    });
+
+    await expect(registry.dispatch("migration-reports", job)).rejects.toThrow(
+      "Migration report contains secret-like content",
+    );
   });
 });
