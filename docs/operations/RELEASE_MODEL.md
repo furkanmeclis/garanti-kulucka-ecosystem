@@ -18,9 +18,9 @@ If checks pass:
 
 - Find latest `vMAJOR.MINOR.PATCH`
 - Increment patch
-- Package API, worker, and migrator container images as downloadable workflow artifacts
+- Package API, worker, migrator, and web container images as downloadable workflow artifacts
 - Create annotated tag on the exact passing commit
-- API, worker, and migrator Dockerfiles must build before tagging.
+- API, worker, migrator, and web Dockerfiles must build before tagging.
 
 If checks fail:
 
@@ -36,6 +36,7 @@ container-images-vX.Y.Z/
   garanti-kulucka-api-vX.Y.Z.tar.gz
   garanti-kulucka-worker-vX.Y.Z.tar.gz
   garanti-kulucka-migrator-vX.Y.Z.tar.gz
+  garanti-kulucka-web-vX.Y.Z.tar.gz
 ```
 
 The packaged images are tagged internally as:
@@ -44,6 +45,7 @@ The packaged images are tagged internally as:
 ghcr.io/furkanmeclis/garanti-kulucka-ecosystem/api:vX.Y.Z
 ghcr.io/furkanmeclis/garanti-kulucka-ecosystem/worker:vX.Y.Z
 ghcr.io/furkanmeclis/garanti-kulucka-ecosystem/migrator:vX.Y.Z
+ghcr.io/furkanmeclis/garanti-kulucka-ecosystem/web:vX.Y.Z
 ```
 
 Deployments should use tags, not `latest`.
@@ -60,11 +62,12 @@ Rollback is tag-based.
 docker load < garanti-kulucka-api-vX.Y.Z.tar.gz
 docker load < garanti-kulucka-worker-vX.Y.Z.tar.gz
 docker load < garanti-kulucka-migrator-vX.Y.Z.tar.gz
+docker load < garanti-kulucka-web-vX.Y.Z.tar.gz
 ```
 
 4. Update the deployment image tags to the selected `vX.Y.Z`.
 5. Run the migrator manually only when the selected rollback procedure explicitly requires schema verification.
-6. Restart API and worker containers.
+6. Restart API, worker, and web containers.
 7. Run `garanti-migrator verify` against the target database and check API `/health/ready`.
 
 Never rollback to an untagged image.
