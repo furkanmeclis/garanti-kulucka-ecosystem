@@ -54,6 +54,7 @@ Playwright scenarios should run against local compose services:
 
 ```text
 npm run verify:structure
+npm run compose:config
 npm run lint
 npm run typecheck
 npm run test:unit

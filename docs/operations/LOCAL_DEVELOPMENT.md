@@ -16,6 +16,7 @@ npm run check
 `npm run check` runs:
 
 - repository structure guard
+- compose configuration validation
 - TypeScript checks
 - unit tests
 - current contract gate placeholders
