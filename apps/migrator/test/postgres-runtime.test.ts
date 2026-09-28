@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { migrationApplyDisabledMessage } from "../src/errors.js";
-import { executePostgresMigration } from "../src/postgres-runtime.js";
+import { executePostgresMigration, parseSafePostgresInt8 } from "../src/postgres-runtime.js";
 import {
   withReadonlyRepeatableReadTransaction,
   type PostgresSourceClient,
@@ -46,6 +46,12 @@ class FixturePostgresClient implements PostgresSourceClient {
 }
 
 describe("PostgreSQL migration runtime", () => {
+  it("uses the same safe int8 runtime policy as the database package", () => {
+    expect(parseSafePostgresInt8(String(Number.MAX_SAFE_INTEGER))).toBe(Number.MAX_SAFE_INTEGER);
+    expect(() => parseSafePostgresInt8("9007199254740992")).toThrow(RangeError);
+    expect(() => parseSafePostgresInt8("42.1")).toThrow(TypeError);
+  });
+
   it("rejects apply before constructing a source or target connection", async () => {
     await expect(
       executePostgresMigration({

@@ -1,5 +1,4 @@
-import { Client } from "pg";
-import { installSafeIntegerTypeParsers } from "@garanti-kulucka/database";
+import { Client, types } from "pg";
 import type { ExecutePostgresMigrationInput } from "./commands.js";
 import { migrationApplyDisabledMessage } from "./errors.js";
 import { LegacyDatabaseSource, type LegacyQueryDatabase, type LegacySourceTableMap } from "./legacy-source.js";
@@ -9,6 +8,9 @@ import {
   withReadonlyRepeatableReadTransaction,
   type PostgresSourceClient,
 } from "./source-transaction.js";
+
+const postgresInt8Oid = 20;
+let safeIntegerParsersInstalled = false;
 
 export async function executePostgresMigration(
   input: ExecutePostgresMigrationInput,
@@ -32,6 +34,25 @@ export async function executePostgresMigration(
       batchSize: input.batchSize,
     });
   });
+}
+
+export function installSafeIntegerTypeParsers(): void {
+  if (safeIntegerParsersInstalled) return;
+  types.setTypeParser(postgresInt8Oid, parseSafePostgresInt8);
+  safeIntegerParsersInstalled = true;
+}
+
+export function parseSafePostgresInt8(value: string): number {
+  if (!/^-?\d+$/.test(value)) {
+    throw new TypeError(`Invalid PostgreSQL int8 value: ${value}`);
+  }
+
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed)) {
+    throw new RangeError(`PostgreSQL int8 value is outside JavaScript safe integer range: ${value}`);
+  }
+
+  return parsed;
 }
 
 export function canonicalSourceTableMap(): LegacySourceTableMap {
