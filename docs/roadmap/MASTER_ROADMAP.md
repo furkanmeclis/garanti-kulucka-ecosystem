@@ -13,7 +13,7 @@ This roadmap is the execution source of truth for the Garanti Kulucka ecosystem 
 - Phase 6 realtime and webphone boundaries are implemented with Socket.IO event contracts, Redis fanout support, and SIP/WebRTC kept outside API media routing.
 - Phase 7 migrator foundation is implemented with manual commands, PostgreSQL legacy source reader, canonical target writer, source/target ports, batch planning, batch apply ports, batch offset/cursor separation, persisted batch execution state, completed batch resume skips, legacy ID map helpers, legacy ID map coverage checks, orphan message verification, synthetic verification reports, canonical table verification reports, target database snapshot verification, migration gate snapshot coverage, order item legacy target verification, manual-only compose profile guards, and optional secret-free command report files.
 - Phase 8 release automation tags every passing `main` commit, publishes downloadable API, worker, migrator, and web container image artifacts, generates release notes from tag diffs, and documents tag-based rollback.
-- Current CI/tag state: latest implementation checkpoint is `v0.1.101`; latest roadmap sync checkpoint is `v0.1.102`.
+- Current CI/tag state: latest implementation checkpoint is `v0.1.103`; latest roadmap sync checkpoint is `v0.1.104`.
 
 ## Non-Negotiables
 
@@ -162,7 +162,7 @@ Tasks:
 Verification:
 
 - Grep check finds no frontend `supabase.from`, `supabase.auth`, or Supabase channel usage outside temporary migration shims.
-- Playwright e2e tests cover message inbox, order flow, shipment flow, admin settings, and webphone config.
+- Playwright e2e smoke currently boots the API through a real Node HTTP server and validates `/health/live`; broader Playwright flows still need to expand across message inbox, order flow, shipment flow, admin settings, and webphone config.
 - API contract tests ensure frontend receives the same response shapes it expects.
 - Current typed client tests cover auth, admin settings, integrations, admin audit trails, provider attempts, provider request preview view models, domain data, files, realtime, webphone route mapping, and backend-only base URL guards.
 
