@@ -8,6 +8,8 @@ const requiredPaths = [
   "docs/architecture/SYSTEM_ARCHITECTURE.md",
   "docs/admin/ADMIN_CONFIGURATION.md",
   "docs/contracts/CONTRACT_STRATEGY.md",
+  "docs/contracts/LEGACY_CONTRACT_INVENTORY.md",
+  "contracts/legacy/endpoint-classification.json",
   "docs/testing/TEST_STRATEGY.md",
   "docs/migration/MIGRATOR_DESIGN.md",
   "docs/webphone/WEBPHONE_DESIGN.md",

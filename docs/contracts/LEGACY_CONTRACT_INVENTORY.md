@@ -203,8 +203,12 @@ rg -n "createClient|supabase\\.auth|supabase\\.channel|postgres_changes|\\.from\
 rg -n "KOLAYBI|PTT_|SURAT_|NETGSM|INSTAGRAM|MESSENGER|WHATSAPP|OPENAI|VAPI|SIP" .env.example server.js frontend/src
 ```
 
+## Classification Report
+
+The classified route surface lives in `contracts/legacy/endpoint-classification.json`.
+Contract tests fail when an inventoried API or webhook group is left unclassified or lacks a target boundary.
+
 ## Known Gaps
 
-- Provider payload schemas still need fixture-level extraction from the large legacy `server.js`.
 - n8n/Evolution WhatsApp docs may be stale versus the current Meta Cloud webhook path.
 - Live Supabase policies were not inspected.

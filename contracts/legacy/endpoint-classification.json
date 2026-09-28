@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "inventory_document": "docs/contracts/LEGACY_CONTRACT_INVENTORY.md",
+  "classification_rule": "Every inventoried legacy API or webhook group must have an explicit target boundary. The classification value unclassified is forbidden.",
+  "groups": [
+    {
+      "inventory_heading": "KolayBi",
+      "classification": "provider_integration",
+      "target_boundary": "worker provider-delivery adapter plus admin provider catalog",
+      "migration_policy": "Replace generic proxy behavior with typed provider operations, fixture-backed payloads, and provider attempt persistence."
+    },
+    {
+      "inventory_heading": "PTT",
+      "classification": "provider_integration",
+      "target_boundary": "worker provider-delivery and shipment-tracking queues",
+      "migration_policy": "Route shipment creation, tracking, deletes, and scheduled tracking work through worker/provider contracts."
+    },
+    {
+      "inventory_heading": "Surat",
+      "classification": "provider_integration",
+      "target_boundary": "worker provider-delivery and shipment-tracking queues",
+      "migration_policy": "Route shipment creation, tracking, deletes, recalls, and status checks through worker/provider contracts."
+    },
+    {
+      "inventory_heading": "Messaging And Admin",
+      "classification": "backend_domain_and_admin_api",
+      "target_boundary": "api domain, auth, admin, realtime, and privacy callback routes",
+      "migration_policy": "Serve frontend data through backend-owned APIs with auth, permissions, audit logs, and Socket.IO presence."
+    },
+    {
+      "inventory_heading": "AI Agent",
+      "classification": "worker_ai_and_admin_settings",
+      "target_boundary": "worker ai-replies queue plus audited admin settings",
+      "migration_policy": "Persist prompts in PostgreSQL and route slow response generation through worker jobs."
+    },
+    {
+      "inventory_heading": "Social Comments",
+      "classification": "provider_integration",
+      "target_boundary": "api domain routes plus worker provider-webhooks/provider-delivery queues",
+      "migration_policy": "Serve comment state through backend APIs and route provider-side ingest/reply/hide/delete work through worker attempts."
+    },
+    {
+      "inventory_heading": "Vapi",
+      "classification": "voice_provider_and_webphone",
+      "target_boundary": "api webphone/domain routes plus worker provider-delivery/provider-webhooks queues",
+      "migration_policy": "Persist voice config in admin settings, expose call data through backend APIs, and route Vapi calls/webhooks through worker/provider contracts."
+    },
+    {
+      "inventory_heading": "Meta WhatsApp Cloud",
+      "classification": "webhook_callback",
+      "target_boundary": "api webhook routes and provider-webhooks queue",
+      "migration_policy": "Map legacy Meta challenge and EVENT_RECEIVED semantics to stable webhook callbacks without returning secrets."
+    },
+    {
+      "inventory_heading": "Instagram",
+      "classification": "webhook_callback",
+      "target_boundary": "api webhook routes and provider-webhooks queue",
+      "migration_policy": "Map legacy Instagram challenge and inbound event semantics to stable webhook callbacks."
+    },
+    {
+      "inventory_heading": "Messenger",
+      "classification": "webhook_callback",
+      "target_boundary": "api webhook routes and provider-webhooks queue",
+      "migration_policy": "Map legacy Messenger challenge and inbound event semantics to stable webhook callbacks."
+    },
+    {
+      "inventory_heading": "NetGSM IVR",
+      "classification": "webhook_callback",
+      "target_boundary": "api webhook routes and provider-webhooks queue",
+      "migration_policy": "Map legacy NetGSM voice callbacks to stable webhook ingestion and worker processing."
+    },
+    {
+      "inventory_heading": "Vapi Webhook",
+      "classification": "webhook_callback",
+      "target_boundary": "api webhook routes and provider-webhooks queue",
+      "migration_policy": "Map legacy Vapi webhook payload wrappers to stable webhook ingestion and worker processing."
+    }
+  ]
+}
