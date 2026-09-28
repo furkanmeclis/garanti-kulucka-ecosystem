@@ -74,6 +74,17 @@ const forbiddenSchemaPatterns = [
   /\bmoney\b/i,
 ];
 
+const forbiddenDocumentationPatterns = [
+  {
+    pattern: /\bplaceholder(s)?\b/i,
+    message: "Documentation must describe implemented gates instead of placeholders",
+  },
+  {
+    pattern: /\bstill need(s)? to\b/i,
+    message: "Roadmap documentation must be updated when a gap is closed",
+  },
+];
+
 const failures = [];
 
 for (const path of requiredPaths) {
@@ -125,6 +136,14 @@ for (const file of files) {
 
   if (/console\.log\([^)]*(TOKEN|SECRET|PASSWORD|ACCESS_TOKEN|API_KEY)/i.test(text)) {
     failures.push(`Potential secret logging pattern: ${rel}`);
+  }
+
+  if (rel.startsWith("docs/")) {
+    for (const { pattern, message } of forbiddenDocumentationPatterns) {
+      if (pattern.test(text)) {
+        failures.push(`${message}: ${rel}`);
+      }
+    }
   }
 }
 

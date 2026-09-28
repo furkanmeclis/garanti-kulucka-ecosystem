@@ -19,7 +19,8 @@ npm run check
 - compose configuration validation
 - TypeScript checks
 - unit tests
-- current contract gate placeholders
+- contract tests for legacy endpoint classification, provider catalog parity, provider fixtures, and fixture replay
+- integration, migrator, worker, websocket, and Playwright e2e tests
 - workspace builds
 - Docker builds for API, worker, migrator, and web
 
