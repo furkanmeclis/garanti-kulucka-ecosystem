@@ -2,6 +2,7 @@ import type { LegacySource, MigrationEntity, MigrationEntityPlan, MigrationMode,
 
 export const canonicalMigrationEntities: readonly MigrationEntity[] = [
   "customers",
+  "customer_external_identities",
   "customer_addresses",
   "conversations",
   "messages",

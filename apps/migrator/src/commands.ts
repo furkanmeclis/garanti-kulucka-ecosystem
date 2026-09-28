@@ -57,6 +57,7 @@ const requiredCanonicalTables = [
   "users",
   "roles",
   "customers",
+  "customer_external_identities",
   "conversations",
   "messages",
   "orders",

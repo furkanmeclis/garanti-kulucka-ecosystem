@@ -10,8 +10,29 @@ describe("target verification snapshot", () => {
         if (sql.includes("from customers order by")) {
           return { rows: [{ public_id: "cus_1", phone: "555", email: "customer@example.com" }] };
         }
+        if (sql.includes("from customer_external_identities")) {
+          return {
+            rows: [
+              {
+                public_id: "cei_1",
+                customer_public_id: "cus_1",
+                integration_account_public_id: "ina_1",
+                external_id: "42",
+              },
+            ],
+          };
+        }
         if (sql.includes("from conversations")) {
-          return { rows: [{ public_id: "cnv_1", customer_public_id: "cus_1" }] };
+          return {
+            rows: [
+              {
+                public_id: "cnv_1",
+                customer_public_id: "cus_1",
+                integration_account_public_id: "ina_1",
+                has_integration_account: true,
+              },
+            ],
+          };
         }
         if (sql.includes("from messages")) {
           return {
@@ -51,6 +72,7 @@ describe("target verification snapshot", () => {
                 source_table: "legacy.musteriler",
                 source_id: "1",
                 target_table: "customers",
+                mapping_role: "primary",
                 target_id: "cus_1",
               },
               {
@@ -58,6 +80,7 @@ describe("target verification snapshot", () => {
                 source_table: "legacy.siparisler",
                 source_id: "10",
                 target_table: "orders",
+                mapping_role: "primary",
                 target_id: "ord_1",
               },
             ],
@@ -70,16 +93,20 @@ describe("target verification snapshot", () => {
 
     const snapshot = await createTargetVerificationSnapshot(client as never);
 
-    expect(queries).toHaveLength(7);
+    expect(queries).toHaveLength(8);
     expect(snapshot.sourceCounts).toEqual({ customers: 1, orders: 1 });
     expect(snapshot.targetCounts).toMatchObject({
       customers: 1,
+      customer_external_identities: 1,
       conversations: 1,
       messages: 1,
       orders: 1,
       order_items: 1,
       shipments: 1,
     });
+    expect(snapshot.customerExternalIdentities[0]?.external_id).toBe("42");
+    expect(snapshot.customerExternalIdentities[0]?.integration_account_public_id).toBe("ina_1");
+    expect(snapshot.conversations[0]?.integration_account_public_id).toBe("ina_1");
     expect(snapshot.messages[0]?.sent_at).toBe("2026-01-01T00:00:00.000Z");
     expect(snapshot.orderItems[0]?.public_id).toBe("oit_1");
     expect(snapshot.orderItems[0]?.quantity).toBe(1);

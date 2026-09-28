@@ -12,6 +12,7 @@ describe("migration gate", () => {
       sourceCounts: { customers: 1 },
       targetCounts: { customers: 1 },
       customers: [{ public_id: "cus_1", phone: null, email: "customer@example.com" }],
+      customerExternalIdentities: [],
       conversations: [],
       messages: [],
       orders: [],
@@ -33,6 +34,9 @@ describe("migration gate", () => {
       query: async (sql: string) => {
         if (sql.includes("from customers order by")) {
           return { rows: [{ public_id: "cus_1", phone: "555", email: "customer@example.com" }] };
+        }
+        if (sql.includes("from customer_external_identities")) {
+          return { rows: [] };
         }
         if (sql.includes("from conversations")) {
           return { rows: [{ public_id: "cnv_1", customer_public_id: "cus_1" }] };
@@ -75,6 +79,7 @@ describe("migration gate", () => {
                 source_table: "legacy.musteriler",
                 source_id: "1",
                 target_table: "customers",
+                mapping_role: "primary",
                 target_id: "cus_1",
               },
               {
@@ -82,6 +87,7 @@ describe("migration gate", () => {
                 source_table: "legacy.siparisler",
                 source_id: "10",
                 target_table: "orders",
+                mapping_role: "primary",
                 target_id: "ord_1",
               },
               {
@@ -89,6 +95,7 @@ describe("migration gate", () => {
                 source_table: "legacy.siparis_kalemleri",
                 source_id: "11",
                 target_table: "order_items",
+                mapping_role: "primary",
                 target_id: "oit_1",
               },
             ],

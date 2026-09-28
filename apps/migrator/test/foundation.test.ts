@@ -232,6 +232,7 @@ describe("migration foundation", () => {
       sourceTable: "customers",
       sourceId: "42",
       targetTable: "customers",
+      mappingRole: "primary",
       targetId: "1001",
       checksum: "sha256:first",
     };
@@ -242,6 +243,15 @@ describe("migration foundation", () => {
       status: "updated",
       entry: { checksum: "sha256:changed" },
     });
+
+    await expect(
+      upsertLegacyIdMap(target, {
+        ...write,
+        targetTable: "customer_addresses",
+        mappingRole: "legacy_default_address",
+        targetId: "2001",
+      }),
+    ).resolves.toMatchObject({ status: "created" });
   });
 
   it("applies batches through source and target ports idempotently", async () => {

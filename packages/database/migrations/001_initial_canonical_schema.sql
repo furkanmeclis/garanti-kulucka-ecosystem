@@ -328,7 +328,7 @@ CREATE TABLE integration_settings (
   is_secret BOOLEAN NOT NULL DEFAULT false,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE (provider_id, account_id, key) NULLS NOT DISTINCT
+  UNIQUE NULLS NOT DISTINCT (provider_id, account_id, key)
 );
 CREATE INDEX integration_settings_account_id_idx ON integration_settings(account_id);
 CREATE INDEX integration_settings_provider_id_idx ON integration_settings(provider_id);

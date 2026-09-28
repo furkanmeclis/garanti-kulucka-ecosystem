@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { NewUser } from "../src/index.js";
+import type { Database, NewCustomerExternalIdentity, NewUser } from "../src/index.js";
 
 describe("database schema types", () => {
   it("exposes insertable user shape", () => {
@@ -19,5 +19,20 @@ describe("database schema types", () => {
     } satisfies NewUser;
 
     expect(user.email).toBe("admin@example.com");
+  });
+
+  it("exposes customer identity and conversation integration account shapes", () => {
+    const identity = {
+      public_id: "cei_1",
+      customer_id: 1,
+      integration_account_id: 10,
+      external_id: "customer-42",
+      metadata: { legacy_column: "woocommerce_id" },
+    } satisfies NewCustomerExternalIdentity;
+
+    const integrationAccountId: Database["conversations"]["integration_account_id"] = null;
+
+    expect(identity.integration_account_id).toBe(10);
+    expect(integrationAccountId).toBeNull();
   });
 });

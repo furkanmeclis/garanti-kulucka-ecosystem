@@ -32,6 +32,10 @@ describe("database migration target", () => {
     );
   });
 
+  it("accepts account-scoped customer identity targets", () => {
+    expect(() => assertCanonicalTargetTable("customer_external_identities")).not.toThrow();
+  });
+
   it("rejects reserved canonical columns from migrated payloads", () => {
     expect(() =>
       mapCanonicalRecordToInsert({

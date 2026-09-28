@@ -31,9 +31,11 @@ export function toLegacyIdMapKey(input: LegacyIdMapWrite): LegacyIdMapKey {
     sourceSystem: input.sourceSystem,
     sourceTable: input.sourceTable,
     sourceId: input.sourceId,
+    targetTable: input.targetTable,
+    mappingRole: input.mappingRole,
   };
 }
 
 export function legacyIdMapKey(input: LegacyIdMapKey): string {
-  return `${input.sourceSystem}:${input.sourceTable}:${input.sourceId}`;
+  return `${input.sourceSystem}:${input.sourceTable}:${input.sourceId}:${input.targetTable}:${input.mappingRole}`;
 }

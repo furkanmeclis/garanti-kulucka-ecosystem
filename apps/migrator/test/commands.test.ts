@@ -228,6 +228,14 @@ describe("migrator commands", () => {
     expect(report.status).toBe("failed");
     expect(report.checks).toContainEqual(
       expect.objectContaining({
+        name: "canonical_table.customer_external_identities",
+        status: "failed",
+        expected: 1,
+        actual: 0,
+      }),
+    );
+    expect(report.checks).toContainEqual(
+      expect.objectContaining({
         name: "canonical_table.legacy_id_map",
         status: "failed",
         expected: 1,

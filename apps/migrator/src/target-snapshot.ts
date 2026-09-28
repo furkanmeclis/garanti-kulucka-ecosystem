@@ -2,9 +2,10 @@ import type { Client } from "pg";
 import type { MigrationVerificationSnapshot } from "./verify.js";
 
 export async function createTargetVerificationSnapshot(client: Client): Promise<MigrationVerificationSnapshot> {
-  const [customers, conversations, messages, orders, orderItems, shipments, legacyIdMaps] =
+  const [customers, customerExternalIdentities, conversations, messages, orders, orderItems, shipments, legacyIdMaps] =
     await Promise.all([
       selectCustomers(client),
+      selectCustomerExternalIdentities(client),
       selectConversations(client),
       selectMessages(client),
       selectOrders(client),
@@ -15,6 +16,7 @@ export async function createTargetVerificationSnapshot(client: Client): Promise<
 
   const targetCounts = {
     customers: customers.length,
+    customer_external_identities: customerExternalIdentities.length,
     conversations: conversations.length,
     messages: messages.length,
     orders: orders.length,
@@ -26,6 +28,7 @@ export async function createTargetVerificationSnapshot(client: Client): Promise<
     sourceCounts: createSourceCountsFromLegacyIdMaps(legacyIdMaps),
     targetCounts,
     customers,
+    customerExternalIdentities,
     conversations,
     messages,
     orders,
@@ -33,6 +36,25 @@ export async function createTargetVerificationSnapshot(client: Client): Promise<
     shipments,
     legacyIdMaps,
   };
+}
+
+async function selectCustomerExternalIdentities(client: Client) {
+  const result = await client.query<{
+    public_id: string;
+    customer_public_id: string | null;
+    integration_account_public_id: string | null;
+    external_id: string;
+  }>(`
+    select customer_external_identities.public_id,
+           customers.public_id as customer_public_id,
+           integration_accounts.public_id as integration_account_public_id,
+           customer_external_identities.external_id
+    from customer_external_identities
+    left join customers on customers.id = customer_external_identities.customer_id
+    left join integration_accounts on integration_accounts.id = customer_external_identities.integration_account_id
+    order by customer_external_identities.id asc
+  `);
+  return result.rows;
 }
 
 function createSourceCountsFromLegacyIdMaps(
@@ -53,10 +75,19 @@ async function selectCustomers(client: Client) {
 }
 
 async function selectConversations(client: Client) {
-  const result = await client.query<{ public_id: string; customer_public_id: string | null }>(`
-    select conversations.public_id, customers.public_id as customer_public_id
+  const result = await client.query<{
+    public_id: string;
+    customer_public_id: string | null;
+    integration_account_public_id: string | null;
+    has_integration_account: boolean;
+  }>(`
+    select conversations.public_id,
+           customers.public_id as customer_public_id,
+           integration_accounts.public_id as integration_account_public_id,
+           conversations.integration_account_id is not null as has_integration_account
     from conversations
     left join customers on customers.id = conversations.customer_id
+    left join integration_accounts on integration_accounts.id = conversations.integration_account_id
     order by conversations.id asc
   `);
   return result.rows;
@@ -141,9 +172,10 @@ async function selectLegacyIdMaps(client: Client) {
     source_table: string;
     source_id: string;
     target_table: string;
+    mapping_role: string;
     target_id: string;
   }>(`
-    select source_system, source_table, source_id, target_table, target_id
+    select source_system, source_table, source_id, target_table, mapping_role, target_id
     from legacy_id_map
     order by id asc
   `);

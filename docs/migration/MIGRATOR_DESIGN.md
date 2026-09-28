@@ -38,9 +38,19 @@ Dry-run does not resolve a target URL, connect to the target, write data, or val
 - `MigrationTarget` provides canonical write, migration batch state, and `legacy_id_map` ports.
 - `createMigrationPlan` creates deterministic entity and batch plans.
 - `applyMigrationBatch` and its state wrapper implement resumable, idempotent batch foundations behind the disabled apply gate.
-- `upsertLegacyIdMap` keys migrated records by source system, source table, and source ID.
+- `upsertLegacyIdMap` keys migrated records by source system, source table, source ID, target table, and mapping role.
 - Source transactions enforce repeatable-read and read-only semantics.
 - Error and report serialization remove database URLs and credential parameters.
+
+## Canonical Identity Targets
+
+`customer_external_identities` stores durable customer identifiers under a persisted `integration_account_id`. `(integration_account_id, external_id)` identifies one external customer inside one account, while `(customer_id, integration_account_id)` permits one identity for each canonical customer in that account. Provider ownership is derived through `integration_accounts.provider_id`; no duplicate provider text is stored on the identity. Account deletion cascades to its external identities, and provider-specific attributes remain in object-shaped `metadata`.
+
+`conversations.integration_account_id` links a conversation to the exact persisted integration account that owns its provider thread. The nullable foreign key uses `ON DELETE SET NULL`, so deleting an account does not delete conversation history. This is the canonical resolution target for legacy Instagram account identifiers.
+
+Target verification requires the identity table and snapshots both identity ownership and conversation account links. These schema additions do not enable apply; the legacy mapping catalog and activation review remain mandatory.
+
+`legacy_id_map.mapping_role` defaults to `primary` and participates in the source-to-target uniqueness key. A single legacy row can therefore retain separate mappings for its canonical customer, synthesized address, and account-scoped external identities without overwriting earlier mappings.
 
 ## Migration Roadmap
 
@@ -52,6 +62,8 @@ The apply gate can be reviewed for activation after these capabilities are imple
 - Reconciliation for row counts, unmapped fields, rejected rows, and business totals.
 - Operator report artifacts such as migration summaries, row counts, unmapped fields, errors, and final verification results.
 - Recovery drills proving that interrupted runs resume without duplicate target records.
+- A project-wide PostgreSQL `BIGINT` runtime type policy and corresponding Kysely type migration.
+- A source-backed migration manifest that proves source completeness independently of `legacy_id_map`.
 
 These roadmap artifacts are not outputs of the current dry-run command.
 

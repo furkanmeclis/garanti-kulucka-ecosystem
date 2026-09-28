@@ -5,6 +5,7 @@ export interface MigrationVerificationSnapshot {
   readonly sourceCounts: Record<string, number>;
   readonly targetCounts: Record<string, number>;
   readonly customers: VerificationCustomer[];
+  readonly customerExternalIdentities: VerificationCustomerExternalIdentity[];
   readonly conversations: VerificationConversation[];
   readonly messages: VerificationMessage[];
   readonly orders: VerificationOrder[];
@@ -20,9 +21,18 @@ export interface VerificationCustomer {
   readonly email: string | null;
 }
 
+export interface VerificationCustomerExternalIdentity {
+  readonly public_id: string;
+  readonly customer_public_id: string | null;
+  readonly integration_account_public_id: string | null;
+  readonly external_id: string;
+}
+
 export interface VerificationConversation {
   readonly public_id: string;
   readonly customer_public_id: string | null;
+  readonly integration_account_public_id: string | null;
+  readonly has_integration_account: boolean;
 }
 
 export interface VerificationMessage {
@@ -56,6 +66,7 @@ export interface VerificationLegacyIdMapEntry {
   readonly source_table: string;
   readonly source_id: string;
   readonly target_table: string;
+  readonly mapping_role: string;
   readonly target_id: string;
 }
 
@@ -65,7 +76,9 @@ export function createMigrationVerificationReport(
   return createVerificationReport({
     checks: [
       ...verifyRowCounts(snapshot.sourceCounts, snapshot.targetCounts),
+      verifyCustomerExternalIdentityReferences(snapshot),
       verifyConversationCustomers(snapshot),
+      verifyConversationIntegrationAccounts(snapshot),
       verifyMessageConversations(snapshot),
       verifyOrderCustomers(snapshot),
       verifyShipmentReferences(snapshot),
@@ -76,6 +89,20 @@ export function createMigrationVerificationReport(
     ],
     ...(snapshot.now ? { now: snapshot.now } : {}),
   });
+}
+
+export function verifyCustomerExternalIdentityReferences(
+  snapshot: MigrationVerificationSnapshot,
+): VerificationCheck {
+  const customerIds = new Set(snapshot.customers.map((customer) => customer.public_id));
+  const orphanCount = snapshot.customerExternalIdentities.filter((identity) => {
+    const missingCustomer =
+      identity.customer_public_id === null || !customerIds.has(identity.customer_public_id);
+    const missingIntegrationAccount = identity.integration_account_public_id === null;
+    return missingCustomer || missingIntegrationAccount;
+  }).length;
+
+  return countCheck("referential_integrity.customer_external_identities", 0, orphanCount);
 }
 
 export function verifyRowCounts(
@@ -102,6 +129,17 @@ export function verifyConversationCustomers(snapshot: MigrationVerificationSnaps
   ).length;
 
   return countCheck("referential_integrity.conversations.customer", 0, orphanCount);
+}
+
+export function verifyConversationIntegrationAccounts(
+  snapshot: MigrationVerificationSnapshot,
+): VerificationCheck {
+  const orphanCount = snapshot.conversations.filter(
+    (conversation) =>
+      conversation.has_integration_account && conversation.integration_account_public_id === null,
+  ).length;
+
+  return countCheck("referential_integrity.conversations.integration_account", 0, orphanCount);
 }
 
 export function verifyMessageConversations(snapshot: MigrationVerificationSnapshot): VerificationCheck {
@@ -208,6 +246,10 @@ export function verifyLegacyIdMapCoverage(snapshot: MigrationVerificationSnapsho
 function verifyLegacyIdMapTargetReferences(snapshot: MigrationVerificationSnapshot): VerificationCheck {
   const targetIds = new Map<string, Set<string>>([
     ["customers", new Set(snapshot.customers.map((customer) => customer.public_id))],
+    [
+      "customer_external_identities",
+      new Set(snapshot.customerExternalIdentities.map((identity) => identity.public_id)),
+    ],
     ["conversations", new Set(snapshot.conversations.map((conversation) => conversation.public_id))],
     ["messages", new Set(snapshot.messages.map((message) => message.public_id))],
     ["orders", new Set(snapshot.orders.map((order) => order.public_id))],
@@ -227,6 +269,7 @@ function verifyLegacyIdMapTargetReferences(snapshot: MigrationVerificationSnapsh
 function legacyEntityTargetTable(entity: string): string {
   const targetTables = {
     customers: "customers",
+    customer_external_identities: "customer_external_identities",
     customer_addresses: "customer_addresses",
     conversations: "conversations",
     messages: "messages",

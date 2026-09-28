@@ -2,6 +2,7 @@ export type MigrationMode = "dry-run" | "apply";
 
 export type MigrationEntity =
   | "customers"
+  | "customer_external_identities"
   | "customer_addresses"
   | "conversations"
   | "messages"
@@ -41,6 +42,7 @@ export interface LegacyIdMapEntry {
   readonly sourceTable: string;
   readonly sourceId: string;
   readonly targetTable: string;
+  readonly mappingRole: string;
   readonly targetId: string;
   readonly checksum: string | null;
   readonly migratedAt: Date;
@@ -78,10 +80,11 @@ export interface LegacyIdMapKey {
   readonly sourceSystem: string;
   readonly sourceTable: string;
   readonly sourceId: string;
+  readonly targetTable: string;
+  readonly mappingRole: string;
 }
 
 export interface LegacyIdMapWrite extends LegacyIdMapKey {
-  readonly targetTable: string;
   readonly targetId: string;
   readonly checksum: string | null;
 }

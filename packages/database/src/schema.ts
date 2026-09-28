@@ -23,6 +23,7 @@ export interface Database {
   refresh_tokens: RefreshTokensTable;
   login_attempts: LoginAttemptsTable;
   customers: CustomersTable;
+  customer_external_identities: CustomerExternalIdentitiesTable;
   customer_addresses: CustomerAddressesTable;
   conversations: ConversationsTable;
   messages: MessagesTable;
@@ -119,6 +120,13 @@ export interface CustomersTable extends BaseTable {
   notes: string | null;
 }
 
+export interface CustomerExternalIdentitiesTable extends BaseTable {
+  customer_id: number;
+  integration_account_id: number;
+  external_id: string;
+  metadata: Json;
+}
+
 export interface CustomerAddressesTable extends BaseTable {
   customer_id: number;
   label: string | null;
@@ -133,6 +141,7 @@ export interface CustomerAddressesTable extends BaseTable {
 export interface ConversationsTable extends BaseTable {
   customer_id: number | null;
   assigned_user_id: number | null;
+  integration_account_id: number | null;
   channel: string;
   external_thread_id: string | null;
   status: string;
@@ -360,6 +369,7 @@ export interface LegacyIdMapTable {
   source_table: string;
   source_id: string;
   target_table: string;
+  mapping_role: string;
   target_id: string;
   checksum: string | null;
   migrated_at: Timestamp;
@@ -368,3 +378,6 @@ export interface LegacyIdMapTable {
 export type User = Selectable<UsersTable>;
 export type NewUser = Insertable<UsersTable>;
 export type UserUpdate = Updateable<UsersTable>;
+export type CustomerExternalIdentity = Selectable<CustomerExternalIdentitiesTable>;
+export type NewCustomerExternalIdentity = Insertable<CustomerExternalIdentitiesTable>;
+export type CustomerExternalIdentityUpdate = Updateable<CustomerExternalIdentitiesTable>;

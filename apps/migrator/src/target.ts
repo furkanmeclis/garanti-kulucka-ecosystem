@@ -18,6 +18,7 @@ import type {
 
 const canonicalTargetTables = new Set<MigrationEntity>([
   "customers",
+  "customer_external_identities",
   "customer_addresses",
   "conversations",
   "messages",
@@ -93,6 +94,8 @@ export class DatabaseMigrationTarget implements MigrationTarget {
       .where("source_system", "=", input.sourceSystem)
       .where("source_table", "=", input.sourceTable)
       .where("source_id", "=", input.sourceId)
+      .where("target_table", "=", input.targetTable)
+      .where("mapping_role", "=", input.mappingRole)
       .executeTakeFirst();
 
     return row ? mapLegacyIdMapRow(row) : null;
@@ -106,12 +109,12 @@ export class DatabaseMigrationTarget implements MigrationTarget {
         source_table: input.sourceTable,
         source_id: input.sourceId,
         target_table: input.targetTable,
+        mapping_role: input.mappingRole,
         target_id: input.targetId,
         checksum: input.checksum,
       })
       .onConflict((conflict) =>
-        conflict.columns(["source_system", "source_table", "source_id"]).doUpdateSet({
-          target_table: input.targetTable,
+        conflict.columns(["source_system", "source_table", "source_id", "target_table", "mapping_role"]).doUpdateSet({
           target_id: input.targetId,
           checksum: input.checksum,
           migrated_at: new Date(),
@@ -300,6 +303,7 @@ function mapLegacyIdMapRow(row: Insertable<LegacyIdMapTable> & { migrated_at?: D
     sourceTable: row.source_table,
     sourceId: row.source_id,
     targetTable: row.target_table,
+    mappingRole: row.mapping_role,
     targetId: row.target_id,
     checksum: row.checksum ?? null,
     migratedAt: row.migrated_at ? new Date(row.migrated_at) : new Date(),

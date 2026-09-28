@@ -77,6 +77,7 @@ export async function applyMigrationBatch(
       sourceTable: legacyRecord.sourceTable,
       sourceId: legacyRecord.sourceId,
       targetTable: canonicalRecord.targetTable,
+      mappingRole: "primary",
       targetId: canonicalRecord.targetId,
       checksum: canonicalRecord.checksum,
     });

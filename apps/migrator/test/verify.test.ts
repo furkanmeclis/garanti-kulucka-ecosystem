@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   createMigrationVerificationReport,
   verifyLegacyIdMapCoverage,
+  verifyCustomerExternalIdentityReferences,
+  verifyConversationIntegrationAccounts,
   verifyMessageConversations,
   verifyMessageOrdering,
   verifyOrderTotals,
@@ -54,7 +56,15 @@ describe("migration verification", () => {
         sourceCounts: {},
         targetCounts: {},
         customers: [],
-        conversations: [{ public_id: "cnv_1", customer_public_id: null }],
+        customerExternalIdentities: [],
+        conversations: [
+          {
+            public_id: "cnv_1",
+            customer_public_id: null,
+            integration_account_public_id: null,
+            has_integration_account: false,
+          },
+        ],
         messages: [
           {
             public_id: "msg_1",
@@ -68,6 +78,43 @@ describe("migration verification", () => {
       }),
     ).toMatchObject({
       name: "referential_integrity.messages.conversation",
+      status: "failed",
+      actual: 1,
+    });
+  });
+
+  it("detects orphan customer identities and conversation integration accounts", () => {
+    const snapshot = {
+      sourceCounts: {},
+      targetCounts: {},
+      customers: [{ public_id: "cus_1", phone: null, email: null }],
+      customerExternalIdentities: [
+        {
+          public_id: "cei_1",
+          customer_public_id: null,
+          integration_account_public_id: null,
+          external_id: "42",
+        },
+      ],
+      conversations: [
+        {
+          public_id: "cnv_1",
+          customer_public_id: "cus_1",
+          integration_account_public_id: null,
+          has_integration_account: true,
+        },
+      ],
+      messages: [],
+      orders: [],
+      orderItems: [],
+      shipments: [],
+    };
+
+    expect(verifyCustomerExternalIdentityReferences(snapshot)).toMatchObject({
+      status: "failed",
+      actual: 1,
+    });
+    expect(verifyConversationIntegrationAccounts(snapshot)).toMatchObject({
       status: "failed",
       actual: 1,
     });
@@ -103,9 +150,10 @@ describe("migration verification", () => {
 
   it("detects missing legacy id map coverage and dangling target references", () => {
     const checks = verifyLegacyIdMapCoverage({
-      sourceCounts: { customers: 2, orders: 1, order_items: 1 },
-      targetCounts: { customers: 2, orders: 1, order_items: 1 },
+      sourceCounts: { customers: 2, customer_external_identities: 1, orders: 1, order_items: 1 },
+      targetCounts: { customers: 2, customer_external_identities: 0, orders: 1, order_items: 1 },
       customers: [{ public_id: "cus_1", phone: null, email: "customer@example.com" }],
+      customerExternalIdentities: [],
       conversations: [],
       messages: [],
       orders: [{ public_id: "ord_1", customer_public_id: "cus_1", total_amount: "10.00" }],
@@ -125,6 +173,7 @@ describe("migration verification", () => {
           source_table: "legacy.musteriler",
           source_id: "1",
           target_table: "customers",
+          mapping_role: "primary",
           target_id: "cus_1",
         },
         {
@@ -132,13 +181,23 @@ describe("migration verification", () => {
           source_table: "legacy.siparisler",
           source_id: "10",
           target_table: "orders",
+          mapping_role: "primary",
           target_id: "ord_missing",
+        },
+        {
+          source_system: "legacy",
+          source_table: "legacy.musteriler",
+          source_id: "1",
+          target_table: "customer_external_identities",
+          mapping_role: "woocommerce_identity",
+          target_id: "cei_missing",
         },
         {
           source_system: "legacy",
           source_table: "legacy.siparis_kalemleri",
           source_id: "11",
           target_table: "order_items",
+          mapping_role: "primary",
           target_id: "oit_missing",
         },
       ],
@@ -160,6 +219,12 @@ describe("migration verification", () => {
     );
     expect(checks).toContainEqual(
       expect.objectContaining({
+        name: "legacy_id_map.customer_external_identities",
+        status: "passed",
+      }),
+    );
+    expect(checks).toContainEqual(
+      expect.objectContaining({
         name: "legacy_id_map.order_items",
         status: "passed",
       }),
@@ -168,7 +233,7 @@ describe("migration verification", () => {
       expect.objectContaining({
         name: "legacy_id_map.target_references",
         status: "failed",
-        actual: 2,
+        actual: 3,
       }),
     );
   });
@@ -181,7 +246,15 @@ describe("migration verification", () => {
         { public_id: "cus_1", phone: "555", email: null },
         { public_id: "cus_2", phone: "555", email: null },
       ],
-      conversations: [{ public_id: "cnv_1", customer_public_id: "cus_missing" }],
+      customerExternalIdentities: [],
+      conversations: [
+        {
+          public_id: "cnv_1",
+          customer_public_id: "cus_missing",
+          integration_account_public_id: null,
+          has_integration_account: false,
+        },
+      ],
       messages: [
         {
           public_id: "msg_1",
@@ -211,6 +284,7 @@ describe("migration verification", () => {
           source_table: "legacy.musteriler",
           source_id: "1",
           target_table: "customers",
+          mapping_role: "primary",
           target_id: "cus_1",
         },
         {
@@ -218,6 +292,7 @@ describe("migration verification", () => {
           source_table: "legacy.siparisler",
           source_id: "10",
           target_table: "orders",
+          mapping_role: "primary",
           target_id: "ord_1",
         },
       ],
