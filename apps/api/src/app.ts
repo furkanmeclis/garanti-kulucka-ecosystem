@@ -15,6 +15,7 @@ import { createWebhookRoutes } from "./http/webhook-routes.js";
 import { createWebphoneRoutes } from "./http/webphone-routes.js";
 import type { AppBindings } from "./http/types.js";
 import { createSecretEncryptor, type SecretEncryptor } from "./security/encryption.js";
+import type { WebhookQueuePublisher } from "./webhooks/queue-publisher.js";
 
 const logger = pino({ name: "api" });
 
@@ -22,6 +23,7 @@ export interface CreateAppOptions {
   config?: ApiConfig;
   db?: AppDatabase | null;
   encryptor?: SecretEncryptor;
+  webhookQueuePublisher?: WebhookQueuePublisher;
 }
 
 export function createApp(options: CreateAppOptions = {}) {
@@ -95,7 +97,14 @@ export function createApp(options: CreateAppOptions = {}) {
   app.route("/api", createDomainRoutes());
   app.route("/api/files", createFileRoutes());
   app.route("/api/webphone", createWebphoneRoutes());
-  app.route("/webhooks", createWebhookRoutes());
+  app.route(
+    "/webhooks",
+    createWebhookRoutes(
+      options.webhookQueuePublisher
+        ? { queuePublisher: options.webhookQueuePublisher }
+        : {},
+    ),
+  );
   app.route("/admin/settings", createSettingsRoutes());
   app.route("/admin/integrations", createIntegrationRoutes());
 
