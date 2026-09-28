@@ -1,4 +1,5 @@
 import { Client } from "pg";
+import { installSafeIntegerTypeParsers } from "@garanti-kulucka/database";
 import type { ExecutePostgresMigrationInput } from "./commands.js";
 import { migrationApplyDisabledMessage } from "./errors.js";
 import { LegacyDatabaseSource, type LegacyQueryDatabase, type LegacySourceTableMap } from "./legacy-source.js";
@@ -16,6 +17,7 @@ export async function executePostgresMigration(
     throw new Error(migrationApplyDisabledMessage);
   }
 
+  installSafeIntegerTypeParsers();
   const sourceClient = new Client({ connectionString: input.sourceDatabaseUrl });
   return withReadonlyRepeatableReadTransaction(sourceClient, async () => {
     const source = new LegacyDatabaseSource({

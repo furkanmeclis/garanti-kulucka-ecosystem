@@ -10,7 +10,13 @@ const { postgresClientConstructor } = vi.hoisted(() => ({
   postgresClientConstructor: vi.fn(),
 }));
 
-vi.mock("pg", () => ({ Client: postgresClientConstructor }));
+vi.mock("pg", () => ({
+  Client: postgresClientConstructor,
+  Pool: vi.fn(),
+  types: {
+    setTypeParser: vi.fn(),
+  },
+}));
 
 class FixturePostgresClient implements PostgresSourceClient {
   readonly queries: string[] = [];
