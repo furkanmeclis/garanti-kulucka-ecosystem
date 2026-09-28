@@ -12,8 +12,8 @@ This roadmap is the execution source of truth for the Garanti Kulucka ecosystem 
 - Phase 5 provider contracts are fixture-only and worker-routed. Worker provider attempt persistence is wired to PostgreSQL when `DATABASE_URL` is configured, generated transport payloads are checked against frozen provider fixtures, provider retry/dead-letter decisions carry structured metadata, handler failures persist provider failure attempts, provider/channel boundaries are enforced, API catalog parity with worker adapters is contract-tested, provider fixture coverage is explicitly tracked at 15/15 covered, every covered fixture is replayed through the in-process worker handler without live provider calls, worker attempt metadata records fixture-only transport policy, and provider dry-run request previews expose redacted method/path/header/body metadata through admin attempt serialization, route responses, and frontend admin view models. Provider attempts are exposed through secret-redacted admin APIs. Live provider calls remain blocked by a tested worker guard until legacy payload fixtures are fully replayed against implementation adapters.
 - Phase 6 realtime and webphone boundaries are implemented with Socket.IO event contracts, Redis fanout support, and SIP/WebRTC kept outside API media routing.
 - Phase 7 migrator foundation is implemented with manual commands, PostgreSQL legacy source reader, canonical target writer, source/target ports, batch planning, batch apply ports, batch offset/cursor separation, persisted batch execution state, completed batch resume skips, legacy ID map helpers, legacy ID map coverage checks, orphan message verification, synthetic verification reports, canonical table verification reports, target database snapshot verification, migration gate snapshot coverage, order item legacy target verification, manual-only compose profile guards, and optional secret-free command report files.
-- Phase 8 release automation tags every passing `main` commit and publishes downloadable API, worker, and migrator container image artifacts with tag-based rollback documentation.
-- Current CI/tag state: latest implementation checkpoint is `v0.1.83`; latest roadmap sync checkpoint is `v0.1.84`.
+- Phase 8 release automation tags every passing `main` commit and publishes downloadable API, worker, migrator, and web container image artifacts with tag-based rollback documentation.
+- Current CI/tag state: latest implementation checkpoint is `v0.1.85`; latest roadmap sync checkpoint is `v0.1.86`.
 
 ## Non-Negotiables
 
@@ -83,7 +83,7 @@ Verification:
 
 - `npm run check` passes locally and in GitHub Actions.
 - Containers boot locally with health checks.
-- API, worker, and migrator Docker images build successfully.
+- API, worker, migrator, and web Docker images build successfully.
 - API `/health/live` and `/health/ready` pass.
 - Worker starts without processing jobs when no queues exist.
 - Migrator dry-run exits successfully against empty/stub databases.
@@ -262,7 +262,7 @@ Verification:
 - A green commit creates exactly one tag.
 - A failing commit creates no tag.
 - Release notes can be generated from tag diff.
-- Current release tests cover automatic tag creation, downloadable container image artifacts, and tag-based rollback documentation.
+- Current release tests cover automatic tag creation, downloadable API, worker, migrator, and web container image artifacts, and tag-based rollback documentation.
 
 Anti-pattern guards:
 
