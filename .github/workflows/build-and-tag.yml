@@ -35,8 +35,8 @@ jobs:
       - name: Run checks
         run: npm run check
 
-      - name: Create next tag
-        if: success()
+      - name: Compute next tag
+        id: next_tag
         shell: bash
         run: |
           set -euo pipefail
@@ -53,6 +53,48 @@ jobs:
             patch=$((patch + 1))
             next_tag="v${major}.${minor}.${patch}"
           fi
+
+          if git rev-parse "$next_tag" >/dev/null 2>&1; then
+            echo "Tag $next_tag already exists."
+          fi
+
+          echo "next_tag=$next_tag" >> "$GITHUB_OUTPUT"
+
+      - name: Package container image artifacts
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          next_tag="${{ steps.next_tag.outputs.next_tag }}"
+          image_root="ghcr.io/${{ github.repository }}"
+          mkdir -p artifacts
+
+          docker tag garanti-kulucka-api:local "$image_root/api:$next_tag"
+          docker tag garanti-kulucka-worker:local "$image_root/worker:$next_tag"
+          docker tag garanti-kulucka-migrator:local "$image_root/migrator:$next_tag"
+
+          docker save "$image_root/api:$next_tag" | gzip > "artifacts/garanti-kulucka-api-$next_tag.tar.gz"
+          docker save "$image_root/worker:$next_tag" | gzip > "artifacts/garanti-kulucka-worker-$next_tag.tar.gz"
+          docker save "$image_root/migrator:$next_tag" | gzip > "artifacts/garanti-kulucka-migrator-$next_tag.tar.gz"
+
+      - name: Upload container image artifacts
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: container-images-${{ steps.next_tag.outputs.next_tag }}
+          path: artifacts/*.tar.gz
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Create next tag
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          next_tag="${{ steps.next_tag.outputs.next_tag }}"
+          git fetch --tags --force
 
           if git rev-parse "$next_tag" >/dev/null 2>&1; then
             echo "Tag $next_tag already exists."
