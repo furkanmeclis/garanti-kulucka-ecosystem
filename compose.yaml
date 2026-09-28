@@ -72,6 +72,16 @@ services:
       redis:
         condition: service_healthy
 
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    ports:
+      - "8080:80"
+    depends_on:
+      api:
+        condition: service_started
+
   migrator:
     build:
       context: .

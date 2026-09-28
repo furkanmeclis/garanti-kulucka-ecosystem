@@ -20,7 +20,7 @@ npm run check
 - unit tests
 - current contract gate placeholders
 - workspace builds
-- Docker builds for API, worker, and migrator
+- Docker builds for API, worker, migrator, and web
 
 ## Infrastructure
 
@@ -67,7 +67,7 @@ docker compose run --rm \
 ## Services
 
 ```bash
-docker compose up api worker
+docker compose up api worker web
 ```
 
 API health:
@@ -75,6 +75,12 @@ API health:
 ```bash
 curl http://localhost:3000/health/live
 curl http://localhost:3000/health/ready
+```
+
+Web health:
+
+```bash
+curl http://localhost:8080/healthz
 ```
 
 ## Notes

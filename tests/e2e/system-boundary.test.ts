@@ -3,8 +3,9 @@ import { describe, expect, it } from "vitest";
 
 describe("e2e gate", () => {
   it("documents the local system boundary without live external services", () => {
-    const requiredServices = ["api", "worker", "migrator", "postgres", "redis", "garage"];
+    const requiredServices = ["api", "worker", "migrator", "web", "postgres", "redis", "garage"];
     expect(requiredServices).toContain("api");
+    expect(requiredServices).toContain("web");
     expect(requiredServices).toContain("garage");
   });
 
@@ -45,5 +46,12 @@ describe("e2e gate", () => {
 
     expect(compose).toMatch(/migrator:\n(?:.*\n)*?\s+profiles:\n\s+- tools/);
     expect(compose).not.toMatch(/api:\n(?:.*\n)*?garanti-migrator/);
+  });
+
+  it("keeps the web runtime in the local compose stack", () => {
+    const compose = readFileSync("compose.yaml", "utf8");
+
+    expect(compose).toMatch(/web:\n(?:.*\n)*?\s+dockerfile: apps\/web\/Dockerfile/);
+    expect(compose).toMatch(/web:\n(?:.*\n)*?\s+- "8080:80"/);
   });
 });
