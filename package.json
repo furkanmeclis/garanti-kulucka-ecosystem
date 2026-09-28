@@ -19,7 +19,7 @@
     "test:worker": "npm run build -w @garanti-kulucka/shared && vitest run tests/worker && npm run verify:structure",
     "test:ws": "vitest run tests/websocket && npm run verify:structure",
     "test:e2e": "vitest run tests/e2e && npm run test:e2e:playwright && npm run verify:structure",
-    "test:e2e:playwright": "playwright test tests/playwright --reporter=list",
+    "test:e2e:playwright": "npm run build -w @garanti-kulucka/shared && playwright test tests/playwright --reporter=list",
     "db:migrate:up": "npm run migrate:up -w @garanti-kulucka/database",
     "db:migrate:down": "npm run migrate:down -w @garanti-kulucka/database",
     "compose:config": "docker compose config -q",
