@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { applyMigrationBatch, applyMigrationBatchWithState } from "../src/apply.js";
 import { createDryRunReport } from "../src/reports.js";
-import { createMigrationPlan } from "../src/plan.js";
+import { canonicalMigrationEntities, createMigrationPlan } from "../src/plan.js";
 import { legacyIdMapKey, upsertLegacyIdMap } from "../src/id-map.js";
 import type {
   CanonicalRecord,
@@ -158,6 +158,17 @@ class MemoryTarget implements MigrationTarget {
 }
 
 describe("migration foundation", () => {
+  it("anchors the default entity plan to the canonical table catalog", async () => {
+    const plan = await createMigrationPlan({
+      source: new FixtureSource({}),
+      mode: "dry-run",
+      batchSize: 100,
+      now: new Date("2026-01-01T00:00:00.000Z"),
+    });
+
+    expect(plan.entities.map(({ entity }) => entity)).toEqual(canonicalMigrationEntities);
+  });
+
   it("creates a deterministic dry-run batch plan from source counts", async () => {
     const source = new FixtureSource({
       customers: 5,
@@ -434,6 +445,46 @@ describe("migration foundation", () => {
       entity: "customers",
       batchNumber: 1,
       errorMessage: "cannot map legacy customer",
+    });
+  });
+
+  it("marks a short-read batch failed before writing any target rows", async () => {
+    const source = new FixtureSource(
+      { customers: 2 },
+      {
+        customers: [
+          {
+            sourceSystem: "legacy_supabase",
+            sourceTable: "customers",
+            sourceId: "10",
+            payload: { full_name: "Ada Lovelace" },
+            checksum: "sha256:ada",
+          },
+        ],
+      },
+    );
+    const target = new MemoryTarget();
+
+    await expect(
+      applyMigrationBatchWithState({
+        runId: "run_2026_01_01",
+        source,
+        target,
+        batch: {
+          entity: "customers",
+          batchNumber: 1,
+          limit: 2,
+          offset: 0,
+          expectedRows: 2,
+        },
+      }),
+    ).rejects.toThrow("expected 2, received 1");
+
+    expect(target.writtenRecords).toEqual([]);
+    expect(target.batchStateEvents.map((state) => state.status)).toEqual(["running", "failed"]);
+    expect(target.batchStateEvents[1]).toMatchObject({
+      status: "failed",
+      errorMessage: expect.stringContaining("expected 2, received 1"),
     });
   });
 

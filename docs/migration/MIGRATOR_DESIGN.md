@@ -1,8 +1,8 @@
 # Migrator Design
 
-## Runtime
+## Runtime Boundary
 
-The migrator is a separate container and CLI. It is never part of the API feature surface.
+The migrator is a manual CLI in a separate container. It is not part of the API feature surface and it does not run automatically during application startup.
 
 Commands:
 
@@ -12,72 +12,53 @@ garanti-migrator migrate --apply
 garanti-migrator verify
 ```
 
-## Responsibilities
+## Current Behavior
 
-- Read legacy Supabase/PostgreSQL data.
-- Transform legacy naming and shape into canonical English schema.
-- Write to target PostgreSQL.
-- Maintain `legacy_id_map`.
-- Produce reports.
-- Verify referential integrity and important business totals.
+### Dry-run
 
-## Idempotency
+`migrate --dry-run` requires `SOURCE_DATABASE_URL` and opens the source in a `REPEATABLE READ READ ONLY` transaction. The current preflight reads row counts using canonical table names, then creates a deterministic entity and batch plan.
 
-Every migrated entity must have a stable legacy source key.
+Dry-run does not resolve a target URL, connect to the target, write data, or validate legacy field and relationship transformations. A source whose tables use legacy names requires the mapping catalog described in the roadmap section before it can be migrated.
 
-`legacy_id_map` records:
+### Apply
 
-```text
-source_system
-source_table
-source_id
-target_table
-target_id
-checksum
-migrated_at
-```
+`migrate --apply` is fail-closed. It validates the explicit `MIGRATION_RUN_ID`, then exits before resolving a target URL or opening either database. Apply remains disabled until the reviewed legacy-to-canonical table, field, and relationship mapping catalog is connected to the runtime.
 
-Re-running the migrator must not duplicate data.
+### Verify
 
-## Reports
+`verify` requires `TARGET_DATABASE_URL`; `DATABASE_URL` is accepted only as a compatibility fallback. It checks that the canonical target exposes the required migration and application tables and returns a structured pass or fail result.
 
-The migrator writes:
+### Command Reports
 
-- `migration-summary.json`
-- `migration-errors.json`
-- `unmapped-fields.json`
-- `row-counts.json`
-- `verification-report.json`
+`--report-file <path>` writes one JSON command report containing the command, status, timestamps, duration, and a sanitized error message when the command fails. Verification failures also include the current verification result. Database URLs and credential values are excluded.
 
-## Foundation Modules
+## Implemented Foundations
 
-The migrator is split into testable ports before any live legacy connection is added:
+- `LegacySource` provides read-only count and batch-read ports.
+- `MigrationTarget` provides canonical write, migration batch state, and `legacy_id_map` ports.
+- `createMigrationPlan` creates deterministic entity and batch plans.
+- `applyMigrationBatch` and its state wrapper implement resumable, idempotent batch foundations behind the disabled apply gate.
+- `upsertLegacyIdMap` keys migrated records by source system, source table, and source ID.
+- Source transactions enforce repeatable-read and read-only semantics.
+- Error and report serialization remove database URLs and credential parameters.
 
-- `LegacySource`: read-only source interface for counts and paged batches.
-- `MigrationTarget`: target interface for canonical writes and `legacy_id_map` lookups/upserts.
-- `createMigrationPlan`: builds deterministic batch plans for dry-run and apply modes.
-- `upsertLegacyIdMap`: enforces idempotency around `(source_system, source_table, source_id)`.
-- `createDryRunReport` and `createVerificationReport`: report models used by manual CLI commands.
+## Migration Roadmap
 
-Synthetic fixtures cover the foundation. Live Supabase access is intentionally not part of this slice.
+The apply gate can be reviewed for activation after these capabilities are implemented and verified:
 
-## Verification
+- A versioned mapping catalog for each real legacy database shape.
+- Explicit table, field, enum, and foreign-key transformations into the canonical English schema.
+- Dependency-ordered target writes with legacy ID remapping.
+- Reconciliation for row counts, unmapped fields, rejected rows, and business totals.
+- Operator report artifacts such as migration summaries, row counts, unmapped fields, errors, and final verification results.
+- Recovery drills proving that interrupted runs resume without duplicate target records.
 
-Checks include:
-
-- Row counts by mapped table
-- Orphan messages
-- Orphan orders
-- Orphan shipments
-- Duplicate customers
-- Message chronological ordering
-- Order item totals versus order totals
-- Shipment tracking references
-- Integration account persistence
+These roadmap artifacts are not outputs of the current dry-run command.
 
 ## Guardrails
 
-- Source database is read-only.
-- Dry-run is default for unsafe environments.
-- Apply mode requires explicit flag.
-- Unknown fields are reported, not silently discarded.
+- Source access is read-only.
+- Apply is disabled by default and requires explicit operator action when activated.
+- Source and target database identities must differ before writes are enabled.
+- Unknown fields must be reported rather than silently discarded.
+- Every migrated entity must retain a stable legacy source key.

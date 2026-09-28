@@ -1,7 +1,7 @@
-import { spawn } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { Client } from "pg";
+import { migrationApplyDisabledMessage, toSafeMigratorError } from "./errors.js";
 import { createVerificationReport } from "./reports.js";
 import { createTargetVerificationSnapshot } from "./target-snapshot.js";
 import type { MigratorCommandReport, MigratorCommandReportError, VerificationReport } from "./types.js";
@@ -17,6 +17,41 @@ export interface ParsedMigratorCommand {
 export interface MigratorCommandOptions {
   readonly reportFile?: string;
 }
+
+export interface MigratorCommandDependencies {
+  readonly executeMigration: (input: ExecutePostgresMigrationInput) => Promise<unknown>;
+  readonly verifyTarget: (databaseUrl: string) => Promise<VerificationReport>;
+}
+
+export interface ExecutePostgresDryRunInput {
+  readonly mode: "dry-run";
+  readonly sourceDatabaseUrl: string;
+  readonly sourceSystem: string;
+  readonly batchSize: number;
+}
+
+export interface ExecutePostgresApplyInput {
+  readonly mode: "apply";
+  readonly sourceDatabaseUrl: string;
+  readonly targetDatabaseUrl: string;
+  readonly sourceSystem: string;
+  readonly runId: string;
+  readonly batchSize: number;
+}
+
+export type ExecutePostgresMigrationInput = ExecutePostgresDryRunInput | ExecutePostgresApplyInput;
+
+const defaultCommandDependencies: MigratorCommandDependencies = {
+  executeMigration: async (input) => {
+    const { executePostgresMigration } = await import("./postgres-runtime.js");
+    return executePostgresMigration(input);
+  },
+  verifyTarget: verifyTargetDatabase,
+};
+
+const defaultMigrationBatchSize = 500;
+const defaultMigrationSourceSystem = "legacy_postgres";
+export { migrationApplyDisabledMessage } from "./errors.js";
 
 const requiredCanonicalTables = [
   "users",
@@ -52,45 +87,55 @@ export async function runMigratorCommand(
   command: MigratorCommand,
   env = process.env,
   options: MigratorCommandOptions = {},
+  dependencies: MigratorCommandDependencies = defaultCommandDependencies,
 ): Promise<void> {
   const startedAt = new Date();
+  let failedVerification: VerificationReport | undefined;
 
   try {
-    const databaseUrl = env.DATABASE_URL;
-    if (!databaseUrl) {
-      throw new Error("DATABASE_URL is required");
-    }
-
     if (command === "verify") {
-      const verification = await verifyTargetDatabase(databaseUrl);
+      const targetDatabaseUrl = resolveTargetDatabaseUrl(env);
+      const verification = await dependencies.verifyTarget(targetDatabaseUrl);
       if (verification.status === "failed") {
-        const error = new Error("Canonical database verification failed");
-        await writeMigratorCommandReport(options, createCommandReport(command, "failed", startedAt, error, verification));
-        throw error;
+        failedVerification = verification;
+        throw new Error("Canonical database verification failed");
       }
 
       await writeMigratorCommandReport(options, createCommandReport(command, "passed", startedAt, undefined, verification));
       return;
     }
 
-    const args = [
-      "node_modules/node-pg-migrate/bin/node-pg-migrate.js",
-      "up",
-      "--migrations-dir",
-      "packages/database/migrations",
-      "--database-url",
-      databaseUrl,
-    ];
-
-    if (command === "migrate:dry-run") {
-      args.push("--dry-run");
+    const sourceDatabaseUrl = env.SOURCE_DATABASE_URL;
+    if (!sourceDatabaseUrl) {
+      throw new Error("SOURCE_DATABASE_URL is required for migration commands");
     }
 
-    await runNodeCommand(args);
+    const sourceSystem = env.MIGRATION_SOURCE_SYSTEM?.trim() || defaultMigrationSourceSystem;
+    const batchSize = parseMigrationBatchSize(env.MIGRATION_BATCH_SIZE);
+
+    if (command === "migrate:apply") {
+      resolveMigrationRunId(env);
+      throw new Error(migrationApplyDisabledMessage);
+    }
+
+    await dependencies.executeMigration({
+      mode: "dry-run",
+      sourceDatabaseUrl,
+      sourceSystem,
+      batchSize,
+    });
     await writeMigratorCommandReport(options, createCommandReport(command, "passed", startedAt));
   } catch (error) {
-    await writeMigratorCommandReport(options, createCommandReport(command, "failed", startedAt, error));
-    throw error;
+    const safeError = toSafeMigratorError(error);
+    try {
+      await writeMigratorCommandReport(
+        options,
+        createCommandReport(command, "failed", startedAt, safeError, failedVerification),
+      );
+    } catch {
+      // Reporting is best-effort; the safe migration error remains the command result.
+    }
+    throw safeError;
   }
 }
 
@@ -117,20 +162,33 @@ function parseMigratorOptions(args: (string | undefined)[]): MigratorCommandOpti
   return options;
 }
 
-async function runNodeCommand(args: string[]): Promise<void> {
-  await new Promise<void>((resolve, reject) => {
-    const child = spawn(process.execPath, args, {
-      cwd: process.cwd(),
-      env: process.env,
-      stdio: "inherit",
-    });
+export function resolveTargetDatabaseUrl(env: NodeJS.ProcessEnv): string {
+  const databaseUrl = env.TARGET_DATABASE_URL ?? env.DATABASE_URL;
+  if (!databaseUrl) {
+    throw new Error("TARGET_DATABASE_URL is required (DATABASE_URL is supported as a compatibility fallback)");
+  }
 
-    child.on("error", reject);
-    child.on("exit", (code) => {
-      if (code === 0) resolve();
-      else reject(new Error(`Command failed with exit code ${code ?? "unknown"}`));
-    });
-  });
+  return databaseUrl;
+}
+
+export function resolveMigrationRunId(env: NodeJS.ProcessEnv): string {
+  const runId = env.MIGRATION_RUN_ID?.trim();
+  if (!runId) {
+    throw new Error("MIGRATION_RUN_ID is required for migrate --apply");
+  }
+
+  return runId;
+}
+
+function parseMigrationBatchSize(value: string | undefined): number {
+  if (value === undefined || value.trim() === "") return defaultMigrationBatchSize;
+
+  const batchSize = Number(value);
+  if (!Number.isInteger(batchSize) || batchSize < 1) {
+    throw new Error("MIGRATION_BATCH_SIZE must be a positive integer");
+  }
+
+  return batchSize;
 }
 
 async function writeMigratorCommandReport(

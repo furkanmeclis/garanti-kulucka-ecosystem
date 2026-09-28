@@ -44,5 +44,17 @@ describe("database migration target", () => {
         },
       }),
     ).toThrow("reserved columns");
+
+    expect(() =>
+      mapCanonicalRecordToInsert({
+        targetTable: "customers",
+        targetId: "cus_1",
+        checksum: "sha256:customer",
+        payload: {
+          public_id: "legacy-controlled-id",
+          full_name: "Ada Lovelace",
+        },
+      }),
+    ).toThrow("reserved columns");
   });
 });

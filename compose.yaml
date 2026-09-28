@@ -88,6 +88,7 @@ services:
       dockerfile: apps/migrator/Dockerfile
     environment:
       DATABASE_URL: postgres://garanti:garanti@postgres:5432/garanti
+      SOURCE_DATABASE_URL: ${SOURCE_DATABASE_URL:-postgres://garanti:garanti@postgres:5432/garanti}
     depends_on:
       postgres:
         condition: service_healthy

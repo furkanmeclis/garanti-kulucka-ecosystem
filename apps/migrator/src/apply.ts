@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { upsertLegacyIdMap } from "./id-map.js";
+import { toSafeMigratorError } from "./errors.js";
 import type {
   BatchReadOptions,
   CanonicalRecord,
@@ -8,6 +9,7 @@ import type {
   MigrationBatchApplyResult,
   MigrationTarget,
   LegacySource,
+  MigrationEntity,
 } from "./types.js";
 
 export interface ApplyMigrationBatchInput {
@@ -23,6 +25,8 @@ export interface ApplyMigrationBatchWithStateInput extends ApplyMigrationBatchIn
 
 export type LegacyRecordTransformer = (record: LegacyRecord) => CanonicalRecord | null;
 
+const canonicalReservedColumns = new Set(["id", "public_id", "created_at", "updated_at"]);
+
 type MutableMigrationBatchApplyResult = {
   -readonly [Key in keyof MigrationBatchApplyResult]: MigrationBatchApplyResult[Key];
 };
@@ -35,6 +39,11 @@ export async function applyMigrationBatch(
     ...(input.batch.offset > 0 ? { offset: input.batch.offset } : {}),
   };
   const records = await input.source.readBatch(input.batch.entity, readOptions);
+  if (records.length !== input.batch.expectedRows) {
+    throw new Error(
+      `Migration batch short read for ${input.batch.entity} batch ${input.batch.batchNumber}: expected ${input.batch.expectedRows}, received ${records.length}`,
+    );
+  }
   const transform = input.transform ?? defaultLegacyRecordTransformer;
   const result: MutableMigrationBatchApplyResult = {
     entity: input.batch.entity,
@@ -105,12 +114,13 @@ export async function applyMigrationBatchWithState(
     });
     return result;
   } catch (error) {
+    const safeError = toSafeMigratorError(error);
     await input.target.recordMigrationBatchFailed({
       runId: input.runId,
       batch: input.batch,
-      error: error instanceof Error ? error : new Error(String(error)),
+      error: safeError,
     });
-    throw error;
+    throw safeError;
   }
 }
 
@@ -144,6 +154,21 @@ export function defaultLegacyRecordTransformer(record: LegacyRecord): CanonicalR
     targetId: stableTargetId(record),
     payload: record.payload,
     checksum: record.checksum,
+  };
+}
+
+export function createCanonicalEntityTransformer(entity: MigrationEntity): LegacyRecordTransformer {
+  return (record) => {
+    const canonical = defaultLegacyRecordTransformer(record);
+    const payload = Object.fromEntries(
+      Object.entries(canonical.payload).filter(([column]) => !canonicalReservedColumns.has(column)),
+    );
+
+    return {
+      ...canonical,
+      targetTable: entity,
+      payload,
+    };
   };
 }
 

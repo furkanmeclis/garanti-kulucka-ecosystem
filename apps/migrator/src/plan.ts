@@ -1,6 +1,6 @@
 import type { LegacySource, MigrationEntity, MigrationEntityPlan, MigrationMode, MigrationPlan } from "./types.js";
 
-export const defaultMigrationEntities: MigrationEntity[] = [
+export const canonicalMigrationEntities: readonly MigrationEntity[] = [
   "customers",
   "customer_addresses",
   "conversations",
@@ -16,6 +16,8 @@ export const defaultMigrationEntities: MigrationEntity[] = [
   "files",
   "settings",
 ];
+
+export const defaultMigrationEntities: MigrationEntity[] = [...canonicalMigrationEntities];
 
 export interface CreateMigrationPlanInput {
   readonly source: LegacySource;

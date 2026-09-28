@@ -42,7 +42,12 @@ export function assertCanonicalTargetTable(table: string): asserts table is Migr
 export function mapCanonicalRecordToInsert(record: CanonicalRecord): Record<string, unknown> {
   assertCanonicalTargetTable(record.targetTable);
 
-  if ("id" in record.payload || "created_at" in record.payload || "updated_at" in record.payload) {
+  if (
+    "id" in record.payload ||
+    "public_id" in record.payload ||
+    "created_at" in record.payload ||
+    "updated_at" in record.payload
+  ) {
     throw new Error(`Canonical record payload contains reserved columns: ${record.targetTable}`);
   }
 

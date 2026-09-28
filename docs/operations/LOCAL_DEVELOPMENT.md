@@ -42,9 +42,20 @@ Through the migrator container:
 
 ```bash
 docker compose --profile tools run --rm migrator migrate --dry-run
-docker compose --profile tools run --rm migrator migrate --apply
 docker compose --profile tools run --rm migrator verify
 ```
+
+Compose, dry-run icin `SOURCE_DATABASE_URL` degerini migrator servisine aktarir. Mevcut dry-run, source veritabanini `REPEATABLE READ READ ONLY` transaction ile acar, canonical tablo adlariyla row count preflight yapar ve batch planini kurar. Target URL cozmez, target baglantisi acmaz ve veri yazmaz.
+
+`verify`, canonical hedefi kontrol eder ve `TARGET_DATABASE_URL` ister. `DATABASE_URL` yalniz target dogrulamasi icin uyumluluk fallback'i olarak desteklenir.
+
+Apply komutu su anda operasyonel degildir:
+
+```bash
+docker compose --profile tools run --rm migrator migrate --apply
+```
+
+Komut, explicit `MIGRATION_RUN_ID` kontrolunden sonra target URL cozmeden ve veritabanlarina baglanmadan fail-closed olarak cikar. Gercek legacy tablo, alan ve foreign-key mapping katalogu ile target write akisi tamamlanip incelenene kadar apply acilmayacaktir. Migration summary, row count, unmapped field, rejected row ve final reconciliation raporlari roadmap kapsamindadir; mevcut dry-run bunlari uretmez.
 
 ## First Admin
 
