@@ -50,6 +50,26 @@ ghcr.io/furkanmeclis/garanti-kulucka-ecosystem/web:vX.Y.Z
 
 Deployments should use tags, not `latest`.
 
+## Release Notes
+
+Release notes are generated from semantic tag diffs:
+
+```bash
+npm run release-notes -- vX.Y.Z
+```
+
+The default command uses the latest local `vMAJOR.MINOR.PATCH` tag and the previous semantic tag:
+
+```bash
+npm run release-notes
+```
+
+Use an explicit previous tag when validating a non-standard rollback or hotfix range:
+
+```bash
+npm run release-notes -- --tag vX.Y.Z --previous vA.B.C --output docs/releases/vX.Y.Z.md
+```
+
 ## Rollback
 
 Rollback is tag-based.
