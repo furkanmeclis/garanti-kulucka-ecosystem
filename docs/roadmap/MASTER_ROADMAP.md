@@ -2,7 +2,11 @@
 
 This roadmap is the execution source of truth for the Garanti Kulucka ecosystem rebuild.
 
+For a zero-context continuation in a new chat, start with [CONTINUATION_HANDOFF.md](./CONTINUATION_HANDOFF.md). It records the released baseline, active working-tree checkpoint, blockers, remaining dependency order, and verification workflow.
+
 ## Current Status
+
+- Overall delivery is approximately 72% complete. This percentage includes implemented foundations and tested compatibility boundaries; it does not count the active schema checkpoint as released.
 
 - Phase 0 planning, contract inventory documents, backend OpenAPI route contract, and classified legacy endpoint surface guards are in place.
 - Phase 1 foundation is implemented with API, worker, migrator, web runtime, Dockerfiles, compose config validation, CI/tag automation, local development gate documentation, and repository verification that rejects unfinished gate language in docs.
@@ -13,7 +17,9 @@ This roadmap is the execution source of truth for the Garanti Kulucka ecosystem 
 - Phase 6 realtime and webphone boundaries are implemented with Socket.IO event contracts, Redis fanout support, and SIP/WebRTC kept outside API media routing.
 - Phase 7 migrator foundation is implemented with manual commands, PostgreSQL legacy source reader, canonical target writer, source/target ports, batch planning, batch apply ports, batch offset/cursor separation, persisted batch execution state, completed batch resume skips, legacy ID map helpers, legacy ID map coverage checks, orphan message verification, synthetic verification reports, canonical table verification reports, target database snapshot verification, migration gate snapshot coverage, order item legacy target verification, manual-only compose profile guards, and optional secret-free command report files.
 - Phase 8 release automation tags every passing `main` commit, publishes downloadable API, worker, migrator, and web container image artifacts, generates release notes from tag diffs, and documents tag-based rollback.
-- Current CI/tag state: latest implementation checkpoint is `v0.1.111`; latest roadmap sync checkpoint is `v0.1.110`.
+- Current released CI/tag state: `v0.1.114` at commit `4160c3c` (`feat(migrator): add safe source dry-run foundation`). The `main` branch and `origin/main` point to this released commit before the active working-tree changes are considered.
+- Active, unreleased schema checkpoint: migration `002`, account-scoped customer external identities, account-aware conversation uniqueness, `legacy_id_map.mapping_role`, migrator entity/target/snapshot/verification updates, and `node-pg-migrate` `9.0.0` alignment are present in the working tree. They have passed database `6/6`, migrator `53/53`, migration `3/3`, and PostgreSQL 18 migration `002` up/down checks, but they are not a tag or released checkpoint.
+- Immediate blocker before checkpoint release: fix the PostgreSQL syntax in `001_initial_canonical_schema.sql` from `UNIQUE (provider_id, account_id, key) NULLS NOT DISTINCT` to `UNIQUE NULLS NOT DISTINCT (provider_id, account_id, key)`, then rerun the full fresh-database migration and repository gates.
 
 ## Non-Negotiables
 
