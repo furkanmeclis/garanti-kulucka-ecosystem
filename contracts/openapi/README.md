@@ -1,6 +1,8 @@
 # OpenAPI Contracts
 
-This directory will contain the backend API contract consumed by the web app.
+This directory contains the backend API contract consumed by the web app.
+
+- `backend-api.json` pins the current backend-owned HTTP route surface.
 
 Rules:
 

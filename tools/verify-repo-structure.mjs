@@ -33,6 +33,7 @@ const requiredPaths = [
   "packages/database/migrations/001_initial_canonical_schema.sql",
   "packages/database/src/schema.ts",
   "contracts/openapi",
+  "contracts/openapi/backend-api.json",
   "contracts/providers/ptt/fixtures",
   "contracts/providers/ptt/schemas",
   "contracts/providers/surat/fixtures",

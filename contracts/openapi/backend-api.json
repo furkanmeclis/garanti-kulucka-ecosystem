@@ -1,0 +1,1388 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Garanti Kulucka Backend API",
+    "version": "0.1.0",
+    "description": "Backend-owned HTTP contract consumed by the web app."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3000"
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "paths": {
+    "/health/live": {
+      "get": {
+        "operationId": "getLiveHealth",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "API process is alive",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health/ready": {
+      "get": {
+        "operationId": "getReadyHealth",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "API dependencies are ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "operationId": "login",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Authenticated session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthSession"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/auth/refresh": {
+      "post": {
+        "operationId": "refreshToken",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Rotated session tokens",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenPair"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "operationId": "logout",
+        "responses": {
+          "200": {
+            "description": "Session revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OkStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/me": {
+      "get": {
+        "operationId": "getCurrentUser",
+        "responses": {
+          "200": {
+            "description": "Authenticated user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthUser"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/conversations": {
+      "get": {
+        "operationId": "listConversations",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "name": "channel",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "assigned",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["unassigned"]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Conversation summaries",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationList"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/conversations/{conversation_public_id}/messages": {
+      "get": {
+        "operationId": "listMessages",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ConversationPublicId"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Conversation messages",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageList"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createMessage",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ConversationPublicId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateMessageRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Message"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/orders": {
+      "get": {
+        "operationId": "listOrders",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Limit"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Order summaries",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderList"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createOrder",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateOrderRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created order",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Order"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/shipments": {
+      "get": {
+        "operationId": "listShipments",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Limit"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Shipment summaries",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShipmentList"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/shipments/{shipment_public_id}/status": {
+      "patch": {
+        "operationId": "updateShipmentStatus",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ShipmentPublicId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateShipmentStatusRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated shipment",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Shipment"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/files/uploads": {
+      "post": {
+        "operationId": "createFileUpload",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateFileUploadRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "File metadata and upload instruction",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileUpload"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/files/{file_public_id}": {
+      "get": {
+        "operationId": "getFile",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/FilePublicId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "File metadata",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/File"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/webphone/config": {
+      "get": {
+        "operationId": "getWebphoneConfig",
+        "responses": {
+          "200": {
+            "description": "Authorized SIP/WebRTC config",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebphoneConfig"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/settings": {
+      "get": {
+        "operationId": "listSettings",
+        "parameters": [
+          {
+            "name": "scope",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "default": "global"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Admin-managed settings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingList"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/settings/{key}": {
+      "put": {
+        "operationId": "upsertSetting",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertSettingRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Stored setting",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Setting"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/integrations/providers": {
+      "get": {
+        "operationId": "listIntegrationProviders",
+        "responses": {
+          "200": {
+            "description": "Provider catalog",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderList"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/integrations/accounts": {
+      "get": {
+        "operationId": "listIntegrationAccounts",
+        "responses": {
+          "200": {
+            "description": "Integration accounts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationAccountList"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "upsertIntegrationAccount",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertIntegrationAccountRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Stored integration account",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationAccount"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/integrations/accounts/{account_public_id}": {
+      "get": {
+        "operationId": "getIntegrationAccountSnapshot",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountPublicId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Integration account snapshot",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationAccountSnapshot"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/admin/integrations/accounts/{account_public_id}/settings/{key}": {
+      "put": {
+        "operationId": "upsertIntegrationSetting",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountPublicId"
+          },
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertIntegrationSettingRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Stored integration setting",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationSetting"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/integrations/accounts/{account_public_id}/tokens/{token_type}": {
+      "put": {
+        "operationId": "upsertIntegrationToken",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountPublicId"
+          },
+          {
+            "name": "token_type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertIntegrationTokenRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Stored integration token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationToken"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/integrations/provider-attempts": {
+      "get": {
+        "operationId": "listProviderAttempts",
+        "parameters": [
+          {
+            "name": "provider_key",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "account_public_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Provider attempt audit rows",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderAttemptList"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    },
+    "parameters": {
+      "Limit": {
+        "name": "limit",
+        "in": "query",
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200,
+          "default": 50
+        }
+      },
+      "ConversationPublicId": {
+        "name": "conversation_public_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "ShipmentPublicId": {
+        "name": "shipment_public_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "FilePublicId": {
+        "name": "file_public_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "AccountPublicId": {
+        "name": "account_public_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
+    "responses": {
+      "Error": {
+        "description": "Error response",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "HealthStatus": {
+        "type": "object",
+        "required": ["status", "service", "timestamp"],
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "ok"
+          },
+          "service": {
+            "type": "string"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "required": ["error"],
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": ["code", "message"],
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "OkStatus": {
+        "type": "object",
+        "required": ["status"],
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "ok"
+          }
+        }
+      },
+      "LoginRequest": {
+        "type": "object",
+        "required": ["email", "password"],
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "password": {
+            "type": "string"
+          }
+        }
+      },
+      "RefreshRequest": {
+        "type": "object",
+        "required": ["refresh_token"],
+        "properties": {
+          "refresh_token": {
+            "type": "string",
+            "minLength": 16
+          }
+        }
+      },
+      "TokenPair": {
+        "type": "object",
+        "required": ["access_token", "refresh_token", "token_type", "expires_in"],
+        "properties": {
+          "access_token": {
+            "type": "string"
+          },
+          "refresh_token": {
+            "type": "string"
+          },
+          "token_type": {
+            "type": "string",
+            "const": "Bearer"
+          },
+          "expires_in": {
+            "type": "integer"
+          }
+        }
+      },
+      "AuthSession": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/TokenPair"
+          },
+          {
+            "type": "object",
+            "required": ["user"],
+            "properties": {
+              "user": {
+                "$ref": "#/components/schemas/AuthUser"
+              }
+            }
+          }
+        ]
+      },
+      "AuthUser": {
+        "type": "object",
+        "required": ["public_id", "email", "role", "permissions"],
+        "properties": {
+          "public_id": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "first_name": {
+            "type": ["string", "null"]
+          },
+          "last_name": {
+            "type": ["string", "null"]
+          },
+          "role": {
+            "type": "string"
+          },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "sip_username": {
+            "type": ["string", "null"]
+          }
+        }
+      },
+      "DataEnvelope": {
+        "type": "object",
+        "required": ["data"],
+        "properties": {
+          "data": {
+            "type": "array"
+          }
+        }
+      },
+      "ConversationList": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/DataEnvelope"
+          }
+        ]
+      },
+      "MessageList": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/DataEnvelope"
+          }
+        ]
+      },
+      "OrderList": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/DataEnvelope"
+          }
+        ]
+      },
+      "ShipmentList": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/DataEnvelope"
+          }
+        ]
+      },
+      "SettingList": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/DataEnvelope"
+          }
+        ]
+      },
+      "ProviderList": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/DataEnvelope"
+          }
+        ]
+      },
+      "IntegrationAccountList": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/DataEnvelope"
+          }
+        ]
+      },
+      "ProviderAttemptList": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/DataEnvelope"
+          }
+        ]
+      },
+      "Message": {
+        "type": "object",
+        "required": ["public_id", "sender_type", "is_read", "sent_at"],
+        "properties": {
+          "public_id": {
+            "type": "string"
+          },
+          "sender_type": {
+            "type": "string",
+            "enum": ["customer", "user", "ai", "system"]
+          },
+          "sender_name": {
+            "type": ["string", "null"]
+          },
+          "body": {
+            "type": ["string", "null"]
+          },
+          "external_message_id": {
+            "type": ["string", "null"]
+          },
+          "is_read": {
+            "type": "boolean"
+          },
+          "sent_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "CreateMessageRequest": {
+        "type": "object",
+        "properties": {
+          "sender_type": {
+            "type": "string",
+            "enum": ["customer", "user", "ai", "system"],
+            "default": "user"
+          },
+          "sender_name": {
+            "type": ["string", "null"],
+            "default": null
+          },
+          "body": {
+            "type": ["string", "null"],
+            "default": null
+          },
+          "external_message_id": {
+            "type": ["string", "null"],
+            "default": null
+          },
+          "raw_payload": true
+        }
+      },
+      "CreateOrderRequest": {
+        "type": "object",
+        "required": ["order_number", "total_amount"],
+        "properties": {
+          "customer_public_id": {
+            "type": ["string", "null"],
+            "default": null
+          },
+          "conversation_public_id": {
+            "type": ["string", "null"],
+            "default": null
+          },
+          "order_number": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "default": "draft"
+          },
+          "source": {
+            "type": "string",
+            "default": "manual"
+          },
+          "total_amount": {
+            "type": "string",
+            "pattern": "^\\d+(\\.\\d{1,2})?$"
+          },
+          "currency": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 3,
+            "default": "TRY"
+          },
+          "notes": {
+            "type": ["string", "null"],
+            "default": null
+          }
+        }
+      },
+      "Order": {
+        "type": "object",
+        "required": ["public_id", "order_number", "status", "source", "total_amount", "currency"],
+        "properties": {
+          "public_id": {
+            "type": "string"
+          },
+          "order_number": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "total_amount": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "confirmation_status": {
+            "type": ["string", "null"]
+          },
+          "notes": {
+            "type": ["string", "null"]
+          },
+          "customer_full_name": {
+            "type": ["string", "null"]
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          }
+        }
+      },
+      "UpdateShipmentStatusRequest": {
+        "type": "object",
+        "required": ["status"],
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "last_event_text": {
+            "type": ["string", "null"],
+            "default": null
+          },
+          "raw_payload": true
+        }
+      },
+      "Shipment": {
+        "type": "object",
+        "required": ["public_id", "provider", "status"],
+        "properties": {
+          "public_id": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "tracking_number": {
+            "type": ["string", "null"]
+          },
+          "barcode_number": {
+            "type": ["string", "null"]
+          },
+          "status": {
+            "type": "string"
+          },
+          "recipient_name": {
+            "type": ["string", "null"]
+          },
+          "recipient_phone": {
+            "type": ["string", "null"]
+          },
+          "recipient_city": {
+            "type": ["string", "null"]
+          },
+          "recipient_district": {
+            "type": ["string", "null"]
+          },
+          "last_event_text": {
+            "type": ["string", "null"]
+          },
+          "order_number": {
+            "type": ["string", "null"]
+          },
+          "customer_full_name": {
+            "type": ["string", "null"]
+          },
+          "updated_at": {
+            "type": "string"
+          }
+        }
+      },
+      "CreateFileUploadRequest": {
+        "type": "object",
+        "properties": {
+          "original_name": {
+            "type": ["string", "null"]
+          },
+          "mime_type": {
+            "type": ["string", "null"]
+          },
+          "byte_size": {
+            "type": ["integer", "null"],
+            "minimum": 0,
+            "maximum": 52428800
+          },
+          "checksum": {
+            "type": ["string", "null"],
+            "minLength": 16,
+            "maxLength": 128
+          }
+        }
+      },
+      "FileUpload": {
+        "type": "object",
+        "required": ["file", "upload"],
+        "properties": {
+          "file": {
+            "$ref": "#/components/schemas/File"
+          },
+          "upload": {
+            "type": "object",
+            "required": ["method", "url", "headers", "expires_at"],
+            "properties": {
+              "method": {
+                "type": "string",
+                "const": "PUT"
+              },
+              "url": {
+                "type": "string"
+              },
+              "headers": {
+                "type": "object"
+              },
+              "expires_at": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        }
+      },
+      "File": {
+        "type": "object",
+        "required": ["public_id", "bucket", "object_key", "created_at"],
+        "properties": {
+          "public_id": {
+            "type": "string"
+          },
+          "bucket": {
+            "type": "string"
+          },
+          "object_key": {
+            "type": "string"
+          },
+          "original_name": {
+            "type": ["string", "null"]
+          },
+          "mime_type": {
+            "type": ["string", "null"]
+          },
+          "byte_size": {
+            "type": ["integer", "null"]
+          },
+          "checksum": {
+            "type": ["string", "null"]
+          },
+          "created_at": {
+            "type": "string"
+          }
+        }
+      },
+      "WebphoneConfig": {
+        "type": "object",
+        "required": ["enabled", "media_proxy_enabled", "transport", "ice_servers"],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "sip_websocket_url": {
+            "type": ["string", "null"]
+          },
+          "sip_domain": {
+            "type": ["string", "null"]
+          },
+          "sip_username": {
+            "type": ["string", "null"]
+          },
+          "sip_password": {
+            "type": ["string", "null"]
+          },
+          "ice_servers": {
+            "type": "array"
+          },
+          "media_proxy_enabled": {
+            "type": "boolean",
+            "const": false
+          },
+          "transport": {
+            "type": "string",
+            "const": "direct_sip_over_webrtc"
+          }
+        }
+      },
+      "UpsertSettingRequest": {
+        "type": "object",
+        "required": ["value"],
+        "properties": {
+          "value": true,
+          "scope": {
+            "type": "string",
+            "default": "global"
+          },
+          "is_secret": {
+            "type": "boolean",
+            "default": false
+          }
+        }
+      },
+      "Setting": {
+        "type": "object",
+        "required": ["key", "scope", "value", "is_secret", "updated_at"],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string"
+          },
+          "value": true,
+          "is_secret": {
+            "type": "boolean"
+          },
+          "updated_at": {
+            "type": "string"
+          }
+        }
+      },
+      "UpsertIntegrationAccountRequest": {
+        "type": "object",
+        "required": ["provider_key", "display_name"],
+        "properties": {
+          "provider_key": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "external_account_id": {
+            "type": ["string", "null"],
+            "default": null
+          },
+          "metadata": {
+            "type": "object",
+            "default": {}
+          }
+        }
+      },
+      "IntegrationAccount": {
+        "type": "object",
+        "required": ["public_id", "provider_key", "display_name"],
+        "properties": {
+          "public_id": {
+            "type": "string"
+          },
+          "provider_key": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "external_account_id": {
+            "type": ["string", "null"]
+          },
+          "is_active": {
+            "type": "boolean"
+          },
+          "metadata": {
+            "type": "object"
+          }
+        }
+      },
+      "IntegrationAccountSnapshot": {
+        "type": "object",
+        "required": ["account", "settings", "tokens"],
+        "properties": {
+          "account": {
+            "$ref": "#/components/schemas/IntegrationAccount"
+          },
+          "settings": {
+            "type": "array"
+          },
+          "tokens": {
+            "type": "array"
+          }
+        }
+      },
+      "UpsertIntegrationSettingRequest": {
+        "type": "object",
+        "required": ["value"],
+        "properties": {
+          "value": true,
+          "is_secret": {
+            "type": "boolean",
+            "default": false
+          }
+        }
+      },
+      "IntegrationSetting": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Setting"
+          }
+        ]
+      },
+      "UpsertIntegrationTokenRequest": {
+        "type": "object",
+        "required": ["value"],
+        "properties": {
+          "value": true,
+          "expires_at": {
+            "type": ["string", "null"],
+            "format": "date-time",
+            "default": null
+          }
+        }
+      },
+      "IntegrationToken": {
+        "type": "object",
+        "required": ["token_type", "value", "expires_at"],
+        "properties": {
+          "token_type": {
+            "type": "string"
+          },
+          "value": true,
+          "expires_at": {
+            "type": ["string", "null"]
+          }
+        }
+      }
+    }
+  }
+}
