@@ -12,6 +12,9 @@ import {
   handleProviderWebhookJob,
 } from "./providers/handlers.js";
 import type { ProviderAttemptRepository } from "./providers/attempts.js";
+import { assertProviderEnvelope } from "./providers/registry.js";
+import { buildProviderDryRunRequest } from "./providers/dry-run-transport.js";
+import { providerTransportPolicyFor } from "./providers/transport-policy.js";
 
 export type WorkerLifecycleEventName = "started" | "completed" | "failed";
 
@@ -32,6 +35,21 @@ export type WorkerProcessorResult = unknown;
 export type WorkerJob = Pick<Job<JobEnvelope>, "id" | "name" | "data"> &
   Partial<Pick<Job<JobEnvelope>, "attemptsMade" | "opts">>;
 export type QueueProcessor = (job: WorkerJob) => Promise<WorkerProcessorResult>;
+
+export interface ShipmentTrackingProcessorResult {
+  provider: ProviderRequestEnvelope["provider"];
+  request_id: string;
+  queue: "shipment-tracking";
+  status: "accepted_fixture";
+  tracking_number: string | null;
+  live_call_performed: false;
+  metadata: {
+    job_id: string;
+    fixture_only: true;
+    transport_policy: ReturnType<typeof providerTransportPolicyFor>;
+    dry_run_request: ReturnType<typeof buildProviderDryRunRequest>;
+  };
+}
 
 export interface WorkerProcessorRegistry {
   queues: readonly QueueName[];
@@ -83,6 +101,17 @@ function assertProviderJobName(envelope: JobEnvelope): void {
   const expectedName = `${provider}.${operation}`;
   if (envelope.name !== expectedName) {
     throw new Error(`Unknown provider job name: ${envelope.name}`);
+  }
+}
+
+function assertShipmentTrackingJobName(
+  envelope: JobEnvelope,
+  requestEnvelope: ProviderRequestEnvelope,
+): void {
+  const expectedName = `${requestEnvelope.provider}.shipment.track`;
+
+  if (envelope.name !== expectedName) {
+    throw new Error(`Unknown shipment tracking job name: ${envelope.name}`);
   }
 }
 
@@ -186,6 +215,47 @@ function createProviderDeliveryProcessor(
   };
 }
 
+function createShipmentTrackingProcessor(): QueueProcessor {
+  return async (job) => {
+    const envelope = assertJobMatchesQueue("shipment-tracking", job);
+    const requestEnvelope = providerRequestEnvelopeSchema.parse(
+      (envelope.payload as { envelope?: unknown }).envelope,
+    );
+
+    assertShipmentTrackingJobName(envelope, requestEnvelope);
+
+    if (requestEnvelope.direction !== "outbound") {
+      throw new Error(`Shipment tracking jobs must be outbound: ${requestEnvelope.request_id}`);
+    }
+
+    if (requestEnvelope.operation !== "shipment.track") {
+      throw new Error(`Unsupported shipment tracking operation: ${requestEnvelope.operation}`);
+    }
+
+    assertProviderEnvelope(requestEnvelope, "delivery");
+
+    const trackingNumber =
+      typeof requestEnvelope.payload.tracking_number === "string"
+        ? requestEnvelope.payload.tracking_number
+        : null;
+
+    return {
+      provider: requestEnvelope.provider,
+      request_id: requestEnvelope.request_id,
+      queue: "shipment-tracking",
+      status: "accepted_fixture",
+      tracking_number: trackingNumber,
+      live_call_performed: false,
+      metadata: {
+        job_id: envelope.job_id,
+        fixture_only: true,
+        transport_policy: providerTransportPolicyFor(requestEnvelope),
+        dry_run_request: buildProviderDryRunRequest(requestEnvelope),
+      },
+    } satisfies ShipmentTrackingProcessorResult;
+  };
+}
+
 function createUnimplementedProcessor(queue: QueueName): QueueProcessor {
   return async (job) => {
     assertJobMatchesQueue(queue, job);
@@ -203,7 +273,7 @@ export function createWorkerProcessorRegistry(
   const processors = new Map<QueueName, QueueProcessor>([
     ["provider-webhooks", createProviderWebhookProcessor(providerAttemptRepository)],
     ["provider-delivery", createProviderDeliveryProcessor(providerAttemptRepository)],
-    ["shipment-tracking", createUnimplementedProcessor("shipment-tracking")],
+    ["shipment-tracking", createShipmentTrackingProcessor()],
     ["ai-replies", createUnimplementedProcessor("ai-replies")],
     ["migration-reports", createUnimplementedProcessor("migration-reports")],
   ]);

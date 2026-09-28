@@ -63,6 +63,33 @@ function providerDeliveryJob(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function shipmentTrackingJob(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "bull_job_tracking",
+    name: "ptt.shipment.track",
+    data: {
+      job_id: "job_tracking_1",
+      queue: "shipment-tracking",
+      name: "ptt.shipment.track",
+      requested_at: now,
+      payload: {
+        envelope: {
+          request_id: "req_tracking_1",
+          provider: "ptt",
+          operation: "shipment.track",
+          direction: "outbound",
+          channel: "cargo",
+          occurred_at: now,
+          payload: {
+            tracking_number: "PTT fixture tracking",
+          },
+        },
+      },
+      ...overrides,
+    },
+  };
+}
+
 describe("worker processor registry", () => {
   it("exposes processors for every declared worker queue", () => {
     const registry = createWorkerProcessorRegistry();
@@ -206,21 +233,46 @@ describe("worker processor registry", () => {
     ).rejects.toThrow("Unknown worker queue");
   });
 
-  it("fails declared queues that do not have an implemented processor yet", async () => {
+  it("dispatches shipment tracking fixtures without live calls", async () => {
+    const events: WorkerLifecycleEvent[] = [];
+    const registry = createWorkerProcessorRegistry((event) => events.push(event));
+
+    await expect(
+      registry.dispatch("shipment-tracking", shipmentTrackingJob()),
+    ).resolves.toMatchObject({
+      provider: "ptt",
+      request_id: "req_tracking_1",
+      queue: "shipment-tracking",
+      status: "accepted_fixture",
+      tracking_number: "PTT fixture tracking",
+      live_call_performed: false,
+      metadata: {
+        fixture_only: true,
+        dry_run_request: {
+          path: "/ptt/shipments/track",
+          live_call_performed: false,
+        },
+        transport_policy: {
+          contract_mode: "fixture_only",
+          live_call_permitted: false,
+        },
+      },
+    });
+    expect(events.map((event) => event.event)).toEqual(["started", "completed"]);
+    expect(events.every((event) => event.queue === "shipment-tracking")).toBe(true);
+  });
+
+  it("fails shipment tracking jobs that are not provider-qualified", async () => {
     const registry = createWorkerProcessorRegistry();
+    const job = shipmentTrackingJob({
+      name: "shipment.track",
+    });
 
     await expect(
       registry.dispatch("shipment-tracking", {
-        id: "bull_job_tracking",
+        ...job,
         name: "shipment.track",
-        data: {
-          job_id: "job_tracking_1",
-          queue: "shipment-tracking",
-          name: "shipment.track",
-          payload: {},
-          requested_at: now,
-        },
       }),
-    ).rejects.toThrow("Worker processor is not implemented for queue: shipment-tracking");
+    ).rejects.toThrow("Unknown shipment tracking job name");
   });
 });
