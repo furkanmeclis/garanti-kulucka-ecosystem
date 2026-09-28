@@ -420,13 +420,6 @@ function createMigrationReportProcessor(): QueueProcessor {
   };
 }
 
-function createUnimplementedProcessor(queue: QueueName): QueueProcessor {
-  return async (job) => {
-    assertJobMatchesQueue(queue, job);
-    throw new Error(`Worker processor is not implemented for queue: ${queue}`);
-  };
-}
-
 export function createWorkerProcessorRegistry(
   options: WorkerLifecycleRecorder | WorkerProcessorRegistryOptions = {},
 ): WorkerProcessorRegistry {
