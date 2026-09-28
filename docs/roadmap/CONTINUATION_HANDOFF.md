@@ -6,19 +6,19 @@ Bu belge, projeye yeni bir sohbetten veya bağlamsız bir çalışma oturumundan
 
 - Repo: `/Users/furkanmeclis/Documents/Projects/garanti-kulucka-ecosystem`
 - GitHub çalışma modeli: monorepo, yalnız `main`, PR yok.
-- Yayımlanmış son checkpoint: `v0.1.118`
-- Yayımlanmış son commit: `10e73f6c3605b11997fb12683afca1ab5c3fdb9d`
-- Commit mesajı: `fix(migrator): avoid database package runtime import`
-- Genel ilerleme: yaklaşık `%72`
-- Son tamamlanan çalışma: P1 runtime `BIGINT` güvenli sayı politikası.
-- Aktif çalışma ağacı temizdir; sıradaki uygulama dilimi P1 source manifest/completeness ve resume fingerprint temelidir.
+- Yayımlanmış son checkpoint: `v0.1.120`
+- Yayımlanmış son commit: `1bab0fa1634745143eb6f7291ac77dc731fdf106`
+- Commit mesajı: `feat(migrator): add source manifest resume guard`
+- Genel ilerleme: yaklaşık `%74`
+- Son tamamlanan çalışma: P1 source manifest/completeness ve resume guard checkpoint’i.
+- Sıradaki bağımlılık kapısı P2 Legacy Schema Introspection ve Mapping Catalog’dur; ilk dilim gerçek `information_schema` keşfi ile `public.musteriler` mappingleri, ardından `public.konusmalar` ve `public.mesajlar` mappingleridir.
 - Production `migrate --apply` kapısı kapalıdır. Tüm aktivasyon koşulları geçmeden açılmamalıdır.
 
-`%72` tahmini; API, worker, auth temelleri, admin persistence, Socket.IO sınırları, fixture tabanlı provider sözleşmeleri, CI/tag otomasyonu, container buildleri ve migrator dry-run güvenlik temelini içerir. Gerçek frontend taşıması, canlı provider adapterları ve production veri taşıma aktivasyonu tamamlanmış kabul edilmez.
+`%74` tahmini; API, worker, auth temelleri, admin persistence, Socket.IO sınırları, fixture tabanlı provider sözleşmeleri, CI/tag otomasyonu, container buildleri, migrator dry-run güvenlik temeli ve P1 source manifest/completeness checkpoint’ini içerir. Gerçek frontend taşıması, canlı provider adapterları, P3 transaction snapshot isolation ile source row-content checksum/idempotency ve production veri taşıma aktivasyonu tamamlanmış kabul edilmez.
 
-## 2. Son Yayımlanmış Schema Checkpoint
+## 2. Tarihsel Schema Kimliği Checkpoint'i (`v0.1.116`)
 
-Schema checkpoint `v0.1.116` ile yayımlandı. Yeni sohbet bunu tamamlanmış release tabanı kabul etmeli; aynı işi yeniden üretmeye çalışmadan P1 maddesine geçmelidir.
+Bu bölüm, `v0.1.116` ile yayımlanan tarihsel schema kimliği checkpoint'ini kaydeder. Güncel yayımlanmış release tabanı `v0.1.120`'dir; yeni sohbet bu tarihsel işi yeniden üretmeye çalışmadan P2 maddesinden devam etmelidir.
 
 Checkpoint kapsamı:
 
@@ -115,6 +115,33 @@ Kanıt:
 - Otomatik tag: `v0.1.118`
 - Artifact: `container-images-v0.1.118`
 
+## 3.2. Tamamlanan P1 Source Manifest ve Resume Guard Dilimi
+
+P1’in source manifest/completeness ve resume guard dilimi `v0.1.120` ile yayımlandı.
+
+Kapsam:
+
+- Source manifest; source sistem kimliği, normalize database identity, schema/column snapshot’ları, satır sayıları, mapping catalog version, batch size, plan fingerprint ve manifest hash içerir.
+- `migration_runs` manifest kayıtları immutable tutulur.
+- `legacy_id_map` kayıtları migration run kapsamında izole edilir.
+- Verify akışı persisted manifest’i yeniden doğrular; completeness kontrollerini manifest-driven ve run-scoped yürütür.
+- Aynı `MIGRATION_RUN_ID` ile farklı source, mapping version, batch şekli, plan fingerprint veya manifest hash üzerinden resume reddedilir.
+- Partial apply yasaktır ve production apply fail-closed kalır.
+- P3 transaction snapshot isolation ile source row-content checksum/idempotency bu checkpoint’in kapsamında değildir.
+
+Kanıt:
+
+- Implementation commit: `1bab0fa1634745143eb6f7291ac77dc731fdf106` (`feat(migrator): add source manifest resume guard`)
+- Migrator unit: `82/82`
+- Database unit: `10/10`
+- Migration boundary: `3/3`
+- Tam `npm run check`: başarılı
+- PostgreSQL 18 üzerinde `001 -> 002 -> 003`, `003` down ve yeniden up: başarılı
+- `003` FK, manifest immutability, nonblank run ID, run-scoped partial primary target uniqueness ve preexisting batch/ID-map fail-closed davranışları: doğrulandı
+- GitHub Actions run `36497700367`: başarılı
+- Otomatik tag: `v0.1.120`
+- Artifact: `container-images-v0.1.120`, `384237406` byte; API, worker, migrator ve web `.tar.gz` arşivlerini içerir
+
 ## 4. Değişmez Mimari ve Teslimat Kararları
 
 Bu kararlar yeni sohbetlerde yeniden tartışmaya açılmadan uygulanacaktır:
@@ -158,12 +185,14 @@ Kabul kapısı: sıfırdan migration zinciri, testler, image buildleri ve CI ayn
 
 ### P1. Database Runtime Tip ve Completeness Temeli
 
+Durum: tamamlandı ve runtime tip dilimi `v0.1.118`, source manifest/completeness dilimi `v0.1.120` ile yayımlandı.
+
 1. PostgreSQL `BIGINT` runtime politikası belirlendi: mevcut Kysely `number` modeli korunur, `pg` `int8` değerleri kontrollü parser ile yalnız JavaScript safe integer aralığında `number` olur.
 2. Sessiz precision kaybı yasaktır; safe integer dışı `int8` değerler runtime’da fail-fast davranır.
 3. API, worker ve migrator runtime bağlantı yüzeyleri bu politikaya uyumlu hale getirildi.
-4. Migration run için gerçek source manifest oluştur: source sistem kimliği, normalize database kimliği, tablo/kolon snapshot’ı, satır sayıları, batch size, mapping catalog version ve plan fingerprint.
-5. Verify aşamasını target içindeki `legacy_id_map` sayımına değil, source manifest ile karşılaştırmaya bağla.
-6. Aynı `MIGRATION_RUN_ID` ile farklı source, farklı mapping sürümü veya farklı batch şeklinin resume edilmesini reddet.
+4. Migration run için source sistem kimliği, normalize database kimliği, tablo/kolon snapshot’ı, satır sayıları, batch size, mapping catalog version, plan fingerprint ve manifest hash içeren gerçek source manifest oluşturuldu.
+5. Verify aşaması target içindeki global sayımlar yerine persisted source manifest ve run-scoped `legacy_id_map` kapsamıyla karşılaştırmaya bağlandı.
+6. Aynı `MIGRATION_RUN_ID` ile farklı source, mapping sürümü, batch şekli, plan fingerprint veya manifest hash üzerinden resume reddedilir.
 
 Kabul kapısı: kaynaktan sessizce atlanan bir satır verification tarafından bulunmalı; güvenli sayı sınırı üstündeki ID hiçbir katmanda yuvarlanmamalı.
 
@@ -208,8 +237,8 @@ Kabul kapısı: sentetik Türkçe/karma legacy PostgreSQL fixture’ı sıfır v
 2. Aynı migration run’ın paralel çalışmasını PostgreSQL advisory lock veya eşdeğer lease ile engelle.
 3. Source okumalarını `REPEATABLE READ READ ONLY` snapshot içinde tut.
 4. Offset tabanlı riskleri azalt; stabil primary-key cursor veya manifest ile sabitlenmiş aralık kullan.
-5. `readRows !== expectedRows` durumunu target yazımından önce başarısız say.
-6. Resume fingerprint içine source identity, mapping version, plan, batch size ve source manifest hash ekle.
+5. P1'de tamamlanan temel: persisted source manifest ile `readRows !== expectedRows` kontrolü target yazımından önce fail-closed çalışır. P3'te kalan iş: bu garantiyi transaction snapshot isolation ve source row-content checksum ile aynı tutarlı kaynak görünümüne bağla.
+6. P1'de tamamlanan temel: resume fingerprint source identity, mapping version, plan, batch size ve source manifest hash içerir. P3'te kalan iş: fingerprint'i snapshot/row-content kimliğiyle güçlendir ve process/network retry sonrasında tam idempotency kanıtını tamamla.
 7. Yarım yazım, process kill, network failure ve retry sonrasında idempotent resume testleri ekle.
 8. Dry-run yalnız count üretmemeli; tüm satırları transform, enum, zorunlu alan, FK çözümleme, duplicate ve schema-gap kontrollerinden geçirmeli fakat target’a yazmamalı.
 9. Error ve report redaction testleri connection URL, password query parametreleri, token, header ve nested cause alanlarını kapsamalı.
@@ -220,7 +249,7 @@ Kabul kapısı: dry-run target bağlantısı açmadan gerçek uygulanabilirlik r
 
 Apply ancak şu koşulların tamamından sonra açılabilir:
 
-- Migration `001` ve `002` temiz database üzerinde geçiyor.
+- Migration `001`, `002` ve `003` temiz database üzerinde geçiyor.
 - BIGINT runtime politikası uygulanmış.
 - Source manifest/completeness doğrulaması aktif.
 - İlk mapping catalog tamamlanmış ve versionlanmış.
@@ -417,8 +446,8 @@ git diff --check
 Beklenen yayımlanmış taban:
 
 ```text
-10e73f6c3605b11997fb12683afca1ab5c3fdb9d
-v0.1.118
+1bab0fa1634745143eb6f7291ac77dc731fdf106
+v0.1.120
 ```
 
 Aktif schema checkpoint kaybolmuşsa otomatik olarak yeniden üretme. Önce `git status`, `git reflog`, stash, başka worktree ve kullanıcı tarafından bırakılmış değişiklikleri araştır. Mevcut değişiklikleri koru.
@@ -483,10 +512,10 @@ Branch veya PR oluşturma. Başarısız CI commit’ini taglenmiş gibi kaydetme
 
 Bu listenin tamamı işaretlenmeden `migrate --apply` açılmayacaktır:
 
-- [x] `001 -> 002` temiz PostgreSQL migration zinciri başarılı
+- [x] `001 -> 002 -> 003` temiz PostgreSQL migration zinciri başarılı
 - [x] BIGINT runtime type politikası tamam
 - [ ] Source schema introspection tamam
-- [ ] Source manifest ve completeness doğrulaması tamam
+- [x] Source manifest ve completeness doğrulaması tamam
 - [ ] Customer mapping tamam
 - [ ] Customer address sentetik mapping tamam
 - [ ] External identity account resolution tamam
@@ -494,7 +523,7 @@ Bu listenin tamamı işaretlenmeden `migrate --apply` açılmayacaktır:
 - [ ] Message mapping ve media/medya drift çözümü tamam
 - [ ] Zorunlu FK çözümleme ve deferred reconciliation tamam
 - [ ] Atomic transaction ve concurrent-run lock tamam
-- [ ] Resume fingerprint ve idempotency tamam
+- [ ] Resume fingerprint ve idempotency tamam (P1 fingerprint temeli hazır; P3 transaction snapshot isolation, source row-content checksum, process/network retry ve tam idempotency kanıtı bekliyor)
 - [ ] Full-transform dry-run validation tamam
 - [ ] Secret redaction ve operation report testleri tamam
 - [ ] Gerçek PostgreSQL source/target E2E tamam
@@ -523,13 +552,13 @@ Bu maddeler ihtiyaç varsa genişletilir; mevcut davranış sebepsiz yere yenide
 
 ## 10. Bir Sonraki Sohbet İçin İlk Somut Görev
 
-İlk görev P1 maddesidir:
+İlk görev P2 maddesidir:
 
-1. Çalışma ağacının temiz olduğunu doğrula.
-2. Source manifest/completeness modelini tasarla: source sistem kimliği, normalize database identity, tablo/kolon snapshot’ı, satır sayıları, batch size, mapping catalog version ve plan fingerprint.
-3. Migrator verify aşamasını yalnız target sayımlarından source manifest karşılaştırmasına taşı.
-4. Aynı `MIGRATION_RUN_ID` ile farklı source, mapping version veya batch şeklinin resume edilmesini reddeden fingerprint temelini ekle.
-5. Hedefli testleri ve tam `npm run check` çalıştır.
-6. Commit/push sonrası CI, yeni tag ve artifact’i doğrula.
+1. Çalışma ağacındaki mevcut değişiklikleri koru ve yayımlanmış `v0.1.120` P1 checkpoint’ini taban kabul et.
+2. Legacy source şemasını gerçek `information_schema` sorgularıyla keşfet; migration geçmişini tek başına doğru kaynak kabul etme.
+3. Versionlanmış mapping catalog içinde önce `public.musteriler -> customers`, `customer_addresses` ve `customer_external_identities` dönüşümlerini uygula.
+4. Ardından `public.konusmalar -> conversations` ve `public.mesajlar -> messages` dönüşümlerini, zorunlu ID-map/FK ve account/provider çözümlemeleriyle uygula.
+5. Bilinmeyen kolon ve enumları fail-closed yönet; hedefli fixture testlerini ve tam `npm run check` doğrulamasını çalıştır.
+6. Commit/push sonrası CI, yeni tag ve artifact’i doğrula; production apply kapısını kapalı tut.
 
-Bu P1 görevi bitmeden mapping catalog implementation veya apply aktivasyonuna geçilmemelidir.
+P2 mapping ve introspection kabul kapısı tamamlanmadan P3 güvenlik çalışmalarına veya apply aktivasyonuna geçilmemelidir. P1 resume guard tamamlanmış olsa da tam resume/idempotency aktivasyon maddesi P3 transaction snapshot isolation ve source row-content checksum/idempotency kanıtları bitene kadar açık kalır.
