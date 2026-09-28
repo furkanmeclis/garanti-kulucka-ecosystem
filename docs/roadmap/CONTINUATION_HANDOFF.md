@@ -6,12 +6,12 @@ Bu belge, projeye yeni bir sohbetten veya bağlamsız bir çalışma oturumundan
 
 - Repo: `/Users/furkanmeclis/Documents/Projects/garanti-kulucka-ecosystem`
 - GitHub çalışma modeli: monorepo, yalnız `main`, PR yok.
-- Yayımlanmış son checkpoint: `v0.1.116`
-- Yayımlanmış son commit: `0e536505e5bec93097f2d258d8341c87928f2c6d`
-- Commit mesajı: `feat(database): add migration identity targets`
+- Yayımlanmış son checkpoint: `v0.1.118`
+- Yayımlanmış son commit: `10e73f6c3605b11997fb12683afca1ab5c3fdb9d`
+- Commit mesajı: `fix(migrator): avoid database package runtime import`
 - Genel ilerleme: yaklaşık `%72`
-- Son tamamlanan çalışma: canonical şema ve migrator kimlik/provenance genişletmesi.
-- Aktif çalışma ağacı temizdir; sıradaki uygulama dilimi P1 database runtime tip ve source completeness temelidir.
+- Son tamamlanan çalışma: P1 runtime `BIGINT` güvenli sayı politikası.
+- Aktif çalışma ağacı temizdir; sıradaki uygulama dilimi P1 source manifest/completeness ve resume fingerprint temelidir.
 - Production `migrate --apply` kapısı kapalıdır. Tüm aktivasyon koşulları geçmeden açılmamalıdır.
 
 `%72` tahmini; API, worker, auth temelleri, admin persistence, Socket.IO sınırları, fixture tabanlı provider sözleşmeleri, CI/tag otomasyonu, container buildleri ve migrator dry-run güvenlik temelini içerir. Gerçek frontend taşıması, canlı provider adapterları ve production veri taşıma aktivasyonu tamamlanmış kabul edilmez.
@@ -92,6 +92,29 @@ P0 doğrulama sonucu:
 6. Checkpoint `main` dalına pushlandı.
 7. GitHub Actions başarılı oldu, `v0.1.116` tag’i ve `container-images-v0.1.116` artifact’i oluştu.
 
+## 3.1. Tamamlanan P1 Runtime Tip Dilimi
+
+P1’in runtime `BIGINT` politikası dilimi `v0.1.118` ile yayımlandı.
+
+Kapsam:
+
+- `packages/database/src/integers.ts` eklendi.
+- `pg` `int8` parser’ı `Number.isSafeInteger` kontrolüyle kuruldu.
+- `createDatabase` kullanan API ve worker runtime yolları parser’ı otomatik kurar.
+- Migrator’ın doğrudan `pg.Client` kullanan source runtime yolu aynı safe integer politikasını uygular.
+- Safe integer aralığı dışındaki `int8` değerleri sessiz yuvarlanmak yerine `RangeError` ile durur.
+- Malformed `int8` değerleri `TypeError` ile durur.
+
+Kanıt:
+
+- Database unit: `3` dosya, `9` test
+- Migrator unit: `10` dosya, `54` test
+- Tam `npm run check`: başarılı
+- İlk commit `3058d49` CI’da package export çözümleme hatasıyla fail oldu ve tag üretmedi.
+- Follow-up fix commit `10e73f6` CI’da başarılı oldu.
+- Otomatik tag: `v0.1.118`
+- Artifact: `container-images-v0.1.118`
+
 ## 4. Değişmez Mimari ve Teslimat Kararları
 
 Bu kararlar yeni sohbetlerde yeniden tartışmaya açılmadan uygulanacaktır:
@@ -135,9 +158,9 @@ Kabul kapısı: sıfırdan migration zinciri, testler, image buildleri ve CI ayn
 
 ### P1. Database Runtime Tip ve Completeness Temeli
 
-1. PostgreSQL `BIGINT` runtime politikasını belirle. Kysely tipleri şu anda `number` kullanırken `pg` varsayılan olarak `int8` değerlerini string döndürür.
-2. Tercih edilen güvenli politika: ID’leri uygulama sınırında `string` olarak modellemek veya kontrollü parser ile güvenli sayı aralığını açıkça doğrulamak. Sessiz precision kaybı yasaktır.
-3. Tüm API, worker, migrator, schema type ve test fixture yüzeylerini seçilen politikaya uyumlu hale getir.
+1. PostgreSQL `BIGINT` runtime politikası belirlendi: mevcut Kysely `number` modeli korunur, `pg` `int8` değerleri kontrollü parser ile yalnız JavaScript safe integer aralığında `number` olur.
+2. Sessiz precision kaybı yasaktır; safe integer dışı `int8` değerler runtime’da fail-fast davranır.
+3. API, worker ve migrator runtime bağlantı yüzeyleri bu politikaya uyumlu hale getirildi.
 4. Migration run için gerçek source manifest oluştur: source sistem kimliği, normalize database kimliği, tablo/kolon snapshot’ı, satır sayıları, batch size, mapping catalog version ve plan fingerprint.
 5. Verify aşamasını target içindeki `legacy_id_map` sayımına değil, source manifest ile karşılaştırmaya bağla.
 6. Aynı `MIGRATION_RUN_ID` ile farklı source, farklı mapping sürümü veya farklı batch şeklinin resume edilmesini reddet.
@@ -394,8 +417,8 @@ git diff --check
 Beklenen yayımlanmış taban:
 
 ```text
-0e536505e5bec93097f2d258d8341c87928f2c6d
-v0.1.116
+10e73f6c3605b11997fb12683afca1ab5c3fdb9d
+v0.1.118
 ```
 
 Aktif schema checkpoint kaybolmuşsa otomatik olarak yeniden üretme. Önce `git status`, `git reflog`, stash, başka worktree ve kullanıcı tarafından bırakılmış değişiklikleri araştır. Mevcut değişiklikleri koru.
@@ -461,7 +484,7 @@ Branch veya PR oluşturma. Başarısız CI commit’ini taglenmiş gibi kaydetme
 Bu listenin tamamı işaretlenmeden `migrate --apply` açılmayacaktır:
 
 - [x] `001 -> 002` temiz PostgreSQL migration zinciri başarılı
-- [ ] BIGINT runtime type politikası tamam
+- [x] BIGINT runtime type politikası tamam
 - [ ] Source schema introspection tamam
 - [ ] Source manifest ve completeness doğrulaması tamam
 - [ ] Customer mapping tamam
@@ -503,8 +526,8 @@ Bu maddeler ihtiyaç varsa genişletilir; mevcut davranış sebepsiz yere yenide
 İlk görev P1 maddesidir:
 
 1. Çalışma ağacının temiz olduğunu doğrula.
-2. PostgreSQL `BIGINT` runtime politikasını seç ve uygulama sınırlarında sessiz precision kaybını engelle.
-3. Source manifest/completeness modelini tasarla ve migrator verify aşamasını target sayımlarından source manifest karşılaştırmasına taşı.
+2. Source manifest/completeness modelini tasarla: source sistem kimliği, normalize database identity, tablo/kolon snapshot’ı, satır sayıları, batch size, mapping catalog version ve plan fingerprint.
+3. Migrator verify aşamasını yalnız target sayımlarından source manifest karşılaştırmasına taşı.
 4. Aynı `MIGRATION_RUN_ID` ile farklı source, mapping version veya batch şeklinin resume edilmesini reddeden fingerprint temelini ekle.
 5. Hedefli testleri ve tam `npm run check` çalıştır.
 6. Commit/push sonrası CI, yeni tag ve artifact’i doğrula.
