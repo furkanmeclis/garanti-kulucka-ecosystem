@@ -6,19 +6,19 @@ Bu belge, projeye yeni bir sohbetten veya bağlamsız bir çalışma oturumundan
 
 - Repo: `/Users/furkanmeclis/Documents/Projects/garanti-kulucka-ecosystem`
 - GitHub çalışma modeli: monorepo, yalnız `main`, PR yok.
-- Yayımlanmış son checkpoint: `v0.1.114`
-- Yayımlanmış son commit: `4160c3c0a46d173db35086899d3de0579557b0a3`
-- Commit mesajı: `feat(migrator): add safe source dry-run foundation`
+- Yayımlanmış son checkpoint: `v0.1.116`
+- Yayımlanmış son commit: `0e536505e5bec93097f2d258d8341c87928f2c6d`
+- Commit mesajı: `feat(database): add migration identity targets`
 - Genel ilerleme: yaklaşık `%72`
-- Aktif çalışma: canonical şema ve migrator kimlik/provenance genişletmesi.
-- Aktif çalışma henüz commitlenmiş, pushlanmış veya taglenmiş değildir.
+- Son tamamlanan çalışma: canonical şema ve migrator kimlik/provenance genişletmesi.
+- Aktif çalışma ağacı temizdir; sıradaki uygulama dilimi P1 database runtime tip ve source completeness temelidir.
 - Production `migrate --apply` kapısı kapalıdır. Tüm aktivasyon koşulları geçmeden açılmamalıdır.
 
 `%72` tahmini; API, worker, auth temelleri, admin persistence, Socket.IO sınırları, fixture tabanlı provider sözleşmeleri, CI/tag otomasyonu, container buildleri ve migrator dry-run güvenlik temelini içerir. Gerçek frontend taşıması, canlı provider adapterları ve production veri taşıma aktivasyonu tamamlanmış kabul edilmez.
 
-## 2. Aktif Yayımlanmamış Schema Checkpoint
+## 2. Son Yayımlanmış Schema Checkpoint
 
-Çalışma ağacında `v0.1.114` üzerine eklenmiş bir schema checkpoint bulunmaktadır. Yeni sohbet bu değişiklikleri kullanıcıya ait mevcut çalışma olarak korumalı; silmemeli, geri almamalı ve yeniden üretmeye çalışmamalıdır.
+Schema checkpoint `v0.1.116` ile yayımlandı. Yeni sohbet bunu tamamlanmış release tabanı kabul etmeli; aynı işi yeniden üretmeye çalışmadan P1 maddesine geçmelidir.
 
 Checkpoint kapsamı:
 
@@ -54,16 +54,21 @@ Bu checkpoint için alınmış kanıt:
 - Migrator typecheck: başarılı
 - Repository structure doğrulaması: başarılı
 - `git diff --check`: başarılı
-- Gerçek PostgreSQL 18 üzerinde yalnız migration `002` up/down: başarılı
+- Temiz PostgreSQL 18 üzerinde `001 -> 002` up zinciri: başarılı
+- Aynı PostgreSQL 18 üzerinde `002` down ve yeniden up: başarılı
+- Tam `npm run check`: başarılı
+- GitHub Actions run `36487291914`: başarılı
+- Otomatik tag: `v0.1.116`
+- Artifact: `container-images-v0.1.116`
 - Geçici PostgreSQL doğrulama konteyneri temizlendi
 
-Bu kanıt checkpoint’in yayımlandığı anlamına gelmez. Tam sıfırdan migration zinciri, aşağıdaki `001` blocker nedeniyle henüz yeşil değildir.
+`001` down migration bilerek kapalıdır; çift down denemesi `User has disabled down migration on file: 001_initial_canonical_schema` hatasıyla durur. Desteklenen geri alma kanıtı `002` down koruması ve yeniden up zinciridir.
 
-## 3. İlk Çözülecek Acil Blocker
+## 3. Tamamlanan P0 Blocker
 
 Dosya: `packages/database/migrations/001_initial_canonical_schema.sql`, yaklaşık satır `331`.
 
-Mevcut ve PostgreSQL tarafından reddedilen ifade:
+Eski ve PostgreSQL tarafından reddedilen ifade:
 
 ```sql
 UNIQUE (provider_id, account_id, key) NULLS NOT DISTINCT
@@ -75,17 +80,17 @@ Doğru PostgreSQL sözdizimi:
 UNIQUE NULLS NOT DISTINCT (provider_id, account_id, key)
 ```
 
-Hata kodu PostgreSQL `42601` olmuştur. Tam `npm run db:migrate:up`, migration `002` aşamasına ulaşmadan burada durur. Yeni çalışma oturumunun ilk kod değişikliği bu sözdizimini düzeltmek olmalıdır.
+Hata kodu PostgreSQL `42601` olmuştur. Sözdizimi `0e53650` commit’iyle düzeltildi ve temiz PostgreSQL 18 üzerinde tam migration zinciri doğrulandı.
 
-Düzeltmeden sonra zorunlu doğrulama sırası:
+P0 doğrulama sonucu:
 
-1. Boş bir PostgreSQL 18 veritabanında `001` ve `002` birlikte up çalıştırılmalı.
-2. Down sırası veri kaybı korumalarıyla doğrulanmalı.
-3. Database ve migrator typecheck çalıştırılmalı.
-4. Database, migrator ve migration testleri çalıştırılmalı.
-5. `npm run check` tam olarak geçmeli.
-6. Yalnız checkpoint kapsamındaki dosyalar commitlenmeli ve `main` dalına pushlanmalı.
-7. GitHub Actions başarıyla tamamlanmalı, yeni otomatik tag ve container artifact doğrulanmalı.
+1. Boş PostgreSQL 18 veritabanında `001` ve `002` birlikte up çalıştı.
+2. `002` down veri kaybı korumasıyla doğrulandı ve yeniden up çalıştı.
+3. Database ve migrator typecheck geçti.
+4. Database, migrator ve migration testleri geçti.
+5. `npm run check` tam olarak geçti.
+6. Checkpoint `main` dalına pushlandı.
+7. GitHub Actions başarılı oldu, `v0.1.116` tag’i ve `container-images-v0.1.116` artifact’i oluştu.
 
 ## 4. Değişmez Mimari ve Teslimat Kararları
 
@@ -115,14 +120,16 @@ Sıra bağımlılık sırasıdır. Önceki madde tamamlanmadan sonraki riskli ka
 
 ### P0. Aktif Schema Checkpoint’i Tamamla ve Yayımla
 
-1. Migration `001` içindeki `NULLS NOT DISTINCT` sözdizimini düzelt.
-2. Temiz PostgreSQL 18 üzerinde `001 -> 002` up zincirini doğrula.
-3. Uygun down senaryosunu ve migration contract testlerini doğrula.
-4. Aktif çalışma ağacının kapsam dışı değişiklik içermediğini kontrol et.
-5. Tam `npm run check` çalıştır.
-6. Küçük ve açıklayıcı commit oluştur, `main` dalına pushla.
-7. CI sonucunu, otomatik tag’i ve API, worker, migrator ile web için dört `.tar.gz` arşivi içeren tek `container-images-vX.Y.Z` artifact’ini doğrula.
-8. Tag sonrasında roadmap ve bu handoff’taki yayımlanmış checkpoint bilgisini ayrı bir docs commit’iyle güncelle.
+Durum: tamamlandı ve `v0.1.116` ile yayımlandı.
+
+1. Migration `001` içindeki `NULLS NOT DISTINCT` sözdizimi düzeltildi.
+2. Temiz PostgreSQL 18 üzerinde `001 -> 002` up zinciri doğrulandı.
+3. `002` down senaryosu ve migration contract testleri doğrulandı.
+4. Aktif çalışma ağacının kapsamı kontrol edildi.
+5. Tam `npm run check` çalıştırıldı.
+6. `feat(database): add migration identity targets` commit’i oluşturuldu ve `main` dalına pushlandı.
+7. CI sonucu, otomatik tag ve API, worker, migrator ile web için dört `.tar.gz` arşivi içeren tek `container-images-v0.1.116` artifact’i doğrulandı.
+8. Bu dokümantasyon senkronu P0 sonrasındaki ayrı docs checkpoint’idir.
 
 Kabul kapısı: sıfırdan migration zinciri, testler, image buildleri ve CI aynı commit için yeşil olmalı.
 
@@ -387,8 +394,8 @@ git diff --check
 Beklenen yayımlanmış taban:
 
 ```text
-4160c3c0a46d173db35086899d3de0579557b0a3
-v0.1.114
+0e536505e5bec93097f2d258d8341c87928f2c6d
+v0.1.116
 ```
 
 Aktif schema checkpoint kaybolmuşsa otomatik olarak yeniden üretme. Önce `git status`, `git reflog`, stash, başka worktree ve kullanıcı tarafından bırakılmış değişiklikleri araştır. Mevcut değişiklikleri koru.
@@ -453,7 +460,7 @@ Branch veya PR oluşturma. Başarısız CI commit’ini taglenmiş gibi kaydetme
 
 Bu listenin tamamı işaretlenmeden `migrate --apply` açılmayacaktır:
 
-- [ ] `001 -> 002` temiz PostgreSQL migration zinciri başarılı
+- [x] `001 -> 002` temiz PostgreSQL migration zinciri başarılı
 - [ ] BIGINT runtime type politikası tamam
 - [ ] Source schema introspection tamam
 - [ ] Source manifest ve completeness doğrulaması tamam
@@ -493,14 +500,13 @@ Bu maddeler ihtiyaç varsa genişletilir; mevcut davranış sebepsiz yere yenide
 
 ## 10. Bir Sonraki Sohbet İçin İlk Somut Görev
 
-İlk görev yalnız şudur:
+İlk görev P1 maddesidir:
 
-1. Aktif çalışma ağacını koru.
-2. `001_initial_canonical_schema.sql` içindeki `NULLS NOT DISTINCT` sırasını düzelt.
-3. Temiz PostgreSQL 18 üzerinde tam `001 -> 002` up/down zincirini doğrula.
-4. Hedefli testleri ve tam `npm run check` çalıştır.
-5. Checkpoint’i commit/push et.
-6. CI, yeni tag ve artifact’leri doğrula.
-7. Bu dosyadaki yayımlanmış checkpoint’i gerçek tag ile güncelle.
+1. Çalışma ağacının temiz olduğunu doğrula.
+2. PostgreSQL `BIGINT` runtime politikasını seç ve uygulama sınırlarında sessiz precision kaybını engelle.
+3. Source manifest/completeness modelini tasarla ve migrator verify aşamasını target sayımlarından source manifest karşılaştırmasına taşı.
+4. Aynı `MIGRATION_RUN_ID` ile farklı source, mapping version veya batch şeklinin resume edilmesini reddeden fingerprint temelini ekle.
+5. Hedefli testleri ve tam `npm run check` çalıştır.
+6. Commit/push sonrası CI, yeni tag ve artifact’i doğrula.
 
-Bu ilk görev bitmeden mapping implementation veya apply aktivasyonuna geçilmemelidir.
+Bu P1 görevi bitmeden mapping catalog implementation veya apply aktivasyonuna geçilmemelidir.
