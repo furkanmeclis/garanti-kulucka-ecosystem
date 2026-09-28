@@ -28,6 +28,7 @@ export async function upsertLegacyIdMap(
 
 export function toLegacyIdMapKey(input: LegacyIdMapWrite): LegacyIdMapKey {
   return {
+    runId: input.runId,
     sourceSystem: input.sourceSystem,
     sourceTable: input.sourceTable,
     sourceId: input.sourceId,
@@ -37,5 +38,5 @@ export function toLegacyIdMapKey(input: LegacyIdMapWrite): LegacyIdMapKey {
 }
 
 export function legacyIdMapKey(input: LegacyIdMapKey): string {
-  return `${input.sourceSystem}:${input.sourceTable}:${input.sourceId}:${input.targetTable}:${input.mappingRole}`;
+  return `${input.runId}:${input.sourceSystem}:${input.sourceTable}:${input.sourceId}:${input.targetTable}:${input.mappingRole}`;
 }

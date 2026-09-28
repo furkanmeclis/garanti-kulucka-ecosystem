@@ -38,6 +38,7 @@ export interface CanonicalRecord {
 }
 
 export interface LegacyIdMapEntry {
+  readonly runId: string;
   readonly sourceSystem: string;
   readonly sourceTable: string;
   readonly sourceId: string;
@@ -51,6 +52,45 @@ export interface LegacyIdMapEntry {
 export interface LegacySource {
   count(entity: MigrationEntity): Promise<number>;
   readBatch(entity: MigrationEntity, options: BatchReadOptions): Promise<LegacyRecord[]>;
+  describeTables(entities: readonly MigrationEntity[]): Promise<SourceTableSnapshot[]>;
+}
+
+export interface SourceDatabaseIdentity {
+  readonly host: string;
+  readonly port: string;
+  readonly database: string;
+}
+
+export interface SourceColumnSnapshot {
+  readonly name: string;
+  readonly ordinalPosition: number;
+  readonly dataType: string;
+  readonly udtName: string;
+  readonly nullable: boolean;
+}
+
+export interface SourceTableSnapshot {
+  readonly entity: MigrationEntity;
+  readonly schema: string;
+  readonly table: string;
+  readonly idColumn: string;
+  readonly columns: SourceColumnSnapshot[];
+}
+
+export interface SourceEntityRowCount {
+  readonly entity: MigrationEntity;
+  readonly rows: number;
+}
+
+export interface SourceManifest {
+  readonly sourceSystem: string;
+  readonly databaseIdentity: SourceDatabaseIdentity;
+  readonly tables: SourceTableSnapshot[];
+  readonly rowCounts: SourceEntityRowCount[];
+  readonly batchSize: number;
+  readonly mappingCatalogVersion: string;
+  readonly planFingerprint: string;
+  readonly sourceManifestHash: string;
 }
 
 export interface BatchReadOptions {
@@ -67,6 +107,16 @@ export interface MigrationTarget {
   recordMigrationBatchStarted(input: MigrationBatchStateStart): Promise<MigrationBatchState>;
   recordMigrationBatchSucceeded(input: MigrationBatchStateSuccess): Promise<MigrationBatchState>;
   recordMigrationBatchFailed(input: MigrationBatchStateFailure): Promise<MigrationBatchState>;
+  registerMigrationRun(input: MigrationRunRegistration): Promise<MigrationRunState>;
+}
+
+export interface MigrationRunRegistration {
+  readonly runId: string;
+  readonly manifest: SourceManifest;
+}
+
+export interface MigrationRunState extends MigrationRunRegistration {
+  readonly createdAt: Date;
 }
 
 export type CanonicalWriteStatus = "created" | "updated" | "unchanged";
@@ -77,6 +127,7 @@ export interface CanonicalWriteResult {
 }
 
 export interface LegacyIdMapKey {
+  readonly runId: string;
   readonly sourceSystem: string;
   readonly sourceTable: string;
   readonly sourceId: string;

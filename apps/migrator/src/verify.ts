@@ -1,9 +1,12 @@
 import { createVerificationReport } from "./reports.js";
-import type { MigrationEntity, VerificationCheck, VerificationReport } from "./types.js";
+import { canonicalMigrationEntities } from "./plan.js";
+import { calculateSourceManifestHash } from "./source-manifest.js";
+import type { MigrationEntity, SourceManifest, VerificationCheck, VerificationReport } from "./types.js";
 
 export interface MigrationVerificationSnapshot {
-  readonly sourceCounts: Record<string, number>;
-  readonly targetCounts: Record<string, number>;
+  readonly runId: string;
+  readonly sourceManifest: SourceManifest | null;
+  readonly targetPublicIds: Record<MigrationEntity, readonly string[]>;
   readonly customers: VerificationCustomer[];
   readonly customerExternalIdentities: VerificationCustomerExternalIdentity[];
   readonly conversations: VerificationConversation[];
@@ -62,6 +65,7 @@ export interface VerificationShipment {
 }
 
 export interface VerificationLegacyIdMapEntry {
+  readonly run_id: string;
   readonly source_system: string;
   readonly source_table: string;
   readonly source_id: string;
@@ -75,7 +79,9 @@ export function createMigrationVerificationReport(
 ): VerificationReport {
   return createVerificationReport({
     checks: [
-      ...verifyRowCounts(snapshot.sourceCounts, snapshot.targetCounts),
+      verifySourceManifestPresence(snapshot.sourceManifest),
+      verifySourceManifestIntegrity(snapshot.sourceManifest),
+      verifySourceManifestEntityCoverage(snapshot.sourceManifest),
       verifyCustomerExternalIdentityReferences(snapshot),
       verifyConversationCustomers(snapshot),
       verifyConversationIntegrationAccounts(snapshot),
@@ -91,6 +97,34 @@ export function createMigrationVerificationReport(
   });
 }
 
+export function verifySourceManifestPresence(manifest: SourceManifest | null): VerificationCheck {
+  return countCheck("source_manifest.present", 1, manifest ? 1 : 0);
+}
+
+export function verifySourceManifestIntegrity(manifest: SourceManifest | null): VerificationCheck {
+  const valid = isSourceManifestIntegrityValid(manifest);
+  return {
+    name: "source_manifest.integrity",
+    status: valid ? "passed" : "failed",
+    expected: 1,
+    actual: valid ? 1 : 0,
+    ...(valid ? {} : { message: "Persisted source manifest hash does not match its contents" }),
+  };
+}
+
+export function verifySourceManifestEntityCoverage(manifest: SourceManifest | null): VerificationCheck {
+  const valid = isSourceManifestIntegrityValid(manifest) && hasCompleteManifestEntityCoverage(manifest);
+  return {
+    name: "source_manifest.entity_coverage",
+    status: valid ? "passed" : "failed",
+    expected: 1,
+    actual: valid ? 1 : 0,
+    ...(valid ? {} : {
+      message: "Persisted source manifest tables and rowCounts must each contain every canonical entity exactly once",
+    }),
+  };
+}
+
 export function verifyCustomerExternalIdentityReferences(
   snapshot: MigrationVerificationSnapshot,
 ): VerificationCheck {
@@ -103,22 +137,6 @@ export function verifyCustomerExternalIdentityReferences(
   }).length;
 
   return countCheck("referential_integrity.customer_external_identities", 0, orphanCount);
-}
-
-export function verifyRowCounts(
-  sourceCounts: Record<string, number>,
-  targetCounts: Record<string, number>,
-): VerificationCheck[] {
-  return Object.entries(sourceCounts).map(([entity, expected]) => {
-    const actual = targetCounts[entity] ?? 0;
-    return {
-      name: `row_count.${entity}`,
-      status: actual === expected ? "passed" : "failed",
-      expected,
-      actual,
-      ...(actual === expected ? {} : { message: `Expected ${expected} ${entity} rows, found ${actual}` }),
-    };
-  });
 }
 
 export function verifyConversationCustomers(snapshot: MigrationVerificationSnapshot): VerificationCheck {
@@ -231,39 +249,104 @@ export function verifyOrderTotals(
 
 export function verifyLegacyIdMapCoverage(snapshot: MigrationVerificationSnapshot): VerificationCheck[] {
   if (!snapshot.legacyIdMaps) {
-    return [];
+    return [countCheck("legacy_id_map.available", 1, 0)];
   }
 
-  const countChecks = Object.entries(snapshot.sourceCounts).map(([entity, expected]) => {
+  const manifest = snapshot.sourceManifest;
+  const scopedMaps = snapshot.legacyIdMaps.filter((entry) => entry.run_id === snapshot.runId);
+  const countChecks = Object.entries(trustedSourceCountsFromManifest(manifest)).flatMap(([entity, expected]) => {
     const targetTable = legacyEntityTargetTable(entity);
-    const actual = snapshot.legacyIdMaps?.filter((entry) => entry.target_table === targetTable).length ?? 0;
-    return countCheck(`legacy_id_map.${entity}`, expected, actual);
+    const sourceTables = manifestSourceTableIdentities(manifest, entity);
+    const expectedPrimaryMaps = scopedMaps.filter(
+      (entry) =>
+        entry.source_system === manifest?.sourceSystem &&
+        sourceTables.has(entry.source_table) &&
+        entry.target_table === targetTable &&
+        entry.mapping_role === "primary",
+    );
+    const distinctSourceIds = new Set(expectedPrimaryMaps.map((entry) => entry.source_id)).size;
+    const distinctTargetIds = new Set(expectedPrimaryMaps.map((entry) => entry.target_id)).size;
+    return [
+      countCheck(`legacy_id_map.source_coverage.${entity}`, expected, distinctSourceIds),
+      countCheck(`legacy_id_map.target_coverage.${entity}`, expected, distinctTargetIds),
+    ];
   });
 
-  return [...countChecks, verifyLegacyIdMapTargetReferences(snapshot)];
+  return [
+    verifyLegacyIdMapFoundationRules(snapshot),
+    ...countChecks,
+    verifyLegacyIdMapTargetReferences(snapshot),
+  ];
+}
+
+function trustedSourceCountsFromManifest(manifest: SourceManifest | null): Record<string, number> {
+  if (!isSourceManifestIntegrityValid(manifest) || !hasCompleteManifestEntityCoverage(manifest)) return {};
+  return Object.fromEntries(manifest?.rowCounts.map(({ entity, rows }) => [entity, rows]) ?? []);
+}
+
+function isSourceManifestIntegrityValid(manifest: SourceManifest | null): manifest is SourceManifest {
+  return manifest !== null && manifest.sourceManifestHash === calculateSourceManifestHash(manifest);
+}
+
+function hasCompleteManifestEntityCoverage(manifest: SourceManifest): boolean {
+  const expected = new Set<string>(canonicalMigrationEntities);
+  const tableEntities = manifest.tables.map(({ entity }) => entity);
+  const rowCountEntities = manifest.rowCounts.map(({ entity }) => entity);
+  const tableSet = new Set<string>(tableEntities);
+  const rowCountSet = new Set<string>(rowCountEntities);
+
+  return tableEntities.length === canonicalMigrationEntities.length &&
+    rowCountEntities.length === canonicalMigrationEntities.length &&
+    tableSet.size === canonicalMigrationEntities.length &&
+    rowCountSet.size === canonicalMigrationEntities.length &&
+    canonicalMigrationEntities.every((entity) => tableSet.has(entity) && rowCountSet.has(entity)) &&
+    [...tableSet].every((entity) => expected.has(entity)) &&
+    [...rowCountSet].every((entity) => expected.has(entity));
+}
+
+function manifestSourceTableIdentities(manifest: SourceManifest | null, entity: string): Set<string> {
+  const table = manifest?.tables.find((candidate) => candidate.entity === entity);
+  if (!table) return new Set();
+  const qualified = `${table.schema}.${table.table}`;
+  return new Set(table.schema === "public" ? [qualified, table.table] : [qualified]);
 }
 
 function verifyLegacyIdMapTargetReferences(snapshot: MigrationVerificationSnapshot): VerificationCheck {
-  const targetIds = new Map<string, Set<string>>([
-    ["customers", new Set(snapshot.customers.map((customer) => customer.public_id))],
-    [
-      "customer_external_identities",
-      new Set(snapshot.customerExternalIdentities.map((identity) => identity.public_id)),
-    ],
-    ["conversations", new Set(snapshot.conversations.map((conversation) => conversation.public_id))],
-    ["messages", new Set(snapshot.messages.map((message) => message.public_id))],
-    ["orders", new Set(snapshot.orders.map((order) => order.public_id))],
-    ["order_items", new Set(snapshot.orderItems.map((item) => item.public_id))],
-    ["shipments", new Set(snapshot.shipments.map((shipment) => shipment.public_id))],
-  ]);
+  const targetIds = new Map<string, Set<string>>();
+  for (const entity of canonicalMigrationEntities) {
+    const ids = snapshot.targetPublicIds[entity];
+    if (!Array.isArray(ids)) continue;
+    targetIds.set(entity, new Set(ids));
+  }
 
   const danglingCount =
     snapshot.legacyIdMaps?.filter((entry) => {
+      if (entry.run_id !== snapshot.runId) return false;
       const ids = targetIds.get(entry.target_table);
-      return ids !== undefined && !ids.has(entry.target_id);
+      return ids === undefined || !ids.has(entry.target_id);
     }).length ?? 0;
 
   return countCheck("legacy_id_map.target_references", 0, danglingCount);
+}
+
+function verifyLegacyIdMapFoundationRules(snapshot: MigrationVerificationSnapshot): VerificationCheck {
+  const manifest = snapshot.sourceManifest;
+  if (!isSourceManifestIntegrityValid(manifest)) {
+    return countCheck("legacy_id_map.foundation_rules", 0, snapshot.legacyIdMaps?.length ?? 0);
+  }
+
+  const invalidCount = snapshot.legacyIdMaps?.filter((entry) => {
+    if (entry.run_id !== snapshot.runId) return false;
+    if (entry.source_system !== manifest.sourceSystem) return true;
+    return !manifest.rowCounts.some(({ entity }) => {
+      const sourceTables = manifestSourceTableIdentities(manifest, entity);
+      return sourceTables.has(entry.source_table) &&
+        entry.target_table === legacyEntityTargetTable(entity) &&
+        entry.mapping_role === "primary";
+    });
+  }).length ?? 0;
+
+  return countCheck("legacy_id_map.foundation_rules", 0, invalidCount);
 }
 
 function legacyEntityTargetTable(entity: string): string {

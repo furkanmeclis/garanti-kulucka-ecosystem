@@ -1,5 +1,12 @@
 import { createHash } from "node:crypto";
-import type { BatchReadOptions, LegacyRecord, LegacySource, MigrationEntity } from "./types.js";
+import type {
+  BatchReadOptions,
+  LegacyRecord,
+  LegacySource,
+  MigrationEntity,
+  SourceColumnSnapshot,
+  SourceTableSnapshot,
+} from "./types.js";
 
 export interface LegacyQueryResult<Row extends Record<string, unknown> = Record<string, unknown>> {
   readonly rows: Row[];
@@ -91,6 +98,56 @@ export class LegacyDatabaseSource implements LegacySource {
     return result.rows.map((row) => this.toLegacyRecord(table, row));
   }
 
+  async describeTables(entities: readonly MigrationEntity[]): Promise<SourceTableSnapshot[]> {
+    const snapshots: SourceTableSnapshot[] = [];
+    for (const entity of entities) {
+      const table = this.resolveTable(entity);
+      const identity = splitTableIdentity(table.tableName);
+      const result = await this.db.query<{
+        column_name: string;
+        ordinal_position: number | string;
+        data_type: string;
+        udt_name: string;
+        is_nullable: "YES" | "NO";
+      }>(
+        `select column_name, ordinal_position, data_type, udt_name, is_nullable
+         from information_schema.columns
+         where table_schema = $1 and table_name = $2
+         order by ordinal_position asc`,
+        [identity.schema, identity.table],
+      );
+      if (result.rows.length === 0) {
+        throw new Error(`Legacy source table introspection returned no columns for ${table.tableName}`);
+      }
+      const columns: SourceColumnSnapshot[] = result.rows.map((column) => {
+        const ordinalPosition = Number(column.ordinal_position);
+        if (!Number.isSafeInteger(ordinalPosition) || ordinalPosition < 1) {
+          throw new Error(`Legacy source returned invalid column ordinal for ${table.tableName}.${column.column_name}`);
+        }
+        return {
+          name: column.column_name,
+          ordinalPosition,
+          dataType: column.data_type,
+          udtName: column.udt_name,
+          nullable: column.is_nullable === "YES",
+        };
+      });
+      if (!columns.some((column) => column.name === table.idColumn)) {
+        throw new Error(
+          `Legacy source table ${table.tableName} is missing configured id column ${table.idColumn}`,
+        );
+      }
+      snapshots.push({
+        entity,
+        schema: identity.schema,
+        table: identity.table,
+        idColumn: table.idColumn,
+        columns,
+      });
+    }
+    return snapshots;
+  }
+
   private resolveTable(entity: MigrationEntity): ResolvedLegacyTable {
     const table = this.tables[entity];
     if (!table) {
@@ -116,6 +173,13 @@ export class LegacyDatabaseSource implements LegacySource {
       checksum: checksumPayload(payload),
     };
   }
+}
+
+function splitTableIdentity(tableName: string): { schema: string; table: string } {
+  const parts = tableName.split(".");
+  if (parts.length === 1) return { schema: "public", table: parts[0] as string };
+  if (parts.length === 2) return { schema: parts[0] as string, table: parts[1] as string };
+  throw new Error(`Legacy source table must be unqualified or schema-qualified: ${tableName}`);
 }
 
 export function resolveTableMap(

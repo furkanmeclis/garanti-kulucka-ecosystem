@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { canonicalMigrationEntities } from "../src/plan.js";
+import { calculateSourceManifestHash } from "../src/source-manifest.js";
 import {
   createMigrationVerificationReport,
   verifyLegacyIdMapCoverage,
@@ -7,26 +9,50 @@ import {
   verifyMessageConversations,
   verifyMessageOrdering,
   verifyOrderTotals,
-  verifyRowCounts,
+  verifySourceManifestEntityCoverage,
+  verifySourceManifestIntegrity,
 } from "../src/verify.js";
+import type { MigrationEntity, SourceManifest } from "../src/types.js";
 
 describe("migration verification", () => {
-  it("reports row count mismatches by entity", () => {
-    expect(verifyRowCounts({ customers: 2, messages: 3 }, { customers: 2, messages: 1 })).toEqual([
-      {
-        name: "row_count.customers",
-        status: "passed",
-        expected: 2,
-        actual: 2,
-      },
-      {
-        name: "row_count.messages",
-        status: "failed",
-        expected: 3,
-        actual: 1,
-        message: "Expected 3 messages rows, found 1",
-      },
-    ]);
+  it("ignores unrelated global target rows and detects source rows collapsing onto one target", () => {
+    const report = createMigrationVerificationReport({
+      runId: "run_2026_09",
+      sourceManifest: manifest({ customers: 2 }),
+      targetPublicIds: targetPublicIds({ customers: ["cus_1"] }),
+      customers: [
+        { public_id: "cus_1", phone: null, email: "one@example.com" },
+        { public_id: "cus_unrelated", phone: null, email: "unrelated@example.com" },
+      ],
+      customerExternalIdentities: [],
+      conversations: [],
+      messages: [],
+      orders: [],
+      orderItems: [],
+      shipments: [],
+      legacyIdMaps: ["1", "2"].map((sourceId) => ({
+        run_id: "run_2026_09",
+        source_system: "legacy_postgres",
+        source_table: "legacy.musteriler",
+        source_id: sourceId,
+        target_table: "customers",
+        mapping_role: "primary",
+        target_id: "cus_1",
+      })),
+    });
+
+    expect(report.checks).toContainEqual(expect.objectContaining({
+      name: "legacy_id_map.source_coverage.customers",
+      status: "passed",
+      expected: 2,
+      actual: 2,
+    }));
+    expect(report.checks).toContainEqual(expect.objectContaining({
+      name: "legacy_id_map.target_coverage.customers",
+      status: "failed",
+      expected: 2,
+      actual: 1,
+    }));
   });
 
   it("detects message ordering regressions inside a conversation", () => {
@@ -53,8 +79,9 @@ describe("migration verification", () => {
   it("detects orphan messages without a migrated conversation", () => {
     expect(
       verifyMessageConversations({
-        sourceCounts: {},
-        targetCounts: {},
+        runId: "run_2026_09",
+        sourceManifest: manifest({}),
+        targetPublicIds: targetPublicIds(),
         customers: [],
         customerExternalIdentities: [],
         conversations: [
@@ -85,8 +112,9 @@ describe("migration verification", () => {
 
   it("detects orphan customer identities and conversation integration accounts", () => {
     const snapshot = {
-      sourceCounts: {},
-      targetCounts: {},
+      runId: "run_2026_09",
+      sourceManifest: manifest({}),
+      targetPublicIds: targetPublicIds(),
       customers: [{ public_id: "cus_1", phone: null, email: null }],
       customerExternalIdentities: [
         {
@@ -150,8 +178,9 @@ describe("migration verification", () => {
 
   it("detects missing legacy id map coverage and dangling target references", () => {
     const checks = verifyLegacyIdMapCoverage({
-      sourceCounts: { customers: 2, customer_external_identities: 1, orders: 1, order_items: 1 },
-      targetCounts: { customers: 2, customer_external_identities: 0, orders: 1, order_items: 1 },
+      runId: "run_2026_09",
+      sourceManifest: manifest({ customers: 2, customer_external_identities: 1, orders: 1, order_items: 1 }),
+      targetPublicIds: targetPublicIds({ customers: ["cus_1"], orders: ["ord_1"], order_items: ["oit_1"] }),
       customers: [{ public_id: "cus_1", phone: null, email: "customer@example.com" }],
       customerExternalIdentities: [],
       conversations: [],
@@ -169,7 +198,8 @@ describe("migration verification", () => {
       shipments: [],
       legacyIdMaps: [
         {
-          source_system: "legacy",
+          run_id: "run_2026_09",
+          source_system: "legacy_postgres",
           source_table: "legacy.musteriler",
           source_id: "1",
           target_table: "customers",
@@ -177,7 +207,8 @@ describe("migration verification", () => {
           target_id: "cus_1",
         },
         {
-          source_system: "legacy",
+          run_id: "run_2026_09",
+          source_system: "legacy_postgres",
           source_table: "legacy.siparisler",
           source_id: "10",
           target_table: "orders",
@@ -185,7 +216,8 @@ describe("migration verification", () => {
           target_id: "ord_missing",
         },
         {
-          source_system: "legacy",
+          run_id: "run_2026_09",
+          source_system: "legacy_postgres",
           source_table: "legacy.musteriler",
           source_id: "1",
           target_table: "customer_external_identities",
@@ -193,19 +225,29 @@ describe("migration verification", () => {
           target_id: "cei_missing",
         },
         {
-          source_system: "legacy",
+          run_id: "run_2026_09",
+          source_system: "legacy_postgres",
           source_table: "legacy.siparis_kalemleri",
           source_id: "11",
           target_table: "order_items",
           mapping_role: "primary",
           target_id: "oit_missing",
         },
+        {
+          run_id: "another_run",
+          source_system: "legacy_postgres",
+          source_table: "legacy.musteriler",
+          source_id: "2",
+          target_table: "customers",
+          mapping_role: "primary",
+          target_id: "cus_cross_run",
+        },
       ],
     });
 
     expect(checks).toContainEqual(
       expect.objectContaining({
-        name: "legacy_id_map.customers",
+        name: "legacy_id_map.source_coverage.customers",
         status: "failed",
         expected: 2,
         actual: 1,
@@ -213,20 +255,28 @@ describe("migration verification", () => {
     );
     expect(checks).toContainEqual(
       expect.objectContaining({
-        name: "legacy_id_map.orders",
+        name: "legacy_id_map.source_coverage.orders",
         status: "passed",
       }),
     );
     expect(checks).toContainEqual(
       expect.objectContaining({
-        name: "legacy_id_map.customer_external_identities",
+        name: "legacy_id_map.source_coverage.customer_external_identities",
+        status: "failed",
+        actual: 0,
+      }),
+    );
+    expect(checks).toContainEqual(
+      expect.objectContaining({
+        name: "legacy_id_map.source_coverage.order_items",
         status: "passed",
       }),
     );
     expect(checks).toContainEqual(
       expect.objectContaining({
-        name: "legacy_id_map.order_items",
-        status: "passed",
+        name: "legacy_id_map.foundation_rules",
+        status: "failed",
+        actual: 1,
       }),
     );
     expect(checks).toContainEqual(
@@ -238,10 +288,157 @@ describe("migration verification", () => {
     );
   });
 
+  it("detects dangling id maps in canonical tables outside the richer relation snapshots", () => {
+    const checks = verifyLegacyIdMapCoverage({
+      runId: "run_2026_09",
+      sourceManifest: manifest({ products: 1 }),
+      targetPublicIds: targetPublicIds({ products: [] }),
+      customers: [],
+      customerExternalIdentities: [],
+      conversations: [],
+      messages: [],
+      orders: [],
+      orderItems: [],
+      shipments: [],
+      legacyIdMaps: [{
+        run_id: "run_2026_09",
+        source_system: "legacy_postgres",
+        source_table: "legacy.urunler",
+        source_id: "7",
+        target_table: "products",
+        mapping_role: "primary",
+        target_id: "prd_missing",
+      }],
+    });
+
+    expect(checks).toContainEqual(expect.objectContaining({
+      name: "legacy_id_map.source_coverage.products",
+      status: "passed",
+    }));
+    expect(checks).toContainEqual(expect.objectContaining({
+      name: "legacy_id_map.target_references",
+      status: "failed",
+      actual: 1,
+    }));
+  });
+
+  it("keeps malformed same-run mappings visible and fails the foundation rules", () => {
+    const checks = verifyLegacyIdMapCoverage({
+      runId: "run_2026_09",
+      sourceManifest: manifest({ customers: 1 }),
+      targetPublicIds: targetPublicIds({ customers: ["cus_1"] }),
+      customers: [],
+      customerExternalIdentities: [],
+      conversations: [],
+      messages: [],
+      orders: [],
+      orderItems: [],
+      shipments: [],
+      legacyIdMaps: [
+        {
+          run_id: "run_2026_09",
+          source_system: "unexpected_source",
+          source_table: "legacy.musteriler",
+          source_id: "1",
+          target_table: "customers",
+          mapping_role: "primary",
+          target_id: "cus_1",
+        },
+        {
+          run_id: "run_2026_09",
+          source_system: "legacy_postgres",
+          source_table: "legacy.unexpected_table",
+          source_id: "2",
+          target_table: "unknown_targets",
+          mapping_role: "synthetic",
+          target_id: "unknown_1",
+        },
+      ],
+    });
+
+    expect(checks).toContainEqual(expect.objectContaining({
+      name: "legacy_id_map.foundation_rules",
+      status: "failed",
+      actual: 2,
+    }));
+    expect(checks).toContainEqual(expect.objectContaining({
+      name: "legacy_id_map.target_references",
+      status: "failed",
+      actual: 1,
+    }));
+  });
+
+  it("fails manifest integrity before deriving row-count checks", () => {
+    const invalidManifest = { ...manifest({ customers: 1 }), sourceManifestHash: "sha256:invalid" };
+    expect(verifySourceManifestIntegrity(invalidManifest)).toMatchObject({ status: "failed" });
+
+    const report = createMigrationVerificationReport({
+      runId: "run_2026_09",
+      sourceManifest: invalidManifest,
+      targetPublicIds: targetPublicIds({ customers: ["cus_1"] }),
+      customers: [{ public_id: "cus_1", phone: null, email: null }],
+      customerExternalIdentities: [],
+      conversations: [],
+      messages: [],
+      orders: [],
+      orderItems: [],
+      shipments: [],
+      legacyIdMaps: [],
+    });
+
+    expect(report.checks).toContainEqual(expect.objectContaining({
+      name: "source_manifest.integrity",
+      status: "failed",
+    }));
+    expect(report.checks.some((check) => check.name.includes("coverage.customers"))).toBe(false);
+  });
+
+  it.each([
+    ["missing entity", (value: SourceManifest) => ({
+      ...value,
+      tables: value.tables.slice(1),
+      rowCounts: value.rowCounts.slice(1),
+    })],
+    ["duplicate entity", (value: SourceManifest) => ({
+      ...value,
+      tables: [...value.tables.slice(0, -1), value.tables[0]!],
+      rowCounts: [...value.rowCounts.slice(0, -1), value.rowCounts[0]!],
+    })],
+    ["unknown entity", (value: SourceManifest) => ({
+      ...value,
+      tables: [...value.tables.slice(0, -1), { ...value.tables.at(-1)!, entity: "unknown_entity" }],
+      rowCounts: [...value.rowCounts.slice(0, -1), { ...value.rowCounts.at(-1)!, entity: "unknown_entity" }],
+    })],
+    ["disagreeing sets", (value: SourceManifest) => ({
+      ...value,
+      tables: [...value.tables.slice(0, -1), value.tables[0]!],
+    })],
+  ])("fails source manifest entity coverage for a %s", (_case, mutate) => {
+    const changed = mutate(manifest({}));
+    const invalid = {
+      ...changed,
+      sourceManifestHash: calculateSourceManifestHash(changed),
+    } as SourceManifest;
+
+    expect(verifySourceManifestEntityCoverage(invalid)).toMatchObject({
+      name: "source_manifest.entity_coverage",
+      status: "failed",
+      actual: 0,
+    });
+  });
+
+  it("accepts a manifest containing every canonical entity exactly once in both sets", () => {
+    expect(verifySourceManifestEntityCoverage(manifest({ customers: 1 }))).toMatchObject({
+      status: "passed",
+      actual: 1,
+    });
+  });
+
   it("creates a failed report for orphan, duplicate, ordering, and total issues", () => {
     const report = createMigrationVerificationReport({
-      sourceCounts: { customers: 2, orders: 1 },
-      targetCounts: { customers: 2, orders: 1 },
+      runId: "run_2026_09",
+      sourceManifest: manifest({ customers: 2, orders: 1 }),
+      targetPublicIds: targetPublicIds({ customers: ["cus_1", "cus_2"], orders: ["ord_1"] }),
       customers: [
         { public_id: "cus_1", phone: "555", email: null },
         { public_id: "cus_2", phone: "555", email: null },
@@ -280,7 +477,8 @@ describe("migration verification", () => {
       shipments: [{ public_id: "shp_1", order_public_id: "ord_missing", customer_public_id: "cus_1" }],
       legacyIdMaps: [
         {
-          source_system: "legacy",
+          run_id: "run_2026_09",
+          source_system: "legacy_postgres",
           source_table: "legacy.musteriler",
           source_id: "1",
           target_table: "customers",
@@ -288,7 +486,8 @@ describe("migration verification", () => {
           target_id: "cus_1",
         },
         {
-          source_system: "legacy",
+          run_id: "run_2026_09",
+          source_system: "legacy_postgres",
           source_table: "legacy.siparisler",
           source_id: "10",
           target_table: "orders",
@@ -300,8 +499,49 @@ describe("migration verification", () => {
     });
 
     expect(report.status).toBe("failed");
-    expect(report.totals.failed).toBe(7);
+    expect(report.totals.failed).toBe(8);
     expect(report.checks.map((check) => check.name)).toContain("referential_integrity.shipments");
     expect(report.generatedAt).toBe("2026-01-01T00:00:00.000Z");
   });
 });
+
+function manifest(counts: Record<string, number>): SourceManifest {
+  const manifestWithoutHash = {
+    sourceSystem: "legacy_postgres",
+    databaseIdentity: { host: "source", port: "5432", database: "legacy" },
+    tables: canonicalMigrationEntities.map((entity) => ({
+      entity,
+      schema: "legacy",
+      table: sourceTableName(entity),
+      idColumn: "id",
+      columns: [],
+    })),
+    rowCounts: canonicalMigrationEntities.map((entity) => ({
+      entity,
+      rows: counts[entity] ?? 0,
+    })),
+    batchSize: 500,
+    mappingCatalogVersion: "p1-foundation-v1",
+    planFingerprint: "sha256:plan",
+  };
+  return { ...manifestWithoutHash, sourceManifestHash: calculateSourceManifestHash(manifestWithoutHash) };
+}
+
+function targetPublicIds(
+  overrides: Partial<Record<MigrationEntity, readonly string[]>> = {},
+): Record<MigrationEntity, readonly string[]> {
+  return Object.fromEntries(
+    canonicalMigrationEntities.map((entity) => [entity, overrides[entity] ?? []]),
+  ) as Record<MigrationEntity, readonly string[]>;
+}
+
+function sourceTableName(entity: MigrationEntity): string {
+  const names: Partial<Record<MigrationEntity, string>> = {
+    customers: "musteriler",
+    customer_external_identities: "musteri_hesaplari",
+    orders: "siparisler",
+    order_items: "siparis_kalemleri",
+    products: "urunler",
+  };
+  return names[entity] ?? entity;
+}

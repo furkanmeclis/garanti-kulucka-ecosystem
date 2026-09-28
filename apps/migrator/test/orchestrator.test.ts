@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { runMigration } from "../src/orchestrator.js";
+import { canonicalMigrationEntities } from "../src/plan.js";
 import type {
   CanonicalRecord,
   CanonicalWriteResult,
@@ -15,6 +16,10 @@ import type {
   MigrationBatchStateSuccess,
   MigrationEntity,
   MigrationTarget,
+  MigrationRunRegistration,
+  MigrationRunState,
+  SourceManifest,
+  SourceTableSnapshot,
 } from "../src/types.js";
 
 class FixtureSource implements LegacySource {
@@ -31,11 +36,30 @@ class FixtureSource implements LegacySource {
     const offset = options.offset ?? 0;
     return (this.records[entity] ?? []).slice(offset, offset + options.limit);
   }
+
+  async describeTables(entities: readonly MigrationEntity[]): Promise<SourceTableSnapshot[]> {
+    return entities.map((entity) => ({
+      entity,
+      schema: "public",
+      table: entity,
+      idColumn: "id",
+      columns: [{ name: "id", ordinalPosition: 1, dataType: "bigint", udtName: "int8", nullable: false }],
+    }));
+  }
 }
 
 class MemoryTarget implements MigrationTarget {
   readonly records: CanonicalRecord[] = [];
   readonly states = new Map<string, MigrationBatchState>();
+  readonly runs = new Map<string, MigrationRunState>();
+
+  async registerMigrationRun(input: MigrationRunRegistration): Promise<MigrationRunState> {
+    const existing = this.runs.get(input.runId);
+    if (existing) return existing;
+    const state = { ...input, createdAt: new Date("2026-09-28T00:00:00.000Z") };
+    this.runs.set(input.runId, state);
+    return state;
+  }
 
   async writeCanonicalRecord(input: CanonicalRecord): Promise<CanonicalWriteResult> {
     this.records.push(input);
@@ -125,6 +149,8 @@ describe("migration orchestrator", () => {
       batchSize: 100,
       entities: ["customers"],
       now: new Date("2026-09-28T00:00:00.000Z"),
+      sourceSystem: "legacy_postgres",
+      sourceDatabaseIdentity: sourceIdentity,
     });
 
     expect(result.plan.entities).toEqual([{ entity: "customers", totalRows: 1, batches: 1 }]);
@@ -142,7 +168,9 @@ describe("migration orchestrator", () => {
       target,
       runId: "legacy-import-2026-09",
       batchSize: 100,
-      entities: ["customers" as const],
+      entities: [...canonicalMigrationEntities],
+      sourceSystem: "legacy_postgres",
+      sourceDatabaseIdentity: sourceIdentity,
     };
 
     await expect(runMigration(input)).resolves.toMatchObject({
@@ -165,8 +193,35 @@ describe("migration orchestrator", () => {
     expect(target.records[0]?.payload).not.toHaveProperty("updated_at");
   });
 
+  it("rejects partial apply before registering a run or writing batch state", async () => {
+    const source = new FixtureSource({ customers: [customer] });
+    const target = new MemoryTarget();
+
+    await expect(runMigration({
+      mode: "apply",
+      source,
+      target,
+      runId: "partial-import-2026-09",
+      batchSize: 100,
+      entities: ["customers"],
+      sourceSystem: "legacy_postgres",
+      sourceDatabaseIdentity: sourceIdentity,
+    })).rejects.toThrow("Apply mode requires each canonical migration entity exactly once");
+
+    expect(target.runs).toHaveLength(0);
+    expect(target.states).toHaveLength(0);
+    expect(target.records).toHaveLength(0);
+    expect(source.reads).toHaveLength(0);
+  });
+
 });
 
 function stateKey(runId: string, entity: MigrationEntity, batchNumber: number): string {
   return `${runId}:${entity}:${batchNumber}`;
 }
+
+const sourceIdentity: SourceManifest["databaseIdentity"] = {
+  host: "legacy-db.internal",
+  port: "5432",
+  database: "legacy",
+};

@@ -179,7 +179,7 @@ describe("migrator commands", () => {
       await expect(
         runMigratorCommand(
           "verify",
-          { TARGET_DATABASE_URL: "postgres://target/canonical" },
+          { TARGET_DATABASE_URL: "postgres://target/canonical", MIGRATION_RUN_ID: "run_2026_09" },
           { reportFile },
           {
             executeMigration: vi.fn(),
@@ -228,6 +228,24 @@ describe("migrator commands", () => {
     expect(report.status).toBe("failed");
     expect(report.checks).toContainEqual(
       expect.objectContaining({
+        name: "canonical_table.customer_addresses",
+        status: "failed",
+      }),
+    );
+    expect(report.checks).toContainEqual(
+      expect.objectContaining({
+        name: "canonical_table.products",
+        status: "failed",
+      }),
+    );
+    expect(report.checks).toContainEqual(
+      expect.objectContaining({
+        name: "canonical_table.shipment_tracking_events",
+        status: "failed",
+      }),
+    );
+    expect(report.checks).toContainEqual(
+      expect.objectContaining({
         name: "canonical_table.customer_external_identities",
         status: "failed",
         expected: 1,
@@ -248,6 +266,12 @@ describe("migrator commands", () => {
         status: "failed",
         expected: 1,
         actual: 0,
+      }),
+    );
+    expect(report.checks).toContainEqual(
+      expect.objectContaining({
+        name: "canonical_table.migration_runs",
+        status: "failed",
       }),
     );
     expect(JSON.stringify(report)).not.toContain("DATABASE_URL");

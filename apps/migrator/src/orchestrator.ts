@@ -1,6 +1,7 @@
 import { applyMigrationBatchWithState, createCanonicalEntityTransformer } from "./apply.js";
-import { createMigrationPlan, defaultMigrationEntities } from "./plan.js";
+import { canonicalMigrationEntities, createMigrationPlan, defaultMigrationEntities } from "./plan.js";
 import { createDryRunReport } from "./reports.js";
+import { createSourceManifest, mappingCatalogVersion, registerMigrationRun } from "./source-manifest.js";
 import type {
   DryRunReport,
   LegacySource,
@@ -8,6 +9,8 @@ import type {
   MigrationEntity,
   MigrationPlan,
   MigrationTarget,
+  SourceDatabaseIdentity,
+  SourceManifest,
 } from "./types.js";
 
 interface RunMigrationInputBase {
@@ -15,6 +18,9 @@ interface RunMigrationInputBase {
   readonly batchSize: number;
   readonly entities?: MigrationEntity[];
   readonly now?: Date;
+  readonly sourceSystem: string;
+  readonly sourceDatabaseIdentity: SourceDatabaseIdentity;
+  readonly mappingCatalogVersion?: string;
 }
 
 export interface RunMigrationDryRunInput extends RunMigrationInputBase {
@@ -33,12 +39,17 @@ export interface MigrationRunResult {
   readonly mode: "dry-run" | "apply";
   readonly runId?: string;
   readonly plan: MigrationPlan;
+  readonly sourceManifest: SourceManifest;
   readonly dryRunReport?: DryRunReport;
   readonly batches: MigrationBatchApplyResult[];
 }
 
 export async function runMigration(input: RunMigrationInput): Promise<MigrationRunResult> {
   const entities = input.entities ?? defaultMigrationEntities;
+  if (input.mode === "apply") {
+    assertCompleteCanonicalEntitySelection(entities);
+  }
+
   const plan = await createMigrationPlan({
     source: input.source,
     mode: input.mode,
@@ -46,15 +57,25 @@ export async function runMigration(input: RunMigrationInput): Promise<MigrationR
     entities,
     ...(input.now ? { now: input.now } : {}),
   });
+  const sourceManifest = createSourceManifest({
+    sourceSystem: input.sourceSystem,
+    databaseIdentity: input.sourceDatabaseIdentity,
+    tables: await input.source.describeTables(entities),
+    plan,
+    mappingCatalogVersion: input.mappingCatalogVersion ?? mappingCatalogVersion,
+  });
 
   if (input.mode === "dry-run") {
     return {
       mode: input.mode,
       plan,
+      sourceManifest,
       dryRunReport: createDryRunReport({ plan, ...(input.now ? { now: input.now } : {}) }),
       batches: [],
     };
   }
+
+  await registerMigrationRun(input.target, input.runId, sourceManifest);
 
   const batches: MigrationBatchApplyResult[] = [];
   for (const batch of plan.batches) {
@@ -73,6 +94,18 @@ export async function runMigration(input: RunMigrationInput): Promise<MigrationR
     mode: input.mode,
     runId: input.runId,
     plan,
+    sourceManifest,
     batches,
   };
+}
+
+function assertCompleteCanonicalEntitySelection(entities: readonly MigrationEntity[]): void {
+  const selected = new Set<MigrationEntity>(entities);
+  const isComplete = entities.length === canonicalMigrationEntities.length
+    && selected.size === canonicalMigrationEntities.length
+    && canonicalMigrationEntities.every((entity) => selected.has(entity));
+
+  if (!isComplete) {
+    throw new Error("Apply mode requires each canonical migration entity exactly once");
+  }
 }

@@ -87,6 +87,56 @@ describe("LegacyDatabaseSource", () => {
     ]);
   });
 
+  it("captures a deterministic table and column snapshot from information_schema", async () => {
+    const db = new FakeDatabase([
+      { column_name: "id", ordinal_position: 1, data_type: "bigint", udt_name: "int8", is_nullable: "NO" },
+      { column_name: "ad", ordinal_position: "2", data_type: "text", udt_name: "text", is_nullable: "YES" },
+    ]);
+    const source = new LegacyDatabaseSource({
+      db,
+      sourceSystem: "legacy_postgres",
+      tables: { customers: { tableName: "legacy.musteriler", idColumn: "id" } },
+    });
+
+    await expect(source.describeTables(["customers"])).resolves.toEqual([{
+      entity: "customers",
+      schema: "legacy",
+      table: "musteriler",
+      idColumn: "id",
+      columns: [
+        { name: "id", ordinalPosition: 1, dataType: "bigint", udtName: "int8", nullable: false },
+        { name: "ad", ordinalPosition: 2, dataType: "text", udtName: "text", nullable: true },
+      ],
+    }]);
+    expect(db.queries[0]).toMatchObject({ parameters: ["legacy", "musteriler"] });
+  });
+
+  it("rejects a missing table during introspection", async () => {
+    const source = new LegacyDatabaseSource({
+      db: new FakeDatabase([]),
+      sourceSystem: "legacy_postgres",
+      tables: { customers: "legacy.musteriler" },
+    });
+
+    await expect(source.describeTables(["customers"])).rejects.toThrow(
+      "Legacy source table introspection returned no columns for legacy.musteriler",
+    );
+  });
+
+  it("rejects a configured id column missing from the introspected table", async () => {
+    const source = new LegacyDatabaseSource({
+      db: new FakeDatabase([
+        { column_name: "name", ordinal_position: 1, data_type: "text", udt_name: "text", is_nullable: "NO" },
+      ]),
+      sourceSystem: "legacy_postgres",
+      tables: { customers: { tableName: "legacy.musteriler", idColumn: "legacy_id" } },
+    });
+
+    await expect(source.describeTables(["customers"])).rejects.toThrow(
+      "Legacy source table legacy.musteriler is missing configured id column legacy_id",
+    );
+  });
+
   it("reads planned offset batches without treating offsets as source ids", async () => {
     const db = new FakeDatabase([{ legacy_id: 9, name: "Grace" }]);
     const source = new LegacyDatabaseSource({

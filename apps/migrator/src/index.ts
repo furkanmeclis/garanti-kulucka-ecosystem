@@ -8,6 +8,7 @@ export * from "./logging.js";
 export * from "./plan.js";
 export * from "./reports.js";
 export * from "./source-transaction.js";
+export * from "./source-manifest.js";
 export * from "./target.js";
 export * from "./types.js";
 export * from "./verify.js";

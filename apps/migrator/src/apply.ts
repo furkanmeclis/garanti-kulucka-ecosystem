@@ -15,13 +15,12 @@ import type {
 export interface ApplyMigrationBatchInput {
   readonly source: LegacySource;
   readonly target: MigrationTarget;
+  readonly runId: string;
   readonly batch: MigrationBatch;
   readonly transform?: LegacyRecordTransformer;
 }
 
-export interface ApplyMigrationBatchWithStateInput extends ApplyMigrationBatchInput {
-  readonly runId: string;
-}
+export type ApplyMigrationBatchWithStateInput = ApplyMigrationBatchInput;
 
 export type LegacyRecordTransformer = (record: LegacyRecord) => CanonicalRecord | null;
 
@@ -73,6 +72,7 @@ export async function applyMigrationBatch(
     result.writtenRows += 1;
 
     const idMapResult = await upsertLegacyIdMap(input.target, {
+      runId: input.runId,
       sourceSystem: legacyRecord.sourceSystem,
       sourceTable: legacyRecord.sourceTable,
       sourceId: legacyRecord.sourceId,

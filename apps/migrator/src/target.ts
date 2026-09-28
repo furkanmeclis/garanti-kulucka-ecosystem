@@ -1,6 +1,12 @@
 import { createHash } from "node:crypto";
-import type { AppDatabase, LegacyIdMapTable, MigrationBatchesTable } from "@garanti-kulucka/database";
-import type { Insertable } from "kysely";
+import type {
+  AppDatabase,
+  LegacyIdMapTable,
+  MigrationBatchesTable,
+  MigrationRunsTable,
+} from "@garanti-kulucka/database";
+import type { Insertable, Selectable } from "kysely";
+import { assertMigrationRunId } from "./source-manifest.js";
 import type {
   CanonicalRecord,
   CanonicalWriteResult,
@@ -14,6 +20,11 @@ import type {
   MigrationBatchStateSuccess,
   MigrationEntity,
   MigrationTarget,
+  MigrationRunRegistration,
+  MigrationRunState,
+  SourceDatabaseIdentity,
+  SourceEntityRowCount,
+  SourceTableSnapshot,
 } from "./types.js";
 
 const canonicalTargetTables = new Set<MigrationEntity>([
@@ -91,6 +102,7 @@ export class DatabaseMigrationTarget implements MigrationTarget {
     const row = await this.db
       .selectFrom("legacy_id_map")
       .selectAll()
+      .where("run_id", "=", input.runId)
       .where("source_system", "=", input.sourceSystem)
       .where("source_table", "=", input.sourceTable)
       .where("source_id", "=", input.sourceId)
@@ -105,6 +117,7 @@ export class DatabaseMigrationTarget implements MigrationTarget {
     const row = await this.db
       .insertInto("legacy_id_map")
       .values({
+        run_id: input.runId,
         source_system: input.sourceSystem,
         source_table: input.sourceTable,
         source_id: input.sourceId,
@@ -114,7 +127,7 @@ export class DatabaseMigrationTarget implements MigrationTarget {
         checksum: input.checksum,
       })
       .onConflict((conflict) =>
-        conflict.columns(["source_system", "source_table", "source_id", "target_table", "mapping_role"]).doUpdateSet({
+        conflict.columns(["run_id", "source_system", "source_table", "source_id", "target_table", "mapping_role"]).doUpdateSet({
           target_id: input.targetId,
           checksum: input.checksum,
           migrated_at: new Date(),
@@ -124,6 +137,34 @@ export class DatabaseMigrationTarget implements MigrationTarget {
       .executeTakeFirstOrThrow();
 
     return mapLegacyIdMapRow(row);
+  }
+
+  async registerMigrationRun(input: MigrationRunRegistration): Promise<MigrationRunState> {
+    assertMigrationRunId(input.runId);
+    await this.db
+      .insertInto("migration_runs")
+      .values({
+        public_id: migrationRunPublicId(input.runId),
+        run_id: input.runId,
+        source_system: input.manifest.sourceSystem,
+        source_database_identity: input.manifest.databaseIdentity,
+        table_snapshot: input.manifest.tables,
+        row_counts: input.manifest.rowCounts,
+        batch_size: input.manifest.batchSize,
+        mapping_catalog_version: input.manifest.mappingCatalogVersion,
+        plan_fingerprint: input.manifest.planFingerprint,
+        source_manifest_hash: input.manifest.sourceManifestHash,
+      })
+      .onConflict((conflict) => conflict.column("run_id").doNothing())
+      .execute();
+
+    const row = await this.db
+      .selectFrom("migration_runs")
+      .selectAll()
+      .where("run_id", "=", input.runId)
+      .executeTakeFirstOrThrow();
+
+    return mapMigrationRunState(row);
   }
 
   async findMigrationBatchState(input: MigrationBatchStateKey): Promise<MigrationBatchState | null> {
@@ -294,11 +335,13 @@ interface DynamicInsertBuilder {
 interface DynamicConflictBuilder {
   column(column: string): DynamicConflictBuilder;
   columns(columns: string[]): DynamicConflictBuilder;
+  doNothing(): DynamicConflictBuilder;
   doUpdateSet(values: Record<string, unknown>): DynamicConflictBuilder;
 }
 
 function mapLegacyIdMapRow(row: Insertable<LegacyIdMapTable> & { migrated_at?: Date | string }): LegacyIdMapEntry {
   return {
+    runId: row.run_id,
     sourceSystem: row.source_system,
     sourceTable: row.source_table,
     sourceId: row.source_id,
@@ -340,4 +383,26 @@ function mapMigrationBatchStateRow(row: MigrationBatchStateRow): MigrationBatchS
 function migrationBatchPublicId(runId: string, entity: MigrationEntity, batchNumber: number): string {
   const hash = createHash("sha256").update(`${runId}:${entity}:${batchNumber}`).digest("hex").slice(0, 24);
   return `mbt_${hash}`;
+}
+
+function migrationRunPublicId(runId: string): string {
+  const hash = createHash("sha256").update(runId).digest("hex").slice(0, 24);
+  return `mrn_${hash}`;
+}
+
+function mapMigrationRunState(row: Selectable<MigrationRunsTable>): MigrationRunState {
+  return {
+    runId: row.run_id,
+    manifest: {
+      sourceSystem: row.source_system,
+      databaseIdentity: row.source_database_identity as SourceDatabaseIdentity,
+      tables: row.table_snapshot as SourceTableSnapshot[],
+      rowCounts: row.row_counts as SourceEntityRowCount[],
+      batchSize: Number(row.batch_size),
+      mappingCatalogVersion: row.mapping_catalog_version,
+      planFingerprint: row.plan_fingerprint,
+      sourceManifestHash: row.source_manifest_hash,
+    },
+    createdAt: row.created_at,
+  };
 }

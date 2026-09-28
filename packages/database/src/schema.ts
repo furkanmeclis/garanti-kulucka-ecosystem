@@ -44,6 +44,7 @@ export interface Database {
   audit_logs: AuditLogsTable;
   settings: SettingsTable;
   job_runs: JobRunsTable;
+  migration_runs: MigrationRunsTable;
   migration_batches: MigrationBatchesTable;
   legacy_id_map: LegacyIdMapTable;
 }
@@ -363,8 +364,24 @@ export interface MigrationBatchesTable extends BaseTable {
   finished_at: Timestamp | null;
 }
 
+export interface MigrationRunsTable {
+  id: Id;
+  public_id: string;
+  run_id: string;
+  source_system: string;
+  source_database_identity: Json;
+  table_snapshot: Json;
+  row_counts: Json;
+  batch_size: number;
+  mapping_catalog_version: string;
+  plan_fingerprint: string;
+  source_manifest_hash: string;
+  created_at: Timestamp;
+}
+
 export interface LegacyIdMapTable {
   id: Id;
+  run_id: string;
   source_system: string;
   source_table: string;
   source_id: string;

@@ -1,8 +1,6 @@
-export interface PostgresDatabaseIdentity {
-  readonly host: string;
-  readonly port: string;
-  readonly database: string;
-}
+import type { SourceDatabaseIdentity } from "./types.js";
+
+export type PostgresDatabaseIdentity = SourceDatabaseIdentity;
 
 const postgresProtocols = new Set(["postgres:", "postgresql:"]);
 

@@ -18,6 +18,9 @@ import type {
   MigrationBatchStateStart,
   MigrationBatchStateSuccess,
   MigrationTarget,
+  MigrationRunRegistration,
+  MigrationRunState,
+  SourceTableSnapshot,
 } from "../src/types.js";
 
 class FixtureSource implements LegacySource {
@@ -40,6 +43,16 @@ class FixtureSource implements LegacySource {
     const offset = options.offset ?? 0;
     return (this.records[entity] ?? []).slice(offset, offset + options.limit);
   }
+
+  async describeTables(entities: readonly MigrationEntity[]): Promise<SourceTableSnapshot[]> {
+    return entities.map((entity) => ({
+      entity,
+      schema: "public",
+      table: entity,
+      idColumn: "id",
+      columns: [],
+    }));
+  }
 }
 
 class MemoryTarget implements MigrationTarget {
@@ -47,6 +60,15 @@ class MemoryTarget implements MigrationTarget {
   private readonly records = new Map<string, CanonicalRecord>();
   private readonly states = new Map<string, MigrationBatchState>();
   readonly batchStateEvents: MigrationBatchState[] = [];
+  private readonly runs = new Map<string, MigrationRunState>();
+
+  async registerMigrationRun(input: MigrationRunRegistration): Promise<MigrationRunState> {
+    const existing = this.runs.get(input.runId);
+    if (existing) return existing;
+    const state = { ...input, createdAt: new Date("2026-01-02T03:04:05.000Z") };
+    this.runs.set(input.runId, state);
+    return state;
+  }
 
   get writtenRecords(): CanonicalRecord[] {
     return [...this.records.values()];
@@ -228,6 +250,7 @@ describe("migration foundation", () => {
   it("upserts legacy id map entries idempotently", async () => {
     const target = new MemoryTarget();
     const write: LegacyIdMapWrite = {
+      runId: "run_2026_01",
       sourceSystem: "legacy_supabase",
       sourceTable: "customers",
       sourceId: "42",
@@ -252,6 +275,31 @@ describe("migration foundation", () => {
         targetId: "2001",
       }),
     ).resolves.toMatchObject({ status: "created" });
+  });
+
+  it("isolates legacy id map entries by migration run", async () => {
+    const target = new MemoryTarget();
+    const write: LegacyIdMapWrite = {
+      runId: "run_1",
+      sourceSystem: "legacy_supabase",
+      sourceTable: "customers",
+      sourceId: "42",
+      targetTable: "customers",
+      mappingRole: "primary",
+      targetId: "cus_1",
+      checksum: "sha256:first",
+    };
+
+    await expect(upsertLegacyIdMap(target, write)).resolves.toMatchObject({ status: "created" });
+    await expect(upsertLegacyIdMap(target, { ...write, runId: "run_2" })).resolves.toMatchObject({
+      status: "created",
+    });
+    await expect(target.findLegacyIdMap({ ...write, runId: "run_1" })).resolves.toMatchObject({
+      runId: "run_1",
+    });
+    await expect(target.findLegacyIdMap({ ...write, runId: "run_2" })).resolves.toMatchObject({
+      runId: "run_2",
+    });
   });
 
   it("applies batches through source and target ports idempotently", async () => {
@@ -285,7 +333,7 @@ describe("migration foundation", () => {
       expectedRows: 2,
     } as const;
 
-    await expect(applyMigrationBatch({ source, target, batch })).resolves.toMatchObject({
+    await expect(applyMigrationBatch({ source, target, runId: "run_2026_01", batch })).resolves.toMatchObject({
       readRows: 2,
       writtenRows: 2,
       skippedRows: 0,
@@ -294,7 +342,7 @@ describe("migration foundation", () => {
       idMapUnchanged: 0,
     });
 
-    await expect(applyMigrationBatch({ source, target, batch })).resolves.toMatchObject({
+    await expect(applyMigrationBatch({ source, target, runId: "run_2026_01", batch })).resolves.toMatchObject({
       readRows: 2,
       writtenRows: 2,
       skippedRows: 0,
@@ -340,6 +388,7 @@ describe("migration foundation", () => {
       applyMigrationBatch({
         source,
         target,
+        runId: "run_2026_01",
         batch: {
           entity: "customers",
           batchNumber: 2,

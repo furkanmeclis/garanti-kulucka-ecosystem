@@ -1,6 +1,7 @@
 import { Client, types } from "pg";
 import type { ExecutePostgresMigrationInput } from "./commands.js";
 import { migrationApplyDisabledMessage } from "./errors.js";
+import { normalizePostgresDatabaseIdentity } from "./database-identity.js";
 import { LegacyDatabaseSource, type LegacyQueryDatabase, type LegacySourceTableMap } from "./legacy-source.js";
 import { runMigration, type MigrationRunResult } from "./orchestrator.js";
 import { canonicalMigrationEntities } from "./plan.js";
@@ -32,6 +33,8 @@ export async function executePostgresMigration(
       mode: input.mode,
       source,
       batchSize: input.batchSize,
+      sourceSystem: input.sourceSystem,
+      sourceDatabaseIdentity: normalizePostgresDatabaseIdentity(input.sourceDatabaseUrl),
     });
   });
 }

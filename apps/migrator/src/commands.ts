@@ -2,6 +2,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { Client } from "pg";
 import { migrationApplyDisabledMessage, toSafeMigratorError } from "./errors.js";
+import { canonicalMigrationEntities } from "./plan.js";
 import { createVerificationReport } from "./reports.js";
 import { createTargetVerificationSnapshot } from "./target-snapshot.js";
 import type { MigratorCommandReport, MigratorCommandReportError, VerificationReport } from "./types.js";
@@ -20,7 +21,7 @@ export interface MigratorCommandOptions {
 
 export interface MigratorCommandDependencies {
   readonly executeMigration: (input: ExecutePostgresMigrationInput) => Promise<unknown>;
-  readonly verifyTarget: (databaseUrl: string) => Promise<VerificationReport>;
+  readonly verifyTarget: (databaseUrl: string, runId: string) => Promise<VerificationReport>;
 }
 
 export interface ExecutePostgresDryRunInput {
@@ -56,15 +57,9 @@ export { migrationApplyDisabledMessage } from "./errors.js";
 const requiredCanonicalTables = [
   "users",
   "roles",
-  "customers",
-  "customer_external_identities",
-  "conversations",
-  "messages",
-  "orders",
-  "shipments",
   "integration_providers",
-  "integration_accounts",
-  "settings",
+  ...canonicalMigrationEntities,
+  "migration_runs",
   "migration_batches",
   "legacy_id_map",
 ];
@@ -96,7 +91,7 @@ export async function runMigratorCommand(
   try {
     if (command === "verify") {
       const targetDatabaseUrl = resolveTargetDatabaseUrl(env);
-      const verification = await dependencies.verifyTarget(targetDatabaseUrl);
+      const verification = await dependencies.verifyTarget(targetDatabaseUrl, resolveMigrationRunId(env));
       if (verification.status === "failed") {
         failedVerification = verification;
         throw new Error("Canonical database verification failed");
@@ -175,7 +170,7 @@ export function resolveTargetDatabaseUrl(env: NodeJS.ProcessEnv): string {
 export function resolveMigrationRunId(env: NodeJS.ProcessEnv): string {
   const runId = env.MIGRATION_RUN_ID?.trim();
   if (!runId) {
-    throw new Error("MIGRATION_RUN_ID is required for migrate --apply");
+    throw new Error("MIGRATION_RUN_ID is required for migrate --apply and verify");
   }
 
   return runId;
@@ -231,7 +226,7 @@ function createReportError(error: unknown): MigratorCommandReportError {
   return { message: "Unknown migrator error" };
 }
 
-async function verifyTargetDatabase(databaseUrl: string): Promise<VerificationReport> {
+async function verifyTargetDatabase(databaseUrl: string, runId: string): Promise<VerificationReport> {
   const client = new Client({ connectionString: databaseUrl });
   await client.connect();
 
@@ -251,7 +246,7 @@ async function verifyTargetDatabase(databaseUrl: string): Promise<VerificationRe
       return tableVerification;
     }
 
-    return createMigrationVerificationReport(await createTargetVerificationSnapshot(client));
+    return createMigrationVerificationReport(await createTargetVerificationSnapshot(client, runId));
   } finally {
     await client.end();
   }
