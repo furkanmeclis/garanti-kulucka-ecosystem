@@ -51,23 +51,24 @@ describe("file storage foundation", () => {
     expect(serializeFile(file)).not.toHaveProperty("created_by_user_id");
   });
 
-  it("creates secret-free upload instructions", () => {
+  it("creates secret-free presigned upload instructions", async () => {
     const storage = new MediaStorageService({
       endpoint: "http://garage:3900",
       region: "garage",
       accessKeyId: "access-key",
       secretAccessKey: "secret-key",
       bucket: "garanti-media",
+      uploadUrlExpiresSeconds: 600,
     });
 
-    expect(
-      storage.createUploadInstruction({
+    const instruction = await storage.createUploadInstruction({
         objectKey: "media/2026/01/02/fil_test/invoice.pdf",
         mimeType: "application/pdf",
         byteSize: 123,
         checksum: "checksum",
-      }),
-    ).toEqual({
+    });
+
+    expect(instruction).toMatchObject({
       method: "PUT",
       bucket: "garanti-media",
       object_key: "media/2026/01/02/fil_test/invoice.pdf",
@@ -76,8 +77,11 @@ describe("file storage foundation", () => {
         "content-length": "123",
         "x-amz-checksum-sha256": "checksum",
       },
-      presigned_url: null,
-      expires_at: null,
     });
+    expect(instruction.presigned_url).toContain("http://garage:3900/garanti-media/media/2026/01/02/fil_test/invoice.pdf");
+    expect(instruction.presigned_url).toContain("X-Amz-Signature=");
+    expect(instruction.presigned_url).toContain("X-Amz-Expires=600");
+    expect(instruction.expires_at).toEqual(expect.any(String));
+    expect(JSON.stringify(instruction)).not.toContain("secret-key");
   });
 });

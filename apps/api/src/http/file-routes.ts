@@ -41,7 +41,7 @@ export function createFileRoutes() {
     return context.json(
       {
         file: serializeFile(file),
-        upload: storage.createUploadInstruction({
+        upload: await storage.createUploadInstruction({
           objectKey: file.object_key,
           mimeType: file.mime_type,
           byteSize: file.byte_size,
