@@ -8,6 +8,7 @@ import type {
   LegacyIdMapKey,
   LegacyIdMapWrite,
   MigrationBatchState,
+  MigrationBatchStateKey,
   MigrationBatchStateFailure,
   MigrationBatchStateStart,
   MigrationBatchStateSuccess,
@@ -115,6 +116,18 @@ export class DatabaseMigrationTarget implements MigrationTarget {
       .executeTakeFirstOrThrow();
 
     return mapLegacyIdMapRow(row);
+  }
+
+  async findMigrationBatchState(input: MigrationBatchStateKey): Promise<MigrationBatchState | null> {
+    const row = await this.db
+      .selectFrom("migration_batches")
+      .selectAll()
+      .where("run_id", "=", input.runId)
+      .where("entity", "=", input.batch.entity)
+      .where("batch_number", "=", input.batch.batchNumber)
+      .executeTakeFirst();
+
+    return row ? mapMigrationBatchStateRow(row) : null;
   }
 
   async recordMigrationBatchStarted(input: MigrationBatchStateStart): Promise<MigrationBatchState> {

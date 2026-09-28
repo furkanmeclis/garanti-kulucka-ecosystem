@@ -83,6 +83,14 @@ export async function applyMigrationBatch(
 export async function applyMigrationBatchWithState(
   input: ApplyMigrationBatchWithStateInput,
 ): Promise<MigrationBatchApplyResult> {
+  const existing = await input.target.findMigrationBatchState({
+    runId: input.runId,
+    batch: input.batch,
+  });
+  if (existing?.status === "succeeded") {
+    return migrationBatchResultFromState(existing);
+  }
+
   await input.target.recordMigrationBatchStarted({
     runId: input.runId,
     batch: input.batch,
@@ -104,6 +112,30 @@ export async function applyMigrationBatchWithState(
     });
     throw error;
   }
+}
+
+function migrationBatchResultFromState(state: {
+  readonly entity: MigrationBatch["entity"];
+  readonly batchNumber: number;
+  readonly readRows: number;
+  readonly writtenRows: number;
+  readonly skippedRows: number;
+  readonly idMapCreated: number;
+  readonly idMapUpdated: number;
+  readonly idMapUnchanged: number;
+  readonly warnings: MigrationBatchApplyResult["warnings"];
+}): MigrationBatchApplyResult {
+  return {
+    entity: state.entity,
+    batchNumber: state.batchNumber,
+    readRows: state.readRows,
+    writtenRows: state.writtenRows,
+    skippedRows: state.skippedRows,
+    idMapCreated: state.idMapCreated,
+    idMapUpdated: state.idMapUpdated,
+    idMapUnchanged: state.idMapUnchanged,
+    warnings: state.warnings,
+  };
 }
 
 export function defaultLegacyRecordTransformer(record: LegacyRecord): CanonicalRecord {

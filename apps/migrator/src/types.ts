@@ -61,6 +61,7 @@ export interface MigrationTarget {
   writeCanonicalRecord(input: CanonicalRecord): Promise<CanonicalWriteResult>;
   findLegacyIdMap(input: LegacyIdMapKey): Promise<LegacyIdMapEntry | null>;
   upsertLegacyIdMap(input: LegacyIdMapWrite): Promise<LegacyIdMapEntry>;
+  findMigrationBatchState(input: MigrationBatchStateKey): Promise<MigrationBatchState | null>;
   recordMigrationBatchStarted(input: MigrationBatchStateStart): Promise<MigrationBatchState>;
   recordMigrationBatchSucceeded(input: MigrationBatchStateSuccess): Promise<MigrationBatchState>;
   recordMigrationBatchFailed(input: MigrationBatchStateFailure): Promise<MigrationBatchState>;
@@ -125,6 +126,11 @@ export interface MigrationBatchState {
   readonly errorMessage: string | null;
   readonly startedAt: Date | null;
   readonly finishedAt: Date | null;
+}
+
+export interface MigrationBatchStateKey {
+  readonly runId: string;
+  readonly batch: MigrationBatch;
 }
 
 export interface MigrationBatchStateStart {

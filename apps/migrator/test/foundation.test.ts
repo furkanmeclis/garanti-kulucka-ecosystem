@@ -13,6 +13,7 @@ import type {
   LegacySource,
   MigrationEntity,
   MigrationBatchState,
+  MigrationBatchStateKey,
   MigrationBatchStateFailure,
   MigrationBatchStateStart,
   MigrationBatchStateSuccess,
@@ -44,7 +45,8 @@ class FixtureSource implements LegacySource {
 class MemoryTarget implements MigrationTarget {
   private readonly entries = new Map<string, LegacyIdMapEntry>();
   private readonly records = new Map<string, CanonicalRecord>();
-  readonly batchStates: MigrationBatchState[] = [];
+  private readonly states = new Map<string, MigrationBatchState>();
+  readonly batchStateEvents: MigrationBatchState[] = [];
 
   get writtenRecords(): CanonicalRecord[] {
     return [...this.records.values()];
@@ -74,11 +76,15 @@ class MemoryTarget implements MigrationTarget {
     return entry;
   }
 
+  async findMigrationBatchState(input: MigrationBatchStateKey): Promise<MigrationBatchState | null> {
+    return this.states.get(this.batchStateKey(input.runId, input.batch)) ?? null;
+  }
+
   async recordMigrationBatchStarted(input: MigrationBatchStateStart): Promise<MigrationBatchState> {
     const state = this.batchState(input.runId, input.batch, "running", {
       startedAt: input.startedAt ?? new Date("2026-01-02T03:04:05.000Z"),
     });
-    this.batchStates.push(state);
+    this.setBatchState(state);
     return state;
   }
 
@@ -93,7 +99,7 @@ class MemoryTarget implements MigrationTarget {
       warnings: input.result.warnings,
       finishedAt: input.finishedAt ?? new Date("2026-01-02T03:05:05.000Z"),
     });
-    this.batchStates.push(state);
+    this.setBatchState(state);
     return state;
   }
 
@@ -102,8 +108,24 @@ class MemoryTarget implements MigrationTarget {
       errorMessage: input.error.message,
       finishedAt: input.finishedAt ?? new Date("2026-01-02T03:05:05.000Z"),
     });
-    this.batchStates.push(state);
+    this.setBatchState(state);
     return state;
+  }
+
+  seedBatchState(state: MigrationBatchState): void {
+    this.setBatchState(state);
+  }
+
+  private setBatchState(state: MigrationBatchState): void {
+    this.states.set(this.batchStateKey(state.runId, state), state);
+    this.batchStateEvents.push(state);
+  }
+
+  private batchStateKey(
+    runId: string,
+    batch: { entity: MigrationEntity; batchNumber: number },
+  ): string {
+    return `${runId}:${batch.entity}:${batch.batchNumber}`;
   }
 
   private batchState(
@@ -359,8 +381,8 @@ describe("migration foundation", () => {
       writtenRows: 1,
     });
 
-    expect(target.batchStates.map((state) => state.status)).toEqual(["running", "succeeded"]);
-    expect(target.batchStates[1]).toMatchObject({
+    expect(target.batchStateEvents.map((state) => state.status)).toEqual(["running", "succeeded"]);
+    expect(target.batchStateEvents[1]).toMatchObject({
       runId: "run_2026_01_01",
       entity: "customers",
       batchNumber: 1,
@@ -406,12 +428,72 @@ describe("migration foundation", () => {
       }),
     ).rejects.toThrow("cannot map legacy customer");
 
-    expect(target.batchStates.map((state) => state.status)).toEqual(["running", "failed"]);
-    expect(target.batchStates[1]).toMatchObject({
+    expect(target.batchStateEvents.map((state) => state.status)).toEqual(["running", "failed"]);
+    expect(target.batchStateEvents[1]).toMatchObject({
       runId: "run_2026_01_01",
       entity: "customers",
       batchNumber: 1,
       errorMessage: "cannot map legacy customer",
     });
+  });
+
+  it("skips already succeeded batches when resuming the same run", async () => {
+    const source = new FixtureSource(
+      { customers: 1 },
+      {
+        customers: [
+          {
+            sourceSystem: "legacy_supabase",
+            sourceTable: "customers",
+            sourceId: "10",
+            payload: { full_name: "Ada Lovelace" },
+            checksum: "sha256:ada",
+          },
+        ],
+      },
+    );
+    const target = new MemoryTarget();
+    target.seedBatchState({
+      runId: "run_2026_01_01",
+      entity: "customers",
+      batchNumber: 1,
+      status: "succeeded",
+      limit: 10,
+      offset: 0,
+      expectedRows: 1,
+      readRows: 1,
+      writtenRows: 1,
+      skippedRows: 0,
+      idMapCreated: 1,
+      idMapUpdated: 0,
+      idMapUnchanged: 0,
+      warnings: [],
+      errorMessage: null,
+      startedAt: new Date("2026-01-02T03:04:05.000Z"),
+      finishedAt: new Date("2026-01-02T03:05:05.000Z"),
+    });
+
+    await expect(
+      applyMigrationBatchWithState({
+        runId: "run_2026_01_01",
+        source,
+        target,
+        batch: {
+          entity: "customers",
+          batchNumber: 1,
+          limit: 10,
+          offset: 0,
+          expectedRows: 1,
+        },
+      }),
+    ).resolves.toMatchObject({
+      readRows: 1,
+      writtenRows: 1,
+      idMapCreated: 1,
+    });
+
+    expect(source.reads).toEqual([]);
+    expect(target.writtenRecords).toEqual([]);
+    expect(target.batchStateEvents).toHaveLength(1);
   });
 });
