@@ -5,7 +5,7 @@ This roadmap is the execution source of truth for the Garanti Kulucka ecosystem 
 ## Current Status
 
 - Phase 0 planning and contract inventory documents are in place.
-- Phase 1 foundation is implemented with API, worker, migrator, web runtime, Dockerfiles, compose, and CI/tag automation.
+- Phase 1 foundation is implemented with API, worker, migrator, web runtime, Dockerfiles, compose config validation, and CI/tag automation.
 - Phase 2 canonical PostgreSQL schema is implemented with role/permission/provider seed data.
 - Phase 3 backend-owned auth and admin-managed persistence foundations are implemented: sessions, permissions, encrypted settings/tokens, restart-hydratable integration snapshots, admin integration APIs, admin audit trails, webphone config, file metadata, and audit boundaries. Auth lifecycle tests cover refresh rotation, logout revocation, disabled users, and role denial.
 - Phase 4 has backend/frontend typed client boundaries for auth, domain data, files, realtime, webphone, settings, integrations, integration account snapshots, admin audit trails, provider attempt views, and normalized provider request preview view models. Direct Supabase usage is blocked by repository guards, and web clients reject Supabase/provider origins as backend base URLs.
@@ -13,7 +13,7 @@ This roadmap is the execution source of truth for the Garanti Kulucka ecosystem 
 - Phase 6 realtime and webphone boundaries are implemented with Socket.IO event contracts, Redis fanout support, and SIP/WebRTC kept outside API media routing.
 - Phase 7 migrator foundation is implemented with manual commands, PostgreSQL legacy source reader, canonical target writer, source/target ports, batch planning, batch apply ports, batch offset/cursor separation, persisted batch execution state, completed batch resume skips, legacy ID map helpers, legacy ID map coverage checks, orphan message verification, synthetic verification reports, canonical table verification reports, target database snapshot verification, migration gate snapshot coverage, order item legacy target verification, manual-only compose profile guards, and optional secret-free command report files.
 - Phase 8 release automation tags every passing `main` commit, publishes downloadable API, worker, migrator, and web container image artifacts, generates release notes from tag diffs, and documents tag-based rollback.
-- Current CI/tag state: latest implementation checkpoint is `v0.1.89`; latest roadmap sync checkpoint is `v0.1.90`.
+- Current CI/tag state: latest implementation checkpoint is `v0.1.91`; latest roadmap sync checkpoint is `v0.1.92`.
 
 ## Non-Negotiables
 
@@ -87,7 +87,7 @@ Verification:
 - API `/health/live` and `/health/ready` pass.
 - Worker starts without processing jobs when no queues exist.
 - Migrator dry-run exits successfully against empty/stub databases.
-- Current foundation tests cover the local compose web runtime service and web health endpoint port mapping.
+- Current foundation tests cover compose configuration validation, the local compose web runtime service, and web health endpoint port mapping.
 
 Anti-pattern guards:
 
