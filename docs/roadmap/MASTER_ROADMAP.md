@@ -4,7 +4,7 @@ This roadmap is the execution source of truth for the Garanti Kulucka ecosystem 
 
 ## Current Status
 
-- Phase 0 planning, contract inventory documents, and classified legacy endpoint surface guards are in place.
+- Phase 0 planning, contract inventory documents, backend OpenAPI route contract, and classified legacy endpoint surface guards are in place.
 - Phase 1 foundation is implemented with API, worker, migrator, web runtime, Dockerfiles, compose config validation, CI/tag automation, local development gate documentation, and repository verification that rejects unfinished gate language in docs.
 - Phase 2 canonical PostgreSQL schema is implemented with role/permission/provider seed data.
 - Phase 3 backend-owned auth and admin-managed persistence foundations are implemented: sessions, permissions, encrypted settings/tokens, restart-hydratable integration snapshots, admin integration APIs, admin audit trails, webphone config, file metadata, presigned S3-compatible media upload instructions, and audit boundaries. Auth lifecycle tests cover refresh rotation, logout revocation, disabled users, and role denial.
@@ -13,7 +13,7 @@ This roadmap is the execution source of truth for the Garanti Kulucka ecosystem 
 - Phase 6 realtime and webphone boundaries are implemented with Socket.IO event contracts, Redis fanout support, and SIP/WebRTC kept outside API media routing.
 - Phase 7 migrator foundation is implemented with manual commands, PostgreSQL legacy source reader, canonical target writer, source/target ports, batch planning, batch apply ports, batch offset/cursor separation, persisted batch execution state, completed batch resume skips, legacy ID map helpers, legacy ID map coverage checks, orphan message verification, synthetic verification reports, canonical table verification reports, target database snapshot verification, migration gate snapshot coverage, order item legacy target verification, manual-only compose profile guards, and optional secret-free command report files.
 - Phase 8 release automation tags every passing `main` commit, publishes downloadable API, worker, migrator, and web container image artifacts, generates release notes from tag diffs, and documents tag-based rollback.
-- Current CI/tag state: latest implementation checkpoint is `v0.1.107`; latest roadmap sync checkpoint is `v0.1.106`.
+- Current CI/tag state: latest implementation checkpoint is `v0.1.109`; latest roadmap sync checkpoint is `v0.1.108`.
 
 ## Non-Negotiables
 
@@ -58,6 +58,7 @@ Verification:
 
 - `tests/contract` can replay fixture expectations without provider credentials.
 - Grep report proves no unclassified legacy integration endpoint remains.
+- Backend OpenAPI contract pins the current auth, domain, file, webphone, settings, and integration admin route surface consumed by the web app.
 - Migration map covers every legacy table currently used by frontend or backend.
 - Current contract tests cover the legacy API/webhook group classification manifest and reject unclassified groups.
 
