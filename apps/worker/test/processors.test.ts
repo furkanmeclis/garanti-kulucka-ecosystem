@@ -127,6 +127,27 @@ function migrationReportJob(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function aiReplyJob(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "bull_job_ai_reply",
+    name: "ai.reply.generate",
+    data: {
+      job_id: "job_ai_reply_1",
+      queue: "ai-replies",
+      name: "ai.reply.generate",
+      requested_at: now,
+      payload: {
+        conversation_public_id: "con_1",
+        customer_message: "Siparisim ne zaman kargoya verilecek?",
+        prompt: "Kisa, nazik ve yardimci bir yanit hazirla.",
+        prompt_version: "default-v1",
+        language: "tr",
+      },
+      ...overrides,
+    },
+  };
+}
+
 describe("worker processor registry", () => {
   it("exposes processors for every declared worker queue", () => {
     const registry = createWorkerProcessorRegistry();
@@ -363,5 +384,41 @@ describe("worker processor registry", () => {
     await expect(registry.dispatch("migration-reports", job)).rejects.toThrow(
       "Migration report contains secret-like content",
     );
+  });
+
+  it("dispatches AI reply jobs as fixture-only drafts", async () => {
+    const events: WorkerLifecycleEvent[] = [];
+    const registry = createWorkerProcessorRegistry((event) => events.push(event));
+
+    await expect(registry.dispatch("ai-replies", aiReplyJob())).resolves.toMatchObject({
+      queue: "ai-replies",
+      status: "drafted_fixture",
+      conversation_public_id: "con_1",
+      draft_text:
+        "Merhaba, mesajınızı aldık. Kisa, nazik ve yardimci bir yanit hazirla. Konu ozeti: Siparisim ne zaman kargoya verilecek?",
+      live_call_performed: false,
+      metadata: {
+        job_id: "job_ai_reply_1",
+        model: "fixture-ai",
+        prompt_version: "default-v1",
+        source_message_length: 37,
+      },
+    });
+    expect(events.map((event) => event.event)).toEqual(["started", "completed"]);
+    expect(events.every((event) => event.queue === "ai-replies")).toBe(true);
+  });
+
+  it("fails unknown AI reply job names", async () => {
+    const registry = createWorkerProcessorRegistry();
+    const job = aiReplyJob({
+      name: "ai.reply.live",
+    });
+
+    await expect(
+      registry.dispatch("ai-replies", {
+        ...job,
+        name: "ai.reply.live",
+      }),
+    ).rejects.toThrow("Unknown AI reply job name");
   });
 });

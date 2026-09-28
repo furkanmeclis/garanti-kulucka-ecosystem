@@ -70,6 +70,20 @@ export interface MigrationReportProcessorResult {
   };
 }
 
+export interface AiReplyProcessorResult {
+  queue: "ai-replies";
+  status: "drafted_fixture";
+  conversation_public_id: string;
+  draft_text: string;
+  live_call_performed: false;
+  metadata: {
+    job_id: string;
+    model: "fixture-ai";
+    prompt_version: string | null;
+    source_message_length: number;
+  };
+}
+
 export interface WorkerProcessorRegistry {
   queues: readonly QueueName[];
   processors: ReadonlyMap<QueueName, QueueProcessor>;
@@ -297,6 +311,66 @@ function nullableNumber(input: unknown): number | null {
   return typeof input === "number" && Number.isFinite(input) ? input : null;
 }
 
+function nonEmptyString(input: unknown, label: string): string {
+  if (typeof input !== "string" || input.trim().length === 0) {
+    throw new Error(`${label} must be a non-empty string`);
+  }
+
+  return input.trim();
+}
+
+function createAiReplyDraft(input: {
+  prompt: string;
+  customerMessage: string;
+  language: string | null;
+}): string {
+  const normalizedMessage = input.customerMessage.replace(/\s+/g, " ").trim();
+  const messagePreview =
+    normalizedMessage.length > 180 ? `${normalizedMessage.slice(0, 177)}...` : normalizedMessage;
+  const languagePrefix = input.language === "en" ? "Hello" : "Merhaba";
+  const instruction = input.prompt.replace(/\s+/g, " ").trim();
+
+  return `${languagePrefix}, mesajınızı aldık. ${instruction} Konu ozeti: ${messagePreview}`;
+}
+
+function createAiReplyProcessor(): QueueProcessor {
+  return async (job) => {
+    const envelope = assertJobMatchesQueue("ai-replies", job);
+
+    if (envelope.name !== "ai.reply.generate") {
+      throw new Error(`Unknown AI reply job name: ${envelope.name}`);
+    }
+
+    const payload = asRecord(envelope.payload, "AI reply payload");
+    const conversationPublicId = nonEmptyString(
+      payload.conversation_public_id,
+      "AI reply conversation_public_id",
+    );
+    const customerMessage = nonEmptyString(payload.customer_message, "AI reply customer_message");
+    const prompt = nonEmptyString(payload.prompt, "AI reply prompt");
+    const language = typeof payload.language === "string" ? payload.language : null;
+    const promptVersion = typeof payload.prompt_version === "string" ? payload.prompt_version : null;
+
+    return {
+      queue: "ai-replies",
+      status: "drafted_fixture",
+      conversation_public_id: conversationPublicId,
+      draft_text: createAiReplyDraft({
+        prompt,
+        customerMessage,
+        language,
+      }),
+      live_call_performed: false,
+      metadata: {
+        job_id: envelope.job_id,
+        model: "fixture-ai",
+        prompt_version: promptVersion,
+        source_message_length: customerMessage.length,
+      },
+    } satisfies AiReplyProcessorResult;
+  };
+}
+
 function createMigrationReportProcessor(): QueueProcessor {
   return async (job) => {
     const envelope = assertJobMatchesQueue("migration-reports", job);
@@ -364,7 +438,7 @@ export function createWorkerProcessorRegistry(
     ["provider-webhooks", createProviderWebhookProcessor(providerAttemptRepository)],
     ["provider-delivery", createProviderDeliveryProcessor(providerAttemptRepository)],
     ["shipment-tracking", createShipmentTrackingProcessor()],
-    ["ai-replies", createUnimplementedProcessor("ai-replies")],
+    ["ai-replies", createAiReplyProcessor()],
     ["migration-reports", createMigrationReportProcessor()],
   ]);
 
