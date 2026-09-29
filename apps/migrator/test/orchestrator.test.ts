@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createLegacyMappingCatalog } from "../src/mapping-catalog.js";
+import { createLegacyMappingCatalog, legacyMappingCatalog } from "../src/mapping-catalog.js";
 import { runMigration } from "../src/orchestrator.js";
 import type {
   CanonicalRecord,
@@ -235,6 +235,29 @@ describe("migration orchestrator", () => {
     expect(result.sourceManifest.mappingCatalogVersion).toBe("fixture-catalog-v7");
   });
 
+  it("rejects customer apply before source access while external identities are descriptive", async () => {
+    const source = new FixtureSource({ customers: [customer] });
+    const target = new MemoryTarget();
+
+    await expect(runMigration({
+      mode: "apply",
+      source,
+      mappingCatalog: legacyMappingCatalog,
+      target,
+      runId: "legacy-import-2026-09",
+      batchSize: 100,
+      entities: ["customers"],
+      sourceSystem: "legacy_postgres",
+      sourceDatabaseIdentity: sourceIdentity,
+    })).rejects.toThrow(
+      "Migration entity customers cannot be applied while customer_external_identities is descriptive in catalog",
+    );
+
+    expect(source.operations).toEqual([]);
+    expect(source.reads).toEqual([]);
+    expect(target.runs.size).toBe(0);
+  });
+
   it("rejects apply before source access until catalog transforms are apply-ready", async () => {
     const source = new FixtureSource({ customers: [customer] });
     const target = new MemoryTarget();
@@ -242,7 +265,7 @@ describe("migration orchestrator", () => {
     await expect(runMigration({
       mode: "apply",
       source,
-      mappingCatalog: fixtureCatalog,
+      mappingCatalog: identityReadyCatalog,
       target,
       runId: "legacy-import-2026-09",
       batchSize: 100,
@@ -418,6 +441,19 @@ const fixtureCatalog = createLegacyMappingCatalog({
     sourceTable: "public.customers",
     idColumn: "id",
     targetEntities: [{ entity: "customers", mapping: "direct", readiness: "dry-run" }],
+    columns: [{ name: "id", dataType: "bigint", udtName: "int8", nullable: false, required: true }],
+  }],
+});
+
+const identityReadyCatalog = createLegacyMappingCatalog({
+  version: "identity-ready-catalog-v1",
+  tables: [{
+    sourceTable: "public.customers",
+    idColumn: "id",
+    targetEntities: [
+      { entity: "customers", mapping: "direct", readiness: "dry-run" },
+      { entity: "customer_external_identities", mapping: "direct", readiness: "dry-run" },
+    ],
     columns: [{ name: "id", dataType: "bigint", udtName: "int8", nullable: false, required: true }],
   }],
 });

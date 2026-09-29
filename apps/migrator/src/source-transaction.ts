@@ -20,6 +20,9 @@ export async function withReadonlyRepeatableReadTransaction<Result>(
     await client.connect();
     await client.query("begin transaction isolation level repeatable read read only");
     transactionOpen = true;
+    // Timestamp columns are read as server text and checksummed, so their rendering must not depend on server defaults.
+    await client.query("set local timezone = 'UTC'");
+    await client.query("set local datestyle = 'ISO, MDY'");
     const result = await operation();
     await client.query("commit");
     transactionOpen = false;

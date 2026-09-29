@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  assertApplyPrerequisites,
   createLegacyMappingCatalog,
   dryRunMigrationEntities,
   legacyMappingCatalog,
@@ -51,6 +52,32 @@ describe("legacy mapping catalog", () => {
 
   it("selects only dry-run-ready targets", () => {
     expect(dryRunMigrationEntities(legacyMappingCatalog)).toEqual(["customers"]);
+  });
+
+  it("blocks customer apply while external identities are descriptive or undeclared", () => {
+    expect(() => assertApplyPrerequisites(legacyMappingCatalog, ["customers"])).toThrow(
+      "Migration entity customers cannot be applied while customer_external_identities is descriptive in catalog",
+    );
+    expect(() => assertApplyPrerequisites(createLegacyMappingCatalog({
+      ...legacyMappingCatalog,
+      tables: [{
+        ...customerMapping,
+        targetEntities: customerMapping.targetEntities.filter(
+          (target) => target.entity !== "customer_external_identities",
+        ),
+      }],
+    }), ["customers"])).toThrow(
+      "Migration entity customers cannot be applied while customer_external_identities is undeclared in catalog",
+    );
+    expect(() => assertApplyPrerequisites(createLegacyMappingCatalog({
+      ...legacyMappingCatalog,
+      tables: [{
+        ...customerMapping,
+        targetEntities: customerMapping.targetEntities.map((target) => target.entity === "customer_external_identities"
+          ? { ...target, mapping: "direct" as const, readiness: "dry-run" as const }
+          : target),
+      }],
+    }), ["customers"])).not.toThrow();
   });
 
   it.each([

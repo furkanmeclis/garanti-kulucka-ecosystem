@@ -1,6 +1,7 @@
 import { createMigrationPlan } from "./plan.js";
 import { createDryRunReport } from "./reports.js";
 import {
+  assertApplyPrerequisites,
   createLegacyMappingCatalog,
   dryRunMigrationEntities,
   validateLegacySourceSnapshots,
@@ -56,6 +57,7 @@ export async function runMigration(input: RunMigrationInput): Promise<MigrationR
   const entities = input.entities ?? readyEntities;
   assertDryRunReadyEntitySelection(entities, readyEntities);
   if (input.mode === "apply") {
+    assertApplyPrerequisites(catalog, entities);
     throw new Error("Apply mode is unavailable until the mapping catalog declares apply-ready transforms");
   }
 

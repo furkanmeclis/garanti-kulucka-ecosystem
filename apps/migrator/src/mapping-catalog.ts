@@ -30,6 +30,10 @@ export const mappingCatalogVersion = "p2-customer-catalog-v1";
 const canonicalMigrationEntitySet = new Set<string>(canonicalMigrationEntities);
 const targetMappingValues = new Set<string>(["direct", "synthetic"]);
 const targetReadinessValues = new Set<string>(["dry-run", "descriptive"]);
+const applyPrerequisites: Partial<Record<MigrationEntity, readonly MigrationEntity[]>> = {
+  // Customer drafts clear social placeholder phones; only the external identity target carries those ids.
+  customers: ["customer_external_identities"],
+};
 
 export const legacyMappingCatalog = createLegacyMappingCatalog({
   version: mappingCatalogVersion,
@@ -154,6 +158,27 @@ export function dryRunMigrationEntities(catalog: LegacyMappingCatalog): Migratio
   return catalog.tables.flatMap((table) => table.targetEntities
     .filter((target) => target.readiness === "dry-run")
     .map((target) => target.entity));
+}
+
+export function assertApplyPrerequisites(
+  catalog: LegacyMappingCatalog,
+  entities: readonly MigrationEntity[],
+): void {
+  validateLegacyMappingCatalog(catalog);
+  const readiness = new Map<MigrationEntity, string>();
+  for (const table of catalog.tables) {
+    for (const target of table.targetEntities) readiness.set(target.entity, target.readiness);
+  }
+  for (const entity of entities) {
+    for (const prerequisite of applyPrerequisites[entity] ?? []) {
+      const prerequisiteReadiness = readiness.get(prerequisite);
+      if (prerequisiteReadiness === undefined || prerequisiteReadiness === "descriptive") {
+        throw new Error(
+          `Migration entity ${entity} cannot be applied while ${prerequisite} is ${prerequisiteReadiness ?? "undeclared"} in catalog`,
+        );
+      }
+    }
+  }
 }
 
 export function validateLegacyTableColumns(

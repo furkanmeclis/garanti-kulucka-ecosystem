@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { transformLegacyCustomer } from "../src/customer-mapping.js";
 import { calculateSourcePayloadChecksum } from "../src/legacy-source.js";
 import type { LegacyRecord } from "../src/types.js";
@@ -416,6 +416,66 @@ describe("transformLegacyCustomer", () => {
         expect(message).toMatch(/^Invalid legacy customer row:/);
       }
     }
+  });
+
+  it("rejects payloads whose inspection traps throw without leaking the trap error", () => {
+    const base = fixture();
+    const record = {
+      ...base,
+      payload: new Proxy(base.payload, {
+        ownKeys() {
+          throw new Error("ayse@example.test");
+        },
+      }),
+    };
+    const dateRecord = {
+      ...base,
+      payload: {
+        ...base.payload,
+        olusturma_tarihi: new Proxy(new Date("2024-01-02T03:04:05Z"), {
+          getPrototypeOf() {
+            throw new Error("+905551112233");
+          },
+        }),
+      },
+    };
+
+    for (const [candidate, reason] of [
+      [record, "payload could not be inspected"],
+      [dateRecord, "field olusturma_tarihi must be a valid timestamp or null"],
+    ] as const) {
+      try {
+        transformLegacyCustomer(candidate);
+        throw new Error("Expected transformation to fail");
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        expect(message).toBe(`Invalid legacy customer row: ${reason}`);
+        expect(message).not.toContain("ayse@example.test");
+        expect(message).not.toContain("+905551112233");
+      }
+    }
+  });
+
+  it.each([
+    ["TypeError", () => new TypeError("normalize is broken")],
+    ["RangeError", () => new RangeError("normalize is broken")],
+  ])("lets an unexpected %s propagate instead of reporting a row verdict", (_label, createError) => {
+    const record = fixture();
+    const thrown = createError();
+    const normalize = vi.spyOn(String.prototype, "normalize").mockImplementation(() => {
+      throw thrown;
+    });
+    let caught: unknown;
+    try {
+      transformLegacyCustomer(record);
+    } catch (error) {
+      caught = error;
+    } finally {
+      normalize.mockRestore();
+    }
+    expect(caught).toBe(thrown);
+    expect(caught).toBeInstanceOf(thrown.constructor);
+    expect(String(caught)).not.toContain("Invalid legacy customer row");
   });
 
   it("keeps external identities unresolved until a verified account snapshot is available", () => {

@@ -169,6 +169,24 @@ describe("PostgreSQL migration runtime", () => {
     expect(operation).toHaveBeenCalledOnce();
   });
 
+  it("pins the source session time zone and date style before the operation runs", async () => {
+    const client = new FixturePostgresClient();
+    let queriesBeforeOperation: string[] = [];
+    const operation = vi.fn(async () => {
+      queriesBeforeOperation = [...client.queries];
+      return { mode: "dry-run" };
+    });
+
+    await withReadonlyRepeatableReadTransaction(client, operation);
+
+    expect(queriesBeforeOperation).toEqual([
+      "begin transaction isolation level repeatable read read only",
+      "set local timezone = 'UTC'",
+      "set local datestyle = 'ISO, MDY'",
+    ]);
+    expect(client.queries).toEqual([...queriesBeforeOperation, "commit"]);
+  });
+
   it("rolls back a failed dry-run, closes the client, and redacts database URLs", async () => {
     const client = new FixturePostgresClient(
       new Error("driver rejected postgres://reader:secret@source/legacy?sslmode=require"),

@@ -114,15 +114,6 @@ interface ParsedLegacyCustomer {
 }
 
 export function transformLegacyCustomer(record: LegacyRecord): CustomerTransformationResult {
-  try {
-    return transformLegacyCustomerRow(record);
-  } catch (error) {
-    if (error instanceof LegacyCustomerRowError) throw error;
-    fail("row inspection failed");
-  }
-}
-
-function transformLegacyCustomerRow(record: LegacyRecord): CustomerTransformationResult {
   const legacy = parseLegacyCustomer(record);
   const customerPublicId = stablePublicId("cus", legacy);
   const warnings: CustomerMappingWarning[] = [];
@@ -282,13 +273,19 @@ function extractSocialIdentity(phone: string): {
 }
 
 function inspectPayload(value: unknown): Record<string, unknown> {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) fail("payload must be an object");
-  const prototype = Object.getPrototypeOf(value);
+  if (value === null || typeof value !== "object") fail("payload must be an object");
+  const { isArray, prototype, symbolCount, descriptors } = inspectUntrusted(() => ({
+    isArray: Array.isArray(value),
+    prototype: Object.getPrototypeOf(value),
+    symbolCount: Object.getOwnPropertySymbols(value).length,
+    descriptors: Object.getOwnPropertyDescriptors(value),
+  }), "payload could not be inspected");
+  if (isArray) fail("payload must be an object");
   if (prototype !== Object.prototype && prototype !== null) fail("payload must be a plain object");
-  if (Object.getOwnPropertySymbols(value).length > 0) fail("payload must contain only named data fields");
+  if (symbolCount > 0) fail("payload must contain only named data fields");
 
   const payload = Object.create(null) as Record<string, unknown>;
-  for (const [key, descriptor] of Object.entries(Object.getOwnPropertyDescriptors(value))) {
+  for (const [key, descriptor] of Object.entries(descriptors)) {
     if (!("value" in descriptor) || !descriptor.enumerable) {
       fail("payload fields must be enumerable data properties");
     }
@@ -385,11 +382,13 @@ function optionalSafeInteger(value: unknown, field: string): number | null {
 
 function optionalTimestamp(value: unknown, field: string): string | null {
   if (value === null) return null;
-  if (value instanceof Date) {
-    if (!Number.isFinite(value.getTime())) fail(`field ${field} must be a valid timestamp or null`);
-    const year = value.getUTCFullYear();
-    if (year < 1 || year > 9999) fail(`field ${field} must be a valid timestamp or null`);
-    return formatUtcTimestamp(value, `${value.getUTCMilliseconds()}`.padStart(3, "0").padEnd(6, "0"));
+  const invalidTimestamp = `field ${field} must be a valid timestamp or null`;
+  if (inspectUntrusted(() => value instanceof Date, invalidTimestamp)) {
+    const date = new Date(inspectUntrusted(() => Date.prototype.getTime.call(value), invalidTimestamp));
+    if (!Number.isFinite(date.getTime())) fail(invalidTimestamp);
+    const year = date.getUTCFullYear();
+    if (year < 1 || year > 9999) fail(invalidTimestamp);
+    return formatUtcTimestamp(date, `${date.getUTCMilliseconds()}`.padStart(3, "0").padEnd(6, "0"));
   }
   if (typeof value !== "string") fail(`field ${field} must be a valid timestamp or null`);
   const parts = timestampPattern.exec(value);
@@ -477,6 +476,15 @@ function compareStrings(left: string, right: string): number {
 }
 
 class LegacyCustomerRowError extends Error {}
+
+// Reflection on row values can run proxy traps whose errors may carry row data; only wrap those calls.
+function inspectUntrusted<T>(operation: () => T, reason: string): T {
+  try {
+    return operation();
+  } catch {
+    fail(reason);
+  }
+}
 
 function fail(reason: string): never {
   throw new LegacyCustomerRowError(`Invalid legacy customer row: ${reason}`);
