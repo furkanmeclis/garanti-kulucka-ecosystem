@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import { migrationApplyDisabledMessage } from "../src/errors.js";
-import { executePostgresMigration, parseSafePostgresInt8 } from "../src/postgres-runtime.js";
+import { legacyMappingCatalog } from "../src/mapping-catalog.js";
+import {
+  canonicalSourceTableMap,
+  executePostgresMigration,
+  parseSafePostgresInt8,
+} from "../src/postgres-runtime.js";
 import {
   withReadonlyRepeatableReadTransaction,
   type PostgresSourceClient,
@@ -23,7 +28,10 @@ class FixturePostgresClient implements PostgresSourceClient {
   connected = false;
   ended = false;
 
-  constructor(private readonly countError?: Error) {}
+  constructor(
+    private readonly countError?: Error,
+    private readonly introspectionRows: Record<string, unknown>[] = [],
+  ) {}
 
   async connect(): Promise<void> {
     this.connected = true;
@@ -37,6 +45,9 @@ class FixturePostgresClient implements PostgresSourceClient {
       if (this.countError) throw this.countError;
       return { rows: [{ count: "0" }] as Row[] };
     }
+    if (/information_schema\.columns/i.test(sql)) {
+      return { rows: this.introspectionRows as Row[] };
+    }
     return { rows: [] };
   }
 
@@ -46,6 +57,12 @@ class FixturePostgresClient implements PostgresSourceClient {
 }
 
 describe("PostgreSQL migration runtime", () => {
+  it("maps only dry-run-ready customer entities from the explicit catalog", () => {
+    expect(canonicalSourceTableMap(legacyMappingCatalog)).toEqual({
+      customers: { tableName: "public.musteriler", idColumn: "id" },
+    });
+  });
+
   it("uses the same safe int8 runtime policy as the database package", () => {
     expect(parseSafePostgresInt8(String(Number.MAX_SAFE_INTEGER))).toBe(Number.MAX_SAFE_INTEGER);
     expect(() => parseSafePostgresInt8("9007199254740992")).toThrow(RangeError);
@@ -64,6 +81,33 @@ describe("PostgreSQL migration runtime", () => {
       }),
     ).rejects.toThrow(migrationApplyDisabledMessage);
     expect(postgresClientConstructor).not.toHaveBeenCalled();
+  });
+
+  it("dry-runs only the dry-run-ready customer entity", async () => {
+    const client = new FixturePostgresClient(undefined, legacyMappingCatalog.tables[0]!.columns.map(
+      (column, index) => ({
+        column_name: column.name,
+        ordinal_position: index + 1,
+        data_type: column.dataType,
+        udt_name: column.udtName,
+        is_nullable: column.nullable ? "YES" : "NO",
+      }),
+    ));
+    postgresClientConstructor.mockImplementationOnce(function fixtureClientConstructor() {
+      return client;
+    });
+
+    const result = await executePostgresMigration({
+      mode: "dry-run",
+      sourceDatabaseUrl: "postgres://source/legacy",
+      sourceSystem: "legacy_postgres",
+      batchSize: 500,
+    });
+
+    expect(result.plan.entities).toEqual([{ entity: "customers", totalRows: 0, batches: 0 }]);
+    expect(client.queries.filter((sql) => /select count\(\*\)/i.test(sql))).toEqual([
+      'select count(*) as count from "public"."musteriler"',
+    ]);
   });
 
   it("commits a successful dry-run read-only repeatable-read transaction and closes the client", async () => {

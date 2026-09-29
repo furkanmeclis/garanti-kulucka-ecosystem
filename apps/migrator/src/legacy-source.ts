@@ -7,6 +7,12 @@ import type {
   SourceColumnSnapshot,
   SourceTableSnapshot,
 } from "./types.js";
+import {
+  validateLegacyTableColumns,
+  validateLegacyMappingCatalog,
+  type LegacyMappingCatalog,
+  type LegacyTableMapping,
+} from "./mapping-catalog.js";
 
 export interface LegacyQueryResult<Row extends Record<string, unknown> = Record<string, unknown>> {
   readonly rows: Row[];
@@ -31,6 +37,7 @@ export interface CreateLegacyDatabaseSourceInput {
   readonly sourceSystem: string;
   readonly tables: LegacySourceTableMap;
   readonly defaultIdColumn?: string;
+  readonly mappingCatalog?: LegacyMappingCatalog;
 }
 
 interface ResolvedLegacyTable {
@@ -44,11 +51,19 @@ export class LegacyDatabaseSource implements LegacySource {
   private readonly tables: Partial<Record<MigrationEntity, ResolvedLegacyTable>>;
   private readonly sourceSystem: string;
   private readonly db: LegacyQueryDatabase;
+  private readonly mappingsByTable: ReadonlyMap<string, LegacyTableMapping>;
 
   constructor(input: CreateLegacyDatabaseSourceInput) {
     this.db = input.db;
     this.sourceSystem = input.sourceSystem;
     this.tables = resolveTableMap(input.tables, input.defaultIdColumn ?? defaultSourceIdColumn);
+    if (input.mappingCatalog) {
+      validateLegacyMappingCatalog(input.mappingCatalog);
+      validateCatalogRouting(this.tables, input.mappingCatalog);
+    }
+    this.mappingsByTable = new Map(
+      (input.mappingCatalog?.tables ?? []).map((mapping) => [normalizeTableName(mapping.sourceTable), mapping]),
+    );
   }
 
   async count(entity: MigrationEntity): Promise<number> {
@@ -99,16 +114,18 @@ export class LegacyDatabaseSource implements LegacySource {
   }
 
   async describeTables(entities: readonly MigrationEntity[]): Promise<SourceTableSnapshot[]> {
-    const snapshots: SourceTableSnapshot[] = [];
+    const columnsByTable = new Map<string, SourceColumnSnapshot[]>();
     for (const entity of entities) {
       const table = this.resolveTable(entity);
       const identity = splitTableIdentity(table.tableName);
+      const physicalTableName = `${identity.schema}.${identity.table}`;
+      if (columnsByTable.has(physicalTableName)) continue;
       const result = await this.db.query<{
         column_name: string;
         ordinal_position: number | string;
         data_type: string;
         udt_name: string;
-        is_nullable: "YES" | "NO";
+        is_nullable: string;
       }>(
         `select column_name, ordinal_position, data_type, udt_name, is_nullable
          from information_schema.columns
@@ -117,12 +134,17 @@ export class LegacyDatabaseSource implements LegacySource {
         [identity.schema, identity.table],
       );
       if (result.rows.length === 0) {
-        throw new Error(`Legacy source table introspection returned no columns for ${table.tableName}`);
+        throw new Error(`Legacy source table introspection returned no columns for ${physicalTableName}`);
       }
       const columns: SourceColumnSnapshot[] = result.rows.map((column) => {
         const ordinalPosition = Number(column.ordinal_position);
         if (!Number.isSafeInteger(ordinalPosition) || ordinalPosition < 1) {
-          throw new Error(`Legacy source returned invalid column ordinal for ${table.tableName}.${column.column_name}`);
+          throw new Error(`Legacy source returned invalid column ordinal for ${physicalTableName}.${column.column_name}`);
+        }
+        if (column.is_nullable !== "YES" && column.is_nullable !== "NO") {
+          throw new Error(
+            `Legacy source returned invalid nullability for ${physicalTableName}.${column.column_name}`,
+          );
         }
         return {
           name: column.column_name,
@@ -132,20 +154,30 @@ export class LegacyDatabaseSource implements LegacySource {
           nullable: column.is_nullable === "YES",
         };
       });
-      if (!columns.some((column) => column.name === table.idColumn)) {
-        throw new Error(
-          `Legacy source table ${table.tableName} is missing configured id column ${table.idColumn}`,
-        );
+      const mapping = this.mappingsByTable.get(physicalTableName);
+      if (mapping) validateLegacyTableColumns(physicalTableName, columns, mapping);
+      columnsByTable.set(physicalTableName, columns);
+    }
+
+    return entities.map((entity) => {
+      const table = this.resolveTable(entity);
+      const identity = splitTableIdentity(table.tableName);
+      const physicalTableName = `${identity.schema}.${identity.table}`;
+      const columns = columnsByTable.get(physicalTableName);
+      if (!columns) {
+        throw new Error(`Legacy source table introspection missing snapshot for ${physicalTableName}`);
       }
-      snapshots.push({
+      if (!columns.some((column) => column.name === table.idColumn)) {
+        throw new Error(`Legacy source table ${physicalTableName} is missing configured id column ${table.idColumn}`);
+      }
+      return {
         entity,
         schema: identity.schema,
         table: identity.table,
         idColumn: table.idColumn,
         columns,
-      });
-    }
-    return snapshots;
+      };
+    });
   }
 
   private resolveTable(entity: MigrationEntity): ResolvedLegacyTable {
@@ -173,6 +205,45 @@ export class LegacyDatabaseSource implements LegacySource {
       checksum: checksumPayload(payload),
     };
   }
+}
+
+function validateCatalogRouting(
+  tables: Partial<Record<MigrationEntity, ResolvedLegacyTable>>,
+  catalog: LegacyMappingCatalog,
+): void {
+  const expected = new Map<MigrationEntity, ResolvedLegacyTable>();
+  for (const mapping of catalog.tables) {
+    for (const target of mapping.targetEntities) {
+      if (target.readiness !== "dry-run") continue;
+      expected.set(target.entity, {
+        tableName: normalizeTableName(mapping.sourceTable),
+        idColumn: mapping.idColumn,
+      });
+    }
+  }
+
+  const configuredEntities = Object.keys(tables) as MigrationEntity[];
+  for (const entity of configuredEntities) {
+    if (!expected.has(entity)) {
+      throw new Error(`Legacy source table routing contains catalog-unready target ${entity}`);
+    }
+  }
+  for (const [entity, route] of expected) {
+    const configured = tables[entity];
+    if (!configured) {
+      throw new Error(`Legacy source table routing is missing dry-run-ready target ${entity}`);
+    }
+    if (normalizeTableName(configured.tableName) !== route.tableName || configured.idColumn !== route.idColumn) {
+      throw new Error(
+        `Legacy source table routing for ${entity} must be ${route.tableName}.${route.idColumn}`,
+      );
+    }
+  }
+}
+
+function normalizeTableName(tableName: string): string {
+  const identity = splitTableIdentity(tableName);
+  return `${identity.schema}.${identity.table}`;
 }
 
 function splitTableIdentity(tableName: string): { schema: string; table: string } {

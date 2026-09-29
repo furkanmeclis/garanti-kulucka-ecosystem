@@ -1,7 +1,12 @@
-import { applyMigrationBatchWithState, createCanonicalEntityTransformer } from "./apply.js";
-import { canonicalMigrationEntities, createMigrationPlan, defaultMigrationEntities } from "./plan.js";
+import { createMigrationPlan } from "./plan.js";
 import { createDryRunReport } from "./reports.js";
-import { createSourceManifest, mappingCatalogVersion, registerMigrationRun } from "./source-manifest.js";
+import {
+  createLegacyMappingCatalog,
+  dryRunMigrationEntities,
+  validateLegacySourceSnapshots,
+  type LegacyMappingCatalog,
+} from "./mapping-catalog.js";
+import { createSourceManifest } from "./source-manifest.js";
 import type {
   DryRunReport,
   LegacySource,
@@ -11,16 +16,17 @@ import type {
   MigrationTarget,
   SourceDatabaseIdentity,
   SourceManifest,
+  SourceTableSnapshot,
 } from "./types.js";
 
 interface RunMigrationInputBase {
   readonly source: LegacySource;
+  readonly mappingCatalog: LegacyMappingCatalog;
   readonly batchSize: number;
   readonly entities?: MigrationEntity[];
   readonly now?: Date;
   readonly sourceSystem: string;
   readonly sourceDatabaseIdentity: SourceDatabaseIdentity;
-  readonly mappingCatalogVersion?: string;
 }
 
 export interface RunMigrationDryRunInput extends RunMigrationInputBase {
@@ -45,11 +51,16 @@ export interface MigrationRunResult {
 }
 
 export async function runMigration(input: RunMigrationInput): Promise<MigrationRunResult> {
-  const entities = input.entities ?? defaultMigrationEntities;
+  const catalog = createLegacyMappingCatalog(input.mappingCatalog);
+  const readyEntities = dryRunMigrationEntities(catalog);
+  const entities = input.entities ?? readyEntities;
+  assertDryRunReadyEntitySelection(entities, readyEntities);
   if (input.mode === "apply") {
-    assertCompleteCanonicalEntitySelection(entities);
+    throw new Error("Apply mode is unavailable until the mapping catalog declares apply-ready transforms");
   }
 
+  const tables = ownSourceTableSnapshots(await input.source.describeTables(entities));
+  validateLegacySourceSnapshots(catalog, tables, entities);
   const plan = await createMigrationPlan({
     source: input.source,
     mode: input.mode,
@@ -60,9 +71,9 @@ export async function runMigration(input: RunMigrationInput): Promise<MigrationR
   const sourceManifest = createSourceManifest({
     sourceSystem: input.sourceSystem,
     databaseIdentity: input.sourceDatabaseIdentity,
-    tables: await input.source.describeTables(entities),
+    tables,
     plan,
-    mappingCatalogVersion: input.mappingCatalogVersion ?? mappingCatalogVersion,
+    mappingCatalogVersion: catalog.version,
   });
 
   if (input.mode === "dry-run") {
@@ -75,37 +86,33 @@ export async function runMigration(input: RunMigrationInput): Promise<MigrationR
     };
   }
 
-  await registerMigrationRun(input.target, input.runId, sourceManifest);
-
-  const batches: MigrationBatchApplyResult[] = [];
-  for (const batch of plan.batches) {
-    batches.push(
-      await applyMigrationBatchWithState({
-        source: input.source,
-        target: input.target,
-        runId: input.runId,
-        batch,
-        transform: createCanonicalEntityTransformer(batch.entity),
-      }),
-    );
-  }
-
-  return {
-    mode: input.mode,
-    runId: input.runId,
-    plan,
-    sourceManifest,
-    batches,
-  };
+  throw new Error("Apply mode is unavailable until the mapping catalog declares apply-ready transforms");
 }
 
-function assertCompleteCanonicalEntitySelection(entities: readonly MigrationEntity[]): void {
-  const selected = new Set<MigrationEntity>(entities);
-  const isComplete = entities.length === canonicalMigrationEntities.length
-    && selected.size === canonicalMigrationEntities.length
-    && canonicalMigrationEntities.every((entity) => selected.has(entity));
+function ownSourceTableSnapshots(snapshots: readonly SourceTableSnapshot[]): SourceTableSnapshot[] {
+  return Object.freeze(snapshots.map((snapshot) => Object.freeze({
+    entity: snapshot.entity,
+    schema: snapshot.schema,
+    table: snapshot.table,
+    idColumn: snapshot.idColumn,
+    columns: Object.freeze(snapshot.columns.map((column) => Object.freeze({ ...column }))),
+  }))) as unknown as SourceTableSnapshot[];
+}
 
-  if (!isComplete) {
-    throw new Error("Apply mode requires each canonical migration entity exactly once");
+function assertDryRunReadyEntitySelection(
+  entities: readonly MigrationEntity[],
+  readyEntities: readonly MigrationEntity[],
+): void {
+  if (entities.length === 0) {
+    throw new Error("Migration must select at least one entity");
+  }
+  const selected = new Set<MigrationEntity>(entities);
+  if (selected.size !== entities.length) {
+    throw new Error("Migration entities must not contain duplicates");
+  }
+  const ready = new Set(readyEntities);
+  const unavailable = entities.filter((entity) => !ready.has(entity));
+  if (unavailable.length > 0) {
+    throw new Error(`Migration entities are not dry-run-ready in catalog: ${unavailable.join(", ")}`);
   }
 }

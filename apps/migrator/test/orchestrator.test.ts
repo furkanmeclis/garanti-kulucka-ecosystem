@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { createLegacyMappingCatalog } from "../src/mapping-catalog.js";
 import { runMigration } from "../src/orchestrator.js";
-import { canonicalMigrationEntities } from "../src/plan.js";
 import type {
   CanonicalRecord,
   CanonicalWriteResult,
@@ -24,10 +24,12 @@ import type {
 
 class FixtureSource implements LegacySource {
   readonly reads: MigrationEntity[] = [];
+  readonly operations: string[] = [];
 
   constructor(private readonly records: Partial<Record<MigrationEntity, LegacyRecord[]>>) {}
 
   async count(entity: MigrationEntity): Promise<number> {
+    this.operations.push(`count:${entity}`);
     return this.records[entity]?.length ?? 0;
   }
 
@@ -38,6 +40,7 @@ class FixtureSource implements LegacySource {
   }
 
   async describeTables(entities: readonly MigrationEntity[]): Promise<SourceTableSnapshot[]> {
+    this.operations.push("describe");
     return entities.map((entity) => ({
       entity,
       schema: "public",
@@ -146,6 +149,7 @@ describe("migration orchestrator", () => {
     const result = await runMigration({
       mode: "dry-run",
       source,
+      mappingCatalog: fixtureCatalog,
       batchSize: 100,
       entities: ["customers"],
       now: new Date("2026-09-28T00:00:00.000Z"),
@@ -154,67 +158,249 @@ describe("migration orchestrator", () => {
     });
 
     expect(result.plan.entities).toEqual([{ entity: "customers", totalRows: 1, batches: 1 }]);
+    expect(result.sourceManifest.mappingCatalogVersion).toBe("fixture-catalog-v1");
     expect(result.dryRunReport?.totals).toEqual({ plannedRows: 1, plannedBatches: 1, blockedRows: 0 });
     expect(result.batches).toEqual([]);
     expect(source.reads).toEqual([]);
+    expect(source.operations).toEqual(["describe", "count:customers"]);
   });
 
-  it("applies canonical batches and resumes without rewriting succeeded batches", async () => {
+  it("halts before planning when source introspection rejects schema drift", async () => {
     const source = new FixtureSource({ customers: [customer] });
-    const target = new MemoryTarget();
-    const input = {
-      mode: "apply" as const,
-      source,
-      target,
-      runId: "legacy-import-2026-09",
-      batchSize: 100,
-      entities: [...canonicalMigrationEntities],
-      sourceSystem: "legacy_postgres",
-      sourceDatabaseIdentity: sourceIdentity,
+    source.describeTables = async () => {
+      source.operations.push("describe");
+      throw new Error("Legacy source schema mismatch for public.musteriler: unexpected columns [drift]");
     };
 
-    await expect(runMigration(input)).resolves.toMatchObject({
-      mode: "apply",
-      batches: [{ readRows: 1, writtenRows: 1, idMapCreated: 1 }],
-    });
-    await expect(runMigration(input)).resolves.toMatchObject({
-      batches: [{ readRows: 1, writtenRows: 1, idMapCreated: 1 }],
-    });
-
-    expect(source.reads).toEqual(["customers"]);
-    expect(target.records).toHaveLength(1);
-    expect(target.records[0]).toMatchObject({
-      targetTable: "customers",
-      payload: { full_name: "Ada Lovelace" },
-    });
-    expect(target.records[0]?.payload).not.toHaveProperty("id");
-    expect(target.records[0]?.payload).not.toHaveProperty("public_id");
-    expect(target.records[0]?.payload).not.toHaveProperty("created_at");
-    expect(target.records[0]?.payload).not.toHaveProperty("updated_at");
+    await expect(runMigration({
+      mode: "dry-run",
+      source,
+      mappingCatalog: fixtureCatalog,
+      batchSize: 100,
+      entities: ["customers"],
+      sourceSystem: "legacy_postgres",
+      sourceDatabaseIdentity: sourceIdentity,
+    })).rejects.toThrow("unexpected columns [drift]");
+    expect(source.operations).toEqual(["describe"]);
+    expect(source.reads).toEqual([]);
   });
 
-  it("rejects partial apply before registering a run or writing batch state", async () => {
+  it("independently rejects a custom source snapshot that bypasses adapter validation", async () => {
+    const source = new FixtureSource({ customers: [customer] });
+    source.describeTables = async () => {
+      source.operations.push("describe");
+      return [{
+        entity: "customers",
+        schema: "public",
+        table: "other",
+        idColumn: "id",
+        columns: [{ name: "id", ordinalPosition: 1, dataType: "bigint", udtName: "int8", nullable: false }],
+      }];
+    };
+
+    await expect(runMigration({
+      mode: "dry-run",
+      source,
+      mappingCatalog: fixtureCatalog,
+      batchSize: 100,
+      entities: ["customers"],
+      sourceSystem: "legacy_postgres",
+      sourceDatabaseIdentity: sourceIdentity,
+    })).rejects.toThrow("Source table snapshot for customers must route to public.customers.id");
+    expect(source.operations).toEqual(["describe"]);
+  });
+
+  it("derives the manifest version from the explicit validated catalog", async () => {
+    const catalog = createLegacyMappingCatalog({
+      version: "fixture-catalog-v7",
+      tables: [{
+        sourceTable: "public.customers",
+        idColumn: "id",
+        targetEntities: [{ entity: "customers", mapping: "direct", readiness: "dry-run" }],
+        columns: [{ name: "id", dataType: "bigint", udtName: "int8", nullable: false, required: true }],
+      }],
+    });
+    const source = new FixtureSource({ customers: [customer] });
+
+    const result = await runMigration({
+      mode: "dry-run",
+      source,
+      mappingCatalog: catalog,
+      batchSize: 100,
+      entities: ["customers"],
+      sourceSystem: "legacy_postgres",
+      sourceDatabaseIdentity: sourceIdentity,
+    });
+
+    expect(result.sourceManifest.mappingCatalogVersion).toBe("fixture-catalog-v7");
+  });
+
+  it("rejects apply before source access until catalog transforms are apply-ready", async () => {
     const source = new FixtureSource({ customers: [customer] });
     const target = new MemoryTarget();
 
     await expect(runMigration({
       mode: "apply",
       source,
+      mappingCatalog: fixtureCatalog,
       target,
-      runId: "partial-import-2026-09",
+      runId: "legacy-import-2026-09",
       batchSize: 100,
       entities: ["customers"],
       sourceSystem: "legacy_postgres",
       sourceDatabaseIdentity: sourceIdentity,
-    })).rejects.toThrow("Apply mode requires each canonical migration entity exactly once");
+    })).rejects.toThrow("Apply mode is unavailable until the mapping catalog declares apply-ready transforms");
 
-    expect(target.runs).toHaveLength(0);
-    expect(target.states).toHaveLength(0);
-    expect(target.records).toHaveLength(0);
-    expect(source.reads).toHaveLength(0);
+    expect(source.operations).toEqual([]);
+    expect(source.reads).toEqual([]);
+    expect(target.runs.size).toBe(0);
+  });
+
+  it("rejects descriptive entity selection before source access", async () => {
+    const source = new FixtureSource({ customers: [customer] });
+
+    await expect(runMigration({
+      mode: "dry-run",
+      source,
+      mappingCatalog: customerCatalog,
+      batchSize: 100,
+      entities: ["customer_addresses"],
+      sourceSystem: "legacy_postgres",
+      sourceDatabaseIdentity: sourceIdentity,
+    })).rejects.toThrow("not dry-run-ready in catalog: customer_addresses");
+
+    expect(source.operations).toEqual([]);
+    expect(source.reads).toEqual([]);
+  });
+
+  it("rejects duplicate entity selection before source access", async () => {
+    const source = new FixtureSource({ customers: [customer] });
+
+    await expect(runMigration({
+      mode: "dry-run",
+      source,
+      mappingCatalog: fixtureCatalog,
+      batchSize: 100,
+      entities: ["customers", "customers"],
+      sourceSystem: "legacy_postgres",
+      sourceDatabaseIdentity: sourceIdentity,
+    })).rejects.toThrow("Migration entities must not contain duplicates");
+
+    expect(source.operations).toEqual([]);
+  });
+
+  it("rejects an empty entity selection before source access", async () => {
+    const source = new FixtureSource({ customers: [customer] });
+
+    await expect(runMigration({
+      mode: "dry-run",
+      source,
+      mappingCatalog: fixtureCatalog,
+      batchSize: 100,
+      entities: [],
+      sourceSystem: "legacy_postgres",
+      sourceDatabaseIdentity: sourceIdentity,
+    })).rejects.toThrow("Migration must select at least one entity");
+
+    expect(source.operations).toEqual([]);
+  });
+
+  it("uses only the explicit catalog version without a global fallback", async () => {
+    const source = new FixtureSource({ customers: [customer] });
+    const result = await runMigration({
+      mode: "dry-run",
+      source,
+      mappingCatalog: fixtureCatalog,
+      batchSize: 100,
+      sourceSystem: "legacy_postgres",
+      sourceDatabaseIdentity: sourceIdentity,
+    });
+
+    expect(result.sourceManifest.mappingCatalogVersion).toBe("fixture-catalog-v1");
+  });
+
+  it("owns the catalog before count can mutate the caller input", async () => {
+    const catalog = mutableFixtureCatalog("stable-catalog-v1");
+    const source = new FixtureSource({ customers: [customer] });
+    source.count = async () => {
+      catalog.version = "mutated-catalog-v2";
+      catalog.tables[0]!.sourceTable = "public.changed";
+      catalog.tables[0]!.columns[0]!.dataType = "text";
+      return 1;
+    };
+
+    const result = await runMigration({
+      mode: "dry-run",
+      source,
+      mappingCatalog: catalog,
+      batchSize: 100,
+      entities: ["customers"],
+      sourceSystem: "legacy_postgres",
+      sourceDatabaseIdentity: sourceIdentity,
+    });
+
+    expect(result.sourceManifest.mappingCatalogVersion).toBe("stable-catalog-v1");
+    expect(result.sourceManifest.tables[0]?.table).toBe("customers");
+  });
+
+  it("owns source snapshots before count can mutate the adapter result", async () => {
+    const source = new FixtureSource({ customers: [customer] });
+    const snapshot = {
+      entity: "customers" as const,
+      schema: "public",
+      table: "customers",
+      idColumn: "id",
+      columns: [{ name: "id", ordinalPosition: 1, dataType: "bigint", udtName: "int8", nullable: false }],
+    };
+    source.describeTables = async () => {
+      source.operations.push("describe");
+      return [snapshot];
+    };
+    source.count = async () => {
+      snapshot.table = "changed";
+      snapshot.columns[0]!.dataType = "text";
+      snapshot.columns.push({
+        name: "injected",
+        ordinalPosition: 2,
+        dataType: "text",
+        udtName: "text",
+        nullable: true,
+      });
+      return 1;
+    };
+
+    const result = await runMigration({
+      mode: "dry-run",
+      source,
+      mappingCatalog: fixtureCatalog,
+      batchSize: 100,
+      entities: ["customers"],
+      sourceSystem: "legacy_postgres",
+      sourceDatabaseIdentity: sourceIdentity,
+    });
+
+    expect(result.sourceManifest.tables).toEqual([{
+      entity: "customers",
+      schema: "public",
+      table: "customers",
+      idColumn: "id",
+      columns: [{ name: "id", ordinalPosition: 1, dataType: "bigint", udtName: "int8", nullable: false }],
+    }]);
   });
 
 });
+
+function mutableFixtureCatalog(version: string) {
+  return {
+    version,
+    tables: [{
+      sourceTable: "public.customers",
+      idColumn: "id",
+      targetEntities: [{ entity: "customers" as const, mapping: "direct" as const, readiness: "dry-run" as const }],
+      columns: [{ name: "id", dataType: "bigint", udtName: "int8", nullable: false, required: true }],
+    }],
+  };
+}
 
 function stateKey(runId: string, entity: MigrationEntity, batchNumber: number): string {
   return `${runId}:${entity}:${batchNumber}`;
@@ -225,3 +411,26 @@ const sourceIdentity: SourceManifest["databaseIdentity"] = {
   port: "5432",
   database: "legacy",
 };
+
+const fixtureCatalog = createLegacyMappingCatalog({
+  version: "fixture-catalog-v1",
+  tables: [{
+    sourceTable: "public.customers",
+    idColumn: "id",
+    targetEntities: [{ entity: "customers", mapping: "direct", readiness: "dry-run" }],
+    columns: [{ name: "id", dataType: "bigint", udtName: "int8", nullable: false, required: true }],
+  }],
+});
+
+const customerCatalog = createLegacyMappingCatalog({
+  version: "customer-catalog-v1",
+  tables: [{
+    sourceTable: "public.customers",
+    idColumn: "id",
+    targetEntities: [
+      { entity: "customers", mapping: "direct", readiness: "dry-run" },
+      { entity: "customer_addresses", mapping: "synthetic", readiness: "descriptive" },
+    ],
+    columns: [{ name: "id", dataType: "bigint", udtName: "int8", nullable: false, required: true }],
+  }],
+});

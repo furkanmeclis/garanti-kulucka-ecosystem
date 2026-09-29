@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { LegacyDatabaseSource, resolveTableMap, type LegacyQueryDatabase } from "../src/legacy-source.js";
+import { legacyMappingCatalog } from "../src/mapping-catalog.js";
 
 class FakeDatabase implements LegacyQueryDatabase {
   readonly queries: { sql: string; parameters: readonly unknown[] }[] = [];
@@ -135,6 +136,90 @@ describe("LegacyDatabaseSource", () => {
     await expect(source.describeTables(["customers"])).rejects.toThrow(
       "Legacy source table legacy.musteriler is missing configured id column legacy_id",
     );
+  });
+
+  it("introspects and validates the dry-run-ready mapping", async () => {
+    const db = new FakeDatabase(legacyMappingCatalog.tables[0]!.columns.map((column, index) => ({
+      column_name: column.name,
+      ordinal_position: index + 1,
+      data_type: column.dataType,
+      udt_name: column.udtName,
+      is_nullable: column.nullable ? "YES" : "NO",
+    })));
+    const source = new LegacyDatabaseSource({
+      db,
+      sourceSystem: "legacy_postgres",
+      tables: {
+        customers: "public.musteriler",
+      },
+      mappingCatalog: legacyMappingCatalog,
+    });
+
+    const snapshots = await source.describeTables(["customers"]);
+
+    expect(db.queries).toHaveLength(1);
+    expect(snapshots.map(({ entity, schema, table }) => ({ entity, schema, table }))).toEqual([
+      { entity: "customers", schema: "public", table: "musteriler" },
+    ]);
+  });
+
+  it("rejects an invalid catalog before querying", () => {
+    expect(() => new LegacyDatabaseSource({
+      db: new FakeDatabase(),
+      sourceSystem: "legacy_postgres",
+      tables: { customers: "public.musteriler" },
+      mappingCatalog: {
+        version: "test-v1",
+        tables: [{
+          sourceTable: "public.musteriler",
+          idColumn: "id",
+          targetEntities: [{ entity: "customers", mapping: "direct", readiness: "dry-run" }],
+          columns: [],
+        }],
+      },
+    })).toThrow("id column public.musteriler.id is not declared");
+  });
+
+  it("rejects catalog routing to another table before querying", () => {
+    const db = new FakeDatabase();
+    expect(() => new LegacyDatabaseSource({
+      db,
+      sourceSystem: "legacy_postgres",
+      tables: { customers: "public.other_customers" },
+      mappingCatalog: legacyMappingCatalog,
+    })).toThrow("routing for customers must be public.musteriler.id");
+    expect(db.queries).toHaveLength(0);
+  });
+
+  it("rejects catalog routing with the wrong id column before querying", () => {
+    const db = new FakeDatabase();
+    expect(() => new LegacyDatabaseSource({
+      db,
+      sourceSystem: "legacy_postgres",
+      tables: { customers: { tableName: "public.musteriler", idColumn: "legacy_id" } },
+      mappingCatalog: legacyMappingCatalog,
+    })).toThrow("routing for customers must be public.musteriler.id");
+    expect(db.queries).toHaveLength(0);
+  });
+
+  it("rejects missing and catalog-unready routing before querying", () => {
+    const missingDb = new FakeDatabase();
+    expect(() => new LegacyDatabaseSource({
+      db: missingDb,
+      sourceSystem: "legacy_postgres",
+      tables: {},
+      mappingCatalog: legacyMappingCatalog,
+    })).toThrow("routing is missing dry-run-ready target customers");
+    expect(missingDb.queries).toHaveLength(0);
+
+    const extraDb = new FakeDatabase();
+    expect(() => new LegacyDatabaseSource({
+      db: extraDb,
+      sourceSystem: "legacy_postgres",
+      tables: { customers: "public.musteriler", customer_addresses: "public.musteriler" },
+      mappingCatalog: legacyMappingCatalog,
+    })).toThrow("routing contains catalog-unready target customer_addresses");
+    expect(extraDb.queries).toHaveLength(0);
   });
 
   it("reads planned offset batches without treating offsets as source ids", async () => {

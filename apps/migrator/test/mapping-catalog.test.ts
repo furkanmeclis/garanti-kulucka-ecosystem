@@ -1,0 +1,453 @@
+import { describe, expect, it } from "vitest";
+import {
+  createLegacyMappingCatalog,
+  dryRunMigrationEntities,
+  legacyMappingCatalog,
+  mappingCatalogVersion,
+  validateLegacySourceSnapshots,
+  validateLegacyTableColumns,
+} from "../src/mapping-catalog.js";
+import type { LegacyMappingCatalog } from "../src/mapping-catalog.js";
+import type { SourceColumnSnapshot, SourceTableSnapshot } from "../src/types.js";
+
+describe("legacy mapping catalog", () => {
+  const customerMapping = legacyMappingCatalog.tables[0]!;
+
+  it("accepts the exact real musteriler schema and declares all customer targets", () => {
+    expect(() => validateLegacyTableColumns("public.musteriler", realMusterilerColumns(), customerMapping))
+      .not.toThrow();
+    expect(customerMapping.targetEntities).toEqual([
+      { entity: "customers", mapping: "direct", readiness: "dry-run" },
+      { entity: "customer_addresses", mapping: "synthetic", readiness: "descriptive" },
+      { entity: "customer_external_identities", mapping: "synthetic", readiness: "descriptive" },
+    ]);
+    expect(customerMapping.columns.map((column) => column.name)).toEqual([
+      "id",
+      "ad",
+      "soyad",
+      "email",
+      "telefon",
+      "adres",
+      "il",
+      "ilce",
+      "posta_kodu",
+      "notlar",
+      "woocommerce_id",
+      "kolaybi_id",
+      "olusturma_tarihi",
+      "guncelleme_tarihi",
+      "username",
+    ]);
+    expect(mappingCatalogVersion).toBe("p2-customer-catalog-v1");
+  });
+
+  it("rejects a pre-username schema until a lossless row transform exists", () => {
+    expect(() => validateLegacyTableColumns(
+      "public.musteriler",
+      realMusterilerColumns().filter((column) => column.name !== "username"),
+      customerMapping,
+    )).toThrow("missing required columns [username]");
+  });
+
+  it("selects only dry-run-ready targets", () => {
+    expect(dryRunMigrationEntities(legacyMappingCatalog)).toEqual(["customers"]);
+  });
+
+  it.each([
+    ["source table", catalogWith({ sourceTable: "musteriler" }, { sourceTable: "public.musteriler" }),
+      "duplicate source table public.musteriler"],
+    ["target entity", catalogWith({}, { sourceTable: "public.other", targetEntity: "customers" }),
+      "duplicate target entity customers"],
+    ["column", catalogWith({ duplicateColumn: true }), "duplicate column public.musteriler.id"],
+  ])("rejects a duplicate %s before lookup maps are built", (_label, catalog, message) => {
+    expect(() => createLegacyMappingCatalog(catalog)).toThrow(message);
+  });
+
+  it("requires the id column to be declared, required, and non-nullable", () => {
+    expect(() => createLegacyMappingCatalog(catalogWith({ omitIdColumn: true }))).toThrow(
+      "id column public.musteriler.id is not declared",
+    );
+    expect(() => createLegacyMappingCatalog(catalogWith({ optionalIdColumn: true }))).toThrow(
+      "id column public.musteriler.id must be required",
+    );
+    expect(() => createLegacyMappingCatalog(catalogWith({ nullableIdColumn: true }))).toThrow(
+      "id column public.musteriler.id must not be nullable",
+    );
+  });
+
+  it("returns a defensive deeply frozen catalog", () => {
+    const input = catalogWith();
+    const catalog = createLegacyMappingCatalog(input);
+
+    expect(catalog).not.toBe(input);
+    expect(catalog.tables[0]).not.toBe(input.tables[0]);
+    expect(catalog.tables[0]!.targetEntities[0]).not.toBe(input.tables[0]!.targetEntities[0]);
+    expect(catalog.tables[0]!.columns[0]).not.toBe(input.tables[0]!.columns[0]);
+    expect(Object.isFrozen(catalog)).toBe(true);
+    expect(Object.isFrozen(catalog.tables)).toBe(true);
+    expect(Object.isFrozen(catalog.tables[0])).toBe(true);
+    expect(Object.isFrozen(catalog.tables[0]!.targetEntities)).toBe(true);
+    expect(Object.isFrozen(catalog.tables[0]!.targetEntities[0])).toBe(true);
+    expect(Object.isFrozen(catalog.tables[0]!.columns)).toBe(true);
+    expect(Object.isFrozen(catalog.tables[0]!.columns[0])).toBe(true);
+
+    input.version = "mutated-v2";
+    input.tables[0]!.sourceTable = "public.changed";
+    input.tables[0]!.columns[0]!.dataType = "text";
+    expect(catalog.version).toBe("test-v1");
+    expect(catalog.tables[0]!.sourceTable).toBe("public.musteriler");
+    expect(catalog.tables[0]!.columns[0]!.dataType).toBe("uuid");
+  });
+
+  it("requires every source table to declare a target", () => {
+    const catalog = catalogWith();
+    const table = catalog.tables[0]!;
+    expect(() => createLegacyMappingCatalog({
+      ...catalog,
+      tables: [{ ...table, targetEntities: [] }],
+    })).toThrow("source table public.musteriler must declare at least one target");
+  });
+
+  it("rejects an empty catalog", () => {
+    expect(() => createLegacyMappingCatalog({ version: "test-v1", tables: [] })).toThrow(
+      "Legacy mapping catalog must declare at least one target",
+    );
+  });
+
+  it.each([
+    ["synthetic dry-run", "synthetic", "dry-run", "synthetic target customers cannot be dry-run-ready"],
+    ["direct descriptive", "direct", "descriptive", "direct target customers cannot be descriptive"],
+  ] as const)("rejects %s readiness", (_label, mapping, readiness, message) => {
+    const catalog = catalogWith();
+    const table = catalog.tables[0]!;
+    expect(() => createLegacyMappingCatalog({
+      ...catalog,
+      tables: [{ ...table, targetEntities: [{ entity: "customers", mapping, readiness }] }],
+    })).toThrow(message);
+  });
+
+  it.each([
+    ["entity", { entity: "not_canonical" }, "target entity is invalid"],
+    ["mapping", { mapping: "copied" }, "target customers mapping is invalid"],
+    ["readiness", { readiness: "ready" }, "target customers readiness is invalid"],
+  ])("rejects an invalid runtime target %s literal", (_label, targetOverride, message) => {
+    const catalog = catalogWith();
+    const table = catalog.tables[0]!;
+    const target = table.targetEntities[0]!;
+    const jsonLikeCatalog = {
+      ...catalog,
+      tables: [{ ...table, targetEntities: [{ ...target, ...targetOverride }] }],
+    } as unknown as LegacyMappingCatalog;
+
+    expect(() => createLegacyMappingCatalog(jsonLikeCatalog)).toThrow(message);
+  });
+
+  it("requires at least one dry-run-ready target", () => {
+    const catalog = catalogWith();
+    const table = catalog.tables[0]!;
+    expect(() => createLegacyMappingCatalog({
+      ...catalog,
+      tables: [{
+        ...table,
+        targetEntities: [{ entity: "customer_addresses", mapping: "synthetic", readiness: "descriptive" }],
+      }],
+    })).toThrow("must declare at least one dry-run-ready target");
+  });
+
+  it.each([
+    ["source table", { sourceTable: "public.bad-name" }, "source table public.bad-name is invalid"],
+    ["id column", { idColumn: "bad id" }, "id column for public.musteriler bad id is invalid"],
+  ])("rejects an invalid %s identifier", (_label, overrides, message) => {
+    expect(() => createLegacyMappingCatalog(catalogWith(overrides))).toThrow(message);
+  });
+
+  it("rejects invalid column identifiers and blank database type names", () => {
+    const catalog = catalogWith();
+    const table = catalog.tables[0]!;
+    const baseColumn = table.columns[0]!;
+    expect(() => createLegacyMappingCatalog({
+      ...catalog,
+      tables: [{ ...table, columns: [{ ...baseColumn, name: "bad-name" }] }],
+    })).toThrow("column name for public.musteriler bad-name is invalid");
+    expect(() => createLegacyMappingCatalog({
+      ...catalog,
+      tables: [{ ...table, columns: [{ ...baseColumn, dataType: " " }] }],
+    })).toThrow("data type for public.musteriler.id must not be blank");
+    expect(() => createLegacyMappingCatalog({
+      ...catalog,
+      tables: [{ ...table, columns: [{ ...baseColumn, udtName: " " }] }],
+    })).toThrow("UDT name for public.musteriler.id must not be blank");
+  });
+
+  it.each([
+    ["missing required", { required: undefined }, "required for public.musteriler.id must be a boolean"],
+    ["nonboolean required", { required: "true" }, "required for public.musteriler.id must be a boolean"],
+    ["missing nullable", { nullable: undefined }, "nullable for public.musteriler.id must be a boolean"],
+    ["nonboolean nullable", { nullable: 0 }, "nullable for public.musteriler.id must be a boolean"],
+  ])("rejects a JSON-like catalog column with %s", (_label, columnOverride, message) => {
+    const catalog = catalogWith();
+    const table = catalog.tables[0]!;
+    const jsonLikeCatalog = {
+      ...catalog,
+      tables: [{
+        ...table,
+        columns: [{ ...table.columns[0]!, ...columnOverride }],
+      }],
+    } as unknown as LegacyMappingCatalog;
+
+    expect(() => createLegacyMappingCatalog(jsonLikeCatalog)).toThrow(message);
+  });
+
+  it.each([
+    ["version", catalogWith({}, undefined, " "), "catalog version must not be blank"],
+    ["source table", catalogWith({ sourceTable: " " }), "source table must not be blank"],
+    ["id column", catalogWith({ idColumn: " " }), "id column for public.musteriler must not be blank"],
+  ])("rejects a blank %s", (_label, catalog, message) => {
+    expect(() => createLegacyMappingCatalog(catalog)).toThrow(message);
+  });
+
+  it("rejects a source table with a blank identity segment", () => {
+    expect(() => createLegacyMappingCatalog(catalogWith({ sourceTable: "public." }))).toThrow(
+      "source table public. is invalid",
+    );
+  });
+
+  it("rejects unknown columns deterministically", () => {
+    const columns = [
+      ...realMusterilerColumns(),
+      { ...snapshot("z_unknown", "text", "text", true), ordinalPosition: 16 },
+      { ...snapshot("a_unknown", "text", "text", true), ordinalPosition: 17 },
+    ];
+
+    expect(() => validateLegacyTableColumns("public.musteriler", columns, customerMapping)).toThrow(
+      "Legacy source schema mismatch for public.musteriler: unexpected columns [a_unknown, z_unknown]",
+    );
+  });
+
+  it("rejects a missing required column", () => {
+    const columns = realMusterilerColumns().filter((column) => column.name !== "telefon");
+
+    expect(() => validateLegacyTableColumns("public.musteriler", columns, customerMapping)).toThrow(
+      "Legacy source schema mismatch for public.musteriler: missing required columns [telefon]",
+    );
+  });
+
+  it("rejects a missing source id column explicitly", () => {
+    const columns = realMusterilerColumns().filter((column) => column.name !== "id");
+
+    expect(() => validateLegacyTableColumns("public.musteriler", columns, customerMapping)).toThrow(
+      "Legacy source schema mismatch for public.musteriler: missing id column id",
+    );
+  });
+
+  it("rejects an incompatible data type and UDT", () => {
+    const columns = replaceColumn(realMusterilerColumns(), "woocommerce_id", {
+      dataType: "bigint",
+      udtName: "int8",
+    });
+
+    expect(() => validateLegacyTableColumns("public.musteriler", columns, customerMapping)).toThrow(
+      "column woocommerce_id expected type integer/int4, received bigint/int8",
+    );
+  });
+
+  it("rejects incompatible nullability", () => {
+    const columns = replaceColumn(realMusterilerColumns(), "telefon", { nullable: true });
+
+    expect(() => validateLegacyTableColumns("public.musteriler", columns, customerMapping)).toThrow(
+      "column telefon expected nullable=false, received nullable=true",
+    );
+  });
+
+  it("rejects duplicate snapshot names before a later valid value can replace an invalid one", () => {
+    const columns = [
+      { ...realMusterilerColumns()[0]!, dataType: "bigint", udtName: "int8" },
+      ...realMusterilerColumns(),
+    ];
+
+    expect(() => validateLegacyTableColumns("public.musteriler", columns, customerMapping)).toThrow(
+      "Legacy source schema mismatch for public.musteriler: duplicate column name id",
+    );
+  });
+
+  it("rejects duplicate snapshot ordinals", () => {
+    const columns = replaceColumn(realMusterilerColumns(), "ad", { ordinalPosition: 1 });
+
+    expect(() => validateLegacyTableColumns("public.musteriler", columns, customerMapping)).toThrow(
+      "Legacy source schema mismatch for public.musteriler: duplicate ordinal position 1",
+    );
+  });
+
+  it.each([0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1])(
+    "rejects invalid snapshot ordinal %s",
+    (ordinalPosition) => {
+      const columns = replaceColumn(realMusterilerColumns(), "id", { ordinalPosition });
+
+      expect(() => validateLegacyTableColumns("public.musteriler", columns, customerMapping)).toThrow(
+        `Legacy source schema mismatch for public.musteriler: column id ordinal position ${String(ordinalPosition)} is invalid`,
+      );
+    },
+  );
+
+  it("rejects JSON-like snapshot nullability that is not boolean", () => {
+    const columns = replaceColumn(realMusterilerColumns(), "id", {
+      nullable: "false" as unknown as boolean,
+    });
+
+    expect(() => validateLegacyTableColumns("public.musteriler", columns, customerMapping)).toThrow(
+      "Legacy source schema mismatch for public.musteriler: column id nullable must be a boolean",
+    );
+  });
+
+  it.each([
+    ["blank name", { name: " " }, "column name   is invalid"],
+    ["unsafe name", { name: "bad-name" }, "column name bad-name is invalid"],
+    ["blank data type", { dataType: " " }, "column id data type must not be blank"],
+    ["blank UDT name", { udtName: " " }, "column id UDT name must not be blank"],
+  ])("rejects snapshot metadata with a %s", (_label, columnOverride, message) => {
+    const columns = replaceColumn(
+      realMusterilerColumns(),
+      "id",
+      columnOverride as Partial<SourceColumnSnapshot>,
+    );
+
+    expect(() => validateLegacyTableColumns("public.musteriler", columns, customerMapping)).toThrow(
+      `Legacy source schema mismatch for public.musteriler: ${message}`,
+    );
+  });
+
+  it("validates selected source snapshots against catalog routing and columns", () => {
+    expect(() => validateLegacySourceSnapshots(
+      legacyMappingCatalog,
+      [musterilerSnapshot()],
+      ["customers"],
+    )).not.toThrow();
+    expect(() => validateLegacySourceSnapshots(legacyMappingCatalog, [], ["customers"])).toThrow(
+      "exactly one snapshot per selected entity",
+    );
+    expect(() => validateLegacySourceSnapshots(
+      legacyMappingCatalog,
+      [{ ...musterilerSnapshot(), table: "other" }],
+      ["customers"],
+    )).toThrow("Source table snapshot for customers must route to public.musteriler.id");
+    expect(() => validateLegacySourceSnapshots(
+      legacyMappingCatalog,
+      [{ ...musterilerSnapshot(), columns: realMusterilerColumns().slice(0, -1) }],
+      ["customers"],
+    )).toThrow("missing required columns [username]");
+  });
+
+  it("rejects descriptive snapshot selection", () => {
+    expect(() => validateLegacySourceSnapshots(
+      legacyMappingCatalog,
+      [{ ...musterilerSnapshot(), entity: "customer_addresses" }],
+      ["customer_addresses"],
+    )).toThrow("Migration entity customer_addresses is not dry-run-ready in catalog");
+  });
+});
+
+function realMusterilerColumns(): SourceColumnSnapshot[] {
+  return [
+    snapshot("id", "uuid", "uuid", false),
+    snapshot("ad", "character varying", "varchar", false),
+    snapshot("soyad", "character varying", "varchar", true),
+    snapshot("email", "character varying", "varchar", true),
+    snapshot("telefon", "character varying", "varchar", false),
+    snapshot("adres", "text", "text", true),
+    snapshot("il", "character varying", "varchar", true),
+    snapshot("ilce", "character varying", "varchar", true),
+    snapshot("posta_kodu", "character varying", "varchar", true),
+    snapshot("notlar", "text", "text", true),
+    snapshot("woocommerce_id", "integer", "int4", true),
+    snapshot("kolaybi_id", "character varying", "varchar", true),
+    snapshot("olusturma_tarihi", "timestamp with time zone", "timestamptz", true),
+    snapshot("guncelleme_tarihi", "timestamp with time zone", "timestamptz", true),
+    snapshot("username", "text", "text", true),
+  ];
+}
+
+function musterilerSnapshot(): SourceTableSnapshot {
+  return {
+    entity: "customers",
+    schema: "public",
+    table: "musteriler",
+    idColumn: "id",
+    columns: realMusterilerColumns(),
+  };
+}
+
+function snapshot(
+  name: string,
+  dataType: string,
+  udtName: string,
+  nullable: boolean,
+): SourceColumnSnapshot {
+  return { name, ordinalPosition: ordinalByColumn[name] ?? 99, dataType, udtName, nullable };
+}
+
+function replaceColumn(
+  columns: SourceColumnSnapshot[],
+  name: string,
+  replacement: Partial<SourceColumnSnapshot>,
+): SourceColumnSnapshot[] {
+  return columns.map((column) => column.name === name ? { ...column, ...replacement } : column);
+}
+
+const ordinalByColumn: Record<string, number> = {
+  id: 1,
+  ad: 2,
+  soyad: 3,
+  email: 4,
+  telefon: 5,
+  adres: 6,
+  il: 7,
+  ilce: 8,
+  posta_kodu: 9,
+  notlar: 10,
+  woocommerce_id: 11,
+  kolaybi_id: 12,
+  olusturma_tarihi: 13,
+  guncelleme_tarihi: 14,
+  username: 15,
+};
+
+function catalogWith(
+  first: {
+    sourceTable?: string;
+    idColumn?: string;
+    duplicateColumn?: boolean;
+    omitIdColumn?: boolean;
+    optionalIdColumn?: boolean;
+    nullableIdColumn?: boolean;
+  } = {},
+  second?: { sourceTable: string; targetEntity?: "customers" | "messages" },
+  version = "test-v1",
+) {
+  const idColumn = columnContract("id", first.nullableIdColumn ?? false, !first.optionalIdColumn);
+  const columns = first.omitIdColumn ? [] : [idColumn, ...(first.duplicateColumn ? [idColumn] : [])];
+  return {
+    version,
+    tables: [
+      {
+        sourceTable: first.sourceTable ?? "public.musteriler",
+        idColumn: first.idColumn ?? "id",
+        targetEntities: [{ entity: "customers" as const, mapping: "direct" as const, readiness: "dry-run" as const }],
+        columns,
+      },
+      ...(second ? [{
+        sourceTable: second.sourceTable,
+        idColumn: "id",
+        targetEntities: [{
+          entity: second.targetEntity ?? "messages",
+          mapping: "direct" as const,
+          readiness: "dry-run" as const,
+        }],
+        columns: [columnContract("id", false, true)],
+      }] : []),
+    ],
+  };
+}
+
+function columnContract(name: string, nullable: boolean, required: boolean) {
+  return { name, dataType: "uuid", udtName: "uuid", nullable, required };
+}

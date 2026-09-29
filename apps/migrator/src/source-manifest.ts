@@ -8,8 +8,6 @@ import type {
   SourceTableSnapshot,
 } from "./types.js";
 
-export const mappingCatalogVersion = "p1-foundation-v1";
-
 export interface CreateSourceManifestInput {
   readonly sourceSystem: string;
   readonly databaseIdentity: SourceDatabaseIdentity;

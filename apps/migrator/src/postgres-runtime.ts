@@ -3,8 +3,13 @@ import type { ExecutePostgresMigrationInput } from "./commands.js";
 import { migrationApplyDisabledMessage } from "./errors.js";
 import { normalizePostgresDatabaseIdentity } from "./database-identity.js";
 import { LegacyDatabaseSource, type LegacyQueryDatabase, type LegacySourceTableMap } from "./legacy-source.js";
+import {
+  dryRunMigrationEntities,
+  legacyMappingCatalog,
+  validateLegacyMappingCatalog,
+  type LegacyMappingCatalog,
+} from "./mapping-catalog.js";
 import { runMigration, type MigrationRunResult } from "./orchestrator.js";
-import { canonicalMigrationEntities } from "./plan.js";
 import {
   withReadonlyRepeatableReadTransaction,
   type PostgresSourceClient,
@@ -26,15 +31,18 @@ export async function executePostgresMigration(
     const source = new LegacyDatabaseSource({
       db: postgresLegacyQueryDatabase(sourceClient),
       sourceSystem: input.sourceSystem,
-      tables: canonicalSourceTableMap(),
+      tables: canonicalSourceTableMap(legacyMappingCatalog),
+      mappingCatalog: legacyMappingCatalog,
     });
 
     return runMigration({
       mode: input.mode,
       source,
+      mappingCatalog: legacyMappingCatalog,
       batchSize: input.batchSize,
       sourceSystem: input.sourceSystem,
       sourceDatabaseIdentity: normalizePostgresDatabaseIdentity(input.sourceDatabaseUrl),
+      entities: dryRunMigrationEntities(legacyMappingCatalog),
     });
   });
 }
@@ -58,8 +66,16 @@ export function parseSafePostgresInt8(value: string): number {
   return parsed;
 }
 
-export function canonicalSourceTableMap(): LegacySourceTableMap {
-  return Object.fromEntries(canonicalMigrationEntities.map((entity) => [entity, entity])) as LegacySourceTableMap;
+export function canonicalSourceTableMap(catalog: LegacyMappingCatalog): LegacySourceTableMap {
+  validateLegacyMappingCatalog(catalog);
+  const tables: LegacySourceTableMap = {};
+  for (const mapping of catalog.tables) {
+    for (const target of mapping.targetEntities) {
+      if (target.readiness !== "dry-run") continue;
+      tables[target.entity] = { tableName: mapping.sourceTable, idColumn: mapping.idColumn };
+    }
+  }
+  return tables;
 }
 
 function postgresLegacyQueryDatabase(client: PostgresSourceClient): LegacyQueryDatabase {
