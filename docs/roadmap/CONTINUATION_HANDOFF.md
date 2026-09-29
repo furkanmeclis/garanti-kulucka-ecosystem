@@ -6,19 +6,19 @@ Bu belge, projeye yeni bir sohbetten veya bağlamsız bir çalışma oturumundan
 
 - Repo: `/Users/furkanmeclis/Documents/Projects/garanti-kulucka-ecosystem`
 - GitHub çalışma modeli: monorepo, yalnız `main`, PR yok.
-- Yayımlanmış son checkpoint: `v0.1.120`
-- Yayımlanmış son commit: `1bab0fa1634745143eb6f7291ac77dc731fdf106`
-- Commit mesajı: `feat(migrator): add source manifest resume guard`
-- Genel ilerleme: yaklaşık `%74`
-- Son tamamlanan çalışma: P1 source manifest/completeness ve resume guard checkpoint’i.
-- Sıradaki bağımlılık kapısı P2 Legacy Schema Introspection ve Mapping Catalog’dur; ilk dilim gerçek `information_schema` keşfi ile `public.musteriler` mappingleri, ardından `public.konusmalar` ve `public.mesajlar` mappingleridir.
+- Yayımlanmış son checkpoint: `v0.1.122`
+- Yayımlanmış son commit: `656c5f96e5c22cb47c63a1c841324552a5775065`
+- Commit mesajı: `feat(migrator): add legacy customer schema catalog`
+- Genel ilerleme: yaklaşık `%75`
+- Son tamamlanan çalışma: P2 `public.musteriler` schema introspection ve versionlanmış customer catalog checkpoint’i.
+- Sıradaki bağımlılık kapısı P2 içinde customer transform/cardinality/account-resolution dilimidir: `public.musteriler -> customers`, koşullu `customer_addresses` ve account-scoped `customer_external_identities`; ardından `public.konusmalar` ve `public.mesajlar` mappingleri gelir.
 - Production `migrate --apply` kapısı kapalıdır. Tüm aktivasyon koşulları geçmeden açılmamalıdır.
 
-`%74` tahmini; API, worker, auth temelleri, admin persistence, Socket.IO sınırları, fixture tabanlı provider sözleşmeleri, CI/tag otomasyonu, container buildleri, migrator dry-run güvenlik temeli ve P1 source manifest/completeness checkpoint’ini içerir. Gerçek frontend taşıması, canlı provider adapterları, P3 transaction snapshot isolation ile source row-content checksum/idempotency ve production veri taşıma aktivasyonu tamamlanmış kabul edilmez.
+`%75` tahmini; API, worker, auth temelleri, admin persistence, Socket.IO sınırları, fixture tabanlı provider sözleşmeleri, CI/tag otomasyonu, container buildleri, migrator dry-run güvenlik temeli, P1 source manifest/completeness ve P2 ilk customer introspection checkpoint’ini içerir. Customer row dönüşümleri, sentetik address cardinality, external identity account resolution, kalan P2 catalogları, gerçek frontend taşıması, canlı provider adapterları, P3 transaction snapshot isolation ile source row-content checksum/idempotency ve P4 production veri taşıma aktivasyonu tamamlanmış kabul edilmez.
 
 ## 2. Tarihsel Schema Kimliği Checkpoint'i (`v0.1.116`)
 
-Bu bölüm, `v0.1.116` ile yayımlanan tarihsel schema kimliği checkpoint'ini kaydeder. Güncel yayımlanmış release tabanı `v0.1.120`'dir; yeni sohbet bu tarihsel işi yeniden üretmeye çalışmadan P2 maddesinden devam etmelidir.
+Bu bölüm, `v0.1.116` ile yayımlanan tarihsel schema kimliği checkpoint'ini kaydeder. Güncel yayımlanmış release tabanı `v0.1.122`'dir; yeni sohbet bu tarihsel işi yeniden üretmeye çalışmadan P2 maddesinden devam etmelidir.
 
 Checkpoint kapsamı:
 
@@ -142,6 +142,30 @@ Kanıt:
 - Otomatik tag: `v0.1.120`
 - Artifact: `container-images-v0.1.120`, `384237406` byte; API, worker, migrator ve web `.tar.gz` arşivlerini içerir
 
+## 3.3. Tamamlanan P2 Customer Schema Introspection Dilimi
+
+P2'nin ilk introspection ve mapping catalog checkpoint'i `v0.1.122` ile yayımlandı. Bu checkpoint customer dönüşümlerini veya P2 kabul kapısını tamamlamaz.
+
+Kapsam:
+
+- `mappingCatalogVersion` değeri `p2-customer-catalog-v1` olarak versionlandı.
+- `public.musteriler` için 15 kolonlu `information_schema` sözleşmesi açıkça tanımlandı.
+- Bilinmeyen veya eksik kolon; type, UDT, nullability ve identifier drift'i; duplicate kolon/ordinal metadata'sı fail-closed reddedilir.
+- Catalog, source routing, catalog version ve seçilen snapshot kapsamı birbirine bağlandı; catalog ile snapshot verileri defensive clone/freeze ile doğrulama sonrasında dış mutasyona kapatıldı.
+- Yalnız `customers` dry-run-ready durumundadır.
+- `customer_addresses` ve `customer_external_identities`; koşullu cardinality, account resolution ve gerçek row transformları tamamlanana kadar descriptive tutulur ve çalıştırılabilir plana girmez.
+- Core ve production apply, source veya target erişiminden önce kapalı kalır.
+
+Kanıt:
+
+- Implementation commit: `656c5f96e5c22cb47c63a1c841324552a5775065` (`feat(migrator): add legacy customer schema catalog`)
+- Migrator unit: `142/142`
+- Migration boundary: `3/3`
+- Tam `npm run check`: başarılı
+- GitHub Actions Build and Tag run `36503036840`: başarılı
+- Otomatik tag: `v0.1.122`
+- Artifact: `container-images-v0.1.122`, `384197701` byte, süresi dolmamış; API, worker, migrator ve web `.tar.gz` arşivlerini içerir
+
 ## 4. Değişmez Mimari ve Teslimat Kararları
 
 Bu kararlar yeni sohbetlerde yeniden tartışmaya açılmadan uygulanacaktır:
@@ -197,6 +221,8 @@ Durum: tamamlandı ve runtime tip dilimi `v0.1.118`, source manifest/completenes
 Kabul kapısı: kaynaktan sessizce atlanan bir satır verification tarafından bulunmalı; güvenli sayı sınırı üstündeki ID hiçbir katmanda yuvarlanmamalı.
 
 ### P2. Legacy Schema Introspection ve Mapping Catalog
+
+Durum: ilk customer schema introspection checkpoint'i tamamlandı ve `v0.1.122` ile yayımlandı; tam P2 ve customer mapping tamamlanmadı. `public.musteriler` 15-kolon sözleşmesi fail-closed doğrulanır ve yalnız `customers` dry-run-ready durumundadır. Koşullu `customer_addresses`, account-scoped `customer_external_identities`, gerçek customer row transformları, conversation/message catalogları ve fixture kabul kapısı açıktır.
 
 Önce kaynak database gerçek yapısı `information_schema` üzerinden çıkarılmalıdır. Legacy migration dosyaları tek başına doğru kaynak kabul edilmemelidir; çalışan kod ile migration geçmişi arasında drift vardır.
 
@@ -446,8 +472,8 @@ git diff --check
 Beklenen yayımlanmış taban:
 
 ```text
-1bab0fa1634745143eb6f7291ac77dc731fdf106
-v0.1.120
+656c5f96e5c22cb47c63a1c841324552a5775065
+v0.1.122
 ```
 
 Aktif schema checkpoint kaybolmuşsa otomatik olarak yeniden üretme. Önce `git status`, `git reflog`, stash, başka worktree ve kullanıcı tarafından bırakılmış değişiklikleri araştır. Mevcut değişiklikleri koru.
@@ -554,11 +580,11 @@ Bu maddeler ihtiyaç varsa genişletilir; mevcut davranış sebepsiz yere yenide
 
 İlk görev P2 maddesidir:
 
-1. Çalışma ağacındaki mevcut değişiklikleri koru ve yayımlanmış `v0.1.120` P1 checkpoint’ini taban kabul et.
-2. Legacy source şemasını gerçek `information_schema` sorgularıyla keşfet; migration geçmişini tek başına doğru kaynak kabul etme.
-3. Versionlanmış mapping catalog içinde önce `public.musteriler -> customers`, `customer_addresses` ve `customer_external_identities` dönüşümlerini uygula.
-4. Ardından `public.konusmalar -> conversations` ve `public.mesajlar -> messages` dönüşümlerini, zorunlu ID-map/FK ve account/provider çözümlemeleriyle uygula.
-5. Bilinmeyen kolon ve enumları fail-closed yönet; hedefli fixture testlerini ve tam `npm run check` doğrulamasını çalıştır.
-6. Commit/push sonrası CI, yeni tag ve artifact’i doğrula; production apply kapısını kapalı tut.
+1. Çalışma ağacındaki mevcut değişiklikleri koru ve yayımlanmış `v0.1.122` P2 introspection checkpoint’ini taban kabul et.
+2. `p2-customer-catalog-v1` sözleşmesini koruyarak gerçek `public.musteriler -> customers` row transformunu tamamla.
+3. Adres bileşenleri mevcutsa koşullu `customer_addresses` üretimini, account resolution tamamlandığında bir veya daha fazla `customer_external_identities` üretimini ve ayrı `mapping_role` provenance kayıtlarını uygula.
+4. Ardından `public.konusmalar -> conversations` ve `public.mesajlar -> messages` catalog ve dönüşümlerini, zorunlu ID-map/FK ve account/provider çözümlemeleriyle uygula.
+5. Bilinmeyen kolon ve enumları fail-closed yönet; sentetik legacy PostgreSQL fixture testlerini ve tam `npm run check` doğrulamasını çalıştır.
+6. Commit/push sonrası CI, yeni tag ve artifact’i doğrula; P3 ve P4 kapılarını açık, core ve production apply yollarını kapalı tut.
 
 P2 mapping ve introspection kabul kapısı tamamlanmadan P3 güvenlik çalışmalarına veya apply aktivasyonuna geçilmemelidir. P1 resume guard tamamlanmış olsa da tam resume/idempotency aktivasyon maddesi P3 transaction snapshot isolation ve source row-content checksum/idempotency kanıtları bitene kadar açık kalır.
