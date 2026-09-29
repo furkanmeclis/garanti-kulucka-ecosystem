@@ -7,6 +7,11 @@ import type {
   SourceColumnSnapshot,
   SourceTableSnapshot,
 } from "./types.js";
+
+declare const sourcePayloadChecksumBrand: unique symbol;
+export type SourcePayloadChecksum = `sha256:${string}` & {
+  readonly [sourcePayloadChecksumBrand]: true;
+};
 import {
   validateLegacyTableColumns,
   validateLegacyMappingCatalog,
@@ -202,7 +207,7 @@ export class LegacyDatabaseSource implements LegacySource {
       sourceTable: table.tableName,
       sourceId: String(rawSourceId),
       payload,
-      checksum: checksumPayload(payload),
+      checksum: calculateSourcePayloadChecksum(payload),
     };
   }
 }
@@ -290,23 +295,116 @@ function assertIdentifierPath(identifier: string): void {
   }
 }
 
-function normalizePayload(row: Record<string, unknown>): Record<string, unknown> {
-  return Object.keys(row)
-    .sort()
-    .reduce<Record<string, unknown>>((payload, key) => {
-      payload[key] = normalizeValue(row[key]);
-      return payload;
-    }, {});
+const invalidChecksumPayloadMessage = "Source payload checksum requires strict JSON-like data";
+
+type CanonicalPayloadValue = null | string | boolean | number | CanonicalPayloadValue[] | CanonicalPayloadRecord;
+interface CanonicalPayloadRecord {
+  [key: string]: CanonicalPayloadValue;
 }
 
-function normalizeValue(value: unknown): unknown {
-  if (value instanceof Date) return value.toISOString();
-  if (typeof value === "bigint") return value.toString();
-  if (Array.isArray(value)) return value.map(normalizeValue);
-  if (value && typeof value === "object") return normalizePayload(value as Record<string, unknown>);
-  return value;
+function normalizePayload(row: Record<string, unknown>): CanonicalPayloadRecord {
+  return normalizePayloadRecord(row, new WeakSet<object>());
 }
 
-function checksumPayload(payload: Record<string, unknown>): string {
-  return `sha256:${createHash("sha256").update(JSON.stringify(payload)).digest("hex")}`;
+function normalizePayloadRecord(value: object, seen: WeakSet<object>): CanonicalPayloadRecord {
+  const prototype = safeReflect(() => Object.getPrototypeOf(value));
+  if (prototype !== Object.prototype && prototype !== null) rejectChecksumPayload();
+  enterChecksumObject(value, seen);
+
+  const symbols = safeReflect(() => Object.getOwnPropertySymbols(value));
+  if (symbols.length > 0) rejectChecksumPayload();
+  const descriptors = safeReflect(() => Object.getOwnPropertyDescriptors(value)) as Record<string, PropertyDescriptor>;
+  const normalized = Object.create(null) as CanonicalPayloadRecord;
+  for (const key of Object.keys(descriptors).sort(comparePayloadKeys)) {
+    const descriptor = descriptors[key]!;
+    if (!("value" in descriptor) || !descriptor.enumerable) rejectChecksumPayload();
+    Object.defineProperty(normalized, key, {
+      value: normalizePayloadValue(descriptor.value, seen),
+      enumerable: true,
+      configurable: false,
+      writable: false,
+    });
+  }
+  return normalized;
+}
+
+function normalizePayloadValue(value: unknown, seen: WeakSet<object>): CanonicalPayloadValue {
+  if (value === null || typeof value === "string" || typeof value === "boolean") return value;
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) rejectChecksumPayload();
+    return Object.is(value, -0) ? 0 : value;
+  }
+  if (typeof value !== "object") rejectChecksumPayload();
+
+  const prototype = safeReflect(() => Object.getPrototypeOf(value));
+  if (prototype === Date.prototype) return normalizePayloadDate(value, seen);
+  if (Array.isArray(value)) return normalizePayloadArray(value, seen);
+  return normalizePayloadRecord(value, seen);
+}
+
+function normalizePayloadDate(value: object, seen: WeakSet<object>): string {
+  enterChecksumObject(value, seen);
+  if (safeReflect(() => Reflect.ownKeys(value)).length > 0) rejectChecksumPayload();
+  const timestamp = safeReflect(() => Date.prototype.getTime.call(value));
+  if (!Number.isFinite(timestamp)) rejectChecksumPayload();
+  return safeReflect(() => Date.prototype.toISOString.call(value));
+}
+
+function normalizePayloadArray(value: unknown[], seen: WeakSet<object>): CanonicalPayloadValue[] {
+  if (safeReflect(() => Object.getPrototypeOf(value)) !== Array.prototype) rejectChecksumPayload();
+  enterChecksumObject(value, seen);
+  if (safeReflect(() => Object.getOwnPropertySymbols(value)).length > 0) rejectChecksumPayload();
+
+  const descriptors = safeReflect(() => Object.getOwnPropertyDescriptors(value)) as Record<string, PropertyDescriptor>;
+  const lengthDescriptor = descriptors.length;
+  if (lengthDescriptor === undefined || lengthDescriptor.value !== value.length) {
+    rejectChecksumPayload();
+  }
+  const allowedKeys = new Set(["length", ...Array.from({ length: value.length }, (_, index) => String(index))]);
+  if (Object.keys(descriptors).some((key) => !allowedKeys.has(key))) rejectChecksumPayload();
+
+  const normalized: CanonicalPayloadValue[] = [];
+  for (let index = 0; index < value.length; index += 1) {
+    const descriptor = descriptors[String(index)];
+    if (!descriptor || !("value" in descriptor) || !descriptor.enumerable) rejectChecksumPayload();
+    normalized.push(normalizePayloadValue(descriptor.value, seen));
+  }
+  return normalized;
+}
+
+function enterChecksumObject(value: object, seen: WeakSet<object>): void {
+  if (seen.has(value)) rejectChecksumPayload();
+  seen.add(value);
+}
+
+function serializeCanonicalPayload(value: CanonicalPayloadValue): string {
+  if (value === null) return "null";
+  if (typeof value === "string") return JSON.stringify(value);
+  if (typeof value === "boolean" || typeof value === "number") return String(value);
+  if (Array.isArray(value)) return `[${value.map(serializeCanonicalPayload).join(",")}]`;
+  return `{${Object.keys(value)
+    .map((key) => `${JSON.stringify(key)}:${serializeCanonicalPayload(value[key]!)}`)
+    .join(",")}}`;
+}
+
+function safeReflect<T>(operation: () => T): T {
+  try {
+    return operation();
+  } catch {
+    rejectChecksumPayload();
+  }
+}
+
+function rejectChecksumPayload(): never {
+  throw new TypeError(invalidChecksumPayloadMessage);
+}
+
+function comparePayloadKeys(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+export function calculateSourcePayloadChecksum(payload: Record<string, unknown>): SourcePayloadChecksum {
+  const canonical = normalizePayload(payload);
+  return `sha256:${createHash("sha256").update(serializeCanonicalPayload(canonical)).digest("hex")}` as
+    SourcePayloadChecksum;
 }

@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { LegacyDatabaseSource, resolveTableMap, type LegacyQueryDatabase } from "../src/legacy-source.js";
+import {
+  calculateSourcePayloadChecksum,
+  LegacyDatabaseSource,
+  resolveTableMap,
+  type LegacyQueryDatabase,
+} from "../src/legacy-source.js";
 import { legacyMappingCatalog } from "../src/mapping-catalog.js";
 
 class FakeDatabase implements LegacyQueryDatabase {
@@ -17,6 +22,107 @@ class FakeDatabase implements LegacyQueryDatabase {
 }
 
 describe("LegacyDatabaseSource", () => {
+  it("includes an own enumerable __proto__ key in stable checksum normalization", () => {
+    const plain = { id: "customer-1" };
+    const withDangerousKey = { id: "customer-1" };
+    Object.defineProperty(withDangerousKey, "__proto__", {
+      value: "owned-data",
+      enumerable: true,
+    });
+
+    expect(calculateSourcePayloadChecksum(withDangerousKey)).not.toBe(calculateSourcePayloadChecksum(plain));
+  });
+
+  it("rejects checksum accessors without invoking them", () => {
+    const payload: Record<string, unknown> = { id: "customer-1" };
+    let invoked = false;
+    Object.defineProperty(payload, "secret", {
+      enumerable: true,
+      get() {
+        invoked = true;
+        throw new Error("ayse@example.test");
+      },
+    });
+
+    expect(() => calculateSourcePayloadChecksum(payload)).toThrow(
+      "Source payload checksum requires strict JSON-like data",
+    );
+    expect(invoked).toBe(false);
+  });
+
+  it("canonicalizes JSON-like data deterministically without invoking toJSON", () => {
+    const date = new Date("2026-01-02T03:04:05.678Z");
+    const first = Object.create(null) as Record<string, unknown>;
+    Object.defineProperty(first, "z", { value: [null, true, 1.25, date], enumerable: true });
+    Object.defineProperty(first, "a", { value: { nested: "value" }, enumerable: true });
+    const second = { a: { nested: "value" }, z: [null, true, 1.25, date] };
+
+    expect(calculateSourcePayloadChecksum(first)).toBe(calculateSourcePayloadChecksum(second));
+    expect(calculateSourcePayloadChecksum({ value: -0 })).toBe(calculateSourcePayloadChecksum({ value: 0 }));
+  });
+
+  it("rejects symbol data and keys with a generic PII-safe error", () => {
+    const pii = "ayse@example.test";
+    const cases: Record<string, unknown>[] = [
+      { value: Symbol(pii) },
+      Object.assign({ value: "safe" }, { [Symbol(pii)]: "secret" }),
+    ];
+
+    for (const payload of cases) {
+      expectChecksumRejection(payload, pii);
+    }
+  });
+
+  it("never invokes toJSON or array accessors while rejecting them", () => {
+    const pii = "ayse@example.test";
+    let toJsonInvoked = false;
+    const withToJson = {
+      value: "safe",
+      toJSON() {
+        toJsonInvoked = true;
+        throw new Error(pii);
+      },
+    };
+    let getterInvoked = false;
+    const withArrayGetter = { values: ["safe"] };
+    Object.defineProperty(withArrayGetter.values, "0", {
+      enumerable: true,
+      get() {
+        getterInvoked = true;
+        throw new Error(pii);
+      },
+    });
+
+    expectChecksumRejection(withToJson, pii);
+    expectChecksumRejection(withArrayGetter, pii);
+    expect(toJsonInvoked).toBe(false);
+    expect(getterInvoked).toBe(false);
+  });
+
+  it("rejects cycles, shared objects, sparse arrays, custom array properties, and unsupported values", () => {
+    const cycle: Record<string, unknown> = {};
+    cycle.self = cycle;
+    const shared = { value: "same" };
+    const sparse = new Array(2);
+    sparse[1] = "present";
+    const custom = ["value"] as unknown[] & { extra?: string };
+    custom.extra = "not-an-index";
+
+    for (const payload of [
+      cycle,
+      { first: shared, second: shared },
+      { sparse },
+      { custom },
+      { value: undefined },
+      { value: 1n },
+      { value: Number.NaN },
+      { value: Number.POSITIVE_INFINITY },
+      { value: /not-plain/u },
+    ]) {
+      expectChecksumRejection(payload, "ayse@example.test");
+    }
+  });
+
   it("counts rows from the configured legacy table", async () => {
     const db = new FakeDatabase([{ count: "42" }]);
     const source = new LegacyDatabaseSource({
@@ -320,3 +426,14 @@ describe("LegacyDatabaseSource", () => {
     await expect(source.count("customers")).rejects.toThrow("No legacy source table configured for customers");
   });
 });
+
+function expectChecksumRejection(payload: Record<string, unknown>, pii: string): void {
+  try {
+    calculateSourcePayloadChecksum(payload);
+    throw new Error("Expected checksum calculation to fail");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    expect(message).toBe("Source payload checksum requires strict JSON-like data");
+    expect(message).not.toContain(pii);
+  }
+}

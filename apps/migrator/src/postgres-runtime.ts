@@ -1,4 +1,4 @@
-import { Client, types } from "pg";
+import { Client, TypeOverrides } from "pg";
 import type { ExecutePostgresMigrationInput } from "./commands.js";
 import { migrationApplyDisabledMessage } from "./errors.js";
 import { normalizePostgresDatabaseIdentity } from "./database-identity.js";
@@ -16,7 +16,8 @@ import {
 } from "./source-transaction.js";
 
 const postgresInt8Oid = 20;
-let safeIntegerParsersInstalled = false;
+const postgresTimestampOid = 1114;
+const postgresTimestampWithTimezoneOid = 1184;
 
 export async function executePostgresMigration(
   input: ExecutePostgresMigrationInput,
@@ -25,8 +26,10 @@ export async function executePostgresMigration(
     throw new Error(migrationApplyDisabledMessage);
   }
 
-  installSafeIntegerTypeParsers();
-  const sourceClient = new Client({ connectionString: input.sourceDatabaseUrl });
+  const sourceClient = new Client({
+    connectionString: input.sourceDatabaseUrl,
+    types: createLegacyPostgresTypeOverrides(),
+  });
   return withReadonlyRepeatableReadTransaction(sourceClient, async () => {
     const source = new LegacyDatabaseSource({
       db: postgresLegacyQueryDatabase(sourceClient),
@@ -47,10 +50,12 @@ export async function executePostgresMigration(
   });
 }
 
-export function installSafeIntegerTypeParsers(): void {
-  if (safeIntegerParsersInstalled) return;
-  types.setTypeParser(postgresInt8Oid, parseSafePostgresInt8);
-  safeIntegerParsersInstalled = true;
+export function createLegacyPostgresTypeOverrides(): TypeOverrides {
+  const overrides = new TypeOverrides();
+  overrides.setTypeParser(postgresInt8Oid, parseSafePostgresInt8);
+  overrides.setTypeParser(postgresTimestampOid, preservePostgresTimestampText);
+  overrides.setTypeParser(postgresTimestampWithTimezoneOid, preservePostgresTimestampText);
+  return overrides;
 }
 
 export function parseSafePostgresInt8(value: string): number {
@@ -64,6 +69,10 @@ export function parseSafePostgresInt8(value: string): number {
   }
 
   return parsed;
+}
+
+export function preservePostgresTimestampText(value: string): string {
+  return value;
 }
 
 export function canonicalSourceTableMap(catalog: LegacyMappingCatalog): LegacySourceTableMap {

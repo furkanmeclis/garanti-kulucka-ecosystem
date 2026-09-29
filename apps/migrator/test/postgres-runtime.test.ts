@@ -15,12 +15,20 @@ const { postgresClientConstructor } = vi.hoisted(() => ({
   postgresClientConstructor: vi.fn(),
 }));
 
+const { typeParserOverrides, typeOverridesConstructor } = vi.hoisted(() => ({
+  typeParserOverrides: new Map<number, (value: string) => unknown>(),
+  typeOverridesConstructor: vi.fn(function TypeOverridesFixture(this: unknown) {
+    return {
+      setTypeParser: (oid: number, parser: (value: string) => unknown) => typeParserOverrides.set(oid, parser),
+      getTypeParser: vi.fn(),
+    };
+  }),
+}));
+
 vi.mock("pg", () => ({
   Client: postgresClientConstructor,
   Pool: vi.fn(),
-  types: {
-    setTypeParser: vi.fn(),
-  },
+  TypeOverrides: typeOverridesConstructor,
 }));
 
 class FixturePostgresClient implements PostgresSourceClient {
@@ -67,6 +75,41 @@ describe("PostgreSQL migration runtime", () => {
     expect(parseSafePostgresInt8(String(Number.MAX_SAFE_INTEGER))).toBe(Number.MAX_SAFE_INTEGER);
     expect(() => parseSafePostgresInt8("9007199254740992")).toThrow(RangeError);
     expect(() => parseSafePostgresInt8("42.1")).toThrow(TypeError);
+  });
+
+  it("scopes lossless timestamp parsers to each legacy source client", async () => {
+    const client = new FixturePostgresClient(undefined, legacyMappingCatalog.tables[0]!.columns.map(
+      (column, index) => ({
+        column_name: column.name,
+        ordinal_position: index + 1,
+        data_type: column.dataType,
+        udt_name: column.udtName,
+        is_nullable: column.nullable ? "YES" : "NO",
+      }),
+    ));
+    postgresClientConstructor.mockImplementationOnce(function fixtureClientConstructor() {
+      return client;
+    });
+
+    await executePostgresMigration({
+      mode: "dry-run",
+      sourceDatabaseUrl: "postgres://source/legacy",
+      sourceSystem: "legacy_postgres",
+      batchSize: 500,
+    });
+
+    expect(typeOverridesConstructor).toHaveBeenCalled();
+    expect(typeParserOverrides.get(20)?.("42")).toBe(42);
+    expect(typeParserOverrides.get(1114)?.("2024-01-02 03:04:05.123456")).toBe(
+      "2024-01-02 03:04:05.123456",
+    );
+    expect(typeParserOverrides.get(1184)?.("2024-01-02 03:04:05.123456+00")).toBe(
+      "2024-01-02 03:04:05.123456+00",
+    );
+    expect(postgresClientConstructor.mock.calls.at(-1)?.[0]).toMatchObject({
+      connectionString: "postgres://source/legacy",
+      types: expect.any(Object),
+    });
   });
 
   it("rejects apply before constructing a source or target connection", async () => {
