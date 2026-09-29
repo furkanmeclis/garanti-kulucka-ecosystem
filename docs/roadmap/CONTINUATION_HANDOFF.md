@@ -6,15 +6,16 @@ Bu belge, projeye yeni bir sohbetten veya bağlamsız bir çalışma oturumundan
 
 - Repo: `/Users/furkanmeclis/Documents/Projects/garanti-kulucka-ecosystem`
 - GitHub çalışma modeli: monorepo, yalnız `main`, PR yok.
-- Yayımlanmış son checkpoint: `v0.1.122`
-- Yayımlanmış son commit: `656c5f96e5c22cb47c63a1c841324552a5775065`
-- Commit mesajı: `feat(migrator): add legacy customer schema catalog`
+- Yayımlanmış son checkpoint: `v0.1.124`
+- Yayımlanmış son commit: `15627ade9f77cafe240e86b110bf21881aaa1a28`
+- Commit mesajı: `fix(migrator): pin source session and separate row errors`
+- Bu tag, aynı push içindeki üç commit’in ucundadır: `b346503` WooCommerce provider seed, `80c630e` legacy customer row transform, `15627ad` source session pin ve row error ayrımı. Workflow her push için yalnız uç commit’i etiketler.
 - Genel ilerleme: yaklaşık `%75`
-- Son tamamlanan çalışma: P2 `public.musteriler` schema introspection ve versionlanmış customer catalog checkpoint’i.
-- Sıradaki bağımlılık kapısı P2 içinde customer transform/cardinality/account-resolution dilimidir: `public.musteriler -> customers`, koşullu `customer_addresses` ve account-scoped `customer_external_identities`; ardından `public.konusmalar` ve `public.mesajlar` mappingleri gelir.
+- Son tamamlanan çalışma: P2 `public.musteriler` row transform kütüphanesi, koşullu address draft’ları, unresolved external identity candidates ve migration `004` WooCommerce provider seed’i.
+- Sıradaki bağımlılık kapısı P2 içinde account resolution’dır. External identity adayları doğrulanmış integration account snapshot’ı olmadan `mapping_role` almaz. Ardından transform dry-run doğrulamasına bağlanır. `public.konusmalar` ve `public.mesajlar` mappingleri bundan sonra gelir.
 - Production `migrate --apply` kapısı kapalıdır. Tüm aktivasyon koşulları geçmeden açılmamalıdır.
 
-`%75` tahmini; API, worker, auth temelleri, admin persistence, Socket.IO sınırları, fixture tabanlı provider sözleşmeleri, CI/tag otomasyonu, container buildleri, migrator dry-run güvenlik temeli, P1 source manifest/completeness ve P2 ilk customer introspection checkpoint’ini içerir. Customer row dönüşümleri, sentetik address cardinality, external identity account resolution, kalan P2 catalogları, gerçek frontend taşıması, canlı provider adapterları, P3 transaction snapshot isolation ile source row-content checksum/idempotency ve P4 production veri taşıma aktivasyonu tamamlanmış kabul edilmez.
+`%75` tahmini; API, worker, auth temelleri, admin persistence, Socket.IO sınırları, fixture tabanlı provider sözleşmeleri, CI/tag otomasyonu, container buildleri, migrator dry-run güvenlik temeli, P1 source manifest/completeness, P2 customer introspection ve P2 customer row transform kütüphanesini içerir. Transform henüz dry-run okuma yoluna bağlı değildir. External identity account resolution, kalan P2 catalogları, gerçek frontend taşıması, canlı provider adapterları, P3 transaction snapshot isolation ile source row-content checksum/idempotency ve P4 production veri taşıma aktivasyonu tamamlanmış kabul edilmez.
 
 ## 2. Tarihsel Schema Kimliği Checkpoint'i (`v0.1.116`)
 
@@ -166,6 +167,36 @@ Kanıt:
 - Otomatik tag: `v0.1.122`
 - Artifact: `container-images-v0.1.122`, `384197701` byte, süresi dolmamış; API, worker, migrator ve web `.tar.gz` arşivlerini içerir
 
+## 3.4. Tamamlanan P2 Customer Row Transform Dilimi
+
+P2'nin row transform kütüphanesi `v0.1.124` ile yayımlandı. Bu checkpoint customer mapping kabul kapısını, dry-run bağlantısını veya apply aktivasyonunu tamamlamaz.
+
+Kapsam:
+
+- `transformLegacyCustomer` `public.musteriler` satırını frozen customer draft’ına çevirir.
+- Ad ve soyad boşsa username, o da boşsa deterministik ve PII içermeyen fallback kullanılır.
+- `adres`, `il`, `ilce` veya `posta_kodu` alanlarından biri doluysa `address:default` role’lü address draft üretilir. Hepsi boşsa address üretilmez.
+- WooCommerce, KolayBi, Instagram (`ig_`) ve Messenger (`fb_`) değerleri unresolved external identity candidate olarak kalır. Account snapshot olmadan `mappingRole` verilmez.
+- Bilinmeyen alan ve bozuk değer fail-closed reddedilir. Validation hataları ham PII yansıtmaz. Programlama hataları satır hatası diye yeniden yazılmaz.
+- Source payload checksum dönüşümden önce doğrulanır.
+- Migrator source transaction’ı `set local timezone = 'UTC'` ve `set local datestyle = 'ISO, MDY'` ile sabitlenir. Timestamp metni altı haneye kadar korunur.
+- Migration `004` canonical WooCommerce provider seed’ini ekler ve çakışan mevcut satırı reddeder. Down migration seed’i silmez.
+- `mappingCatalogVersion` `p2-customer-catalog-v1` olarak kalır. Yalnız `customers` dry-run-ready’dir. Address ve external identity hedefleri synthetic ve descriptive kalır.
+- Customer apply, `customer_external_identities` descriptive veya tanımsızken orchestrator’da fail-closed durur.
+- Core ve production apply, source veya target erişiminden önce kapalı kalır.
+
+Kanıt:
+
+- Database seed commit: `b346503` (`feat(database): seed the WooCommerce provider`)
+- Transform commit: `80c630e` (`feat(migrator): transform legacy customer rows`)
+- Follow-up commit: `15627ade9f77cafe240e86b110bf21881aaa1a28` (`fix(migrator): pin source session and separate row errors`)
+- Yerel tam `npm run check`: başarılı
+- GitHub Actions Build and Tag run `36635362042`: başarılı
+- Otomatik tag: `v0.1.124`, commit `15627ade9f77cafe240e86b110bf21881aaa1a28`
+- Artifact: `container-images-v0.1.124`, `384247484` byte, süresi dolmamış
+
+Üç commit tek push ile gönderildiği için workflow yalnız uç commit’i etiketledi. Ara commit’lerin ayrı tag’i yoktur.
+
 ## 4. Değişmez Mimari ve Teslimat Kararları
 
 Bu kararlar yeni sohbetlerde yeniden tartışmaya açılmadan uygulanacaktır:
@@ -222,7 +253,7 @@ Kabul kapısı: kaynaktan sessizce atlanan bir satır verification tarafından b
 
 ### P2. Legacy Schema Introspection ve Mapping Catalog
 
-Durum: ilk customer schema introspection checkpoint'i tamamlandı ve `v0.1.122` ile yayımlandı; tam P2 ve customer mapping tamamlanmadı. `public.musteriler` 15-kolon sözleşmesi fail-closed doğrulanır ve yalnız `customers` dry-run-ready durumundadır. Koşullu `customer_addresses`, account-scoped `customer_external_identities`, gerçek customer row transformları, conversation/message catalogları ve fixture kabul kapısı açıktır.
+Durum: customer schema introspection `v0.1.122` ile, customer row transform kütüphanesi `v0.1.124` ile yayımlandı. Tam P2 ve customer mapping tamamlanmadı. `public.musteriler` 15-kolon sözleşmesi fail-closed doğrulanır ve yalnız `customers` dry-run-ready durumundadır. Transform address draft’ı ve unresolved identity candidate üretir; bunları dry-run planına almaz. Account resolution, dry-run bağlantısı, conversation/message catalogları ve fixture kabul kapısı açıktır.
 
 Önce kaynak database gerçek yapısı `information_schema` üzerinden çıkarılmalıdır. Legacy migration dosyaları tek başına doğru kaynak kabul edilmemelidir; çalışan kod ile migration geçmişi arasında drift vardır.
 
@@ -472,8 +503,8 @@ git diff --check
 Beklenen yayımlanmış taban:
 
 ```text
-656c5f96e5c22cb47c63a1c841324552a5775065
-v0.1.122
+15627ade9f77cafe240e86b110bf21881aaa1a28
+v0.1.124
 ```
 
 Aktif schema checkpoint kaybolmuşsa otomatik olarak yeniden üretme. Önce `git status`, `git reflog`, stash, başka worktree ve kullanıcı tarafından bırakılmış değişiklikleri araştır. Mevcut değişiklikleri koru.
@@ -578,13 +609,14 @@ Bu maddeler ihtiyaç varsa genişletilir; mevcut davranış sebepsiz yere yenide
 
 ## 10. Bir Sonraki Sohbet İçin İlk Somut Görev
 
-İlk görev P2 maddesidir:
+İlk görev P2 account resolution dilimidir:
 
-1. Çalışma ağacındaki mevcut değişiklikleri koru ve yayımlanmış `v0.1.122` P2 introspection checkpoint’ini taban kabul et.
-2. `p2-customer-catalog-v1` sözleşmesini koruyarak gerçek `public.musteriler -> customers` row transformunu tamamla.
-3. Adres bileşenleri mevcutsa koşullu `customer_addresses` üretimini, account resolution tamamlandığında bir veya daha fazla `customer_external_identities` üretimini ve ayrı `mapping_role` provenance kayıtlarını uygula.
-4. Ardından `public.konusmalar -> conversations` ve `public.mesajlar -> messages` catalog ve dönüşümlerini, zorunlu ID-map/FK ve account/provider çözümlemeleriyle uygula.
-5. Bilinmeyen kolon ve enumları fail-closed yönet; sentetik legacy PostgreSQL fixture testlerini ve tam `npm run check` doğrulamasını çalıştır.
-6. Commit/push sonrası CI, yeni tag ve artifact’i doğrula; P3 ve P4 kapılarını açık, core ve production apply yollarını kapalı tut.
+1. Yayımlanmış `v0.1.124` customer row transform checkpoint’ini taban kabul et. Çalışma ağacındaki yayınlanmamış değişiklik varsa koru.
+2. `p2-customer-catalog-v1` sözleşmesini koru. `customers` dry-run-ready kalsın. Address ve external identity hedeflerini, account snapshot doğrulanmadan dry-run-ready yapma.
+3. Doğrulanmış integration account snapshot’ı varsa unresolved candidate’ları account-scoped `customer_external_identities` kayıtlarına ve ayrı `mapping_role` provenance’ına bağla. Snapshot yoksa candidate unresolved kalır ve customer apply kapalı kalır.
+4. Transform’u dry-run doğrulamasına bağla: satırlar dönüşsün, target’a yazılmasın, apply source veya target açmadan kapalı kalsın.
+5. Ardından `public.konusmalar -> conversations` ve `public.mesajlar -> messages` catalog ve dönüşümlerini, zorunlu ID-map/FK ve account/provider çözümlemeleriyle uygula.
+6. Bilinmeyen kolon ve enumları fail-closed yönet; sentetik legacy PostgreSQL fixture testlerini ve tam `npm run check` doğrulamasını çalıştır.
+7. Commit/push sonrası CI, yeni tag ve artifact’i doğrula; P3 ve P4 kapılarını açık tut.
 
 P2 mapping ve introspection kabul kapısı tamamlanmadan P3 güvenlik çalışmalarına veya apply aktivasyonuna geçilmemelidir. P1 resume guard tamamlanmış olsa da tam resume/idempotency aktivasyon maddesi P3 transaction snapshot isolation ve source row-content checksum/idempotency kanıtları bitene kadar açık kalır.
