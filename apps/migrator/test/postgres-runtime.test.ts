@@ -72,6 +72,7 @@ describe("PostgreSQL migration runtime", () => {
       customers: { tableName: "public.musteriler", idColumn: "id" },
       conversations: { tableName: "public.konusmalar", idColumn: "id" },
       messages: { tableName: "public.mesajlar", idColumn: "id" },
+      orders: { tableName: "public.siparisler", idColumn: "id" },
     });
   });
 
@@ -139,11 +140,13 @@ describe("PostgreSQL migration runtime", () => {
       { entity: "customers", totalRows: 0, batches: 0 },
       { entity: "conversations", totalRows: 0, batches: 0 },
       { entity: "messages", totalRows: 0, batches: 0 },
+      { entity: "orders", totalRows: 0, batches: 0 },
     ]);
     expect(client.queries.filter((sql) => /select count\(\*\)/i.test(sql))).toEqual([
       'select count(*) as count from "public"."musteriler"',
       'select count(*) as count from "public"."konusmalar"',
       'select count(*) as count from "public"."mesajlar"',
+      'select count(*) as count from "public"."siparisler"',
     ]);
   });
 
@@ -163,6 +166,25 @@ describe("PostgreSQL migration runtime", () => {
       sourceSystem: "legacy_postgres",
       batchSize: 500,
     })).rejects.toThrow("Legacy source schema mismatch for public.konusmalar: missing required columns [human_agent]");
+    expect(client.queries.filter((sql) => /select count\(\*\)/i.test(sql))).toEqual([]);
+  });
+
+  it("fails a dry-run closed when siparisler lacks mukerrer", async () => {
+    const rows = catalogIntrospectionRows();
+    const client = new FixturePostgresClient(undefined, {
+      ...rows,
+      "public.siparisler": (rows["public.siparisler"] ?? []).filter((row) => row.column_name !== "mukerrer"),
+    });
+    postgresClientConstructor.mockImplementationOnce(function fixtureClientConstructor() {
+      return client;
+    });
+
+    await expect(executePostgresMigration({
+      mode: "dry-run",
+      sourceDatabaseUrl: "postgres://source/legacy",
+      sourceSystem: "legacy_postgres",
+      batchSize: 500,
+    })).rejects.toThrow("Legacy source schema mismatch for public.siparisler: missing required columns [mukerrer]");
     expect(client.queries.filter((sql) => /select count\(\*\)/i.test(sql))).toEqual([]);
   });
 

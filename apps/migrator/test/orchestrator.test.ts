@@ -373,8 +373,19 @@ describe("migration orchestrator", () => {
     });
 
     expect(result.sourceManifest.mappingCatalogVersion).toBe("fixture-catalog-v1");
-    expect(result.plan.entities.map(({ entity }) => entity)).toEqual(["customers", "conversations", "messages"]);
-    expect(source.operations).toEqual(["describe", "count:customers", "count:conversations", "count:messages"]);
+    expect(result.plan.entities.map(({ entity }) => entity)).toEqual([
+      "customers",
+      "conversations",
+      "messages",
+      "orders",
+    ]);
+    expect(source.operations).toEqual([
+      "describe",
+      "count:customers",
+      "count:conversations",
+      "count:messages",
+      "count:orders",
+    ]);
   });
 
   it("owns the catalog before count can mutate the caller input", async () => {
