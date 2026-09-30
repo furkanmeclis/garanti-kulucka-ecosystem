@@ -21,7 +21,7 @@ const conversationChannels: ReadonlyMap<string, ConversationChannel> = new Map([
   ["whatsapp", "whatsapp"],
   ["messenger", "messenger"],
   ["instagram", "instagram"],
-  ["panel", "panel"],
+  ["panel", "manual"],
 ]);
 const conversationStatuses: ReadonlyMap<string, ConversationStatus> = new Map([
   ["acik", "open"],
@@ -30,14 +30,14 @@ const conversationStatuses: ReadonlyMap<string, ConversationStatus> = new Map([
 ]);
 const messageSenders: ReadonlyMap<string, MessageSenderType> = new Map([
   ["musteri", "customer"],
-  ["calisan", "staff"],
+  ["calisan", "user"],
   ["ai", "ai"],
 ]);
 const conversationAccountProviders = new Set<string>(["whatsapp", "instagram", "messenger"]);
 
-export type ConversationChannel = "whatsapp" | "messenger" | "instagram" | "panel";
+export type ConversationChannel = "whatsapp" | "messenger" | "instagram" | "manual";
 export type ConversationStatus = "open" | "pending" | "closed";
-export type MessageSenderType = "customer" | "staff" | "ai";
+export type MessageSenderType = "customer" | "user" | "ai";
 export type ConversationAccountProvider = "whatsapp" | "instagram" | "messenger";
 
 export interface VerifiedConversationAccount {
@@ -295,7 +295,7 @@ function resolveIntegrationAccount(
   igAccountId: string | null,
   accounts: readonly VerifiedConversationAccount[],
 ): string | null {
-  if (channel === "panel") return null;
+  if (channel === "manual") return null;
   const candidates = accounts.filter((account) => account.status === "active" && account.providerKey === channel);
   const matches = channel === "instagram"
     ? candidates.filter((account) => igAccountId !== null && account.externalAccountId === igAccountId)

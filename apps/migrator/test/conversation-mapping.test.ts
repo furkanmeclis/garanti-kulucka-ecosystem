@@ -125,10 +125,32 @@ describe("transformLegacyConversation", () => {
   it.each([
     ["whatsapp", "whatsapp"],
     ["messenger", "messenger"],
-    ["panel", "panel"],
+    ["instagram", "instagram"],
+    ["panel", "manual"],
   ])("maps kanal %s to channel %s", (kanal, channel) => {
-    expect(transformLegacyConversation(conversation({ kanal }), conversationContext()).conversation.channel)
-      .toBe(channel);
+    const igAccountId = kanal === "instagram" ? "ig-17841" : null;
+    expect(transformLegacyConversation(conversation({ kanal, ig_account_id: igAccountId }), conversationContext())
+      .conversation.channel).toBe(channel);
+  });
+
+  it("maps every legacy value into the canonical channel and sender sets", () => {
+    const canonicalChannels = ["whatsapp", "instagram", "messenger", "phone", "manual"];
+    const canonicalSenders = ["customer", "user", "ai", "system"];
+    for (const kanal of ["whatsapp", "messenger", "instagram", "panel"]) {
+      for (const sender of ["musteri", "calisan", "ai"]) {
+        const { conversation: draft } = transformLegacyConversation(conversation({
+          kanal,
+          ig_account_id: kanal === "instagram" ? "ig-17841" : null,
+          son_mesaj_gonderici: sender,
+        }), conversationContext());
+        expect(canonicalChannels).toContain(draft.channel);
+        expect(canonicalSenders).toContain(draft.last_message_sender_type);
+      }
+    }
+    for (const sender of ["musteri", "calisan", "ai"]) {
+      const { message: draft } = transformLegacyMessage(message({ gonderici_tipi: sender }), messageContext);
+      expect(canonicalSenders).toContain(draft.sender_type);
+    }
   });
 
   it.each([
@@ -144,7 +166,7 @@ describe("transformLegacyConversation", () => {
   it.each([
     [null, null],
     ["musteri", "customer"],
-    ["calisan", "staff"],
+    ["calisan", "user"],
     ["ai", "ai"],
   ])("maps son_mesaj_gonderici %s to %s", (sender, mapped) => {
     const result = transformLegacyConversation(conversation({ son_mesaj_gonderici: sender }), conversationContext());
@@ -156,7 +178,11 @@ describe("transformLegacyConversation", () => {
     ["kanal", "WhatsApp"],
     ["durum", "open"],
     ["durum", " acik"],
+    ["kanal", "manual"],
+    ["kanal", "phone"],
     ["son_mesaj_gonderici", "system"],
+    ["son_mesaj_gonderici", "user"],
+    ["son_mesaj_gonderici", "staff"],
   ])("fails closed on unknown %s value %s", (field, value) => {
     expect(() => transformLegacyConversation(conversation({ [field]: value }), conversationContext()))
       .toThrow(`Invalid legacy conversation row: field ${field} has an unsupported value`);
@@ -238,9 +264,9 @@ describe("transformLegacyConversation", () => {
     expect(error.message).not.toContain("ig-17841");
   });
 
-  it("stores no integration account for a panel conversation even without any accounts", () => {
+  it("stores a panel conversation as manual with no integration account even without any accounts", () => {
     const result = transformLegacyConversation(conversation({ kanal: "panel" }), conversationContext({ accounts: [] }));
-    expect(result.conversation).toMatchObject({ channel: "panel", integrationAccountPublicId: null });
+    expect(result.conversation).toMatchObject({ channel: "manual", integrationAccountPublicId: null });
   });
 
   it.each([
@@ -317,14 +343,14 @@ describe("transformLegacyMessage", () => {
 
   it.each([
     ["musteri", "customer"],
-    ["calisan", "staff"],
+    ["calisan", "user"],
     ["ai", "ai"],
   ])("maps gonderici_tipi %s to %s", (sender, mapped) => {
     expect(transformLegacyMessage(message({ gonderici_tipi: sender }), messageContext).message.sender_type)
       .toBe(mapped);
   });
 
-  it.each([null, "system"])("rejects gonderici_tipi %j", (sender) => {
+  it.each([null, "system", "user", "staff"])("rejects gonderici_tipi %j", (sender) => {
     expect(() => transformLegacyMessage(message({ gonderici_tipi: sender }), messageContext))
       .toThrow("Invalid legacy message row: field gonderici_tipi has an unsupported value");
   });
