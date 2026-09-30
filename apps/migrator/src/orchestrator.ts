@@ -1,4 +1,5 @@
 import {
+  assertVerifiedIntegrationAccounts,
   legacyCustomerTable,
   resolveCustomerExternalIdentities,
   transformLegacyCustomer,
@@ -126,7 +127,7 @@ function ownIntegrationAccounts(
   accounts: readonly VerifiedIntegrationAccount[] | undefined,
 ): readonly VerifiedIntegrationAccount[] {
   if (accounts === undefined) return Object.freeze([]);
-  resolveCustomerExternalIdentities([], accounts);
+  assertVerifiedIntegrationAccounts(accounts);
   return Object.freeze(accounts.map((account) => Object.freeze({
     publicId: account.publicId,
     providerKey: account.providerKey,

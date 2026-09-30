@@ -183,16 +183,25 @@ export function resolveCustomerExternalIdentities(
   accounts: readonly VerifiedIntegrationAccount[],
 ): CustomerExternalIdentityResolution {
   const activeAccountByProvider = indexActiveAccounts(accounts);
+  if (!Array.isArray(candidates)) failCandidates("candidates must be an array");
   const resolved: LegacyCustomerExternalIdentityDraft[] = [];
   const unresolved: UnresolvedCustomerExternalIdentity[] = [];
 
-  for (const candidate of candidates) {
+  for (let index = 0; index < candidates.length; index += 1) {
+    const entry: unknown = candidates[index];
+    if (entry === null || typeof entry !== "object") {
+      failCandidates(`candidate at index ${index} must be an object`);
+    }
+    const candidate = entry as UnresolvedCustomerExternalIdentity;
     const account = activeAccountByProvider.get(candidate.providerKey);
     if (!account) {
       unresolved.push(Object.freeze({
-        ...candidate,
-        source: Object.freeze({ ...candidate.source }),
-        legacyTimestamps: Object.freeze({ ...candidate.legacyTimestamps }),
+        kind: "unresolved_customer_external_identity" as const,
+        customerPublicId: candidate.customerPublicId,
+        providerKey: candidate.providerKey,
+        externalId: candidate.externalId,
+        source: Object.freeze({ table: candidate.source.table, field: candidate.source.field }),
+        legacyTimestamps: copyLegacyTimestamps(candidate.legacyTimestamps),
       }));
       continue;
     }
@@ -210,7 +219,7 @@ export function resolveCustomerExternalIdentities(
       customerPublicId: candidate.customerPublicId,
       integrationAccountPublicId: account.publicId,
       externalId: candidate.externalId,
-      legacyTimestamps: Object.freeze({ ...candidate.legacyTimestamps }),
+      legacyTimestamps: copyLegacyTimestamps(candidate.legacyTimestamps),
     }));
   }
 
@@ -220,8 +229,18 @@ export function resolveCustomerExternalIdentities(
   });
 }
 
+export function assertVerifiedIntegrationAccounts(
+  accounts: unknown,
+): asserts accounts is readonly VerifiedIntegrationAccount[] {
+  indexActiveAccounts(accounts);
+}
+
+function copyLegacyTimestamps(timestamps: LegacyTimestamps): LegacyTimestamps {
+  return Object.freeze({ createdAt: timestamps.createdAt, updatedAt: timestamps.updatedAt });
+}
+
 function indexActiveAccounts(
-  accounts: readonly VerifiedIntegrationAccount[],
+  accounts: unknown,
 ): ReadonlyMap<CustomerIdentityProvider, VerifiedIntegrationAccount> {
   if (!Array.isArray(accounts)) failAccountSnapshot("accounts must be an array");
   const seenPublicIds = new Set<string>();
@@ -598,4 +617,10 @@ class IntegrationAccountSnapshotError extends Error {}
 
 function failAccountSnapshot(reason: string): never {
   throw new IntegrationAccountSnapshotError(`Invalid integration account snapshot: ${reason}`);
+}
+
+class CustomerExternalIdentityCandidateError extends Error {}
+
+function failCandidates(reason: string): never {
+  throw new CustomerExternalIdentityCandidateError(`Invalid customer external identity candidates: ${reason}`);
 }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  assertVerifiedIntegrationAccounts,
   resolveCustomerExternalIdentities,
   transformLegacyCustomer,
 } from "../src/index.js";
@@ -229,5 +230,96 @@ describe("resolveCustomerExternalIdentities", () => {
       expect(message).toMatch(/^Invalid integration account snapshot:/);
       for (const secret of secrets) expect(message).not.toContain(secret);
     }
+  });
+
+  it("copies only declared fields into unresolved candidates", () => {
+    const input = candidates().map((candidate) => ({
+      ...candidate,
+      token: "tok_secret",
+      mappingRole: "external_identity:kolaybi",
+      source: { ...candidate.source, payload: { email: "c.agri@example.test" } },
+      legacyTimestamps: { ...candidate.legacyTimestamps, checksum: "sha256:x" },
+    })) as unknown as UnresolvedCustomerExternalIdentity[];
+
+    const result = resolveCustomerExternalIdentities(input, []);
+
+    expect(result.unresolved).toEqual(candidates());
+    for (const candidate of result.unresolved) {
+      expect(Object.keys(candidate).sort()).toEqual([
+        "customerPublicId",
+        "externalId",
+        "kind",
+        "legacyTimestamps",
+        "providerKey",
+        "source",
+      ]);
+      expect(Object.keys(candidate.source).sort()).toEqual(["field", "table"]);
+      expect(Object.keys(candidate.legacyTimestamps).sort()).toEqual(["createdAt", "updatedAt"]);
+      expect(Object.isFrozen(candidate)).toBe(true);
+      expect(Object.isFrozen(candidate.source)).toBe(true);
+      expect(Object.isFrozen(candidate.legacyTimestamps)).toBe(true);
+    }
+  });
+
+  it("copies only declared timestamp fields into resolved drafts", () => {
+    const input = candidates().map((candidate) => ({
+      ...candidate,
+      legacyTimestamps: { ...candidate.legacyTimestamps, checksum: "sha256:x" },
+    }));
+
+    const result = resolveCustomerExternalIdentities(input, [account("iac_woo", "woocommerce")]);
+
+    expect(Object.keys(result.resolved[0]!.legacyTimestamps).sort()).toEqual(["createdAt", "updatedAt"]);
+  });
+
+  it.each([
+    ["undefined", undefined],
+    ["null", null],
+    ["an object", { 0: "900719", length: 1 }],
+    ["a string", "900719"],
+  ])("rejects %s candidates without echoing values", (_label, invalid) => {
+    const message = captureError(() => resolveCustomerExternalIdentities(
+      invalid as unknown as UnresolvedCustomerExternalIdentity[],
+      [],
+    ));
+
+    expect(message).toBe("Invalid customer external identity candidates: candidates must be an array");
+  });
+
+  it("rejects a non-object candidate by index without echoing its value", () => {
+    const message = captureError(() => resolveCustomerExternalIdentities(
+      [...candidates(), "tok_secret 900719"] as unknown as UnresolvedCustomerExternalIdentity[],
+      [],
+    ));
+
+    expect(message).toBe("Invalid customer external identity candidates: candidate at index 3 must be an object");
+  });
+});
+
+describe("assertVerifiedIntegrationAccounts", () => {
+  it("accepts an empty or valid snapshot", () => {
+    expect(() => assertVerifiedIntegrationAccounts([])).not.toThrow();
+    expect(() => assertVerifiedIntegrationAccounts([
+      account("iac_woo", "woocommerce"),
+      account("iac_woo_old", "woocommerce", "inactive"),
+      account("iac_kb", "kolaybi"),
+    ])).not.toThrow();
+  });
+
+  it.each([
+    ["a non-array", { length: 0 }, "accounts must be an array"],
+    ["an ambiguous provider", [
+      account("iac_secret_a", "messenger"),
+      account("iac_secret_b", "messenger"),
+    ], "provider messenger has more than one active account"],
+    ["a duplicate public id", [
+      account("iac_secret_a", "woocommerce"),
+      account("iac_secret_a", "kolaybi", "inactive"),
+    ], "account at index 1 duplicates a public id"],
+  ])("rejects %s without echoing public ids", (_label, invalid, reason) => {
+    const message = captureError(() => assertVerifiedIntegrationAccounts(invalid));
+
+    expect(message).toBe(`Invalid integration account snapshot: ${reason}`);
+    expect(message).not.toContain("iac_secret");
   });
 });
