@@ -25,7 +25,7 @@ export interface LegacyMappingCatalog {
   readonly tables: readonly LegacyTableMapping[];
 }
 
-export const mappingCatalogVersion = "p2-shipment-catalog-v1";
+export const mappingCatalogVersion = "p2-product-catalog-v1";
 
 const canonicalMigrationEntitySet = new Set<string>(canonicalMigrationEntities);
 const targetMappingValues = new Set<string>(["direct", "synthetic"]);
@@ -224,6 +224,28 @@ export const legacyMappingCatalog = createLegacyMappingCatalog({
         column("surat_kargo_takip_no", "character varying", "varchar", true),
         column("surat_hesap_tipi", "character varying", "varchar", true),
         column("surat_barkod_no", "character varying", "varchar", true),
+      ],
+    },
+    {
+      sourceTable: "public.urunler",
+      idColumn: "id",
+      targetEntities: [
+        { entity: "products", mapping: "direct", readiness: "dry-run" },
+      ],
+      columns: [
+        column("id", "integer", "int4", false),
+        column("ad", "text", "text", false),
+        column("kod", "character varying", "varchar", true),
+        column("kategori", "character varying", "varchar", true),
+        column("birim", "character varying", "varchar", true),
+        column("satis_fiyati", "numeric", "numeric", true),
+        column("stok_miktari", "integer", "int4", true),
+        column("kritik_seviye", "integer", "int4", true),
+        column("aciklama", "text", "text", true),
+        column("aktif", "boolean", "bool", true),
+        column("olusturma_tarihi", "timestamp with time zone", "timestamptz", true),
+        column("guncelleme_tarihi", "timestamp with time zone", "timestamptz", true),
+        column("kolaybi_product_id", "text", "text", true),
       ],
     },
   ],

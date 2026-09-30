@@ -18,6 +18,7 @@ describe("legacy mapping catalog", () => {
   const orderMapping = legacyMappingCatalog.tables[3]!;
   const orderItemMapping = legacyMappingCatalog.tables[4]!;
   const shipmentMapping = legacyMappingCatalog.tables[5]!;
+  const productMapping = legacyMappingCatalog.tables[6]!;
 
   it("accepts the exact real musteriler schema and declares all customer targets", () => {
     expect(() => validateLegacyTableColumns("public.musteriler", realMusterilerColumns(), customerMapping))
@@ -44,7 +45,7 @@ describe("legacy mapping catalog", () => {
       "guncelleme_tarihi",
       "username",
     ]);
-    expect(mappingCatalogVersion).toBe("p2-shipment-catalog-v1");
+    expect(mappingCatalogVersion).toBe("p2-product-catalog-v1");
   });
 
   it("declares konusmalar and mesajlar as direct dry-run tables after musteriler", () => {
@@ -55,6 +56,7 @@ describe("legacy mapping catalog", () => {
       ["public.siparisler", "id"],
       ["public.siparis_kalemleri", "id"],
       ["public.kargo_gonderimleri", "id"],
+      ["public.urunler", "id"],
     ]);
     expect(conversationMapping.targetEntities).toEqual([
       { entity: "conversations", mapping: "direct", readiness: "dry-run" },
@@ -86,6 +88,21 @@ describe("legacy mapping catalog", () => {
     expect(shipmentMapping.targetEntities).toEqual([
       { entity: "shipments", mapping: "direct", readiness: "dry-run" },
     ]);
+  });
+
+  it("declares urunler as a direct dry-run table after kargo_gonderimleri", () => {
+    expect(productMapping.sourceTable).toBe("public.urunler");
+    expect(productMapping.idColumn).toBe("id");
+    expect(productMapping.targetEntities).toEqual([
+      { entity: "products", mapping: "direct", readiness: "dry-run" },
+    ]);
+    expect(productMapping.columns[0]).toEqual({
+      name: "id",
+      dataType: "integer",
+      udtName: "int4",
+      nullable: false,
+      required: true,
+    });
   });
 
   it("accepts the exact real konusmalar schema and requires every column", () => {
@@ -168,6 +185,33 @@ describe("legacy mapping catalog", () => {
     );
   });
 
+  it("accepts the exact real urunler schema and requires every column", () => {
+    expect(() => validateLegacyTableColumns(
+      "public.urunler",
+      realUrunlerColumns(),
+      productMapping,
+    )).not.toThrow();
+    expect(productMapping.columns).toEqual(realUrunlerColumns().map(asRequiredContract));
+  });
+
+  it("rejects a urunler schema missing kolaybi_product_id", () => {
+    expect(() => validateLegacyTableColumns(
+      "public.urunler",
+      realUrunlerColumns().filter((column) => column.name !== "kolaybi_product_id"),
+      productMapping,
+    )).toThrow(
+      "Legacy source schema mismatch for public.urunler: missing required columns [kolaybi_product_id]",
+    );
+  });
+
+  it("rejects a uuid urunler id instead of the live serial integer", () => {
+    expect(() => validateLegacyTableColumns(
+      "public.urunler",
+      replaceColumn(realUrunlerColumns(), "id", { dataType: "uuid", udtName: "uuid" }),
+      productMapping,
+    )).toThrow("column id expected type integer/int4, received uuid/uuid");
+  });
+
   it("rejects media_url and media_type as unexpected mesajlar columns rather than aliases", () => {
     const aliased = realMesajlarColumns().map((column) => {
       if (column.name === "medya_url") return { ...column, name: "media_url" };
@@ -204,6 +248,7 @@ describe("legacy mapping catalog", () => {
       "orders",
       "order_items",
       "shipments",
+      "products",
     ]);
   });
 
@@ -525,17 +570,18 @@ describe("legacy mapping catalog", () => {
       { entity: "orders", schema: "public", table: "siparisler", idColumn: "id", columns: realSiparislerColumns() },
       { entity: "order_items", schema: "public", table: "siparis_kalemleri", idColumn: "id", columns: realSiparisKalemleriColumns() },
       { entity: "shipments", schema: "public", table: "kargo_gonderimleri", idColumn: "id", columns: realKargoGonderimleriColumns() },
+      { entity: "products", schema: "public", table: "urunler", idColumn: "id", columns: realUrunlerColumns() },
     ];
 
     expect(() => validateLegacySourceSnapshots(
       legacyMappingCatalog,
       snapshots,
-      ["customers", "conversations", "messages", "orders", "order_items", "shipments"],
+      ["customers", "conversations", "messages", "orders", "order_items", "shipments", "products"],
     )).not.toThrow();
     expect(() => validateLegacySourceSnapshots(
       legacyMappingCatalog,
-      [snapshots[0]!, { ...snapshots[1]!, table: "musteriler" }, snapshots[2]!, snapshots[3]!, snapshots[4]!, snapshots[5]!],
-      ["customers", "conversations", "messages", "orders", "order_items", "shipments"],
+      [snapshots[0]!, { ...snapshots[1]!, table: "musteriler" }, snapshots[2]!, snapshots[3]!, snapshots[4]!, snapshots[5]!, snapshots[6]!],
+      ["customers", "conversations", "messages", "orders", "order_items", "shipments", "products"],
     )).toThrow("Source table snapshot for conversations must route to public.konusmalar.id");
   });
 
@@ -707,6 +753,24 @@ function realKargoGonderimleriColumns(): SourceColumnSnapshot[] {
     ["surat_kargo_takip_no", "character varying", "varchar", true],
     ["surat_hesap_tipi", "character varying", "varchar", true],
     ["surat_barkod_no", "character varying", "varchar", true],
+  ]);
+}
+
+function realUrunlerColumns(): SourceColumnSnapshot[] {
+  return inOrder([
+    ["id", "integer", "int4", false],
+    ["ad", "text", "text", false],
+    ["kod", "character varying", "varchar", true],
+    ["kategori", "character varying", "varchar", true],
+    ["birim", "character varying", "varchar", true],
+    ["satis_fiyati", "numeric", "numeric", true],
+    ["stok_miktari", "integer", "int4", true],
+    ["kritik_seviye", "integer", "int4", true],
+    ["aciklama", "text", "text", true],
+    ["aktif", "boolean", "bool", true],
+    ["olusturma_tarihi", "timestamp with time zone", "timestamptz", true],
+    ["guncelleme_tarihi", "timestamp with time zone", "timestamptz", true],
+    ["kolaybi_product_id", "text", "text", true],
   ]);
 }
 

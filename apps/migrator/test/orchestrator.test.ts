@@ -380,6 +380,7 @@ describe("migration orchestrator", () => {
       "orders",
       "order_items",
       "shipments",
+      "products",
     ]);
     expect(source.operations).toEqual([
       "describe",
@@ -389,6 +390,7 @@ describe("migration orchestrator", () => {
       "count:orders",
       "count:order_items",
       "count:shipments",
+      "count:products",
     ]);
   });
 

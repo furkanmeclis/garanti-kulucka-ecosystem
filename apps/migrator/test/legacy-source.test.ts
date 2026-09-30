@@ -262,6 +262,7 @@ describe("LegacyDatabaseSource", () => {
         orders: "public.siparisler",
         order_items: "public.siparis_kalemleri",
         shipments: "public.kargo_gonderimleri",
+        products: "public.urunler",
       },
       mappingCatalog: legacyMappingCatalog,
     });
@@ -273,6 +274,7 @@ describe("LegacyDatabaseSource", () => {
       "orders",
       "order_items",
       "shipments",
+      "products",
     ]);
 
     expect(db.queries.map((query) => query.parameters)).toEqual([
@@ -282,6 +284,7 @@ describe("LegacyDatabaseSource", () => {
       ["public", "siparisler"],
       ["public", "siparis_kalemleri"],
       ["public", "kargo_gonderimleri"],
+      ["public", "urunler"],
     ]);
     expect(snapshots.map(({ entity, schema, table }) => ({ entity, schema, table }))).toEqual([
       { entity: "customers", schema: "public", table: "musteriler" },
@@ -290,6 +293,7 @@ describe("LegacyDatabaseSource", () => {
       { entity: "orders", schema: "public", table: "siparisler" },
       { entity: "order_items", schema: "public", table: "siparis_kalemleri" },
       { entity: "shipments", schema: "public", table: "kargo_gonderimleri" },
+      { entity: "products", schema: "public", table: "urunler" },
     ]);
   });
 
