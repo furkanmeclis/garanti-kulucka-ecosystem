@@ -314,7 +314,7 @@ function schemaMismatch(tableName: string, mismatch: string): Error {
   return new Error(`Legacy source schema mismatch for ${tableName}: ${mismatch}`);
 }
 
-function normalizeSourceTable(sourceTable: string): string {
+export function normalizeSourceTable(sourceTable: string): string {
   const parts = sourceTable.split(".");
   if (parts.length > 2 || parts.some((part) => !part.trim())) {
     throw new Error(`Legacy mapping catalog source table ${sourceTable} is invalid`);

@@ -228,7 +228,16 @@ export interface DryRunReport {
   readonly totals: MigrationReportTotals;
   readonly entities: MigrationEntityReport[];
   readonly warnings: MigrationWarning[];
+  readonly customerTransform?: CustomerTransformSummary;
   readonly generatedAt: string;
+}
+
+export interface CustomerTransformSummary {
+  readonly transformedRows: number;
+  readonly addressDrafts: number;
+  readonly resolvedIdentities: number;
+  readonly unresolvedIdentities: number;
+  readonly nameFallbackWarnings: number;
 }
 
 export interface VerificationReport {

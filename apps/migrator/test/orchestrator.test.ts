@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
+import type { VerifiedIntegrationAccount } from "../src/customer-mapping.js";
+import { calculateSourcePayloadChecksum } from "../src/legacy-source.js";
 import { createLegacyMappingCatalog, legacyMappingCatalog } from "../src/mapping-catalog.js";
 import { runMigration } from "../src/orchestrator.js";
 import type {
+  BatchReadOptions,
   CanonicalRecord,
   CanonicalWriteResult,
   LegacyIdMapEntry,
@@ -411,6 +414,177 @@ describe("migration orchestrator", () => {
     }]);
   });
 
+});
+
+class LegacyCustomerSource implements LegacySource {
+  readonly reads: { entity: MigrationEntity; options: BatchReadOptions }[] = [];
+  readonly operations: string[] = [];
+
+  constructor(private readonly rows: LegacyRecord[]) {}
+
+  async count(entity: MigrationEntity): Promise<number> {
+    this.operations.push(`count:${entity}`);
+    return entity === "customers" ? this.rows.length : 0;
+  }
+
+  async readBatch(entity: MigrationEntity, options: BatchReadOptions): Promise<LegacyRecord[]> {
+    this.operations.push(`read:${entity}`);
+    this.reads.push({ entity, options: { ...options } });
+    const offset = options.offset ?? 0;
+    return this.rows.slice(offset, offset + options.limit);
+  }
+
+  async describeTables(entities: readonly MigrationEntity[]): Promise<SourceTableSnapshot[]> {
+    this.operations.push("describe");
+    return entities.map((entity) => ({
+      entity,
+      schema: "public",
+      table: "musteriler",
+      idColumn: "id",
+      columns: legacyMappingCatalog.tables[0]!.columns.map((column, index) => ({
+        name: column.name,
+        ordinalPosition: index + 1,
+        dataType: column.dataType,
+        udtName: column.udtName,
+        nullable: column.nullable,
+      })),
+    }));
+  }
+}
+
+function legacyCustomerRow(id: string, overrides: Record<string, unknown> = {}): LegacyRecord {
+  const payload = {
+    id,
+    ad: "Ada",
+    soyad: "Lovelace",
+    email: null,
+    telefon: "+90 555 000 00 00",
+    adres: null,
+    il: null,
+    ilce: null,
+    posta_kodu: null,
+    notlar: null,
+    woocommerce_id: null,
+    kolaybi_id: null,
+    olusturma_tarihi: "2024-01-02T03:04:05Z",
+    guncelleme_tarihi: null,
+    username: null,
+    ...overrides,
+  };
+  return {
+    sourceSystem: "legacy_postgres",
+    sourceTable: "public.musteriler",
+    sourceId: id,
+    payload,
+    checksum: calculateSourcePayloadChecksum(payload),
+  };
+}
+
+const legacyCustomerRows: LegacyRecord[] = [
+  legacyCustomerRow("0a32ce63-4c3b-4fd4-917d-726d540a7216", {
+    telefon: "ig_ada.lovelace",
+    woocommerce_id: 100,
+    kolaybi_id: "kb-1",
+    adres: "Bağdat Caddesi 1",
+  }),
+  legacyCustomerRow("1b43df74-5d4c-4fe5-a28e-837e651b8327", { ad: "", soyad: null }),
+  legacyCustomerRow("2c54e085-6e5d-4af6-b39f-948f762c9438", { woocommerce_id: 200, il: "İstanbul" }),
+];
+
+const verifiedAccounts: VerifiedIntegrationAccount[] = [
+  { publicId: "iac_woo_main", providerKey: "woocommerce", status: "active" },
+  { publicId: "iac_kolaybi_old", providerKey: "kolaybi", status: "inactive" },
+];
+
+function customerDryRun(source: LegacySource, integrationAccounts?: VerifiedIntegrationAccount[]) {
+  return runMigration({
+    mode: "dry-run",
+    source,
+    mappingCatalog: legacyMappingCatalog,
+    batchSize: 2,
+    entities: ["customers"],
+    now: new Date("2026-09-30T00:00:00.000Z"),
+    sourceSystem: "legacy_postgres",
+    sourceDatabaseIdentity: sourceIdentity,
+    ...(integrationAccounts ? { integrationAccounts } : {}),
+  });
+}
+
+describe("customer dry-run validation", () => {
+  it("transforms every planned customer batch and resolves identities without a target", async () => {
+    const source = new LegacyCustomerSource(legacyCustomerRows);
+
+    const result = await customerDryRun(source, verifiedAccounts);
+
+    expect(source.reads).toEqual([
+      { entity: "customers", options: { limit: 2, offset: 0 } },
+      { entity: "customers", options: { limit: 2, offset: 2 } },
+    ]);
+    expect(source.operations).toEqual(["describe", "count:customers", "read:customers", "read:customers"]);
+    expect(result.dryRunReport?.customerTransform).toEqual({
+      transformedRows: 3,
+      addressDrafts: 2,
+      resolvedIdentities: 2,
+      unresolvedIdentities: 2,
+      nameFallbackWarnings: 1,
+    });
+    expect(result.dryRunReport?.totals).toEqual({ plannedRows: 3, plannedBatches: 2, blockedRows: 0 });
+    expect(result.batches).toEqual([]);
+  });
+
+  it("leaves every identity candidate unresolved when no accounts are supplied", async () => {
+    const result = await customerDryRun(new LegacyCustomerSource(legacyCustomerRows));
+
+    expect(result.dryRunReport?.customerTransform).toMatchObject({
+      transformedRows: 3,
+      resolvedIdentities: 0,
+      unresolvedIdentities: 4,
+    });
+  });
+
+  it("fails the dry-run on an invalid customer row instead of skipping it", async () => {
+    const tampered = { ...legacyCustomerRows[1]!, checksum: `sha256:${"0".repeat(64)}` };
+    const source = new LegacyCustomerSource([legacyCustomerRows[0]!, tampered, legacyCustomerRows[2]!]);
+
+    await expect(customerDryRun(source, verifiedAccounts)).rejects.toThrow(
+      "Invalid legacy customer row: source payload checksum does not match payload",
+    );
+  });
+
+  it("fails the dry-run when a batch returns a different row count than planned", async () => {
+    const source = new LegacyCustomerSource(legacyCustomerRows);
+    const readBatch = source.readBatch.bind(source);
+    source.readBatch = async (entity, options) => (await readBatch(entity, options)).slice(0, 1);
+
+    await expect(customerDryRun(source, verifiedAccounts)).rejects.toThrow(
+      "Customer dry-run batch 1 returned 1 rows; expected 2",
+    );
+    expect(source.reads).toHaveLength(1);
+  });
+
+  it("rejects an invalid integration account snapshot before source access", async () => {
+    const source = new LegacyCustomerSource(legacyCustomerRows);
+
+    await expect(customerDryRun(source, [
+      { publicId: "iac_woo_a", providerKey: "woocommerce", status: "active" },
+      { publicId: "iac_woo_b", providerKey: "woocommerce", status: "active" },
+    ])).rejects.toThrow("Invalid integration account snapshot: provider woocommerce has more than one active account");
+    expect(source.operations).toEqual([]);
+  });
+
+  it("owns the integration account snapshot before source reads can mutate it", async () => {
+    const accounts = verifiedAccounts.map((account) => ({ ...account }));
+    const source = new LegacyCustomerSource(legacyCustomerRows);
+    const readBatch = source.readBatch.bind(source);
+    source.readBatch = async (entity, options) => {
+      accounts[0]!.status = "inactive";
+      return readBatch(entity, options);
+    };
+
+    const result = await customerDryRun(source, accounts);
+
+    expect(result.dryRunReport?.customerTransform?.resolvedIdentities).toBe(2);
+  });
 });
 
 function mutableFixtureCatalog(version: string) {

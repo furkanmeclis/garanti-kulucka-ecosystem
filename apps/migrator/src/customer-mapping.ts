@@ -3,7 +3,7 @@ import { calculateSourcePayloadChecksum } from "./legacy-source.js";
 import type { SourcePayloadChecksum } from "./legacy-source.js";
 import type { LegacyRecord } from "./types.js";
 
-const legacyCustomerTable = "public.musteriler";
+export const legacyCustomerTable = "public.musteriler";
 const legacyCustomerFields = [
   "id",
   "ad",

@@ -1,14 +1,23 @@
+import {
+  legacyCustomerTable,
+  resolveCustomerExternalIdentities,
+  transformLegacyCustomer,
+  type UnresolvedCustomerExternalIdentity,
+  type VerifiedIntegrationAccount,
+} from "./customer-mapping.js";
 import { createMigrationPlan } from "./plan.js";
 import { createDryRunReport } from "./reports.js";
 import {
   assertApplyPrerequisites,
   createLegacyMappingCatalog,
   dryRunMigrationEntities,
+  normalizeSourceTable,
   validateLegacySourceSnapshots,
   type LegacyMappingCatalog,
 } from "./mapping-catalog.js";
 import { createSourceManifest } from "./source-manifest.js";
 import type {
+  CustomerTransformSummary,
   DryRunReport,
   LegacySource,
   MigrationBatchApplyResult,
@@ -32,6 +41,7 @@ interface RunMigrationInputBase {
 
 export interface RunMigrationDryRunInput extends RunMigrationInputBase {
   readonly mode: "dry-run";
+  readonly integrationAccounts?: readonly VerifiedIntegrationAccount[];
 }
 
 export interface RunMigrationApplyInput extends RunMigrationInputBase {
@@ -61,6 +71,9 @@ export async function runMigration(input: RunMigrationInput): Promise<MigrationR
     throw new Error("Apply mode is unavailable until the mapping catalog declares apply-ready transforms");
   }
 
+  const integrationAccounts = ownIntegrationAccounts(input.integrationAccounts);
+  const validateCustomerRows = entities.includes("customers") && routesCustomersFromLegacyTable(catalog);
+
   const tables = ownSourceTableSnapshots(await input.source.describeTables(entities));
   validateLegacySourceSnapshots(catalog, tables, entities);
   const plan = await createMigrationPlan({
@@ -79,16 +92,84 @@ export async function runMigration(input: RunMigrationInput): Promise<MigrationR
   });
 
   if (input.mode === "dry-run") {
+    const customerTransform = validateCustomerRows
+      ? await validateCustomerBatches(input.source, plan, integrationAccounts)
+      : undefined;
     return {
       mode: input.mode,
       plan,
       sourceManifest,
-      dryRunReport: createDryRunReport({ plan, ...(input.now ? { now: input.now } : {}) }),
+      dryRunReport: createDryRunReport({
+        plan,
+        ...(customerTransform ? { customerTransform } : {}),
+        ...(input.now ? { now: input.now } : {}),
+      }),
       batches: [],
     };
   }
 
   throw new Error("Apply mode is unavailable until the mapping catalog declares apply-ready transforms");
+}
+
+// transformLegacyCustomer only accepts public.musteriler rows; catalogs routing customers elsewhere stay plan-only.
+function routesCustomersFromLegacyTable(catalog: LegacyMappingCatalog): boolean {
+  const route = catalog.tables.find((table) => table.targetEntities.some((target) => target.entity === "customers"));
+  return route !== undefined && normalizeSourceTable(route.sourceTable) === legacyCustomerTable;
+}
+
+function ownIntegrationAccounts(
+  accounts: readonly VerifiedIntegrationAccount[] | undefined,
+): readonly VerifiedIntegrationAccount[] {
+  if (accounts === undefined) return Object.freeze([]);
+  resolveCustomerExternalIdentities([], accounts);
+  return Object.freeze(accounts.map((account) => Object.freeze({
+    publicId: account.publicId,
+    providerKey: account.providerKey,
+    status: account.status,
+  })));
+}
+
+async function validateCustomerBatches(
+  source: LegacySource,
+  plan: MigrationPlan,
+  accounts: readonly VerifiedIntegrationAccount[],
+): Promise<CustomerTransformSummary> {
+  let transformedRows = 0;
+  let addressDrafts = 0;
+  let resolvedIdentities = 0;
+  let unresolvedIdentities = 0;
+  let nameFallbackWarnings = 0;
+
+  for (const batch of plan.batches) {
+    if (batch.entity !== "customers") continue;
+    const rows = await source.readBatch(batch.entity, { limit: batch.limit, offset: batch.offset });
+    const rowCount = Array.isArray(rows) ? rows.length : null;
+    if (rowCount !== batch.expectedRows) {
+      throw new Error(
+        `Customer dry-run batch ${batch.batchNumber} returned ${rowCount ?? "a non-array"} rows; expected ${batch.expectedRows}`,
+      );
+    }
+
+    const candidates: UnresolvedCustomerExternalIdentity[] = [];
+    for (const row of rows) {
+      const result = transformLegacyCustomer(row);
+      transformedRows += 1;
+      if (result.address) addressDrafts += 1;
+      nameFallbackWarnings += result.warnings.filter((warning) => warning.code === "customer_name_fallback").length;
+      candidates.push(...result.externalIdentityCandidates);
+    }
+    const resolution = resolveCustomerExternalIdentities(candidates, accounts);
+    resolvedIdentities += resolution.resolved.length;
+    unresolvedIdentities += resolution.unresolved.length;
+  }
+
+  return Object.freeze({
+    transformedRows,
+    addressDrafts,
+    resolvedIdentities,
+    unresolvedIdentities,
+    nameFallbackWarnings,
+  });
 }
 
 function ownSourceTableSnapshots(snapshots: readonly SourceTableSnapshot[]): SourceTableSnapshot[] {
