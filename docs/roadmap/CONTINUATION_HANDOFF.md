@@ -6,14 +6,14 @@ Bu belge, projeye yeni bir sohbetten veya bağlamsız bir çalışma oturumundan
 
 - Repo: `/Users/furkanmeclis/Documents/Projects/garanti-kulucka-ecosystem`
 - GitHub çalışma modeli: monorepo, yalnız `main`, PR yok.
-- Yayımlanmış son checkpoint: `v0.1.140`
-- Yayımlanmış son commit: `2ef7541e463d2478f26465114d52947c0928d76f`
-- Commit mesajı: `feat(migrator): validate product rows during dry-run`
-- Bu tag, aynı push içindeki iki commit’in ucundadır: `aac0b5f` ürün satır dönüşümü ve `2ef7541` dry-run doğrulaması. Workflow her push için yalnız uç commit’i etiketler.
+- Yayımlanmış son checkpoint: `v0.1.142`
+- Yayımlanmış son commit: `07a8f37bd1f1e106919915228732a04944204ece`
+- Commit mesajı: `fix(migrator): retain unmapped legacy order fields`
+- Bu tag, aynı push içindeki iki commit’in ucundadır: `eccc7cc` sipariş satır dönüşümü ve `07a8f37` eşlenmemiş kolonların `sourceRemainder` içinde tutulması.
 - Genel ilerleme: yaklaşık `%75`
-- Son tamamlanan çalışma: `public.urunler` satır dönüşümü. `kulucka` `incubator`, `yedek_parca` `spare_part`, `diger` `other` olur. `birim`, `kritik_seviye` ve `aciklama` taslakta kalır; canonical product tablosunda kolonları yoktur.
-- Dry-run ürün satırlarını dönüştürür ve target’a yazmaz. Sipariş, kalem ve kargo satırları hâlâ yalnız sayılır.
-- Sıradaki bağımlılık kapısı sipariş satır dönüşümüdür.
+- Son tamamlanan çalışma: `public.siparisler` satır dönüşümü. Bilinmeyen durum fail-closed durur. Çözülemeyen konuşma satırı düşürmez. Katalogda olup taslağın ana alanlarına girmeyen kolonlar `sourceRemainder` içinde kalır.
+- Dry-run sipariş satırlarını henüz dönüştürmez. Yalnız sayar ve kolon sözleşmesini doğrular.
+- Sıradaki bağımlılık kapısı bu dönüşümün dry-run’a bağlanması, ardından kalem ve kargo dönüşümleridir.
 - Production `migrate --apply` kapısı kapalıdır. Tüm aktivasyon koşulları geçmeden açılmamalıdır.
 
 `%75` tahmini; önceki temellere ek olarak conversation ve message kolon sözleşmesini, satır dönüşümünü ve dry-run doğrulamasını içerir. Kalan legacy commerce tabloları, canlı provider adapterları, gerçek frontend taşıması, P3 transaction snapshot isolation ve P4 production veri taşıma aktivasyonu tamamlanmış kabul edilmez.
@@ -535,8 +535,8 @@ git diff --check
 Beklenen yayımlanmış taban:
 
 ```text
-2ef7541e463d2478f26465114d52947c0928d76f
-v0.1.140
+07a8f37bd1f1e106919915228732a04944204ece
+v0.1.142
 ```
 
 Aktif schema checkpoint kaybolmuşsa otomatik olarak yeniden üretme. Önce `git status`, `git reflog`, stash, başka worktree ve kullanıcı tarafından bırakılmış değişiklikleri araştır. Mevcut değişiklikleri koru.
@@ -641,11 +641,11 @@ Bu maddeler ihtiyaç varsa genişletilir; mevcut davranış sebepsiz yere yenide
 
 ## 10. Bir Sonraki Sohbet İçin İlk Somut Görev
 
-İlk görev sipariş satır dönüşümüdür:
+İlk görev sipariş dönüşümünü dry-run’a bağlamaktır:
 
-1. Yayımlanmış `v0.1.140` ürün dry-run checkpoint’ini taban kabul et. Ürün sözleşmesini ve dönüşümünü koru. Apply kapalı kalsın.
-2. `public.siparisler` satırını canonical order draft’ına çevir. Bilinmeyen `durum` ve `siparis_tipi` fail-closed durur. Zorunlu müşteri kimliği çözülemezse satırı durdur.
-3. Ardından kalem ve kargo dönüşümlerini küçük commit’lerle ekle. Kalemi `urun_kodu` veya `kolaybi_product_id` ile ürüne bağla. `stok_id` uuid olduğu için `urunler.id` ile eşitleme.
-4. Dry-run bu satırları dönüştürsün, target’a yazmasın. Tam `npm run check`, CI, tag ve artifact doğrulanır. P3 ve P4 kapıları açık kalır.
+1. Yayımlanmış `v0.1.142` sipariş dönüşümünü taban kabul et. Apply kapalı kalsın.
+2. Dry-run `public.siparisler` satırlarını `transformLegacyOrder` ile doğrulasın, target’a yazmasın. Müşteri haritası aynı dry-run’daki müşteri taslaklarından gelsin.
+3. Ardından kalem ve kargo dönüşümlerini küçük commit’lerle ekle. Kalemi `urun_kodu` veya `kolaybi_product_id` ile ürüne bağla.
+4. Tam `npm run check`, CI, tag ve artifact doğrulanır. P3 ve P4 kapıları açık kalır.
 
 P2 mapping ve introspection kabul kapısı tamamlanmadan P3 güvenlik çalışmalarına veya apply aktivasyonuna geçilmemelidir. P1 resume guard tamamlanmış olsa da tam resume/idempotency aktivasyon maddesi P3 transaction snapshot isolation ve source row-content checksum/idempotency kanıtları bitene kadar açık kalır.
