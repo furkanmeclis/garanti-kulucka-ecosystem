@@ -6,13 +6,13 @@ Bu belge, projeye yeni bir sohbetten veya bağlamsız bir çalışma oturumundan
 
 - Repo: `/Users/furkanmeclis/Documents/Projects/garanti-kulucka-ecosystem`
 - GitHub çalışma modeli: monorepo, yalnız `main`, PR yok.
-- Yayımlanmış son checkpoint: `v0.1.126`
-- Yayımlanmış son commit: `4ccc5ec2362e6189eb347cf716c22581a7dd0c7e`
-- Commit mesajı: `fix(migrator): assert account snapshots explicitly`
-- Bu tag, aynı push içindeki dört commit’in ucundadır: `af42d66` external identity resolution, `12785be` customer dry-run validation, `f5018e8` non-legacy customer dry-run reddi, `4ccc5ec` explicit account snapshot assertion. Workflow her push için yalnız uç commit’i etiketler.
+- Yayımlanmış son checkpoint: `v0.1.128`
+- Yayımlanmış son commit: `864840ccdbbe507bbe276264f2a7ec676ee5ba4f`
+- Commit mesajı: `feat(migrator): catalog legacy conversation tables`
 - Genel ilerleme: yaklaşık `%75`
-- Son tamamlanan çalışma: doğrulanmış integration account snapshot’ı ile customer external identity resolution ve `public.musteriler` dry-run row validation.
-- Sıradaki bağımlılık kapısı `public.konusmalar -> conversations` ve `public.mesajlar -> messages` catalog ve dönüşümleridir. Address ve external identity hedefleri catalog’da descriptive kalır. Customer apply, identity hedefi descriptive iken kapalı kalır.
+- Son tamamlanan çalışma: `public.konusmalar` ve `public.mesajlar` için fail-closed kolon sözleşmesi. Catalog sürümü `p2-conversation-catalog-v1`. Müşteri 15 kolon sözleşmesi değişmedi.
+- Sıradaki bağımlılık kapısı bu iki tablonun satır dönüşümüdür: zorunlu customer ve conversation ID-map çözümlemesi, account/provider uyumu ve bilinmeyen enum reddi. Dry-run bu tabloları şimdilik sayar; satır dönüşümü henüz yoktur.
+- Kolon listesi numaralı legacy migration’lar ve Instagram `human_agent` ekinden çıkarılmıştır. Canlı `information_schema` dökümü henüz alınmamıştır. Uyuşmayan kolon dry-run’ı durdurur.
 - Production `migrate --apply` kapısı kapalıdır. Tüm aktivasyon koşulları geçmeden açılmamalıdır.
 
 `%75` tahmini; API, worker, auth temelleri, admin persistence, Socket.IO sınırları, fixture tabanlı provider sözleşmeleri, CI/tag otomasyonu, container buildleri, migrator dry-run güvenlik temeli, P1 source manifest/completeness, P2 customer introspection, customer row transform, account snapshot resolution ve customer dry-run validation dilimlerini içerir. Conversation ve message catalogları, gerçek frontend taşıması, canlı provider adapterları, P3 transaction snapshot isolation ile source row-content checksum/idempotency ve P4 production veri taşıma aktivasyonu tamamlanmış kabul edilmez.
@@ -284,7 +284,7 @@ Kabul kapısı: kaynaktan sessizce atlanan bir satır verification tarafından b
 
 ### P2. Legacy Schema Introspection ve Mapping Catalog
 
-Durum: customer schema introspection `v0.1.122`, customer row transform `v0.1.124`, account resolution ve customer dry-run validation `v0.1.126` ile yayımlandı. Tam P2 tamamlanmadı. Yalnız `customers` dry-run-ready’dir. Address ve external identity hedefleri descriptive kalır. Dry-run `public.musteriler` satırlarını dönüştürür ve target’a yazmaz. Conversation ve message catalogları ile fixture kabul kapısı açıktır.
+Durum: customer schema introspection `v0.1.122`, customer row transform `v0.1.124`, account resolution ve customer dry-run validation `v0.1.126`, conversation ve message kolon sözleşmesi `v0.1.128` ile yayımlandı. Catalog sürümü `p2-conversation-catalog-v1`. Tam P2 tamamlanmadı. `customers`, `conversations` ve `messages` dry-run-ready’dir. Address ve external identity hedefleri descriptive kalır. Dry-run `public.musteriler` satırlarını dönüştürür. `konusmalar` ve `mesajlar` satırları henüz dönüştürülmez; yalnız sayılır ve kolon sözleşmesi doğrulanır.
 
 Önce kaynak database gerçek yapısı `information_schema` üzerinden çıkarılmalıdır. Legacy migration dosyaları tek başına doğru kaynak kabul edilmemelidir; çalışan kod ile migration geçmişi arasında drift vardır.
 
@@ -534,8 +534,8 @@ git diff --check
 Beklenen yayımlanmış taban:
 
 ```text
-4ccc5ec2362e6189eb347cf716c22581a7dd0c7e
-v0.1.126
+864840ccdbbe507bbe276264f2a7ec676ee5ba4f
+v0.1.128
 ```
 
 Aktif schema checkpoint kaybolmuşsa otomatik olarak yeniden üretme. Önce `git status`, `git reflog`, stash, başka worktree ve kullanıcı tarafından bırakılmış değişiklikleri araştır. Mevcut değişiklikleri koru.
@@ -640,12 +640,12 @@ Bu maddeler ihtiyaç varsa genişletilir; mevcut davranış sebepsiz yere yenide
 
 ## 10. Bir Sonraki Sohbet İçin İlk Somut Görev
 
-İlk görev P2 conversation ve message dilimidir:
+İlk görev P2 conversation ve message satır dönüşümüdür:
 
-1. Yayımlanmış `v0.1.126` account resolution ve customer dry-run checkpoint’ini taban kabul et. Çalışma ağacındaki yayınlanmamış değişiklik varsa koru.
-2. `p2-customer-catalog-v1` müşteri sözleşmesini koru. Address ve external identity hedeflerini descriptive bırak. Apply’ı kapalı tut.
-3. `public.konusmalar -> conversations` ve `public.mesajlar -> messages` catalog ve dönüşümlerini ekle. Zorunlu customer ve conversation ID-map çözümlemelerini, account/provider uyumunu ve bilinmeyen enum reddini uygula.
-4. Bilinmeyen kolon ve enumları fail-closed yönet. Sentetik legacy PostgreSQL fixture testlerini ve tam `npm run check` doğrulamasını çalıştır.
+1. Yayımlanmış `v0.1.128` kolon sözleşmesini taban kabul et. `p2-conversation-catalog-v1` sürümünü ve müşteri 15 kolon sözleşmesini koru.
+2. `public.konusmalar` ve `public.mesajlar` satırlarını canonical draft’lara çevir. Zorunlu customer ve conversation kimlikleri çözülemezse satırı durdur. Opsiyonel atanmış kullanıcı çözülemezse reconciliation kaydı üret ve satırı düşürme.
+3. `kanal`, `durum` ve gönderici tipi için açık enum haritası kullan. Bilinmeyen değer fail-closed durur. `ig_account_id` yalnız Instagram konuşmasında ve eşleşen aktif hesaba bağlanır.
+4. Dry-run bu satırları da dönüştürsün, target’a yazmasın. Apply kapalı kalsın.
 5. Commit/push sonrası CI, yeni tag ve artifact’i doğrula. P3 ve P4 kapılarını açık tut.
 
 P2 mapping ve introspection kabul kapısı tamamlanmadan P3 güvenlik çalışmalarına veya apply aktivasyonuna geçilmemelidir. P1 resume guard tamamlanmış olsa da tam resume/idempotency aktivasyon maddesi P3 transaction snapshot isolation ve source row-content checksum/idempotency kanıtları bitene kadar açık kalır.
