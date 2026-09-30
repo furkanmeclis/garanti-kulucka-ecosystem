@@ -32,6 +32,8 @@ const identifierIgnorablePattern = /[\u200B\u2060\uFEFF]/gu;
 const visibilityIgnorablePattern = /[\s\u200B\u200C\u200D\u2060\uFEFF]/gu;
 const forbiddenExternalIdentityPattern = /[\u200B\u2060\uFEFF]/u;
 const externalIdentityBlankPattern = /[\s\u200C\u200D]/gu;
+const integrationAccountPublicIdPattern = /^iac_[a-z0-9_]{1,64}$/;
+const customerIdentityProviders = new Set<string>(["woocommerce", "kolaybi", "instagram", "messenger"]);
 
 export type CustomerIdentityProvider = "woocommerce" | "kolaybi" | "instagram" | "messenger";
 
@@ -84,6 +86,30 @@ export interface UnresolvedCustomerExternalIdentity {
     field: "woocommerce_id" | "kolaybi_id" | "telefon";
   }>;
   readonly legacyTimestamps: LegacyTimestamps;
+}
+
+export interface VerifiedIntegrationAccount {
+  readonly publicId: string;
+  readonly providerKey: CustomerIdentityProvider;
+  readonly status: "active" | "inactive";
+}
+
+export type CustomerExternalIdentityMappingRole = `external_identity:${CustomerIdentityProvider}`;
+
+export interface LegacyCustomerExternalIdentityDraft {
+  readonly kind: "legacy_customer_external_identity_draft";
+  readonly targetTable: "customer_external_identities";
+  readonly publicId: string;
+  readonly mappingRole: CustomerExternalIdentityMappingRole;
+  readonly customerPublicId: string;
+  readonly integrationAccountPublicId: string;
+  readonly externalId: string;
+  readonly legacyTimestamps: LegacyTimestamps;
+}
+
+export interface CustomerExternalIdentityResolution {
+  readonly resolved: readonly LegacyCustomerExternalIdentityDraft[];
+  readonly unresolved: readonly UnresolvedCustomerExternalIdentity[];
 }
 
 export interface CustomerTransformationResult {
@@ -150,6 +176,84 @@ export function transformLegacyCustomer(record: LegacyRecord): CustomerTransform
     externalIdentityCandidates: Object.freeze(externalIdentityCandidates.map((candidate) => Object.freeze(candidate))),
     warnings: Object.freeze(warnings.map((warning) => Object.freeze(warning))),
   });
+}
+
+export function resolveCustomerExternalIdentities(
+  candidates: readonly UnresolvedCustomerExternalIdentity[],
+  accounts: readonly VerifiedIntegrationAccount[],
+): CustomerExternalIdentityResolution {
+  const activeAccountByProvider = indexActiveAccounts(accounts);
+  const resolved: LegacyCustomerExternalIdentityDraft[] = [];
+  const unresolved: UnresolvedCustomerExternalIdentity[] = [];
+
+  for (const candidate of candidates) {
+    const account = activeAccountByProvider.get(candidate.providerKey);
+    if (!account) {
+      unresolved.push(Object.freeze({
+        ...candidate,
+        source: Object.freeze({ ...candidate.source }),
+        legacyTimestamps: Object.freeze({ ...candidate.legacyTimestamps }),
+      }));
+      continue;
+    }
+    const mappingRole: CustomerExternalIdentityMappingRole = `external_identity:${account.providerKey}`;
+    resolved.push(Object.freeze({
+      kind: "legacy_customer_external_identity_draft" as const,
+      targetTable: "customer_external_identities" as const,
+      publicId: stablePublicIdFromParts("cext", [
+        candidate.source.table,
+        candidate.customerPublicId,
+        mappingRole,
+        account.publicId,
+      ]),
+      mappingRole,
+      customerPublicId: candidate.customerPublicId,
+      integrationAccountPublicId: account.publicId,
+      externalId: candidate.externalId,
+      legacyTimestamps: Object.freeze({ ...candidate.legacyTimestamps }),
+    }));
+  }
+
+  return Object.freeze({
+    resolved: Object.freeze(resolved),
+    unresolved: Object.freeze(unresolved),
+  });
+}
+
+function indexActiveAccounts(
+  accounts: readonly VerifiedIntegrationAccount[],
+): ReadonlyMap<CustomerIdentityProvider, VerifiedIntegrationAccount> {
+  if (!Array.isArray(accounts)) failAccountSnapshot("accounts must be an array");
+  const seenPublicIds = new Set<string>();
+  const activeByProvider = new Map<CustomerIdentityProvider, VerifiedIntegrationAccount>();
+
+  for (let index = 0; index < accounts.length; index += 1) {
+    const account: unknown = accounts[index];
+    if (account === null || typeof account !== "object") {
+      failAccountSnapshot(`account at index ${index} must be an object`);
+    }
+    const { publicId, providerKey, status } = account as Record<string, unknown>;
+    if (typeof publicId !== "string" || !integrationAccountPublicIdPattern.test(publicId)) {
+      failAccountSnapshot(`account at index ${index} has a blank or illegal public id`);
+    }
+    if (typeof providerKey !== "string" || !customerIdentityProviders.has(providerKey)) {
+      failAccountSnapshot(`account at index ${index} has an unknown provider`);
+    }
+    if (status !== "active" && status !== "inactive") {
+      failAccountSnapshot(`account at index ${index} has an unknown status`);
+    }
+    if (seenPublicIds.has(publicId)) failAccountSnapshot(`account at index ${index} duplicates a public id`);
+    seenPublicIds.add(publicId);
+    if (status !== "active") continue;
+
+    const provider = providerKey as CustomerIdentityProvider;
+    if (activeByProvider.has(provider)) {
+      failAccountSnapshot(`provider ${provider} has more than one active account`);
+    }
+    activeByProvider.set(provider, { publicId, providerKey: provider, status });
+  }
+
+  return activeByProvider;
 }
 
 function parseLegacyCustomer(record: LegacyRecord): ParsedLegacyCustomer {
@@ -488,4 +592,10 @@ function inspectUntrusted<T>(operation: () => T, reason: string): T {
 
 function fail(reason: string): never {
   throw new LegacyCustomerRowError(`Invalid legacy customer row: ${reason}`);
+}
+
+class IntegrationAccountSnapshotError extends Error {}
+
+function failAccountSnapshot(reason: string): never {
+  throw new IntegrationAccountSnapshotError(`Invalid integration account snapshot: ${reason}`);
 }
