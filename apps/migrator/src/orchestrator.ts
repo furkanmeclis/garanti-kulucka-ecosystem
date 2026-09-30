@@ -71,8 +71,9 @@ export async function runMigration(input: RunMigrationInput): Promise<MigrationR
     throw new Error("Apply mode is unavailable until the mapping catalog declares apply-ready transforms");
   }
 
+  const validateCustomerRows = entities.includes("customers");
+  if (validateCustomerRows) assertCustomersRouteFromLegacyTable(catalog);
   const integrationAccounts = ownIntegrationAccounts(input.integrationAccounts);
-  const validateCustomerRows = entities.includes("customers") && routesCustomersFromLegacyTable(catalog);
 
   const tables = ownSourceTableSnapshots(await input.source.describeTables(entities));
   validateLegacySourceSnapshots(catalog, tables, entities);
@@ -111,10 +112,14 @@ export async function runMigration(input: RunMigrationInput): Promise<MigrationR
   throw new Error("Apply mode is unavailable until the mapping catalog declares apply-ready transforms");
 }
 
-// transformLegacyCustomer only accepts public.musteriler rows; catalogs routing customers elsewhere stay plan-only.
-function routesCustomersFromLegacyTable(catalog: LegacyMappingCatalog): boolean {
+function assertCustomersRouteFromLegacyTable(catalog: LegacyMappingCatalog): void {
   const route = catalog.tables.find((table) => table.targetEntities.some((target) => target.entity === "customers"));
-  return route !== undefined && normalizeSourceTable(route.sourceTable) === legacyCustomerTable;
+  const sourceTable = route ? normalizeSourceTable(route.sourceTable) : "undeclared";
+  if (sourceTable !== legacyCustomerTable) {
+    throw new Error(
+      `Customer dry-run requires catalog source table ${legacyCustomerTable}; catalog routes customers from ${sourceTable}`,
+    );
+  }
 }
 
 function ownIntegrationAccounts(

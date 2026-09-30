@@ -146,10 +146,10 @@ const customer: LegacyRecord = {
 };
 
 describe("migration orchestrator", () => {
-  it("builds a canonical dry-run plan without reading batches or requiring a target", async () => {
+  it("rejects a customer dry-run from a non-legacy source table before source access", async () => {
     const source = new FixtureSource({ customers: [customer] });
 
-    const result = await runMigration({
+    const error = await runMigration({
       mode: "dry-run",
       source,
       mappingCatalog: fixtureCatalog,
@@ -158,11 +158,48 @@ describe("migration orchestrator", () => {
       now: new Date("2026-09-28T00:00:00.000Z"),
       sourceSystem: "legacy_postgres",
       sourceDatabaseIdentity: sourceIdentity,
+    }).then(() => null, (reason: unknown) => reason);
+
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toBe(
+      "Customer dry-run requires catalog source table public.musteriler; catalog routes customers from public.customers",
+    );
+    expect((error as Error).message).not.toContain("Ada Lovelace");
+    expect(source.reads).toEqual([]);
+    expect(source.operations).toEqual([]);
+  });
+
+  it("rejects a default customer selection from a non-legacy source table before source access", async () => {
+    const source = new FixtureSource({ customers: [customer] });
+
+    await expect(runMigration({
+      mode: "dry-run",
+      source,
+      mappingCatalog: fixtureCatalog,
+      batchSize: 100,
+      sourceSystem: "legacy_postgres",
+      sourceDatabaseIdentity: sourceIdentity,
+    })).rejects.toThrow("catalog routes customers from public.customers");
+    expect(source.operations).toEqual([]);
+  });
+
+  it("builds a canonical dry-run plan without requiring a target", async () => {
+    const source = new LegacyCustomerSource([]);
+
+    const result = await runMigration({
+      mode: "dry-run",
+      source,
+      mappingCatalog: legacyCatalogWithVersion("fixture-catalog-v1"),
+      batchSize: 100,
+      entities: ["customers"],
+      now: new Date("2026-09-28T00:00:00.000Z"),
+      sourceSystem: "legacy_postgres",
+      sourceDatabaseIdentity: sourceIdentity,
     });
 
-    expect(result.plan.entities).toEqual([{ entity: "customers", totalRows: 1, batches: 1 }]);
+    expect(result.plan.entities).toEqual([{ entity: "customers", totalRows: 0, batches: 0 }]);
     expect(result.sourceManifest.mappingCatalogVersion).toBe("fixture-catalog-v1");
-    expect(result.dryRunReport?.totals).toEqual({ plannedRows: 1, plannedBatches: 1, blockedRows: 0 });
+    expect(result.dryRunReport?.totals).toEqual({ plannedRows: 0, plannedBatches: 0, blockedRows: 0 });
     expect(result.batches).toEqual([]);
     expect(source.reads).toEqual([]);
     expect(source.operations).toEqual(["describe", "count:customers"]);
@@ -178,7 +215,7 @@ describe("migration orchestrator", () => {
     await expect(runMigration({
       mode: "dry-run",
       source,
-      mappingCatalog: fixtureCatalog,
+      mappingCatalog: legacyMappingCatalog,
       batchSize: 100,
       entities: ["customers"],
       sourceSystem: "legacy_postgres",
@@ -204,26 +241,18 @@ describe("migration orchestrator", () => {
     await expect(runMigration({
       mode: "dry-run",
       source,
-      mappingCatalog: fixtureCatalog,
+      mappingCatalog: legacyMappingCatalog,
       batchSize: 100,
       entities: ["customers"],
       sourceSystem: "legacy_postgres",
       sourceDatabaseIdentity: sourceIdentity,
-    })).rejects.toThrow("Source table snapshot for customers must route to public.customers.id");
+    })).rejects.toThrow("Source table snapshot for customers must route to public.musteriler.id");
     expect(source.operations).toEqual(["describe"]);
   });
 
   it("derives the manifest version from the explicit validated catalog", async () => {
-    const catalog = createLegacyMappingCatalog({
-      version: "fixture-catalog-v7",
-      tables: [{
-        sourceTable: "public.customers",
-        idColumn: "id",
-        targetEntities: [{ entity: "customers", mapping: "direct", readiness: "dry-run" }],
-        columns: [{ name: "id", dataType: "bigint", udtName: "int8", nullable: false, required: true }],
-      }],
-    });
-    const source = new FixtureSource({ customers: [customer] });
+    const catalog = legacyCatalogWithVersion("fixture-catalog-v7");
+    const source = new LegacyCustomerSource([]);
 
     const result = await runMigration({
       mode: "dry-run",
@@ -332,11 +361,11 @@ describe("migration orchestrator", () => {
   });
 
   it("uses only the explicit catalog version without a global fallback", async () => {
-    const source = new FixtureSource({ customers: [customer] });
+    const source = new LegacyCustomerSource([]);
     const result = await runMigration({
       mode: "dry-run",
       source,
-      mappingCatalog: fixtureCatalog,
+      mappingCatalog: legacyCatalogWithVersion("fixture-catalog-v1"),
       batchSize: 100,
       sourceSystem: "legacy_postgres",
       sourceDatabaseIdentity: sourceIdentity,
@@ -347,12 +376,12 @@ describe("migration orchestrator", () => {
 
   it("owns the catalog before count can mutate the caller input", async () => {
     const catalog = mutableFixtureCatalog("stable-catalog-v1");
-    const source = new FixtureSource({ customers: [customer] });
+    const source = new LegacyCustomerSource([]);
     source.count = async () => {
       catalog.version = "mutated-catalog-v2";
       catalog.tables[0]!.sourceTable = "public.changed";
       catalog.tables[0]!.columns[0]!.dataType = "text";
-      return 1;
+      return 0;
     };
 
     const result = await runMigration({
@@ -366,17 +395,17 @@ describe("migration orchestrator", () => {
     });
 
     expect(result.sourceManifest.mappingCatalogVersion).toBe("stable-catalog-v1");
-    expect(result.sourceManifest.tables[0]?.table).toBe("customers");
+    expect(result.sourceManifest.tables[0]?.table).toBe("musteriler");
   });
 
   it("owns source snapshots before count can mutate the adapter result", async () => {
-    const source = new FixtureSource({ customers: [customer] });
+    const source = new LegacyCustomerSource([]);
     const snapshot = {
       entity: "customers" as const,
       schema: "public",
-      table: "customers",
+      table: "musteriler",
       idColumn: "id",
-      columns: [{ name: "id", ordinalPosition: 1, dataType: "bigint", udtName: "int8", nullable: false }],
+      columns: musterilerColumnSnapshots(),
     };
     source.describeTables = async () => {
       source.operations.push("describe");
@@ -387,18 +416,18 @@ describe("migration orchestrator", () => {
       snapshot.columns[0]!.dataType = "text";
       snapshot.columns.push({
         name: "injected",
-        ordinalPosition: 2,
+        ordinalPosition: 16,
         dataType: "text",
         udtName: "text",
         nullable: true,
       });
-      return 1;
+      return 0;
     };
 
     const result = await runMigration({
       mode: "dry-run",
       source,
-      mappingCatalog: fixtureCatalog,
+      mappingCatalog: legacyMappingCatalog,
       batchSize: 100,
       entities: ["customers"],
       sourceSystem: "legacy_postgres",
@@ -408,13 +437,27 @@ describe("migration orchestrator", () => {
     expect(result.sourceManifest.tables).toEqual([{
       entity: "customers",
       schema: "public",
-      table: "customers",
+      table: "musteriler",
       idColumn: "id",
-      columns: [{ name: "id", ordinalPosition: 1, dataType: "bigint", udtName: "int8", nullable: false }],
+      columns: musterilerColumnSnapshots(),
     }]);
   });
 
 });
+
+function musterilerColumnSnapshots() {
+  return legacyMappingCatalog.tables[0]!.columns.map((column, index) => ({
+    name: column.name,
+    ordinalPosition: index + 1,
+    dataType: column.dataType,
+    udtName: column.udtName,
+    nullable: column.nullable,
+  }));
+}
+
+function legacyCatalogWithVersion(version: string) {
+  return createLegacyMappingCatalog({ ...legacyMappingCatalog, version });
+}
 
 class LegacyCustomerSource implements LegacySource {
   readonly reads: { entity: MigrationEntity; options: BatchReadOptions }[] = [];
@@ -441,13 +484,7 @@ class LegacyCustomerSource implements LegacySource {
       schema: "public",
       table: "musteriler",
       idColumn: "id",
-      columns: legacyMappingCatalog.tables[0]!.columns.map((column, index) => ({
-        name: column.name,
-        ordinalPosition: index + 1,
-        dataType: column.dataType,
-        udtName: column.udtName,
-        nullable: column.nullable,
-      })),
+      columns: musterilerColumnSnapshots(),
     }));
   }
 }
@@ -591,10 +628,10 @@ function mutableFixtureCatalog(version: string) {
   return {
     version,
     tables: [{
-      sourceTable: "public.customers",
+      sourceTable: "public.musteriler",
       idColumn: "id",
       targetEntities: [{ entity: "customers" as const, mapping: "direct" as const, readiness: "dry-run" as const }],
-      columns: [{ name: "id", dataType: "bigint", udtName: "int8", nullable: false, required: true }],
+      columns: legacyMappingCatalog.tables[0]!.columns.map((column) => ({ ...column })),
     }],
   };
 }
