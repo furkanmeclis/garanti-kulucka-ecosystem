@@ -9,6 +9,7 @@ export * from "./legacy-source.js";
 export * from "./logging.js";
 export * from "./mapping-catalog.js";
 export * from "./plan.js";
+export * from "./product-mapping.js";
 export * from "./reports.js";
 export * from "./source-transaction.js";
 export * from "./source-manifest.js";
