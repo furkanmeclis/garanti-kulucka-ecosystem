@@ -14,6 +14,8 @@ const secretPhone = "+90 555 000 00 01";
 const secretName = "Gizli Musteri Alpha";
 const secretOrderNumber = "GK-SECRET-4242";
 const secretKolaybiId = "kb-order-999";
+const secretTracking = "TRK-SECRET-555";
+const secretCancelReason = "Iptal sebebi gizli";
 
 function orderContext(overrides: Partial<OrderTransformContext> = {}): OrderTransformContext {
   return {
@@ -137,7 +139,35 @@ describe("transformLegacyOrder", () => {
         createdAt: "2024-01-02T00:04:05.000000Z",
         updatedAt: "2025-06-07T08:09:10.123000Z",
       },
+      sourceRemainder: {
+        id: orderId.toLowerCase(),
+        kargo_takip_no: null,
+        kargo_firmasi: null,
+        teyit_tarihi: null,
+        teyit_eden_id: null,
+        iptal_nedeni: null,
+        iade_nedeni: null,
+        ivr_bulk_id: null,
+        ivr_tus: null,
+        ivr_arama_durumu: null,
+        ivr_arama_tarihi: null,
+        kolaybi_contact_id: null,
+        kolaybi_address_id: null,
+        ivr_dinleme_suresi: null,
+        kargo_yazdirildi: null,
+        kargo_son_hareket: null,
+        kargo_son_hareket_tarihi: null,
+        kargoya_aktarilma_tarihi: null,
+        efatura_durumu: null,
+        sevk_edilme_tarihi: null,
+        durum_oncelik: null,
+        mukerrer: false,
+        teyit_arama_deneme: 0,
+        mukerrer_ad: false,
+        at_disi: null,
+      },
     });
+    expect(Object.isFrozen(result.order.sourceRemainder)).toBe(true);
     expect(result.order).not.toHaveProperty("sourceId");
     expect(transformLegacyOrder(fixture(), orderContext()).order.publicId).toBe(result.order.publicId);
   });
@@ -248,6 +278,17 @@ describe("transformLegacyOrder", () => {
     });
   });
 
+  it("keeps a non-null kargo_takip_no and iptal_nedeni on sourceRemainder", () => {
+    const result = transformLegacyOrder(fixture({
+      kargo_takip_no: "  TRK-998877  ",
+      iptal_nedeni: "  Musteri vazgecti  ",
+    }), orderContext());
+    expect(result.order.sourceRemainder).toMatchObject({
+      kargo_takip_no: "TRK-998877",
+      iptal_nedeni: "Musteri vazgecti",
+    });
+  });
+
   it("does not echo the customer phone, name, order number, or KolayBi id in row errors", () => {
     const errors = [
       captureError(() => transformLegacyOrder(fixture({
@@ -255,6 +296,8 @@ describe("transformLegacyOrder", () => {
         musteri_telefon: secretPhone,
         siparis_no: secretOrderNumber,
         kolaybi_siparis_id: secretKolaybiId,
+        kargo_takip_no: secretTracking,
+        iptal_nedeni: secretCancelReason,
         durum: secretPhone,
       }), orderContext())),
       captureError(() => transformLegacyOrder(fixture({
@@ -274,6 +317,8 @@ describe("transformLegacyOrder", () => {
       expect(error.message).not.toContain(secretName);
       expect(error.message).not.toContain(secretOrderNumber);
       expect(error.message).not.toContain(secretKolaybiId);
+      expect(error.message).not.toContain(secretTracking);
+      expect(error.message).not.toContain(secretCancelReason);
     }
   });
 });

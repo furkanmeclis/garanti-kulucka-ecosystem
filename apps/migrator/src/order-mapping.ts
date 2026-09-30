@@ -4,14 +4,44 @@ import type { LegacyRowRejection } from "./customer-mapping.js";
 import { calculateSourcePayloadChecksum } from "./legacy-source.js";
 import type { SourcePayloadChecksum } from "./legacy-source.js";
 import { legacyMappingCatalog } from "./mapping-catalog.js";
+import type { LegacyColumnContract } from "./mapping-catalog.js";
 import type { LegacyRecord } from "./types.js";
 
 export const legacyOrderTable = "public.siparisler";
-const legacyOrderFields = catalogColumnNames(legacyOrderTable);
+const legacyOrderColumns = catalogColumns(legacyOrderTable);
+const legacyOrderFields = Object.freeze(legacyOrderColumns.map((column) => column.name));
+const mappedCatalogColumns = new Set<string>([
+  "musteri_id",
+  "olusturan_id",
+  "konusma_id",
+  "musteri_ad",
+  "musteri_telefon",
+  "musteri_adres",
+  "musteri_il",
+  "musteri_ilce",
+  "musteri_posta_kodu",
+  "siparis_no",
+  "siparis_tipi",
+  "durum",
+  "ara_toplam",
+  "kdv_toplam",
+  "kargo_ucreti",
+  "genel_toplam",
+  "teyit_durumu",
+  "notlar",
+  "olusturma_tarihi",
+  "guncelleme_tarihi",
+  "kolaybi_siparis_id",
+  "kaynak",
+]);
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const checksumPattern = /^sha256:[0-9a-f]{64}$/;
 const customerPublicIdPattern = /^cus_[0-9a-f]{24}$/;
 const conversationPublicIdPattern = /^conv_[0-9a-f]{24}$/;
+const postgresIntegerMin = -2_147_483_648;
+const postgresIntegerMax = 2_147_483_647;
+const postgresSmallintMin = -32_768;
+const postgresSmallintMax = 32_767;
 
 const orderStatuses: ReadonlyMap<string, OrderStatus> = new Map([
   ["olusturuldu", "created"],
@@ -103,7 +133,12 @@ export interface LegacyOrderDraft {
   readonly externalOrderId: string | null;
   readonly notes: string | null;
   readonly legacyTimestamps: LegacyTimestamps;
+  readonly sourceRemainder: LegacyOrderSourceRemainder;
 }
+
+export type LegacyOrderRemainderValue = string | number | boolean | null;
+
+export type LegacyOrderSourceRemainder = Readonly<Record<string, LegacyOrderRemainderValue>>;
 
 export interface OrderTransformationResult {
   readonly sourcePayloadChecksum: SourcePayloadChecksum;
@@ -203,6 +238,7 @@ export function transformLegacyOrder(
       createdAt: normalizeLegacyTimestamp(payload.olusturma_tarihi, "olusturma_tarihi", rejectRow),
       updatedAt: normalizeLegacyTimestamp(payload.guncelleme_tarihi, "guncelleme_tarihi", rejectRow),
     }),
+    sourceRemainder: remainderFromPayload(payload, rejectRow),
   });
 
   return Object.freeze({
@@ -327,15 +363,85 @@ function formatTwoDecimal(raw: string, field: string, reject: LegacyRowRejection
   return `${match[1]}.${fraction.slice(0, 2).padEnd(2, "0")}`;
 }
 
+function remainderFromPayload(
+  payload: Record<string, unknown>,
+  reject: LegacyRowRejection,
+): LegacyOrderSourceRemainder {
+  const remainder = Object.create(null) as Record<string, LegacyOrderRemainderValue>;
+  for (const column of legacyOrderColumns) {
+    if (mappedCatalogColumns.has(column.name)) continue;
+    remainder[column.name] = remainderValue(payload[column.name], column, reject);
+  }
+  return Object.freeze(remainder);
+}
+
+function remainderValue(
+  value: unknown,
+  column: LegacyColumnContract,
+  reject: LegacyRowRejection,
+): LegacyOrderRemainderValue {
+  switch (column.udtName) {
+    case "uuid":
+      return column.nullable
+        ? optionalUuid(value, column.name, reject)
+        : requiredUuid(value, column.name, reject);
+    case "timestamptz":
+      return normalizeLegacyTimestamp(value, column.name, reject);
+    case "bool":
+      return remainderBoolean(value, column, reject);
+    case "int4":
+      return remainderInteger(value, column, postgresIntegerMin, postgresIntegerMax, reject);
+    case "int2":
+      return remainderInteger(value, column, postgresSmallintMin, postgresSmallintMax, reject);
+    case "varchar":
+    case "text":
+      return optionalTrimmedString(value, column.name, reject);
+    default:
+      reject(`field ${column.name} has an unsupported remainder type`);
+  }
+}
+
+function remainderBoolean(
+  value: unknown,
+  column: LegacyColumnContract,
+  reject: LegacyRowRejection,
+): boolean | null {
+  if (value === null) {
+    if (!column.nullable) reject(`field ${column.name} is required`);
+    return null;
+  }
+  if (typeof value !== "boolean") {
+    reject(column.nullable ? `field ${column.name} must be a boolean or null` : `field ${column.name} must be a boolean`);
+  }
+  return value;
+}
+
+function remainderInteger(
+  value: unknown,
+  column: LegacyColumnContract,
+  min: number,
+  max: number,
+  reject: LegacyRowRejection,
+): number | null {
+  if (value === null) {
+    if (!column.nullable) reject(`field ${column.name} is required`);
+    return null;
+  }
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < min || value > max) {
+    reject(column.nullable ? `field ${column.name} must be an integer or null` : `field ${column.name} must be an integer`);
+  }
+  return value;
+}
+
 function stablePublicId(row: ParsedLegacyOrder): string {
   const identity = [row.sourceSystem, row.sourceTable, row.sourceId, "primary"].join(":");
   return `ord_${createHash("sha256").update(identity).digest("hex").slice(0, 24)}`;
 }
 
-function catalogColumnNames(sourceTable: string): readonly string[] {
+function catalogColumns(sourceTable: string): readonly LegacyColumnContract[] {
   const mapping = legacyMappingCatalog.tables.find((table) => table.sourceTable === sourceTable);
   if (!mapping) throw new Error(`Legacy mapping catalog does not declare ${sourceTable}`);
-  return Object.freeze(mapping.columns.map((column) => column.name));
+  return mapping.columns;
 }
 
 class LegacyOrderRowError extends Error {}
