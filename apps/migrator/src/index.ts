@@ -8,6 +8,7 @@ export * from "./id-map.js";
 export * from "./legacy-source.js";
 export * from "./logging.js";
 export * from "./mapping-catalog.js";
+export * from "./order-mapping.js";
 export * from "./plan.js";
 export * from "./product-mapping.js";
 export * from "./reports.js";
