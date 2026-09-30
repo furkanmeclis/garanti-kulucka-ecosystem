@@ -73,6 +73,7 @@ describe("PostgreSQL migration runtime", () => {
       conversations: { tableName: "public.konusmalar", idColumn: "id" },
       messages: { tableName: "public.mesajlar", idColumn: "id" },
       orders: { tableName: "public.siparisler", idColumn: "id" },
+      order_items: { tableName: "public.siparis_kalemleri", idColumn: "id" },
     });
   });
 
@@ -141,12 +142,14 @@ describe("PostgreSQL migration runtime", () => {
       { entity: "conversations", totalRows: 0, batches: 0 },
       { entity: "messages", totalRows: 0, batches: 0 },
       { entity: "orders", totalRows: 0, batches: 0 },
+      { entity: "order_items", totalRows: 0, batches: 0 },
     ]);
     expect(client.queries.filter((sql) => /select count\(\*\)/i.test(sql))).toEqual([
       'select count(*) as count from "public"."musteriler"',
       'select count(*) as count from "public"."konusmalar"',
       'select count(*) as count from "public"."mesajlar"',
       'select count(*) as count from "public"."siparisler"',
+      'select count(*) as count from "public"."siparis_kalemleri"',
     ]);
   });
 
@@ -185,6 +188,29 @@ describe("PostgreSQL migration runtime", () => {
       sourceSystem: "legacy_postgres",
       batchSize: 500,
     })).rejects.toThrow("Legacy source schema mismatch for public.siparisler: missing required columns [mukerrer]");
+    expect(client.queries.filter((sql) => /select count\(\*\)/i.test(sql))).toEqual([]);
+  });
+
+  it("fails a dry-run closed when siparis_kalemleri lacks kolaybi_product_id", async () => {
+    const rows = catalogIntrospectionRows();
+    const client = new FixturePostgresClient(undefined, {
+      ...rows,
+      "public.siparis_kalemleri": (rows["public.siparis_kalemleri"] ?? []).filter(
+        (row) => row.column_name !== "kolaybi_product_id",
+      ),
+    });
+    postgresClientConstructor.mockImplementationOnce(function fixtureClientConstructor() {
+      return client;
+    });
+
+    await expect(executePostgresMigration({
+      mode: "dry-run",
+      sourceDatabaseUrl: "postgres://source/legacy",
+      sourceSystem: "legacy_postgres",
+      batchSize: 500,
+    })).rejects.toThrow(
+      "Legacy source schema mismatch for public.siparis_kalemleri: missing required columns [kolaybi_product_id]",
+    );
     expect(client.queries.filter((sql) => /select count\(\*\)/i.test(sql))).toEqual([]);
   });
 

@@ -16,6 +16,7 @@ describe("legacy mapping catalog", () => {
   const conversationMapping = legacyMappingCatalog.tables[1]!;
   const messageMapping = legacyMappingCatalog.tables[2]!;
   const orderMapping = legacyMappingCatalog.tables[3]!;
+  const orderItemMapping = legacyMappingCatalog.tables[4]!;
 
   it("accepts the exact real musteriler schema and declares all customer targets", () => {
     expect(() => validateLegacyTableColumns("public.musteriler", realMusterilerColumns(), customerMapping))
@@ -42,7 +43,7 @@ describe("legacy mapping catalog", () => {
       "guncelleme_tarihi",
       "username",
     ]);
-    expect(mappingCatalogVersion).toBe("p2-order-catalog-v1");
+    expect(mappingCatalogVersion).toBe("p2-order-item-catalog-v1");
   });
 
   it("declares konusmalar and mesajlar as direct dry-run tables after musteriler", () => {
@@ -51,6 +52,7 @@ describe("legacy mapping catalog", () => {
       ["public.konusmalar", "id"],
       ["public.mesajlar", "id"],
       ["public.siparisler", "id"],
+      ["public.siparis_kalemleri", "id"],
     ]);
     expect(conversationMapping.targetEntities).toEqual([
       { entity: "conversations", mapping: "direct", readiness: "dry-run" },
@@ -65,6 +67,14 @@ describe("legacy mapping catalog", () => {
     expect(orderMapping.idColumn).toBe("id");
     expect(orderMapping.targetEntities).toEqual([
       { entity: "orders", mapping: "direct", readiness: "dry-run" },
+    ]);
+  });
+
+  it("declares siparis_kalemleri as a direct dry-run table after siparisler", () => {
+    expect(orderItemMapping.sourceTable).toBe("public.siparis_kalemleri");
+    expect(orderItemMapping.idColumn).toBe("id");
+    expect(orderItemMapping.targetEntities).toEqual([
+      { entity: "order_items", mapping: "direct", readiness: "dry-run" },
     ]);
   });
 
@@ -110,6 +120,25 @@ describe("legacy mapping catalog", () => {
     )).toThrow("column teyit_durumu expected type character varying/varchar, received boolean/bool");
   });
 
+  it("accepts the exact real siparis_kalemleri schema and requires every column", () => {
+    expect(() => validateLegacyTableColumns(
+      "public.siparis_kalemleri",
+      realSiparisKalemleriColumns(),
+      orderItemMapping,
+    )).not.toThrow();
+    expect(orderItemMapping.columns).toEqual(realSiparisKalemleriColumns().map(asRequiredContract));
+  });
+
+  it("rejects a siparis_kalemleri schema missing kolaybi_product_id", () => {
+    expect(() => validateLegacyTableColumns(
+      "public.siparis_kalemleri",
+      realSiparisKalemleriColumns().filter((column) => column.name !== "kolaybi_product_id"),
+      orderItemMapping,
+    )).toThrow(
+      "Legacy source schema mismatch for public.siparis_kalemleri: missing required columns [kolaybi_product_id]",
+    );
+  });
+
   it("rejects media_url and media_type as unexpected mesajlar columns rather than aliases", () => {
     const aliased = realMesajlarColumns().map((column) => {
       if (column.name === "medya_url") return { ...column, name: "media_url" };
@@ -144,6 +173,7 @@ describe("legacy mapping catalog", () => {
       "conversations",
       "messages",
       "orders",
+      "order_items",
     ]);
   });
 
@@ -463,17 +493,18 @@ describe("legacy mapping catalog", () => {
       { entity: "conversations", schema: "public", table: "konusmalar", idColumn: "id", columns: realKonusmalarColumns() },
       { entity: "messages", schema: "public", table: "mesajlar", idColumn: "id", columns: realMesajlarColumns() },
       { entity: "orders", schema: "public", table: "siparisler", idColumn: "id", columns: realSiparislerColumns() },
+      { entity: "order_items", schema: "public", table: "siparis_kalemleri", idColumn: "id", columns: realSiparisKalemleriColumns() },
     ];
 
     expect(() => validateLegacySourceSnapshots(
       legacyMappingCatalog,
       snapshots,
-      ["customers", "conversations", "messages", "orders"],
+      ["customers", "conversations", "messages", "orders", "order_items"],
     )).not.toThrow();
     expect(() => validateLegacySourceSnapshots(
       legacyMappingCatalog,
-      [snapshots[0]!, { ...snapshots[1]!, table: "musteriler" }, snapshots[2]!, snapshots[3]!],
-      ["customers", "conversations", "messages", "orders"],
+      [snapshots[0]!, { ...snapshots[1]!, table: "musteriler" }, snapshots[2]!, snapshots[3]!, snapshots[4]!],
+      ["customers", "conversations", "messages", "orders", "order_items"],
     )).toThrow("Source table snapshot for conversations must route to public.konusmalar.id");
   });
 
@@ -589,6 +620,23 @@ function realSiparislerColumns(): SourceColumnSnapshot[] {
     ["kaynak", "text", "text", false],
     ["mukerrer_ad", "boolean", "bool", false],
     ["at_disi", "boolean", "bool", true],
+  ]);
+}
+
+function realSiparisKalemleriColumns(): SourceColumnSnapshot[] {
+  return inOrder([
+    ["id", "uuid", "uuid", false],
+    ["siparis_id", "uuid", "uuid", false],
+    ["stok_id", "uuid", "uuid", true],
+    ["urun_adi", "character varying", "varchar", false],
+    ["urun_kodu", "character varying", "varchar", true],
+    ["miktar", "numeric", "numeric", false],
+    ["birim", "character varying", "varchar", true],
+    ["birim_fiyat", "numeric", "numeric", false],
+    ["kdv_orani", "numeric", "numeric", true],
+    ["toplam_fiyat", "numeric", "numeric", false],
+    ["olusturma_tarihi", "timestamp with time zone", "timestamptz", true],
+    ["kolaybi_product_id", "character varying", "varchar", true],
   ]);
 }
 

@@ -260,23 +260,26 @@ describe("LegacyDatabaseSource", () => {
         conversations: "public.konusmalar",
         messages: "public.mesajlar",
         orders: "public.siparisler",
+        order_items: "public.siparis_kalemleri",
       },
       mappingCatalog: legacyMappingCatalog,
     });
 
-    const snapshots = await source.describeTables(["customers", "conversations", "messages", "orders"]);
+    const snapshots = await source.describeTables(["customers", "conversations", "messages", "orders", "order_items"]);
 
     expect(db.queries.map((query) => query.parameters)).toEqual([
       ["public", "musteriler"],
       ["public", "konusmalar"],
       ["public", "mesajlar"],
       ["public", "siparisler"],
+      ["public", "siparis_kalemleri"],
     ]);
     expect(snapshots.map(({ entity, schema, table }) => ({ entity, schema, table }))).toEqual([
       { entity: "customers", schema: "public", table: "musteriler" },
       { entity: "conversations", schema: "public", table: "konusmalar" },
       { entity: "messages", schema: "public", table: "mesajlar" },
       { entity: "orders", schema: "public", table: "siparisler" },
+      { entity: "order_items", schema: "public", table: "siparis_kalemleri" },
     ]);
   });
 
