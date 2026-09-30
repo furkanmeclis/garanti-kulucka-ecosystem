@@ -504,19 +504,29 @@ function optionalSafeInteger(value: unknown, field: string): number | null {
 }
 
 function optionalTimestamp(value: unknown, field: string): string | null {
+  return normalizeLegacyTimestamp(value, field, fail);
+}
+
+export type LegacyRowRejection = (reason: string) => never;
+
+export function normalizeLegacyTimestamp(
+  value: unknown,
+  field: string,
+  reject: LegacyRowRejection,
+): string | null {
   if (value === null) return null;
   const invalidTimestamp = `field ${field} must be a valid timestamp or null`;
-  if (inspectUntrusted(() => value instanceof Date, invalidTimestamp)) {
-    const date = new Date(inspectUntrusted(() => Date.prototype.getTime.call(value), invalidTimestamp));
-    if (!Number.isFinite(date.getTime())) fail(invalidTimestamp);
+  if (inspectUntrusted(() => value instanceof Date, invalidTimestamp, reject)) {
+    const date = new Date(inspectUntrusted(() => Date.prototype.getTime.call(value), invalidTimestamp, reject));
+    if (!Number.isFinite(date.getTime())) reject(invalidTimestamp);
     const year = date.getUTCFullYear();
-    if (year < 1 || year > 9999) fail(invalidTimestamp);
+    if (year < 1 || year > 9999) reject(invalidTimestamp);
     return formatUtcTimestamp(date, `${date.getUTCMilliseconds()}`.padStart(3, "0").padEnd(6, "0"));
   }
-  if (typeof value !== "string") fail(`field ${field} must be a valid timestamp or null`);
+  if (typeof value !== "string") reject(invalidTimestamp);
   const parts = timestampPattern.exec(value);
-  if (!parts || !hasValidTimestampParts(parts)) fail(`field ${field} must be a valid timestamp or null`);
-  return normalizeTimestampParts(parts, field);
+  if (!parts || !hasValidTimestampParts(parts)) reject(invalidTimestamp);
+  return normalizeTimestampParts(parts, invalidTimestamp, reject);
 }
 
 function hasValidTimestampParts(parts: RegExpExecArray): boolean {
@@ -536,7 +546,11 @@ function hasValidTimestampParts(parts: RegExpExecArray): boolean {
   return day >= 1 && day <= daysInMonth;
 }
 
-function normalizeTimestampParts(parts: RegExpExecArray, field: string): string {
+function normalizeTimestampParts(
+  parts: RegExpExecArray,
+  invalidTimestamp: string,
+  reject: LegacyRowRejection,
+): string {
   const local = new Date(0);
   local.setUTCFullYear(Number(parts[1]), Number(parts[2]) - 1, Number(parts[3]));
   local.setUTCHours(Number(parts[4]), Number(parts[5]), Number(parts[6]), 0);
@@ -545,7 +559,7 @@ function normalizeTimestampParts(parts: RegExpExecArray, field: string): string 
   const direction = parts[8] === "-" ? -1 : 1;
   const utc = new Date(local.getTime() - direction * offsetMinutes * 60_000);
   const utcYear = utc.getUTCFullYear();
-  if (utcYear < 1 || utcYear > 9999) fail(`field ${field} must be a valid timestamp or null`);
+  if (utcYear < 1 || utcYear > 9999) reject(invalidTimestamp);
   const fractional = (parts[7] ?? "").padEnd(6, "0");
   return formatUtcTimestamp(utc, fractional);
 }
@@ -601,11 +615,11 @@ function compareStrings(left: string, right: string): number {
 class LegacyCustomerRowError extends Error {}
 
 // Reflection on row values can run proxy traps whose errors may carry row data; only wrap those calls.
-function inspectUntrusted<T>(operation: () => T, reason: string): T {
+function inspectUntrusted<T>(operation: () => T, reason: string, reject: LegacyRowRejection = fail): T {
   try {
     return operation();
   } catch {
-    fail(reason);
+    reject(reason);
   }
 }
 

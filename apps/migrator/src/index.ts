@@ -1,5 +1,6 @@
 export * from "./apply.js";
 export * from "./commands.js";
+export * from "./conversation-mapping.js";
 export * from "./customer-mapping.js";
 export * from "./database-identity.js";
 export * from "./errors.js";
