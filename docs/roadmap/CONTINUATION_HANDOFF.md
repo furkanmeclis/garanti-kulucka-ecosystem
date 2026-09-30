@@ -6,15 +6,13 @@ Bu belge, projeye yeni bir sohbetten veya bağlamsız bir çalışma oturumundan
 
 - Repo: `/Users/furkanmeclis/Documents/Projects/garanti-kulucka-ecosystem`
 - GitHub çalışma modeli: monorepo, yalnız `main`, PR yok.
-- Yayımlanmış son checkpoint: `v0.1.130`
-- Yayımlanmış son commit: `1e91fefde6b17d1e4f2088b858e9a525351551b8`
-- Commit mesajı: `docs(migrator): describe conversation dry-run snapshots`
-- Bu tag, aynı push içindeki beş commit’in ucundadır: `5945d0c` conversation row transform, `17a1fa0` canonical enum map, `2304353` dry-run validation, `86f86ce` snapshot files, `1e91fef` operator docs. Workflow her push için yalnız uç commit’i etiketler.
+- Yayımlanmış son checkpoint: `v0.1.132`
+- Yayımlanmış son commit: `a43ce2409912811d690955bc60b45029be914f00`
+- Commit mesajı: `feat(migrator): catalog legacy order table`
 - Genel ilerleme: yaklaşık `%75`
-- Son tamamlanan çalışma: `public.konusmalar` ve `public.mesajlar` satır dönüşümü ve dry-run doğrulaması. Catalog sürümü `p2-conversation-catalog-v1` değişmedi.
-- Dry-run müşteri, konuşma ve mesaj satırlarını dönüştürür, target’a yazmaz. WhatsApp, Messenger ve Instagram konuşmaları `MIGRATION_CONVERSATION_ACCOUNTS_FILE` olmadan fail-closed durur. Opsiyonel kullanıcı eşlemesi `MIGRATION_USER_PUBLIC_IDS_FILE` dosyasındadır.
-- Legacy `panel` canonical `manual` olur. Legacy `calisan` canonical `user` olur.
-- Sıradaki bağımlılık kapısı kalan legacy tablolardır: orders, order items, shipments ve products. Konuşma ve mesaj external id tekilliği apply öncesi hâlâ açıktır.
+- Son tamamlanan çalışma: `public.siparisler` için 47 kolonluk fail-closed sözleşme. Catalog sürümü `p2-order-catalog-v1`. Müşteri, konuşma ve mesaj sözleşmeleri değişmedi.
+- Dry-run sipariş satırlarını sayar ve kolonları kontrol eder. Sipariş satır dönüşümü henüz yoktur.
+- Sıradaki bağımlılık kapısı `public.siparis_kalemleri`, ardından kargo ve ürün sözleşmeleridir. Sipariş satır dönüşümü bu sözleşmelerden sonra gelir.
 - Production `migrate --apply` kapısı kapalıdır. Tüm aktivasyon koşulları geçmeden açılmamalıdır.
 
 `%75` tahmini; önceki temellere ek olarak conversation ve message kolon sözleşmesini, satır dönüşümünü ve dry-run doğrulamasını içerir. Kalan legacy commerce tabloları, canlı provider adapterları, gerçek frontend taşıması, P3 transaction snapshot isolation ve P4 production veri taşıma aktivasyonu tamamlanmış kabul edilmez.
@@ -536,8 +534,8 @@ git diff --check
 Beklenen yayımlanmış taban:
 
 ```text
-1e91fefde6b17d1e4f2088b858e9a525351551b8
-v0.1.130
+a43ce2409912811d690955bc60b45029be914f00
+v0.1.132
 ```
 
 Aktif schema checkpoint kaybolmuşsa otomatik olarak yeniden üretme. Önce `git status`, `git reflog`, stash, başka worktree ve kullanıcı tarafından bırakılmış değişiklikleri araştır. Mevcut değişiklikleri koru.
@@ -642,11 +640,11 @@ Bu maddeler ihtiyaç varsa genişletilir; mevcut davranış sebepsiz yere yenide
 
 ## 10. Bir Sonraki Sohbet İçin İlk Somut Görev
 
-İlk görev kalan P2 commerce catalog dilimidir:
+İlk görev `public.siparis_kalemleri` kolon sözleşmesidir:
 
-1. Yayımlanmış `v0.1.130` conversation dry-run checkpoint’ini taban kabul et. `p2-conversation-catalog-v1` müşteri, konuşma ve mesaj sözleşmelerini koru. Apply kapalı kalsın.
-2. Orders, order items, shipments ve products için fail-closed kolon sözleşmesi ve satır dönüşümünü, bu sırayla ve küçük commit’lerle ekle.
-3. Konuşma `kanal_konusma_id` ve mesaj `kanal_mesaj_id` tekilliğini dry-run’da kontrol et. Çakışma satırı sessizce birleştirmez.
-4. Bilinmeyen kolon ve enum fail-closed kalır. Tam `npm run check`, CI, tag ve artifact doğrulanır. P3 ve P4 kapıları açık kalır.
+1. Yayımlanmış `v0.1.132` sipariş catalog checkpoint’ini taban kabul et. `p2-order-catalog-v1` içindeki `siparisler` sözleşmesini koru. Apply kapalı kalsın.
+2. `siparis_kalemleri`, `kargo_gonderimleri` ve `urunler` sözleşmelerini bu sırayla, küçük commit’lerle ekle.
+3. Sipariş satır dönüşümünü, kalem sözleşmesi durduktan sonra yaz. Bilinmeyen kolon fail-closed kalır.
+4. Tam `npm run check`, CI, tag ve artifact doğrulanır. P3 ve P4 kapıları açık kalır.
 
 P2 mapping ve introspection kabul kapısı tamamlanmadan P3 güvenlik çalışmalarına veya apply aktivasyonuna geçilmemelidir. P1 resume guard tamamlanmış olsa da tam resume/idempotency aktivasyon maddesi P3 transaction snapshot isolation ve source row-content checksum/idempotency kanıtları bitene kadar açık kalır.
