@@ -25,7 +25,7 @@ export interface LegacyMappingCatalog {
   readonly tables: readonly LegacyTableMapping[];
 }
 
-export const mappingCatalogVersion = "p2-order-item-catalog-v1";
+export const mappingCatalogVersion = "p2-shipment-catalog-v1";
 
 const canonicalMigrationEntitySet = new Set<string>(canonicalMigrationEntities);
 const targetMappingValues = new Set<string>(["direct", "synthetic"]);
@@ -181,6 +181,49 @@ export const legacyMappingCatalog = createLegacyMappingCatalog({
         column("toplam_fiyat", "numeric", "numeric", false),
         column("olusturma_tarihi", "timestamp with time zone", "timestamptz", true),
         column("kolaybi_product_id", "character varying", "varchar", true),
+      ],
+    },
+    {
+      sourceTable: "public.kargo_gonderimleri",
+      idColumn: "id",
+      targetEntities: [
+        { entity: "shipments", mapping: "direct", readiness: "dry-run" },
+      ],
+      columns: [
+        column("id", "uuid", "uuid", false),
+        column("musteri_id", "uuid", "uuid", true),
+        column("kargo_firmasi", "character varying", "varchar", false),
+        column("takip_no", "character varying", "varchar", true),
+        column("barkod_url", "text", "text", true),
+        column("alici_ad", "character varying", "varchar", false),
+        column("alici_telefon", "character varying", "varchar", false),
+        column("alici_adres", "text", "text", false),
+        column("alici_il", "character varying", "varchar", false),
+        column("alici_ilce", "character varying", "varchar", false),
+        column("alici_posta_kodu", "character varying", "varchar", true),
+        column("gonderi_tipi", "character varying", "varchar", true),
+        column("agirlik", "numeric", "numeric", true),
+        column("desi", "numeric", "numeric", true),
+        column("ucret", "numeric", "numeric", true),
+        column("odeme_tipi", "character varying", "varchar", true),
+        column("durum", "character varying", "varchar", true),
+        column("notlar", "text", "text", true),
+        column("olusturan_id", "uuid", "uuid", true),
+        column("olusturma_tarihi", "timestamp with time zone", "timestamptz", true),
+        column("guncelleme_tarihi", "timestamp with time zone", "timestamptz", true),
+        column("alici_email", "character varying", "varchar", true),
+        column("kargo_turu", "character varying", "varchar", true),
+        column("tasima_sekli", "character varying", "varchar", true),
+        column("teslim_sekli", "character varying", "varchar", true),
+        column("adet", "integer", "int4", true),
+        column("kapida_odeme_tutari", "numeric", "numeric", true),
+        column("kargo_icerigi", "text", "text", true),
+        column("son_hareket", "text", "text", true),
+        column("son_hareket_tarihi", "timestamp with time zone", "timestamptz", true),
+        column("surat_web_siparis_kodu", "character varying", "varchar", true),
+        column("surat_kargo_takip_no", "character varying", "varchar", true),
+        column("surat_hesap_tipi", "character varying", "varchar", true),
+        column("surat_barkod_no", "character varying", "varchar", true),
       ],
     },
   ],
