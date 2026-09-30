@@ -297,6 +297,9 @@ function resolveIntegrationAccount(
 ): string | null {
   if (channel === "manual") return null;
   const candidates = accounts.filter((account) => account.status === "active" && account.providerKey === channel);
+  if (candidates.length === 0) {
+    failConversation(`no active ${channel} integration account was supplied in MIGRATION_CONVERSATION_ACCOUNTS_FILE`);
+  }
   const matches = channel === "instagram"
     ? candidates.filter((account) => igAccountId !== null && account.externalAccountId === igAccountId)
     : candidates;

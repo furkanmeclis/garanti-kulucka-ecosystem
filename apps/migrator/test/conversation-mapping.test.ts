@@ -270,8 +270,8 @@ describe("transformLegacyConversation", () => {
   });
 
   it.each([
-    ["whatsapp", "no active whatsapp integration account matches the conversation", []],
-    ["messenger", "no active messenger integration account matches the conversation", [
+    ["whatsapp", "no active whatsapp integration account was supplied in MIGRATION_CONVERSATION_ACCOUNTS_FILE", []],
+    ["messenger", "no active messenger integration account was supplied in MIGRATION_CONVERSATION_ACCOUNTS_FILE", [
       { publicId: "iac_messenger_old", providerKey: "messenger", status: "inactive", externalAccountId: null },
     ]],
     ["whatsapp", "several active whatsapp integration accounts match the conversation", [
@@ -281,6 +281,28 @@ describe("transformLegacyConversation", () => {
   ] as const)("requires exactly one active %s account (%s)", (kanal, reason, snapshot) => {
     expect(() => transformLegacyConversation(conversation({ kanal }), conversationContext({ accounts: snapshot })))
       .toThrow(`Invalid legacy conversation row: ${reason}`);
+  });
+
+  it.each([
+    ["whatsapp", null],
+    ["messenger", null],
+    ["instagram", "ig-17841"],
+  ] as const)("names the accounts file when no active %s account is supplied", (kanal, igAccountId) => {
+    const error = captureError(() => transformLegacyConversation(
+      conversation({
+        kanal,
+        ig_account_id: igAccountId,
+        kanal_konusma_id: "thread-ext-4242",
+        son_mesaj_text: secretBody,
+      }),
+      conversationContext({ accounts: [] }),
+    ));
+    expect(error.message).toBe(
+      `Invalid legacy conversation row: no active ${kanal} integration account was supplied in MIGRATION_CONVERSATION_ACCOUNTS_FILE`,
+    );
+    expect(error.message).not.toContain(secretBody);
+    expect(error.message).not.toContain("thread-ext-4242");
+    expect(error.message).not.toContain("ig-17841");
   });
 
   it("defaults null human_agent and okunmamis_sayisi", () => {
