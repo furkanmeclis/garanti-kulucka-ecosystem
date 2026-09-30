@@ -231,6 +231,7 @@ export interface DryRunReport {
   readonly customerTransform?: CustomerTransformSummary;
   readonly conversationTransform?: ConversationTransformSummary;
   readonly messageTransform?: MessageTransformSummary;
+  readonly productTransform?: ProductTransformSummary;
   readonly generatedAt: string;
 }
 
@@ -251,6 +252,11 @@ export interface ConversationTransformSummary {
 export interface MessageTransformSummary {
   readonly transformedRows: number;
   readonly mediaPayloads: number;
+}
+
+export interface ProductTransformSummary {
+  readonly transformedRows: number;
+  readonly inactiveProducts: number;
 }
 
 export interface VerificationReport {

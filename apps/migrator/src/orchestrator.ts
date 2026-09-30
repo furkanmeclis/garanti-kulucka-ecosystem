@@ -15,6 +15,7 @@ import {
   type VerifiedIntegrationAccount,
 } from "./customer-mapping.js";
 import { createMigrationPlan } from "./plan.js";
+import { legacyProductTable, transformLegacyProduct } from "./product-mapping.js";
 import { createDryRunReport } from "./reports.js";
 import {
   assertApplyPrerequisites,
@@ -37,6 +38,7 @@ import type {
   MigrationEntity,
   MigrationPlan,
   MigrationTarget,
+  ProductTransformSummary,
   SourceDatabaseIdentity,
   SourceManifest,
   SourceTableSnapshot,
@@ -90,11 +92,13 @@ export async function runMigration(input: RunMigrationInput): Promise<MigrationR
   const validateCustomerRows = entities.includes("customers");
   const validateConversationRows = entities.includes("conversations");
   const validateMessageRows = entities.includes("messages");
+  const validateProductRows = entities.includes("products");
   if (validateCustomerRows) assertEntityRoutesFromLegacyTable(catalog, "customers", legacyCustomerTable, "Customer");
   if (validateConversationRows) {
     assertEntityRoutesFromLegacyTable(catalog, "conversations", legacyConversationTable, "Conversation");
   }
   if (validateMessageRows) assertEntityRoutesFromLegacyTable(catalog, "messages", legacyMessageTable, "Message");
+  if (validateProductRows) assertEntityRoutesFromLegacyTable(catalog, "products", legacyProductTable, "Product");
   const integrationAccounts = ownIntegrationAccounts(input.integrationAccounts);
   const conversationAccounts = ownConversationAccounts(input.conversationAccounts);
   const userPublicIds = ownUserPublicIds(input.userPublicIds);
@@ -134,6 +138,9 @@ export async function runMigration(input: RunMigrationInput): Promise<MigrationR
         requireDependencyPublicIds(conversations, "Message", "conversations"),
       )
       : undefined;
+    const productTransform = validateProductRows
+      ? await validateProductBatches(input.source, plan)
+      : undefined;
     return {
       mode: input.mode,
       plan,
@@ -143,6 +150,7 @@ export async function runMigration(input: RunMigrationInput): Promise<MigrationR
         ...(customers ? { customerTransform: customers.summary } : {}),
         ...(conversations ? { conversationTransform: conversations.summary } : {}),
         ...(messageTransform ? { messageTransform } : {}),
+        ...(productTransform ? { productTransform } : {}),
         ...(input.now ? { now: input.now } : {}),
       }),
       batches: [],
@@ -348,6 +356,27 @@ async function validateMessageBatches(
   }
 
   return Object.freeze({ transformedRows, mediaPayloads });
+}
+
+async function validateProductBatches(
+  source: LegacySource,
+  plan: MigrationPlan,
+): Promise<ProductTransformSummary> {
+  let transformedRows = 0;
+  let inactiveProducts = 0;
+
+  for (const batch of plan.batches) {
+    if (batch.entity !== "products") continue;
+    const rows = await readPlannedBatch(source, batch, "Product");
+
+    for (const row of rows) {
+      const result = transformLegacyProduct(row);
+      transformedRows += 1;
+      if (!result.product.isActive) inactiveProducts += 1;
+    }
+  }
+
+  return Object.freeze({ transformedRows, inactiveProducts });
 }
 
 function ownSourceTableSnapshots(snapshots: readonly SourceTableSnapshot[]): SourceTableSnapshot[] {

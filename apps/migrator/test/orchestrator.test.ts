@@ -850,6 +850,136 @@ describe("conversation dry-run validation", () => {
   });
 });
 
+function legacyProductRow(id: number, overrides: Record<string, unknown> = {}): LegacyRecord {
+  const payload = {
+    id,
+    ad: `Urun ${id}`,
+    kod: `SKU-${id}`,
+    kategori: "diger",
+    birim: "adet",
+    satis_fiyati: "10.00",
+    stok_miktari: 1,
+    kritik_seviye: null,
+    aciklama: null,
+    aktif: true,
+    olusturma_tarihi: "2024-01-02T03:04:05Z",
+    guncelleme_tarihi: null,
+    kolaybi_product_id: null,
+    ...overrides,
+  };
+  return legacyRow("public.urunler", String(id), payload);
+}
+
+const secretProductName = "Gizli Kulucka Makinesi Alpha";
+const secretProductSku = "SKU-SECRET-4242";
+const secretKolaybiProductId = "kb-product-999";
+
+const legacyProductRows: LegacyRecord[] = [
+  legacyProductRow(1, { aktif: true }),
+  legacyProductRow(2, { aktif: false }),
+  legacyProductRow(3, { aktif: false }),
+];
+
+function productDryRun(source: LegacySource) {
+  return runMigration({
+    mode: "dry-run",
+    source,
+    mappingCatalog: legacyMappingCatalog,
+    batchSize: 2,
+    entities: ["products"],
+    now: new Date("2026-09-30T00:00:00.000Z"),
+    sourceSystem: "legacy_postgres",
+    sourceDatabaseIdentity: sourceIdentity,
+  });
+}
+
+describe("product dry-run validation", () => {
+  it("transforms every planned product batch without a target", async () => {
+    const source = new LegacyTableSource({ products: legacyProductRows });
+
+    const result = await productDryRun(source);
+
+    expect(source.reads).toEqual([
+      { entity: "products", options: { limit: 2, offset: 0 } },
+      { entity: "products", options: { limit: 2, offset: 2 } },
+    ]);
+    expect(source.operations).toEqual(["describe", "count:products", "read:products", "read:products"]);
+    expect(result.dryRunReport?.productTransform).toEqual({
+      transformedRows: 3,
+      inactiveProducts: 2,
+    });
+    expect(result.dryRunReport?.totals).toEqual({ plannedRows: 3, plannedBatches: 2, blockedRows: 0 });
+    expect(result.batches).toEqual([]);
+  });
+
+  it("fails the dry-run on an invalid product row instead of skipping it", async () => {
+    const tampered = { ...legacyProductRows[1]!, checksum: `sha256:${"0".repeat(64)}` };
+    const source = new LegacyTableSource({
+      products: [
+        legacyProductRow(1, {
+          ad: secretProductName,
+          kod: secretProductSku,
+          kolaybi_product_id: secretKolaybiProductId,
+        }),
+        tampered,
+        legacyProductRows[2]!,
+      ],
+    });
+
+    const error = await productDryRun(source).then(() => null, (reason: unknown) => reason);
+
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toBe(
+      "Invalid legacy product row: source payload checksum does not match payload",
+    );
+    expect((error as Error).message).not.toContain(secretProductName);
+    expect((error as Error).message).not.toContain(secretProductSku);
+    expect((error as Error).message).not.toContain(secretKolaybiProductId);
+  });
+
+  it("fails the dry-run when a batch returns a different row count than planned", async () => {
+    const source = new LegacyTableSource({ products: legacyProductRows });
+    const readBatch = source.readBatch.bind(source);
+    source.readBatch = async (entity, options) => (await readBatch(entity, options)).slice(0, 1);
+
+    await expect(productDryRun(source)).rejects.toThrow(
+      "Product dry-run batch 1 returned 1 rows; expected 2",
+    );
+    expect(source.reads).toHaveLength(1);
+  });
+
+  it("rejects a product dry-run from a non-legacy source table before source access", async () => {
+    const source = new FixtureSource({
+      products: [legacyProductRow(1, {
+        ad: secretProductName,
+        kod: secretProductSku,
+        kolaybi_product_id: secretKolaybiProductId,
+      })],
+    });
+
+    const error = await runMigration({
+      mode: "dry-run",
+      source,
+      mappingCatalog: productFixtureCatalog,
+      batchSize: 100,
+      entities: ["products"],
+      now: new Date("2026-09-28T00:00:00.000Z"),
+      sourceSystem: "legacy_postgres",
+      sourceDatabaseIdentity: sourceIdentity,
+    }).then(() => null, (reason: unknown) => reason);
+
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toBe(
+      "Product dry-run requires catalog source table public.urunler; catalog routes products from public.products",
+    );
+    expect((error as Error).message).not.toContain(secretProductName);
+    expect((error as Error).message).not.toContain(secretProductSku);
+    expect((error as Error).message).not.toContain(secretKolaybiProductId);
+    expect(source.reads).toEqual([]);
+    expect(source.operations).toEqual([]);
+  });
+});
+
 function mutableFixtureCatalog(version: string) {
   return {
     version,
@@ -905,5 +1035,15 @@ const customerCatalog = createLegacyMappingCatalog({
       { entity: "customer_addresses", mapping: "synthetic", readiness: "descriptive" },
     ],
     columns: [{ name: "id", dataType: "bigint", udtName: "int8", nullable: false, required: true }],
+  }],
+});
+
+const productFixtureCatalog = createLegacyMappingCatalog({
+  version: "fixture-catalog-v1",
+  tables: [{
+    sourceTable: "public.products",
+    idColumn: "id",
+    targetEntities: [{ entity: "products", mapping: "direct", readiness: "dry-run" }],
+    columns: [{ name: "id", dataType: "integer", udtName: "int4", nullable: false, required: true }],
   }],
 });

@@ -5,6 +5,7 @@ import type {
   MessageTransformSummary,
   MigrationPlan,
   MigrationWarning,
+  ProductTransformSummary,
   VerificationCheck,
   VerificationReport,
 } from "./types.js";
@@ -15,6 +16,7 @@ export function createDryRunReport(input: {
   readonly customerTransform?: CustomerTransformSummary;
   readonly conversationTransform?: ConversationTransformSummary;
   readonly messageTransform?: MessageTransformSummary;
+  readonly productTransform?: ProductTransformSummary;
   readonly now?: Date;
 }): DryRunReport {
   const warnings = input.warnings ?? [];
@@ -41,6 +43,7 @@ export function createDryRunReport(input: {
     ...(input.customerTransform ? { customerTransform: input.customerTransform } : {}),
     ...(input.conversationTransform ? { conversationTransform: input.conversationTransform } : {}),
     ...(input.messageTransform ? { messageTransform: input.messageTransform } : {}),
+    ...(input.productTransform ? { productTransform: input.productTransform } : {}),
     generatedAt: (input.now ?? new Date()).toISOString(),
   };
 }
