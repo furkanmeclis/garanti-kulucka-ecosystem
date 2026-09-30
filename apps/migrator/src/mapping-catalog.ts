@@ -25,7 +25,7 @@ export interface LegacyMappingCatalog {
   readonly tables: readonly LegacyTableMapping[];
 }
 
-export const mappingCatalogVersion = "p2-customer-catalog-v1";
+export const mappingCatalogVersion = "p2-conversation-catalog-v1";
 
 const canonicalMigrationEntitySet = new Set<string>(canonicalMigrationEntities);
 const targetMappingValues = new Set<string>(["direct", "synthetic"]);
@@ -62,6 +62,48 @@ export const legacyMappingCatalog = createLegacyMappingCatalog({
         column("olusturma_tarihi", "timestamp with time zone", "timestamptz", true),
         column("guncelleme_tarihi", "timestamp with time zone", "timestamptz", true),
         column("username", "text", "text", true),
+      ],
+    },
+    {
+      sourceTable: "public.konusmalar",
+      idColumn: "id",
+      targetEntities: [
+        { entity: "conversations", mapping: "direct", readiness: "dry-run" },
+      ],
+      columns: [
+        column("id", "uuid", "uuid", false),
+        column("musteri_id", "uuid", "uuid", true),
+        column("kanal", "character varying", "varchar", false),
+        column("kanal_konusma_id", "character varying", "varchar", true),
+        column("atanan_kullanici_id", "uuid", "uuid", true),
+        column("durum", "character varying", "varchar", true),
+        column("son_mesaj_tarihi", "timestamp with time zone", "timestamptz", true),
+        column("okunmamis_sayisi", "integer", "int4", true),
+        column("olusturma_tarihi", "timestamp with time zone", "timestamptz", true),
+        column("guncelleme_tarihi", "timestamp with time zone", "timestamptz", true),
+        column("son_mesaj_text", "text", "text", true),
+        column("son_mesaj_gonderici", "character varying", "varchar", true),
+        column("ig_account_id", "text", "text", true),
+        column("human_agent", "boolean", "bool", true),
+      ],
+    },
+    {
+      sourceTable: "public.mesajlar",
+      idColumn: "id",
+      targetEntities: [
+        { entity: "messages", mapping: "direct", readiness: "dry-run" },
+      ],
+      columns: [
+        column("id", "uuid", "uuid", false),
+        column("konusma_id", "uuid", "uuid", true),
+        column("gonderici_tipi", "character varying", "varchar", false),
+        column("gonderici_id", "uuid", "uuid", true),
+        column("icerik", "text", "text", false),
+        column("medya_url", "text", "text", true),
+        column("medya_tipi", "character varying", "varchar", true),
+        column("kanal_mesaj_id", "character varying", "varchar", true),
+        column("okundu", "boolean", "bool", true),
+        column("olusturma_tarihi", "timestamp with time zone", "timestamptz", true),
       ],
     },
   ],

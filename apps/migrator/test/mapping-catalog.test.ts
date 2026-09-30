@@ -13,6 +13,8 @@ import type { SourceColumnSnapshot, SourceTableSnapshot } from "../src/types.js"
 
 describe("legacy mapping catalog", () => {
   const customerMapping = legacyMappingCatalog.tables[0]!;
+  const conversationMapping = legacyMappingCatalog.tables[1]!;
+  const messageMapping = legacyMappingCatalog.tables[2]!;
 
   it("accepts the exact real musteriler schema and declares all customer targets", () => {
     expect(() => validateLegacyTableColumns("public.musteriler", realMusterilerColumns(), customerMapping))
@@ -39,7 +41,61 @@ describe("legacy mapping catalog", () => {
       "guncelleme_tarihi",
       "username",
     ]);
-    expect(mappingCatalogVersion).toBe("p2-customer-catalog-v1");
+    expect(mappingCatalogVersion).toBe("p2-conversation-catalog-v1");
+  });
+
+  it("declares konusmalar and mesajlar as direct dry-run tables after musteriler", () => {
+    expect(legacyMappingCatalog.tables.map((table) => [table.sourceTable, table.idColumn])).toEqual([
+      ["public.musteriler", "id"],
+      ["public.konusmalar", "id"],
+      ["public.mesajlar", "id"],
+    ]);
+    expect(conversationMapping.targetEntities).toEqual([
+      { entity: "conversations", mapping: "direct", readiness: "dry-run" },
+    ]);
+    expect(messageMapping.targetEntities).toEqual([
+      { entity: "messages", mapping: "direct", readiness: "dry-run" },
+    ]);
+  });
+
+  it("accepts the exact real konusmalar schema and requires every column", () => {
+    expect(() => validateLegacyTableColumns("public.konusmalar", realKonusmalarColumns(), conversationMapping))
+      .not.toThrow();
+    expect(conversationMapping.columns).toEqual(realKonusmalarColumns().map(asRequiredContract));
+  });
+
+  it.each(["human_agent", "ig_account_id"])("rejects a konusmalar schema missing %s", (name) => {
+    expect(() => validateLegacyTableColumns(
+      "public.konusmalar",
+      realKonusmalarColumns().filter((column) => column.name !== name),
+      conversationMapping,
+    )).toThrow(`Legacy source schema mismatch for public.konusmalar: missing required columns [${name}]`);
+  });
+
+  it("accepts the exact real mesajlar schema and requires every column", () => {
+    expect(() => validateLegacyTableColumns("public.mesajlar", realMesajlarColumns(), messageMapping))
+      .not.toThrow();
+    expect(messageMapping.columns).toEqual(realMesajlarColumns().map(asRequiredContract));
+  });
+
+  it("rejects media_url and media_type as unexpected mesajlar columns rather than aliases", () => {
+    const aliased = realMesajlarColumns().map((column) => {
+      if (column.name === "medya_url") return { ...column, name: "media_url" };
+      if (column.name === "medya_tipi") return { ...column, name: "media_type" };
+      return column;
+    });
+
+    expect(() => validateLegacyTableColumns("public.mesajlar", aliased, messageMapping)).toThrow(
+      "Legacy source schema mismatch for public.mesajlar: unexpected columns [media_type, media_url]",
+    );
+    expect(() => validateLegacyTableColumns(
+      "public.mesajlar",
+      [
+        ...realMesajlarColumns(),
+        { name: "media_url", ordinalPosition: 11, dataType: "text", udtName: "text", nullable: true },
+      ],
+      messageMapping,
+    )).toThrow("Legacy source schema mismatch for public.mesajlar: unexpected columns [media_url]");
   });
 
   it("rejects a pre-username schema until a lossless row transform exists", () => {
@@ -51,7 +107,7 @@ describe("legacy mapping catalog", () => {
   });
 
   it("selects only dry-run-ready targets", () => {
-    expect(dryRunMigrationEntities(legacyMappingCatalog)).toEqual(["customers"]);
+    expect(dryRunMigrationEntities(legacyMappingCatalog)).toEqual(["customers", "conversations", "messages"]);
   });
 
   it("blocks customer apply while external identities are descriptive or undeclared", () => {
@@ -364,6 +420,25 @@ describe("legacy mapping catalog", () => {
     )).toThrow("missing required columns [username]");
   });
 
+  it("validates every dry-run-ready source snapshot together", () => {
+    const snapshots: SourceTableSnapshot[] = [
+      musterilerSnapshot(),
+      { entity: "conversations", schema: "public", table: "konusmalar", idColumn: "id", columns: realKonusmalarColumns() },
+      { entity: "messages", schema: "public", table: "mesajlar", idColumn: "id", columns: realMesajlarColumns() },
+    ];
+
+    expect(() => validateLegacySourceSnapshots(
+      legacyMappingCatalog,
+      snapshots,
+      ["customers", "conversations", "messages"],
+    )).not.toThrow();
+    expect(() => validateLegacySourceSnapshots(
+      legacyMappingCatalog,
+      [snapshots[0]!, { ...snapshots[1]!, table: "musteriler" }, snapshots[2]!],
+      ["customers", "conversations", "messages"],
+    )).toThrow("Source table snapshot for conversations must route to public.konusmalar.id");
+  });
+
   it("rejects descriptive snapshot selection", () => {
     expect(() => validateLegacySourceSnapshots(
       legacyMappingCatalog,
@@ -391,6 +466,60 @@ function realMusterilerColumns(): SourceColumnSnapshot[] {
     snapshot("guncelleme_tarihi", "timestamp with time zone", "timestamptz", true),
     snapshot("username", "text", "text", true),
   ];
+}
+
+function realKonusmalarColumns(): SourceColumnSnapshot[] {
+  return inOrder([
+    ["id", "uuid", "uuid", false],
+    ["musteri_id", "uuid", "uuid", true],
+    ["kanal", "character varying", "varchar", false],
+    ["kanal_konusma_id", "character varying", "varchar", true],
+    ["atanan_kullanici_id", "uuid", "uuid", true],
+    ["durum", "character varying", "varchar", true],
+    ["son_mesaj_tarihi", "timestamp with time zone", "timestamptz", true],
+    ["okunmamis_sayisi", "integer", "int4", true],
+    ["olusturma_tarihi", "timestamp with time zone", "timestamptz", true],
+    ["guncelleme_tarihi", "timestamp with time zone", "timestamptz", true],
+    ["son_mesaj_text", "text", "text", true],
+    ["son_mesaj_gonderici", "character varying", "varchar", true],
+    ["ig_account_id", "text", "text", true],
+    ["human_agent", "boolean", "bool", true],
+  ]);
+}
+
+function realMesajlarColumns(): SourceColumnSnapshot[] {
+  return inOrder([
+    ["id", "uuid", "uuid", false],
+    ["konusma_id", "uuid", "uuid", true],
+    ["gonderici_tipi", "character varying", "varchar", false],
+    ["gonderici_id", "uuid", "uuid", true],
+    ["icerik", "text", "text", false],
+    ["medya_url", "text", "text", true],
+    ["medya_tipi", "character varying", "varchar", true],
+    ["kanal_mesaj_id", "character varying", "varchar", true],
+    ["okundu", "boolean", "bool", true],
+    ["olusturma_tarihi", "timestamp with time zone", "timestamptz", true],
+  ]);
+}
+
+function inOrder(columns: [string, string, string, boolean][]): SourceColumnSnapshot[] {
+  return columns.map(([name, dataType, udtName, nullable], index) => ({
+    name,
+    ordinalPosition: index + 1,
+    dataType,
+    udtName,
+    nullable,
+  }));
+}
+
+function asRequiredContract(column: SourceColumnSnapshot) {
+  return {
+    name: column.name,
+    dataType: column.dataType,
+    udtName: column.udtName,
+    nullable: column.nullable,
+    required: true,
+  };
 }
 
 function musterilerSnapshot(): SourceTableSnapshot {

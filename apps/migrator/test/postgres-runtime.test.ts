@@ -38,7 +38,7 @@ class FixturePostgresClient implements PostgresSourceClient {
 
   constructor(
     private readonly countError?: Error,
-    private readonly introspectionRows: Record<string, unknown>[] = [],
+    private readonly introspectionRows: Readonly<Record<string, Record<string, unknown>[]>> = {},
   ) {}
 
   async connect(): Promise<void> {
@@ -47,6 +47,7 @@ class FixturePostgresClient implements PostgresSourceClient {
 
   async query<Row extends Record<string, unknown> = Record<string, unknown>>(
     sql: string,
+    parameters: readonly unknown[] = [],
   ): Promise<{ rows: Row[] }> {
     this.queries.push(sql);
     if (/select count\(\*\)/i.test(sql)) {
@@ -54,7 +55,8 @@ class FixturePostgresClient implements PostgresSourceClient {
       return { rows: [{ count: "0" }] as Row[] };
     }
     if (/information_schema\.columns/i.test(sql)) {
-      return { rows: this.introspectionRows as Row[] };
+      const [schema, table] = parameters;
+      return { rows: (this.introspectionRows[`${String(schema)}.${String(table)}`] ?? []) as Row[] };
     }
     return { rows: [] };
   }
@@ -65,9 +67,11 @@ class FixturePostgresClient implements PostgresSourceClient {
 }
 
 describe("PostgreSQL migration runtime", () => {
-  it("maps only dry-run-ready customer entities from the explicit catalog", () => {
+  it("maps only dry-run-ready entities from the explicit catalog", () => {
     expect(canonicalSourceTableMap(legacyMappingCatalog)).toEqual({
       customers: { tableName: "public.musteriler", idColumn: "id" },
+      conversations: { tableName: "public.konusmalar", idColumn: "id" },
+      messages: { tableName: "public.mesajlar", idColumn: "id" },
     });
   });
 
@@ -78,15 +82,7 @@ describe("PostgreSQL migration runtime", () => {
   });
 
   it("scopes lossless timestamp parsers to each legacy source client", async () => {
-    const client = new FixturePostgresClient(undefined, legacyMappingCatalog.tables[0]!.columns.map(
-      (column, index) => ({
-        column_name: column.name,
-        ordinal_position: index + 1,
-        data_type: column.dataType,
-        udt_name: column.udtName,
-        is_nullable: column.nullable ? "YES" : "NO",
-      }),
-    ));
+    const client = new FixturePostgresClient(undefined, catalogIntrospectionRows());
     postgresClientConstructor.mockImplementationOnce(function fixtureClientConstructor() {
       return client;
     });
@@ -126,16 +122,8 @@ describe("PostgreSQL migration runtime", () => {
     expect(postgresClientConstructor).not.toHaveBeenCalled();
   });
 
-  it("dry-runs only the dry-run-ready customer entity", async () => {
-    const client = new FixturePostgresClient(undefined, legacyMappingCatalog.tables[0]!.columns.map(
-      (column, index) => ({
-        column_name: column.name,
-        ordinal_position: index + 1,
-        data_type: column.dataType,
-        udt_name: column.udtName,
-        is_nullable: column.nullable ? "YES" : "NO",
-      }),
-    ));
+  it("dry-runs only the dry-run-ready catalog entities", async () => {
+    const client = new FixturePostgresClient(undefined, catalogIntrospectionRows());
     postgresClientConstructor.mockImplementationOnce(function fixtureClientConstructor() {
       return client;
     });
@@ -147,10 +135,35 @@ describe("PostgreSQL migration runtime", () => {
       batchSize: 500,
     });
 
-    expect(result.plan.entities).toEqual([{ entity: "customers", totalRows: 0, batches: 0 }]);
+    expect(result.plan.entities).toEqual([
+      { entity: "customers", totalRows: 0, batches: 0 },
+      { entity: "conversations", totalRows: 0, batches: 0 },
+      { entity: "messages", totalRows: 0, batches: 0 },
+    ]);
     expect(client.queries.filter((sql) => /select count\(\*\)/i.test(sql))).toEqual([
       'select count(*) as count from "public"."musteriler"',
+      'select count(*) as count from "public"."konusmalar"',
+      'select count(*) as count from "public"."mesajlar"',
     ]);
+  });
+
+  it("fails a dry-run closed when konusmalar lacks human_agent", async () => {
+    const rows = catalogIntrospectionRows();
+    const client = new FixturePostgresClient(undefined, {
+      ...rows,
+      "public.konusmalar": rows["public.konusmalar"]!.filter((row) => row.column_name !== "human_agent"),
+    });
+    postgresClientConstructor.mockImplementationOnce(function fixtureClientConstructor() {
+      return client;
+    });
+
+    await expect(executePostgresMigration({
+      mode: "dry-run",
+      sourceDatabaseUrl: "postgres://source/legacy",
+      sourceSystem: "legacy_postgres",
+      batchSize: 500,
+    })).rejects.toThrow("Legacy source schema mismatch for public.konusmalar: missing required columns [human_agent]");
+    expect(client.queries.filter((sql) => /select count\(\*\)/i.test(sql))).toEqual([]);
   });
 
   it("commits a successful dry-run read-only repeatable-read transaction and closes the client", async () => {
@@ -202,3 +215,16 @@ describe("PostgreSQL migration runtime", () => {
     expect(operation).toHaveBeenCalledOnce();
   });
 });
+
+function catalogIntrospectionRows(): Record<string, Record<string, unknown>[]> {
+  return Object.fromEntries(legacyMappingCatalog.tables.map((table) => [
+    table.sourceTable,
+    table.columns.map((column, index) => ({
+      column_name: column.name,
+      ordinal_position: index + 1,
+      data_type: column.dataType,
+      udt_name: column.udtName,
+      is_nullable: column.nullable ? "YES" : "NO",
+    })),
+  ]));
+}

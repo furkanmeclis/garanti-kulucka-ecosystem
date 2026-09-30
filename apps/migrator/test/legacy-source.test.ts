@@ -245,28 +245,47 @@ describe("LegacyDatabaseSource", () => {
   });
 
   it("introspects and validates the dry-run-ready mapping", async () => {
-    const db = new FakeDatabase(legacyMappingCatalog.tables[0]!.columns.map((column, index) => ({
+    const db = new FakeDatabase(...legacyMappingCatalog.tables.map((table) => table.columns.map((column, index) => ({
       column_name: column.name,
       ordinal_position: index + 1,
       data_type: column.dataType,
       udt_name: column.udtName,
       is_nullable: column.nullable ? "YES" : "NO",
-    })));
+    }))));
     const source = new LegacyDatabaseSource({
       db,
       sourceSystem: "legacy_postgres",
       tables: {
         customers: "public.musteriler",
+        conversations: "public.konusmalar",
+        messages: "public.mesajlar",
       },
       mappingCatalog: legacyMappingCatalog,
     });
 
-    const snapshots = await source.describeTables(["customers"]);
+    const snapshots = await source.describeTables(["customers", "conversations", "messages"]);
 
-    expect(db.queries).toHaveLength(1);
+    expect(db.queries.map((query) => query.parameters)).toEqual([
+      ["public", "musteriler"],
+      ["public", "konusmalar"],
+      ["public", "mesajlar"],
+    ]);
     expect(snapshots.map(({ entity, schema, table }) => ({ entity, schema, table }))).toEqual([
       { entity: "customers", schema: "public", table: "musteriler" },
+      { entity: "conversations", schema: "public", table: "konusmalar" },
+      { entity: "messages", schema: "public", table: "mesajlar" },
     ]);
+  });
+
+  it("rejects catalog routing that omits the conversation and message targets", () => {
+    const db = new FakeDatabase();
+    expect(() => new LegacyDatabaseSource({
+      db,
+      sourceSystem: "legacy_postgres",
+      tables: { customers: "public.musteriler" },
+      mappingCatalog: legacyMappingCatalog,
+    })).toThrow("routing is missing dry-run-ready target conversations");
+    expect(db.queries).toHaveLength(0);
   });
 
   it("rejects an invalid catalog before querying", () => {

@@ -372,6 +372,8 @@ describe("migration orchestrator", () => {
     });
 
     expect(result.sourceManifest.mappingCatalogVersion).toBe("fixture-catalog-v1");
+    expect(result.plan.entities.map(({ entity }) => entity)).toEqual(["customers", "conversations", "messages"]);
+    expect(source.operations).toEqual(["describe", "count:customers", "count:conversations", "count:messages"]);
   });
 
   it("owns the catalog before count can mutate the caller input", async () => {
@@ -479,14 +481,28 @@ class LegacyCustomerSource implements LegacySource {
 
   async describeTables(entities: readonly MigrationEntity[]): Promise<SourceTableSnapshot[]> {
     this.operations.push("describe");
-    return entities.map((entity) => ({
-      entity,
-      schema: "public",
-      table: "musteriler",
-      idColumn: "id",
-      columns: musterilerColumnSnapshots(),
-    }));
+    return entities.map(legacySnapshotFor);
   }
+}
+
+function legacySnapshotFor(entity: MigrationEntity): SourceTableSnapshot {
+  const mapping = legacyMappingCatalog.tables.find((table) =>
+    table.targetEntities.some((target) => target.entity === entity));
+  if (!mapping) throw new Error(`Fixture catalog has no source table for ${entity}`);
+  const [schema, table] = mapping.sourceTable.split(".") as [string, string];
+  return {
+    entity,
+    schema,
+    table,
+    idColumn: mapping.idColumn,
+    columns: mapping.columns.map((column, index) => ({
+      name: column.name,
+      ordinalPosition: index + 1,
+      dataType: column.dataType,
+      udtName: column.udtName,
+      nullable: column.nullable,
+    })),
+  };
 }
 
 function legacyCustomerRow(id: string, overrides: Record<string, unknown> = {}): LegacyRecord {
