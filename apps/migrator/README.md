@@ -29,7 +29,7 @@ MIGRATION_USER_PUBLIC_IDS_FILE=/snapshots/user_public_ids.json
 ```
 
 - `SOURCE_DATABASE_URL` zorunludur. Source okumalari `REPEATABLE READ READ ONLY` transaction icinde yapilir.
-- `migrate --dry-run` source row count'larini okuyup batch planini kurar, sonra `public.musteriler`, `public.konusmalar` ve `public.mesajlar` satirlarini batch batch okuyup canonical customer, conversation ve message taslaklarina donusturur. `public.siparisler` ve `public.siparis_kalemleri` satirlari bu checkpoint'te yalniz sayilir ve kolon sozlesmesi dogrulanir; henuz donusturulmez. Target URL cozmez, target baglantisi acmaz ve veri yazmaz.
+- `migrate --dry-run` source row count'larini okuyup batch planini kurar, sonra `public.musteriler`, `public.konusmalar` ve `public.mesajlar` satirlarini batch batch okuyup canonical customer, conversation ve message taslaklarina donusturur. `public.siparisler`, `public.siparis_kalemleri` ve `public.kargo_gonderimleri` satirlari bu checkpoint'te yalniz sayilir ve kolon sozlesmesi dogrulanir; henuz donusturulmez. Target URL cozmez, target baglantisi acmaz ve veri yazmaz.
 - Donusturulemeyen bir satir dry-run'i durdurur. Hata mesajina musteri bilgisi, mesaj metni veya kanal external id degerleri yazilmaz.
 - `MIGRATION_CONVERSATION_ACCOUNTS_FILE` opsiyoneldir. Dosya konusmalarin baglanacagi integration account listesini iceren bir JSON dizisidir:
 

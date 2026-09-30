@@ -6,13 +6,13 @@ Bu belge, projeye yeni bir sohbetten veya bağlamsız bir çalışma oturumundan
 
 - Repo: `/Users/furkanmeclis/Documents/Projects/garanti-kulucka-ecosystem`
 - GitHub çalışma modeli: monorepo, yalnız `main`, PR yok.
-- Yayımlanmış son checkpoint: `v0.1.134`
-- Yayımlanmış son commit: `339df477cc2e531d81ac3f4d73b27ee8f904db81`
-- Commit mesajı: `feat(migrator): catalog legacy order items`
+- Yayımlanmış son checkpoint: `v0.1.136`
+- Yayımlanmış son commit: `234e61c1b4b80de7904a9308e39cc5235ea1c784`
+- Commit mesajı: `feat(migrator): catalog legacy shipments`
 - Genel ilerleme: yaklaşık `%75`
-- Son tamamlanan çalışma: `public.siparis_kalemleri` için 12 kolonluk fail-closed sözleşme. Catalog sürümü `p2-order-item-catalog-v1`. Sipariş, müşteri, konuşma ve mesaj sözleşmeleri değişmedi.
-- Dry-run sipariş kalemlerini sayar ve kolonları kontrol eder. Kalem satır dönüşümü henüz yoktur.
-- Sıradaki bağımlılık kapısı `public.kargo_gonderimleri`, ardından `public.urunler` sözleşmesidir.
+- Son tamamlanan çalışma: `public.kargo_gonderimleri` için 34 kolonluk fail-closed sözleşme. Catalog sürümü `p2-shipment-catalog-v1`. Sipariş, kalem, müşteri, konuşma ve mesaj sözleşmeleri değişmedi.
+- Dry-run kargo satırlarını sayar ve kolonları kontrol eder. Kargo satır dönüşümü henüz yoktur.
+- Sıradaki bağımlılık kapısı `public.urunler` sözleşmesidir.
 - Production `migrate --apply` kapısı kapalıdır. Tüm aktivasyon koşulları geçmeden açılmamalıdır.
 
 `%75` tahmini; önceki temellere ek olarak conversation ve message kolon sözleşmesini, satır dönüşümünü ve dry-run doğrulamasını içerir. Kalan legacy commerce tabloları, canlı provider adapterları, gerçek frontend taşıması, P3 transaction snapshot isolation ve P4 production veri taşıma aktivasyonu tamamlanmış kabul edilmez.
@@ -534,8 +534,8 @@ git diff --check
 Beklenen yayımlanmış taban:
 
 ```text
-339df477cc2e531d81ac3f4d73b27ee8f904db81
-v0.1.134
+234e61c1b4b80de7904a9308e39cc5235ea1c784
+v0.1.136
 ```
 
 Aktif schema checkpoint kaybolmuşsa otomatik olarak yeniden üretme. Önce `git status`, `git reflog`, stash, başka worktree ve kullanıcı tarafından bırakılmış değişiklikleri araştır. Mevcut değişiklikleri koru.
@@ -640,11 +640,11 @@ Bu maddeler ihtiyaç varsa genişletilir; mevcut davranış sebepsiz yere yenide
 
 ## 10. Bir Sonraki Sohbet İçin İlk Somut Görev
 
-İlk görev `public.kargo_gonderimleri` kolon sözleşmesidir:
+İlk görev `public.urunler` kolon sözleşmesidir:
 
-1. Yayımlanmış `v0.1.134` sipariş kalemi checkpoint’ini taban kabul et. `siparisler` ve `siparis_kalemleri` sözleşmelerini koru. Apply kapalı kalsın.
-2. `kargo_gonderimleri` ve `urunler` sözleşmelerini bu sırayla, küçük commit’lerle ekle.
-3. Satır dönüşümünü bu sözleşmeler durduktan sonra yaz. Bilinmeyen kolon fail-closed kalır.
+1. Yayımlanmış `v0.1.136` kargo checkpoint’ini taban kabul et. `kargo_gonderimleri` sözleşmesini koru. Apply kapalı kalsın.
+2. `urunler` kolon sözleşmesini ekle. Bilinmeyen kolon fail-closed kalır.
+3. Satır dönüşümünü sipariş, kalem, kargo ve ürün sözleşmeleri durduktan sonra yaz.
 4. Tam `npm run check`, CI, tag ve artifact doğrulanır. P3 ve P4 kapıları açık kalır.
 
 P2 mapping ve introspection kabul kapısı tamamlanmadan P3 güvenlik çalışmalarına veya apply aktivasyonuna geçilmemelidir. P1 resume guard tamamlanmış olsa da tam resume/idempotency aktivasyon maddesi P3 transaction snapshot isolation ve source row-content checksum/idempotency kanıtları bitene kadar açık kalır.
