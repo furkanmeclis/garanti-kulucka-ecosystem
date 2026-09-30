@@ -229,6 +229,8 @@ export interface DryRunReport {
   readonly entities: MigrationEntityReport[];
   readonly warnings: MigrationWarning[];
   readonly customerTransform?: CustomerTransformSummary;
+  readonly conversationTransform?: ConversationTransformSummary;
+  readonly messageTransform?: MessageTransformSummary;
   readonly generatedAt: string;
 }
 
@@ -238,6 +240,17 @@ export interface CustomerTransformSummary {
   readonly resolvedIdentities: number;
   readonly unresolvedIdentities: number;
   readonly nameFallbackWarnings: number;
+}
+
+export interface ConversationTransformSummary {
+  readonly transformedRows: number;
+  readonly unresolvedAssignedUsers: number;
+  readonly resolvedInstagramAccounts: number;
+}
+
+export interface MessageTransformSummary {
+  readonly transformedRows: number;
+  readonly mediaPayloads: number;
 }
 
 export interface VerificationReport {

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { VerifiedConversationAccount } from "../src/conversation-mapping.js";
 import type { VerifiedIntegrationAccount } from "../src/customer-mapping.js";
 import { calculateSourcePayloadChecksum } from "../src/legacy-source.js";
 import { createLegacyMappingCatalog, legacyMappingCatalog } from "../src/mapping-catalog.js";
@@ -637,6 +638,198 @@ describe("customer dry-run validation", () => {
     const result = await customerDryRun(source, accounts);
 
     expect(result.dryRunReport?.customerTransform?.resolvedIdentities).toBe(2);
+  });
+});
+
+class LegacyTableSource implements LegacySource {
+  readonly reads: { entity: MigrationEntity; options: BatchReadOptions }[] = [];
+  readonly operations: string[] = [];
+
+  constructor(private readonly records: Partial<Record<MigrationEntity, LegacyRecord[]>>) {}
+
+  async count(entity: MigrationEntity): Promise<number> {
+    this.operations.push(`count:${entity}`);
+    return this.records[entity]?.length ?? 0;
+  }
+
+  async readBatch(entity: MigrationEntity, options: BatchReadOptions): Promise<LegacyRecord[]> {
+    this.operations.push(`read:${entity}`);
+    this.reads.push({ entity, options: { ...options } });
+    const offset = options.offset ?? 0;
+    return (this.records[entity] ?? []).slice(offset, offset + options.limit);
+  }
+
+  async describeTables(entities: readonly MigrationEntity[]): Promise<SourceTableSnapshot[]> {
+    this.operations.push("describe");
+    return entities.map(legacySnapshotFor);
+  }
+}
+
+function legacyRow(sourceTable: string, id: string, payload: Record<string, unknown>): LegacyRecord {
+  return {
+    sourceSystem: "legacy_postgres",
+    sourceTable,
+    sourceId: id,
+    payload,
+    checksum: calculateSourcePayloadChecksum(payload),
+  };
+}
+
+function legacyConversationRow(id: string, overrides: Record<string, unknown>): LegacyRecord {
+  return legacyRow("public.konusmalar", id, {
+    id,
+    musteri_id: null,
+    kanal: "whatsapp",
+    kanal_konusma_id: null,
+    atanan_kullanici_id: null,
+    durum: "acik",
+    son_mesaj_tarihi: null,
+    okunmamis_sayisi: 0,
+    olusturma_tarihi: "2024-03-01T00:00:00Z",
+    guncelleme_tarihi: null,
+    son_mesaj_text: null,
+    son_mesaj_gonderici: null,
+    ig_account_id: null,
+    human_agent: false,
+    ...overrides,
+  });
+}
+
+function legacyMessageRow(id: string, overrides: Record<string, unknown>): LegacyRecord {
+  return legacyRow("public.mesajlar", id, {
+    id,
+    konusma_id: null,
+    gonderici_tipi: "musteri",
+    gonderici_id: null,
+    icerik: "Merhaba",
+    medya_url: null,
+    medya_tipi: null,
+    kanal_mesaj_id: null,
+    okundu: null,
+    olusturma_tarihi: "2024-03-02T00:00:00Z",
+    ...overrides,
+  });
+}
+
+const assignedUserId = "7b98c4c9-ac91-4e3a-9f83-d8c2ba6e3870";
+const unknownUserId = "8ca9d5da-bda2-4f4b-a094-e9d3cb7f4981";
+const legacyConversationRows: LegacyRecord[] = [
+  legacyConversationRow("3d65f196-7f6e-4b07-8c50-a59f873d0549", {
+    musteri_id: "0a32ce63-4c3b-4fd4-917d-726d540a7216",
+    atanan_kullanici_id: assignedUserId,
+  }),
+  legacyConversationRow("4e76a2a7-8a7f-4c18-9d61-b6a0984e165a", {
+    musteri_id: "1b43df74-5d4c-4fe5-a28e-837e651b8327",
+    kanal: "instagram",
+    ig_account_id: "ig-17841",
+    atanan_kullanici_id: unknownUserId,
+  }),
+  legacyConversationRow("5f87b3b8-9b80-4d29-8e72-c7b1a95f276b", {
+    musteri_id: "2c54e085-6e5d-4af6-b39f-948f762c9438",
+    kanal: "panel",
+    son_mesaj_text: "Kargonuz yolda",
+    son_mesaj_gonderici: "calisan",
+  }),
+];
+
+const legacyMessageRows: LegacyRecord[] = [
+  legacyMessageRow("6a000000-0000-4000-8000-000000000001", {
+    konusma_id: "3d65f196-7f6e-4b07-8c50-a59f873d0549",
+  }),
+  legacyMessageRow("6a000000-0000-4000-8000-000000000002", {
+    konusma_id: "4e76a2a7-8a7f-4c18-9d61-b6a0984e165a",
+    gonderici_tipi: "calisan",
+    gonderici_id: assignedUserId,
+    medya_url: "https://cdn.example.com/legacy/1.jpg",
+    medya_tipi: "image",
+  }),
+  legacyMessageRow("6a000000-0000-4000-8000-000000000003", {
+    konusma_id: "5f87b3b8-9b80-4d29-8e72-c7b1a95f276b",
+    gonderici_tipi: "ai",
+    gonderici_id: assignedUserId,
+  }),
+];
+
+const verifiedConversationAccounts: VerifiedConversationAccount[] = [
+  { publicId: "iac_whatsapp_main", providerKey: "whatsapp", status: "active", externalAccountId: null },
+  { publicId: "iac_instagram_main", providerKey: "instagram", status: "active", externalAccountId: "ig-17841" },
+];
+
+function conversationDryRun(source: LegacySource, entities: MigrationEntity[]) {
+  return runMigration({
+    mode: "dry-run",
+    source,
+    mappingCatalog: legacyMappingCatalog,
+    batchSize: 2,
+    entities,
+    now: new Date("2026-09-30T00:00:00.000Z"),
+    sourceSystem: "legacy_postgres",
+    sourceDatabaseIdentity: sourceIdentity,
+    conversationAccounts: verifiedConversationAccounts,
+    userPublicIds: new Map([[assignedUserId, "usr_agent_1"]]),
+  });
+}
+
+describe("conversation dry-run validation", () => {
+  it("transforms customers, then conversations, then ordered messages without a target", async () => {
+    const source = new LegacyTableSource({
+      customers: legacyCustomerRows,
+      conversations: legacyConversationRows,
+      messages: legacyMessageRows,
+    });
+
+    const result = await conversationDryRun(source, ["messages", "conversations", "customers"]);
+
+    expect(source.operations).toEqual([
+      "describe",
+      "count:messages",
+      "count:conversations",
+      "count:customers",
+      "read:customers",
+      "read:customers",
+      "read:conversations",
+      "read:conversations",
+      "read:messages",
+      "read:messages",
+    ]);
+    expect(source.reads.filter(({ entity }) => entity === "messages")).toEqual([
+      { entity: "messages", options: { limit: 2, offset: 0 } },
+      { entity: "messages", options: { limit: 2, offset: 2 } },
+    ]);
+    expect(result.dryRunReport?.customerTransform).toMatchObject({ transformedRows: 3 });
+    expect(result.dryRunReport?.conversationTransform).toEqual({
+      transformedRows: 3,
+      unresolvedAssignedUsers: 1,
+      resolvedInstagramAccounts: 1,
+    });
+    expect(result.dryRunReport?.messageTransform).toEqual({ transformedRows: 3, mediaPayloads: 1 });
+    expect(result.dryRunReport?.totals).toEqual({ plannedRows: 9, plannedBatches: 6, blockedRows: 0 });
+    expect(result.batches).toEqual([]);
+  });
+
+  it("rejects conversations without customers and messages without conversations before source access", async () => {
+    const source = new LegacyTableSource({ conversations: legacyConversationRows, messages: legacyMessageRows });
+
+    await expect(conversationDryRun(source, ["conversations"])).rejects.toThrow(
+      "Conversation dry-run requires customers in the same plan",
+    );
+    await expect(conversationDryRun(source, ["customers", "messages"])).rejects.toThrow(
+      "Message dry-run requires conversations in the same plan",
+    );
+    expect(source.operations).toEqual([]);
+  });
+
+  it("fails the dry-run when a message batch is out of source id order", async () => {
+    const [first, second, third] = legacyMessageRows as [LegacyRecord, LegacyRecord, LegacyRecord];
+    const source = new LegacyTableSource({
+      customers: legacyCustomerRows,
+      conversations: legacyConversationRows,
+      messages: [first, third, second],
+    });
+
+    await expect(conversationDryRun(source, ["customers", "conversations", "messages"])).rejects.toThrow(
+      "Message dry-run batch 2 is not in ascending source id order",
+    );
   });
 });
 

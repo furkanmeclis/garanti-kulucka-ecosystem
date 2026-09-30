@@ -1,6 +1,8 @@
 import type {
+  ConversationTransformSummary,
   CustomerTransformSummary,
   DryRunReport,
+  MessageTransformSummary,
   MigrationPlan,
   MigrationWarning,
   VerificationCheck,
@@ -11,6 +13,8 @@ export function createDryRunReport(input: {
   readonly plan: MigrationPlan;
   readonly warnings?: MigrationWarning[];
   readonly customerTransform?: CustomerTransformSummary;
+  readonly conversationTransform?: ConversationTransformSummary;
+  readonly messageTransform?: MessageTransformSummary;
   readonly now?: Date;
 }): DryRunReport {
   const warnings = input.warnings ?? [];
@@ -35,6 +39,8 @@ export function createDryRunReport(input: {
     entities,
     warnings,
     ...(input.customerTransform ? { customerTransform: input.customerTransform } : {}),
+    ...(input.conversationTransform ? { conversationTransform: input.conversationTransform } : {}),
+    ...(input.messageTransform ? { messageTransform: input.messageTransform } : {}),
     generatedAt: (input.now ?? new Date()).toISOString(),
   };
 }
