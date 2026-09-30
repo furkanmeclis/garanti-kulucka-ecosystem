@@ -6,16 +6,18 @@ Bu belge, projeye yeni bir sohbetten veya bağlamsız bir çalışma oturumundan
 
 - Repo: `/Users/furkanmeclis/Documents/Projects/garanti-kulucka-ecosystem`
 - GitHub çalışma modeli: monorepo, yalnız `main`, PR yok.
-- Yayımlanmış son checkpoint: `v0.1.128`
-- Yayımlanmış son commit: `864840ccdbbe507bbe276264f2a7ec676ee5ba4f`
-- Commit mesajı: `feat(migrator): catalog legacy conversation tables`
+- Yayımlanmış son checkpoint: `v0.1.130`
+- Yayımlanmış son commit: `1e91fefde6b17d1e4f2088b858e9a525351551b8`
+- Commit mesajı: `docs(migrator): describe conversation dry-run snapshots`
+- Bu tag, aynı push içindeki beş commit’in ucundadır: `5945d0c` conversation row transform, `17a1fa0` canonical enum map, `2304353` dry-run validation, `86f86ce` snapshot files, `1e91fef` operator docs. Workflow her push için yalnız uç commit’i etiketler.
 - Genel ilerleme: yaklaşık `%75`
-- Son tamamlanan çalışma: `public.konusmalar` ve `public.mesajlar` için fail-closed kolon sözleşmesi. Catalog sürümü `p2-conversation-catalog-v1`. Müşteri 15 kolon sözleşmesi değişmedi.
-- Sıradaki bağımlılık kapısı bu iki tablonun satır dönüşümüdür: zorunlu customer ve conversation ID-map çözümlemesi, account/provider uyumu ve bilinmeyen enum reddi. Dry-run bu tabloları şimdilik sayar; satır dönüşümü henüz yoktur.
-- Kolon listesi numaralı legacy migration’lar ve Instagram `human_agent` ekinden çıkarılmıştır. Canlı `information_schema` dökümü henüz alınmamıştır. Uyuşmayan kolon dry-run’ı durdurur.
+- Son tamamlanan çalışma: `public.konusmalar` ve `public.mesajlar` satır dönüşümü ve dry-run doğrulaması. Catalog sürümü `p2-conversation-catalog-v1` değişmedi.
+- Dry-run müşteri, konuşma ve mesaj satırlarını dönüştürür, target’a yazmaz. WhatsApp, Messenger ve Instagram konuşmaları `MIGRATION_CONVERSATION_ACCOUNTS_FILE` olmadan fail-closed durur. Opsiyonel kullanıcı eşlemesi `MIGRATION_USER_PUBLIC_IDS_FILE` dosyasındadır.
+- Legacy `panel` canonical `manual` olur. Legacy `calisan` canonical `user` olur.
+- Sıradaki bağımlılık kapısı kalan legacy tablolardır: orders, order items, shipments ve products. Konuşma ve mesaj external id tekilliği apply öncesi hâlâ açıktır.
 - Production `migrate --apply` kapısı kapalıdır. Tüm aktivasyon koşulları geçmeden açılmamalıdır.
 
-`%75` tahmini; API, worker, auth temelleri, admin persistence, Socket.IO sınırları, fixture tabanlı provider sözleşmeleri, CI/tag otomasyonu, container buildleri, migrator dry-run güvenlik temeli, P1 source manifest/completeness, P2 customer introspection, customer row transform, account snapshot resolution ve customer dry-run validation dilimlerini içerir. Conversation ve message catalogları, gerçek frontend taşıması, canlı provider adapterları, P3 transaction snapshot isolation ile source row-content checksum/idempotency ve P4 production veri taşıma aktivasyonu tamamlanmış kabul edilmez.
+`%75` tahmini; önceki temellere ek olarak conversation ve message kolon sözleşmesini, satır dönüşümünü ve dry-run doğrulamasını içerir. Kalan legacy commerce tabloları, canlı provider adapterları, gerçek frontend taşıması, P3 transaction snapshot isolation ve P4 production veri taşıma aktivasyonu tamamlanmış kabul edilmez.
 
 ## 2. Tarihsel Schema Kimliği Checkpoint'i (`v0.1.116`)
 
@@ -284,7 +286,7 @@ Kabul kapısı: kaynaktan sessizce atlanan bir satır verification tarafından b
 
 ### P2. Legacy Schema Introspection ve Mapping Catalog
 
-Durum: customer schema introspection `v0.1.122`, customer row transform `v0.1.124`, account resolution ve customer dry-run validation `v0.1.126`, conversation ve message kolon sözleşmesi `v0.1.128` ile yayımlandı. Catalog sürümü `p2-conversation-catalog-v1`. Tam P2 tamamlanmadı. `customers`, `conversations` ve `messages` dry-run-ready’dir. Address ve external identity hedefleri descriptive kalır. Dry-run `public.musteriler` satırlarını dönüştürür. `konusmalar` ve `mesajlar` satırları henüz dönüştürülmez; yalnız sayılır ve kolon sözleşmesi doğrulanır.
+Durum: conversation ve message satır dönüşümü `v0.1.130` ile yayımlandı. Catalog sürümü `p2-conversation-catalog-v1`. Tam P2 tamamlanmadı. Dry-run müşteri, konuşma ve mesaj satırlarını dönüştürür ve target’a yazmaz. Address ve external identity hedefleri descriptive kalır. Orders, shipments ve products catalogları açıktır.
 
 Önce kaynak database gerçek yapısı `information_schema` üzerinden çıkarılmalıdır. Legacy migration dosyaları tek başına doğru kaynak kabul edilmemelidir; çalışan kod ile migration geçmişi arasında drift vardır.
 
@@ -534,8 +536,8 @@ git diff --check
 Beklenen yayımlanmış taban:
 
 ```text
-864840ccdbbe507bbe276264f2a7ec676ee5ba4f
-v0.1.128
+1e91fefde6b17d1e4f2088b858e9a525351551b8
+v0.1.130
 ```
 
 Aktif schema checkpoint kaybolmuşsa otomatik olarak yeniden üretme. Önce `git status`, `git reflog`, stash, başka worktree ve kullanıcı tarafından bırakılmış değişiklikleri araştır. Mevcut değişiklikleri koru.
@@ -640,12 +642,11 @@ Bu maddeler ihtiyaç varsa genişletilir; mevcut davranış sebepsiz yere yenide
 
 ## 10. Bir Sonraki Sohbet İçin İlk Somut Görev
 
-İlk görev P2 conversation ve message satır dönüşümüdür:
+İlk görev kalan P2 commerce catalog dilimidir:
 
-1. Yayımlanmış `v0.1.128` kolon sözleşmesini taban kabul et. `p2-conversation-catalog-v1` sürümünü ve müşteri 15 kolon sözleşmesini koru.
-2. `public.konusmalar` ve `public.mesajlar` satırlarını canonical draft’lara çevir. Zorunlu customer ve conversation kimlikleri çözülemezse satırı durdur. Opsiyonel atanmış kullanıcı çözülemezse reconciliation kaydı üret ve satırı düşürme.
-3. `kanal`, `durum` ve gönderici tipi için açık enum haritası kullan. Bilinmeyen değer fail-closed durur. `ig_account_id` yalnız Instagram konuşmasında ve eşleşen aktif hesaba bağlanır.
-4. Dry-run bu satırları da dönüştürsün, target’a yazmasın. Apply kapalı kalsın.
-5. Commit/push sonrası CI, yeni tag ve artifact’i doğrula. P3 ve P4 kapılarını açık tut.
+1. Yayımlanmış `v0.1.130` conversation dry-run checkpoint’ini taban kabul et. `p2-conversation-catalog-v1` müşteri, konuşma ve mesaj sözleşmelerini koru. Apply kapalı kalsın.
+2. Orders, order items, shipments ve products için fail-closed kolon sözleşmesi ve satır dönüşümünü, bu sırayla ve küçük commit’lerle ekle.
+3. Konuşma `kanal_konusma_id` ve mesaj `kanal_mesaj_id` tekilliğini dry-run’da kontrol et. Çakışma satırı sessizce birleştirmez.
+4. Bilinmeyen kolon ve enum fail-closed kalır. Tam `npm run check`, CI, tag ve artifact doğrulanır. P3 ve P4 kapıları açık kalır.
 
 P2 mapping ve introspection kabul kapısı tamamlanmadan P3 güvenlik çalışmalarına veya apply aktivasyonuna geçilmemelidir. P1 resume guard tamamlanmış olsa da tam resume/idempotency aktivasyon maddesi P3 transaction snapshot isolation ve source row-content checksum/idempotency kanıtları bitene kadar açık kalır.
