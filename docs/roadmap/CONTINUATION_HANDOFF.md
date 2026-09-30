@@ -6,16 +6,16 @@ Bu belge, projeye yeni bir sohbetten veya bağlamsız bir çalışma oturumundan
 
 - Repo: `/Users/furkanmeclis/Documents/Projects/garanti-kulucka-ecosystem`
 - GitHub çalışma modeli: monorepo, yalnız `main`, PR yok.
-- Yayımlanmış son checkpoint: `v0.1.124`
-- Yayımlanmış son commit: `15627ade9f77cafe240e86b110bf21881aaa1a28`
-- Commit mesajı: `fix(migrator): pin source session and separate row errors`
-- Bu tag, aynı push içindeki üç commit’in ucundadır: `b346503` WooCommerce provider seed, `80c630e` legacy customer row transform, `15627ad` source session pin ve row error ayrımı. Workflow her push için yalnız uç commit’i etiketler.
+- Yayımlanmış son checkpoint: `v0.1.126`
+- Yayımlanmış son commit: `4ccc5ec2362e6189eb347cf716c22581a7dd0c7e`
+- Commit mesajı: `fix(migrator): assert account snapshots explicitly`
+- Bu tag, aynı push içindeki dört commit’in ucundadır: `af42d66` external identity resolution, `12785be` customer dry-run validation, `f5018e8` non-legacy customer dry-run reddi, `4ccc5ec` explicit account snapshot assertion. Workflow her push için yalnız uç commit’i etiketler.
 - Genel ilerleme: yaklaşık `%75`
-- Son tamamlanan çalışma: P2 `public.musteriler` row transform kütüphanesi, koşullu address draft’ları, unresolved external identity candidates ve migration `004` WooCommerce provider seed’i.
-- Sıradaki bağımlılık kapısı P2 içinde account resolution’dır. External identity adayları doğrulanmış integration account snapshot’ı olmadan `mapping_role` almaz. Ardından transform dry-run doğrulamasına bağlanır. `public.konusmalar` ve `public.mesajlar` mappingleri bundan sonra gelir.
+- Son tamamlanan çalışma: doğrulanmış integration account snapshot’ı ile customer external identity resolution ve `public.musteriler` dry-run row validation.
+- Sıradaki bağımlılık kapısı `public.konusmalar -> conversations` ve `public.mesajlar -> messages` catalog ve dönüşümleridir. Address ve external identity hedefleri catalog’da descriptive kalır. Customer apply, identity hedefi descriptive iken kapalı kalır.
 - Production `migrate --apply` kapısı kapalıdır. Tüm aktivasyon koşulları geçmeden açılmamalıdır.
 
-`%75` tahmini; API, worker, auth temelleri, admin persistence, Socket.IO sınırları, fixture tabanlı provider sözleşmeleri, CI/tag otomasyonu, container buildleri, migrator dry-run güvenlik temeli, P1 source manifest/completeness, P2 customer introspection ve P2 customer row transform kütüphanesini içerir. Transform henüz dry-run okuma yoluna bağlı değildir. External identity account resolution, kalan P2 catalogları, gerçek frontend taşıması, canlı provider adapterları, P3 transaction snapshot isolation ile source row-content checksum/idempotency ve P4 production veri taşıma aktivasyonu tamamlanmış kabul edilmez.
+`%75` tahmini; API, worker, auth temelleri, admin persistence, Socket.IO sınırları, fixture tabanlı provider sözleşmeleri, CI/tag otomasyonu, container buildleri, migrator dry-run güvenlik temeli, P1 source manifest/completeness, P2 customer introspection, customer row transform, account snapshot resolution ve customer dry-run validation dilimlerini içerir. Conversation ve message catalogları, gerçek frontend taşıması, canlı provider adapterları, P3 transaction snapshot isolation ile source row-content checksum/idempotency ve P4 production veri taşıma aktivasyonu tamamlanmış kabul edilmez.
 
 ## 2. Tarihsel Schema Kimliği Checkpoint'i (`v0.1.116`)
 
@@ -197,6 +197,37 @@ Kanıt:
 
 Üç commit tek push ile gönderildiği için workflow yalnız uç commit’i etiketledi. Ara commit’lerin ayrı tag’i yoktur.
 
+## 3.5. Tamamlanan P2 Account Resolution ve Customer Dry-run Dilimi
+
+Bu dilim `v0.1.126` ile yayımlandı. Customer mapping kabul kapısını veya apply aktivasyonunu tamamlamaz.
+
+Kapsam:
+
+- `resolveCustomerExternalIdentities` doğrulanmış hesap snapshot’ındaki tek aktif provider hesabına candidate bağlar.
+- `mappingRole` değerleri `external_identity:woocommerce`, `external_identity:kolaybi`, `external_identity:instagram` ve `external_identity:messenger` olur.
+- Aynı provider için birden fazla aktif hesap, tekrarlayan public id, bozuk snapshot veya ambiguous eşleşme fail-closed reddedilir. Hata metni public id, external id, e-posta, telefon veya token içermez.
+- Aktif hesap yoksa candidate unresolved kalır ve `mappingRole` almaz.
+- `assertVerifiedIntegrationAccounts` snapshot’ı source okumadan önce doğrular.
+- Dry-run, catalog `customers` kaynağı `public.musteriler` ise planlanan batch’leri okur, satırları dönüştürür ve identity’leri çözer. Target’a yazmaz.
+- Catalog kaynağı `public.musteriler` değilse dry-run batch okumadan reddeder.
+- Dry-run raporu `customerTransform` özetini taşır: dönüşen satır, address draft, resolved identity, unresolved identity ve isim fallback uyarı sayıları.
+- Batch’ten dönen satır sayısı `expectedRows` ile uyuşmazsa dry-run durur.
+- `mappingCatalogVersion` `p2-customer-catalog-v1` kalır. Yalnız `customers` dry-run-ready’dir.
+- Apply, source veya target açmadan kapalı kalır.
+
+Kanıt:
+
+- Resolution commit: `af42d66` (`feat(migrator): resolve customer external identities`)
+- Dry-run commit: `12785be` (`feat(migrator): validate customer rows during dry-run`)
+- Non-legacy reddi: `f5018e8` (`fix(migrator): reject non-legacy customer dry-runs`)
+- Snapshot assertion: `4ccc5ec2362e6189eb347cf716c22581a7dd0c7e` (`fix(migrator): assert account snapshots explicitly`)
+- Yerel tam `npm run check`: başarılı
+- GitHub Actions Build and Tag run `36725232959`: başarılı
+- Otomatik tag: `v0.1.126`, commit `4ccc5ec2362e6189eb347cf716c22581a7dd0c7e`
+- Artifact: `container-images-v0.1.126`, `384223823` byte, süresi dolmamış
+
+Dört commit tek push ile gönderildiği için workflow yalnız uç commit’i etiketledi.
+
 ## 4. Değişmez Mimari ve Teslimat Kararları
 
 Bu kararlar yeni sohbetlerde yeniden tartışmaya açılmadan uygulanacaktır:
@@ -253,7 +284,7 @@ Kabul kapısı: kaynaktan sessizce atlanan bir satır verification tarafından b
 
 ### P2. Legacy Schema Introspection ve Mapping Catalog
 
-Durum: customer schema introspection `v0.1.122` ile, customer row transform kütüphanesi `v0.1.124` ile yayımlandı. Tam P2 ve customer mapping tamamlanmadı. `public.musteriler` 15-kolon sözleşmesi fail-closed doğrulanır ve yalnız `customers` dry-run-ready durumundadır. Transform address draft’ı ve unresolved identity candidate üretir; bunları dry-run planına almaz. Account resolution, dry-run bağlantısı, conversation/message catalogları ve fixture kabul kapısı açıktır.
+Durum: customer schema introspection `v0.1.122`, customer row transform `v0.1.124`, account resolution ve customer dry-run validation `v0.1.126` ile yayımlandı. Tam P2 tamamlanmadı. Yalnız `customers` dry-run-ready’dir. Address ve external identity hedefleri descriptive kalır. Dry-run `public.musteriler` satırlarını dönüştürür ve target’a yazmaz. Conversation ve message catalogları ile fixture kabul kapısı açıktır.
 
 Önce kaynak database gerçek yapısı `information_schema` üzerinden çıkarılmalıdır. Legacy migration dosyaları tek başına doğru kaynak kabul edilmemelidir; çalışan kod ile migration geçmişi arasında drift vardır.
 
@@ -503,8 +534,8 @@ git diff --check
 Beklenen yayımlanmış taban:
 
 ```text
-15627ade9f77cafe240e86b110bf21881aaa1a28
-v0.1.124
+4ccc5ec2362e6189eb347cf716c22581a7dd0c7e
+v0.1.126
 ```
 
 Aktif schema checkpoint kaybolmuşsa otomatik olarak yeniden üretme. Önce `git status`, `git reflog`, stash, başka worktree ve kullanıcı tarafından bırakılmış değişiklikleri araştır. Mevcut değişiklikleri koru.
@@ -609,14 +640,12 @@ Bu maddeler ihtiyaç varsa genişletilir; mevcut davranış sebepsiz yere yenide
 
 ## 10. Bir Sonraki Sohbet İçin İlk Somut Görev
 
-İlk görev P2 account resolution dilimidir:
+İlk görev P2 conversation ve message dilimidir:
 
-1. Yayımlanmış `v0.1.124` customer row transform checkpoint’ini taban kabul et. Çalışma ağacındaki yayınlanmamış değişiklik varsa koru.
-2. `p2-customer-catalog-v1` sözleşmesini koru. `customers` dry-run-ready kalsın. Address ve external identity hedeflerini, account snapshot doğrulanmadan dry-run-ready yapma.
-3. Doğrulanmış integration account snapshot’ı varsa unresolved candidate’ları account-scoped `customer_external_identities` kayıtlarına ve ayrı `mapping_role` provenance’ına bağla. Snapshot yoksa candidate unresolved kalır ve customer apply kapalı kalır.
-4. Transform’u dry-run doğrulamasına bağla: satırlar dönüşsün, target’a yazılmasın, apply source veya target açmadan kapalı kalsın.
-5. Ardından `public.konusmalar -> conversations` ve `public.mesajlar -> messages` catalog ve dönüşümlerini, zorunlu ID-map/FK ve account/provider çözümlemeleriyle uygula.
-6. Bilinmeyen kolon ve enumları fail-closed yönet; sentetik legacy PostgreSQL fixture testlerini ve tam `npm run check` doğrulamasını çalıştır.
-7. Commit/push sonrası CI, yeni tag ve artifact’i doğrula; P3 ve P4 kapılarını açık tut.
+1. Yayımlanmış `v0.1.126` account resolution ve customer dry-run checkpoint’ini taban kabul et. Çalışma ağacındaki yayınlanmamış değişiklik varsa koru.
+2. `p2-customer-catalog-v1` müşteri sözleşmesini koru. Address ve external identity hedeflerini descriptive bırak. Apply’ı kapalı tut.
+3. `public.konusmalar -> conversations` ve `public.mesajlar -> messages` catalog ve dönüşümlerini ekle. Zorunlu customer ve conversation ID-map çözümlemelerini, account/provider uyumunu ve bilinmeyen enum reddini uygula.
+4. Bilinmeyen kolon ve enumları fail-closed yönet. Sentetik legacy PostgreSQL fixture testlerini ve tam `npm run check` doğrulamasını çalıştır.
+5. Commit/push sonrası CI, yeni tag ve artifact’i doğrula. P3 ve P4 kapılarını açık tut.
 
 P2 mapping ve introspection kabul kapısı tamamlanmadan P3 güvenlik çalışmalarına veya apply aktivasyonuna geçilmemelidir. P1 resume guard tamamlanmış olsa da tam resume/idempotency aktivasyon maddesi P3 transaction snapshot isolation ve source row-content checksum/idempotency kanıtları bitene kadar açık kalır.
