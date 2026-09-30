@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
@@ -57,6 +57,94 @@ describe("migrator commands", () => {
       sourceSystem: "legacy_postgres",
       batchSize: 500,
     });
+  });
+
+  it("passes conversation account and user public id snapshot files into the dry-run", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "migrator-snapshots-"));
+    const accountsFile = join(directory, "accounts.json");
+    const userPublicIdsFile = join(directory, "users.json");
+    const accounts = [
+      { publicId: "iac_whatsapp_main", providerKey: "whatsapp", status: "active", externalAccountId: null },
+      { publicId: "iac_instagram_main", providerKey: "instagram", status: "active", externalAccountId: "ig-17841" },
+    ];
+    const executeMigration = vi.fn().mockResolvedValue(undefined);
+
+    try {
+      await writeFile(accountsFile, JSON.stringify(accounts));
+      await writeFile(userPublicIdsFile, JSON.stringify({ "7b98c4c9-ac91-4e3a-9f83-d8c2ba6e3870": "usr_agent_1" }));
+
+      await runMigratorCommand(
+        "migrate:dry-run",
+        {
+          SOURCE_DATABASE_URL: "postgres://source/legacy",
+          MIGRATION_CONVERSATION_ACCOUNTS_FILE: accountsFile,
+          MIGRATION_USER_PUBLIC_IDS_FILE: userPublicIdsFile,
+        },
+        {},
+        commandDependencies(executeMigration),
+      );
+
+      expect(executeMigration).toHaveBeenCalledWith({
+        mode: "dry-run",
+        sourceDatabaseUrl: "postgres://source/legacy",
+        sourceSystem: "legacy_postgres",
+        batchSize: 500,
+        conversationAccounts: accounts,
+        userPublicIds: new Map([["7b98c4c9-ac91-4e3a-9f83-d8c2ba6e3870", "usr_agent_1"]]),
+      });
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects invalid snapshot files with fixed messages that do not echo their contents", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "migrator-snapshots-invalid-"));
+    const reportFile = join(directory, "report.json");
+    const invalidAccountsFile = join(directory, "invalid-accounts.json");
+    const malformedAccountsFile = join(directory, "malformed-accounts.json");
+    const invalidUsersFile = join(directory, "invalid-users.json");
+    const executeMigration = vi.fn().mockResolvedValue(undefined);
+    const run = (env: Record<string, string>) => runMigratorCommand(
+      "migrate:dry-run",
+      { SOURCE_DATABASE_URL: "postgres://source/legacy", ...env },
+      { reportFile },
+      commandDependencies(executeMigration),
+    ).then(() => null, (reason: unknown) => reason as Error);
+
+    try {
+      await writeFile(invalidAccountsFile, JSON.stringify([
+        { publicId: "iac_instagram_main", providerKey: "tiktok", status: "active", externalAccountId: "ig-secret-account" },
+      ]));
+      await writeFile(malformedAccountsFile, "[{\"externalAccountId\": \"ig-secret-account\"");
+      await writeFile(invalidUsersFile, JSON.stringify({ "not-a-uuid": "usr_secret_user" }));
+
+      const cases: { env: Record<string, string>; message: string }[] = [
+        {
+          env: { MIGRATION_CONVERSATION_ACCOUNTS_FILE: invalidAccountsFile },
+          message: "MIGRATION_CONVERSATION_ACCOUNTS_FILE must contain a valid conversation account array",
+        },
+        {
+          env: { MIGRATION_CONVERSATION_ACCOUNTS_FILE: malformedAccountsFile },
+          message: "MIGRATION_CONVERSATION_ACCOUNTS_FILE must contain valid JSON",
+        },
+        {
+          env: { MIGRATION_USER_PUBLIC_IDS_FILE: invalidUsersFile },
+          message: "MIGRATION_USER_PUBLIC_IDS_FILE must map legacy user UUIDs to nonblank public ids",
+        },
+      ];
+      for (const { env, message } of cases) {
+        const error = await run(env);
+        expect(error?.message).toBe(message);
+        const report = await readFile(reportFile, "utf8");
+        for (const secret of ["ig-secret-account", "iac_instagram_main", "usr_secret_user", "not-a-uuid"]) {
+          expect(error?.message).not.toContain(secret);
+          expect(report).not.toContain(secret);
+        }
+      }
+      expect(executeMigration).not.toHaveBeenCalled();
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 
   it("uses DATABASE_URL only as the documented target compatibility fallback", () => {

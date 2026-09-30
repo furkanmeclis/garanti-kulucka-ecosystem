@@ -46,6 +46,8 @@ export async function executePostgresMigration(
       sourceSystem: input.sourceSystem,
       sourceDatabaseIdentity: normalizePostgresDatabaseIdentity(input.sourceDatabaseUrl),
       entities: dryRunMigrationEntities(legacyMappingCatalog),
+      ...(input.conversationAccounts ? { conversationAccounts: input.conversationAccounts } : {}),
+      ...(input.userPublicIds ? { userPublicIds: input.userPublicIds } : {}),
     });
   });
 }

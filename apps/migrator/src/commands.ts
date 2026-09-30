@@ -1,6 +1,7 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { Client } from "pg";
+import { assertVerifiedConversationAccounts, type VerifiedConversationAccount } from "./conversation-mapping.js";
 import { migrationApplyDisabledMessage, toSafeMigratorError } from "./errors.js";
 import { canonicalMigrationEntities } from "./plan.js";
 import { createVerificationReport } from "./reports.js";
@@ -29,6 +30,8 @@ export interface ExecutePostgresDryRunInput {
   readonly sourceDatabaseUrl: string;
   readonly sourceSystem: string;
   readonly batchSize: number;
+  readonly conversationAccounts?: readonly VerifiedConversationAccount[];
+  readonly userPublicIds?: ReadonlyMap<string, string>;
 }
 
 export interface ExecutePostgresApplyInput {
@@ -114,11 +117,20 @@ export async function runMigratorCommand(
       throw new Error(migrationApplyDisabledMessage);
     }
 
+    const conversationAccountsFile = env.MIGRATION_CONVERSATION_ACCOUNTS_FILE?.trim();
+    const userPublicIdsFile = env.MIGRATION_USER_PUBLIC_IDS_FILE?.trim();
+    const conversationAccounts = conversationAccountsFile
+      ? await readConversationAccountsFile(conversationAccountsFile)
+      : undefined;
+    const userPublicIds = userPublicIdsFile ? await readUserPublicIdsFile(userPublicIdsFile) : undefined;
+
     await dependencies.executeMigration({
       mode: "dry-run",
       sourceDatabaseUrl,
       sourceSystem,
       batchSize,
+      ...(conversationAccounts ? { conversationAccounts } : {}),
+      ...(userPublicIds ? { userPublicIds } : {}),
     });
     await writeMigratorCommandReport(options, createCommandReport(command, "passed", startedAt));
   } catch (error) {
@@ -185,6 +197,46 @@ function parseMigrationBatchSize(value: string | undefined): number {
   }
 
   return batchSize;
+}
+
+const legacyUserIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+async function readConversationAccountsFile(path: string): Promise<readonly VerifiedConversationAccount[]> {
+  const value = await readJsonSnapshotFile(path, "MIGRATION_CONVERSATION_ACCOUNTS_FILE");
+  try {
+    assertVerifiedConversationAccounts(value);
+  } catch {
+    throw new Error("MIGRATION_CONVERSATION_ACCOUNTS_FILE must contain a valid conversation account array");
+  }
+  return value;
+}
+
+async function readUserPublicIdsFile(path: string): Promise<ReadonlyMap<string, string>> {
+  const value = await readJsonSnapshotFile(path, "MIGRATION_USER_PUBLIC_IDS_FILE");
+  const invalid = "MIGRATION_USER_PUBLIC_IDS_FILE must map legacy user UUIDs to nonblank public ids";
+  if (value === null || typeof value !== "object" || Array.isArray(value)) throw new Error(invalid);
+  const userPublicIds = new Map<string, string>();
+  for (const [legacyUserId, publicId] of Object.entries(value)) {
+    if (!legacyUserIdPattern.test(legacyUserId) || typeof publicId !== "string" || !publicId.trim()) {
+      throw new Error(invalid);
+    }
+    userPublicIds.set(legacyUserId, publicId);
+  }
+  return userPublicIds;
+}
+
+async function readJsonSnapshotFile(path: string, variable: string): Promise<unknown> {
+  let text: string;
+  try {
+    text = await readFile(path, "utf8");
+  } catch {
+    throw new Error(`${variable} could not be read`);
+  }
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    throw new Error(`${variable} must contain valid JSON`);
+  }
 }
 
 async function writeMigratorCommandReport(
