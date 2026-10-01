@@ -6,14 +6,12 @@ Bu belge, projeye yeni bir sohbetten veya bağlamsız bir çalışma oturumundan
 
 - Repo: `/Users/furkanmeclis/Documents/Projects/garanti-kulucka-ecosystem`
 - GitHub çalışma modeli: monorepo, yalnız `main`, PR yok.
-- Yayımlanmış son checkpoint: `v0.1.142`
-- Yayımlanmış son commit: `07a8f37bd1f1e106919915228732a04944204ece`
-- Commit mesajı: `fix(migrator): retain unmapped legacy order fields`
-- Bu tag, aynı push içindeki iki commit’in ucundadır: `eccc7cc` sipariş satır dönüşümü ve `07a8f37` eşlenmemiş kolonların `sourceRemainder` içinde tutulması.
+- Yayımlanmış son checkpoint: `v0.1.144`
+- Yayımlanmış son commit: `dadd20a2f421cae3b8f41c81b276cd53fc1a2ab2`
+- Commit mesajı: `feat(migrator): validate order rows during dry-run`
 - Genel ilerleme: yaklaşık `%75`
-- Son tamamlanan çalışma: `public.siparisler` satır dönüşümü. Bilinmeyen durum fail-closed durur. Çözülemeyen konuşma satırı düşürmez. Katalogda olup taslağın ana alanlarına girmeyen kolonlar `sourceRemainder` içinde kalır.
-- Dry-run sipariş satırlarını henüz dönüştürmez. Yalnız sayar ve kolon sözleşmesini doğrular.
-- Sıradaki bağımlılık kapısı bu dönüşümün dry-run’a bağlanması, ardından kalem ve kargo dönüşümleridir.
+- Son tamamlanan çalışma: dry-run artık `public.siparisler` satırlarını dönüştürüyor. Müşteri haritası aynı dry-run’daki müşteri taslaklarından gelir. Konuşma seçilmezse konuşma haritası boş kalır ve çözülemeyen konuşma reconciliation üretir.
+- Sıradaki bağımlılık kapısı sipariş kalemi dönüşümü, ardından kargo dönüşümüdür. Kalem `urun_kodu` veya `kolaybi_product_id` ile ürüne bağlanır. `stok_id` kullanılmaz.
 - Production `migrate --apply` kapısı kapalıdır. Tüm aktivasyon koşulları geçmeden açılmamalıdır.
 
 `%75` tahmini; önceki temellere ek olarak conversation ve message kolon sözleşmesini, satır dönüşümünü ve dry-run doğrulamasını içerir. Kalan legacy commerce tabloları, canlı provider adapterları, gerçek frontend taşıması, P3 transaction snapshot isolation ve P4 production veri taşıma aktivasyonu tamamlanmış kabul edilmez.
@@ -535,8 +533,8 @@ git diff --check
 Beklenen yayımlanmış taban:
 
 ```text
-07a8f37bd1f1e106919915228732a04944204ece
-v0.1.142
+dadd20a2f421cae3b8f41c81b276cd53fc1a2ab2
+v0.1.144
 ```
 
 Aktif schema checkpoint kaybolmuşsa otomatik olarak yeniden üretme. Önce `git status`, `git reflog`, stash, başka worktree ve kullanıcı tarafından bırakılmış değişiklikleri araştır. Mevcut değişiklikleri koru.
@@ -641,11 +639,11 @@ Bu maddeler ihtiyaç varsa genişletilir; mevcut davranış sebepsiz yere yenide
 
 ## 10. Bir Sonraki Sohbet İçin İlk Somut Görev
 
-İlk görev sipariş dönüşümünü dry-run’a bağlamaktır:
+İlk görev sipariş kalemi dönüşümüdür:
 
-1. Yayımlanmış `v0.1.142` sipariş dönüşümünü taban kabul et. Apply kapalı kalsın.
-2. Dry-run `public.siparisler` satırlarını `transformLegacyOrder` ile doğrulasın, target’a yazmasın. Müşteri haritası aynı dry-run’daki müşteri taslaklarından gelsin.
-3. Ardından kalem ve kargo dönüşümlerini küçük commit’lerle ekle. Kalemi `urun_kodu` veya `kolaybi_product_id` ile ürüne bağla.
-4. Tam `npm run check`, CI, tag ve artifact doğrulanır. P3 ve P4 kapıları açık kalır.
+1. Yayımlanmış `v0.1.144` sipariş dry-run checkpoint’ini taban kabul et. Apply kapalı kalsın.
+2. `public.siparis_kalemleri` satırını canonical order item draft’ına çevir. Sipariş kimliği aynı dry-run’daki sipariş taslağından çözülür. Çözülemezse kalem durur.
+3. Ürün eşlemesi `urun_kodu` veya `kolaybi_product_id` ile yapılır. `stok_id` ürün kimliği değildir.
+4. Ardından kargo dönüşümünü ekle. Dry-run target’a yazmaz. Tam `npm run check`, CI, tag ve artifact doğrulanır.
 
 P2 mapping ve introspection kabul kapısı tamamlanmadan P3 güvenlik çalışmalarına veya apply aktivasyonuna geçilmemelidir. P1 resume guard tamamlanmış olsa da tam resume/idempotency aktivasyon maddesi P3 transaction snapshot isolation ve source row-content checksum/idempotency kanıtları bitene kadar açık kalır.
