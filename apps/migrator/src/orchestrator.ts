@@ -15,6 +15,7 @@ import {
   type VerifiedIntegrationAccount,
 } from "./customer-mapping.js";
 import { createMigrationPlan } from "./plan.js";
+import { legacyOrderTable, transformLegacyOrder } from "./order-mapping.js";
 import { legacyProductTable, transformLegacyProduct } from "./product-mapping.js";
 import { createDryRunReport } from "./reports.js";
 import {
@@ -38,6 +39,7 @@ import type {
   MigrationEntity,
   MigrationPlan,
   MigrationTarget,
+  OrderTransformSummary,
   ProductTransformSummary,
   SourceDatabaseIdentity,
   SourceManifest,
@@ -93,12 +95,14 @@ export async function runMigration(input: RunMigrationInput): Promise<MigrationR
   const validateConversationRows = entities.includes("conversations");
   const validateMessageRows = entities.includes("messages");
   const validateProductRows = entities.includes("products");
+  const validateOrderRows = entities.includes("orders");
   if (validateCustomerRows) assertEntityRoutesFromLegacyTable(catalog, "customers", legacyCustomerTable, "Customer");
   if (validateConversationRows) {
     assertEntityRoutesFromLegacyTable(catalog, "conversations", legacyConversationTable, "Conversation");
   }
   if (validateMessageRows) assertEntityRoutesFromLegacyTable(catalog, "messages", legacyMessageTable, "Message");
   if (validateProductRows) assertEntityRoutesFromLegacyTable(catalog, "products", legacyProductTable, "Product");
+  if (validateOrderRows) assertEntityRoutesFromLegacyTable(catalog, "orders", legacyOrderTable, "Order");
   const integrationAccounts = ownIntegrationAccounts(input.integrationAccounts);
   const conversationAccounts = ownConversationAccounts(input.conversationAccounts);
   const userPublicIds = ownUserPublicIds(input.userPublicIds);
@@ -141,6 +145,13 @@ export async function runMigration(input: RunMigrationInput): Promise<MigrationR
     const productTransform = validateProductRows
       ? await validateProductBatches(input.source, plan)
       : undefined;
+    const orderTransform = validateOrderRows
+      ? await validateOrderBatches(input.source, plan, {
+        customerPublicIds: requireDependencyPublicIds(customers, "Order", "customers"),
+        conversationPublicIds: conversations?.publicIds ?? new Map(),
+        userPublicIds,
+      })
+      : undefined;
     return {
       mode: input.mode,
       plan,
@@ -151,6 +162,7 @@ export async function runMigration(input: RunMigrationInput): Promise<MigrationR
         ...(conversations ? { conversationTransform: conversations.summary } : {}),
         ...(messageTransform ? { messageTransform } : {}),
         ...(productTransform ? { productTransform } : {}),
+        ...(orderTransform ? { orderTransform } : {}),
         ...(input.now ? { now: input.now } : {}),
       }),
       batches: [],
@@ -171,6 +183,9 @@ function assertDryRunEntityDependencies(entities: readonly MigrationEntity[]): v
   }
   if (entities.includes("messages") && !entities.includes("conversations")) {
     throw new Error("Message dry-run requires conversations in the same plan");
+  }
+  if (entities.includes("orders") && !entities.includes("customers")) {
+    throw new Error("Order dry-run requires customers in the same plan");
   }
 }
 
@@ -377,6 +392,36 @@ async function validateProductBatches(
   }
 
   return Object.freeze({ transformedRows, inactiveProducts });
+}
+
+async function validateOrderBatches(
+  source: LegacySource,
+  plan: MigrationPlan,
+  context: {
+    readonly customerPublicIds: ReadonlyMap<string, string>;
+    readonly conversationPublicIds: ReadonlyMap<string, string>;
+    readonly userPublicIds: ReadonlyMap<string, string>;
+  },
+): Promise<OrderTransformSummary> {
+  let transformedRows = 0;
+  let unresolvedConversations = 0;
+  let unresolvedCreators = 0;
+
+  for (const batch of plan.batches) {
+    if (batch.entity !== "orders") continue;
+    const rows = await readPlannedBatch(source, batch, "Order");
+
+    for (const row of rows) {
+      const result = transformLegacyOrder(row, context);
+      transformedRows += 1;
+      for (const entry of result.reconciliation) {
+        if (entry.code === "unresolved_conversation") unresolvedConversations += 1;
+        if (entry.code === "unresolved_created_by") unresolvedCreators += 1;
+      }
+    }
+  }
+
+  return Object.freeze({ transformedRows, unresolvedConversations, unresolvedCreators });
 }
 
 function ownSourceTableSnapshots(snapshots: readonly SourceTableSnapshot[]): SourceTableSnapshot[] {

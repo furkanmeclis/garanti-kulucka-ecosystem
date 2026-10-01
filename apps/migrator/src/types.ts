@@ -232,6 +232,7 @@ export interface DryRunReport {
   readonly conversationTransform?: ConversationTransformSummary;
   readonly messageTransform?: MessageTransformSummary;
   readonly productTransform?: ProductTransformSummary;
+  readonly orderTransform?: OrderTransformSummary;
   readonly generatedAt: string;
 }
 
@@ -257,6 +258,12 @@ export interface MessageTransformSummary {
 export interface ProductTransformSummary {
   readonly transformedRows: number;
   readonly inactiveProducts: number;
+}
+
+export interface OrderTransformSummary {
+  readonly transformedRows: number;
+  readonly unresolvedConversations: number;
+  readonly unresolvedCreators: number;
 }
 
 export interface VerificationReport {

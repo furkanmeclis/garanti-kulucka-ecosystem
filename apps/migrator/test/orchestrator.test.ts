@@ -1038,6 +1038,125 @@ const customerCatalog = createLegacyMappingCatalog({
   }],
 });
 
+function legacyOrderRow(id: string, overrides: Record<string, unknown> = {}): LegacyRecord {
+  const payload = {
+    id,
+    musteri_id: "0a32ce63-4c3b-4fd4-917d-726d540a7216",
+    olusturan_id: assignedUserId,
+    konusma_id: null,
+    musteri_ad: "Ada Lovelace",
+    musteri_telefon: "+90 555 000 00 00",
+    musteri_adres: null,
+    musteri_il: null,
+    musteri_ilce: null,
+    musteri_posta_kodu: null,
+    siparis_no: "GK-1001",
+    siparis_tipi: "normal",
+    durum: "olusturuldu",
+    ara_toplam: "100.00",
+    kdv_toplam: "18.00",
+    kargo_ucreti: "25.00",
+    genel_toplam: "143.00",
+    kargo_takip_no: null,
+    kargo_firmasi: null,
+    teyit_durumu: "bekliyor",
+    teyit_tarihi: null,
+    teyit_eden_id: null,
+    notlar: null,
+    iptal_nedeni: null,
+    iade_nedeni: null,
+    olusturma_tarihi: "2024-01-02T03:04:05Z",
+    guncelleme_tarihi: null,
+    kolaybi_siparis_id: null,
+    ivr_bulk_id: null,
+    ivr_tus: null,
+    ivr_arama_durumu: null,
+    ivr_arama_tarihi: null,
+    kolaybi_contact_id: null,
+    kolaybi_address_id: null,
+    ivr_dinleme_suresi: null,
+    kargo_yazdirildi: null,
+    kargo_son_hareket: null,
+    kargo_son_hareket_tarihi: null,
+    kargoya_aktarilma_tarihi: null,
+    efatura_durumu: null,
+    sevk_edilme_tarihi: null,
+    durum_oncelik: null,
+    mukerrer: false,
+    teyit_arama_deneme: 0,
+    kaynak: "manuel",
+    mukerrer_ad: false,
+    at_disi: null,
+    ...overrides,
+  };
+  return legacyRow("public.siparisler", id, payload);
+}
+
+const legacyOrderRows: LegacyRecord[] = [
+  legacyOrderRow("a1000000-0000-4000-8000-000000000001", {
+    musteri_id: "0a32ce63-4c3b-4fd4-917d-726d540a7216",
+    konusma_id: "3d65f196-7f6e-4b07-8c50-a59f873d0549",
+    olusturan_id: assignedUserId,
+  }),
+  legacyOrderRow("a1000000-0000-4000-8000-000000000002", {
+    musteri_id: "1b43df74-5d4c-4fe5-a28e-837e651b8327",
+    olusturan_id: unknownUserId,
+  }),
+  legacyOrderRow("a1000000-0000-4000-8000-000000000003", {
+    musteri_id: "2c54e085-6e5d-4af6-b39f-948f762c9438",
+    olusturan_id: assignedUserId,
+  }),
+];
+
+function orderDryRun(source: LegacySource) {
+  return runMigration({
+    mode: "dry-run",
+    source,
+    mappingCatalog: legacyMappingCatalog,
+    batchSize: 2,
+    entities: ["orders", "customers"],
+    now: new Date("2026-09-30T00:00:00.000Z"),
+    sourceSystem: "legacy_postgres",
+    sourceDatabaseIdentity: sourceIdentity,
+    userPublicIds: new Map([[assignedUserId, "usr_agent_1"]]),
+  });
+}
+
+describe("order dry-run validation", () => {
+  it("transforms customers, then orders, without a target", async () => {
+    const source = new LegacyTableSource({
+      customers: legacyCustomerRows,
+      orders: legacyOrderRows,
+    });
+
+    const result = await orderDryRun(source);
+
+    expect(source.reads).toEqual([
+      { entity: "customers", options: { limit: 2, offset: 0 } },
+      { entity: "customers", options: { limit: 2, offset: 2 } },
+      { entity: "orders", options: { limit: 2, offset: 0 } },
+      { entity: "orders", options: { limit: 2, offset: 2 } },
+    ]);
+    expect(source.operations).toEqual([
+      "describe",
+      "count:orders",
+      "count:customers",
+      "read:customers",
+      "read:customers",
+      "read:orders",
+      "read:orders",
+    ]);
+    expect(result.dryRunReport?.customerTransform).toMatchObject({ transformedRows: 3 });
+    expect(result.dryRunReport?.orderTransform).toEqual({
+      transformedRows: 3,
+      unresolvedConversations: 1,
+      unresolvedCreators: 1,
+    });
+    expect(result.dryRunReport?.totals).toEqual({ plannedRows: 6, plannedBatches: 4, blockedRows: 0 });
+    expect(result.batches).toEqual([]);
+  });
+});
+
 const productFixtureCatalog = createLegacyMappingCatalog({
   version: "fixture-catalog-v1",
   tables: [{
