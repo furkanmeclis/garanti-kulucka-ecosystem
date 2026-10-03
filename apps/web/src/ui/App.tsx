@@ -22,6 +22,7 @@ import {
   Truck,
   Wallet,
   Wifi,
+  WifiOff,
   XCircle,
   type LucideIcon,
 } from "lucide-react";
@@ -106,6 +107,7 @@ export function App() {
   });
   const [status, setStatus] = useState("Hazır");
   const [uploadedFile, setUploadedFile] = useState<FileMetadata | null>(null);
+  const [presenceUpdating, setPresenceUpdating] = useState(false);
 
   const http = useMemo(
     () =>
@@ -313,6 +315,21 @@ export function App() {
     setStatus("Provider live flag backend API üzerinden güncellendi");
   }
 
+  async function handleTogglePresence() {
+    if (!user || user.role === "admin") return;
+
+    const nextPresence = !user.is_online;
+    setPresenceUpdating(true);
+    setStatus(nextPresence ? "Çevrimiçi duruma geçiliyor" : "Çevrimdışı duruma geçiliyor");
+    try {
+      const updatedUser = await auth.setPresence(nextPresence);
+      setUser(updatedUser);
+      setStatus(updatedUser.is_online ? "Çevrimiçi durum backend auth üzerinden güncellendi" : "Çevrimdışı durum backend auth üzerinden güncellendi");
+    } finally {
+      setPresenceUpdating(false);
+    }
+  }
+
   if (publicPage) {
     return <PublicPage page={publicPage} />;
   }
@@ -342,6 +359,7 @@ export function App() {
   const activeSettings = data.settings.filter((setting) => !setting.is_secret);
   const visibleNavigation = navigationItems.filter((item) => item.roles.includes(user?.role ?? "guest"));
   const activeFlow = flowFromPath(location.pathname);
+  const canTogglePresence = Boolean(user && user.role !== "admin");
 
   return (
     <div className="app-shell">
@@ -365,6 +383,17 @@ export function App() {
             );
           })}
         </nav>
+        {canTogglePresence && (
+          <button
+            className={cx("presence-toggle", user?.is_online && "online")}
+            disabled={presenceUpdating}
+            onClick={handleTogglePresence}
+            type="button"
+          >
+            {user?.is_online ? <Wifi size={15} aria-hidden="true" /> : <WifiOff size={15} aria-hidden="true" />}
+            <span>{presenceUpdating ? "Değişiyor" : user?.is_online ? "Çevrimiçi" : "Çevrimdışı"}</span>
+          </button>
+        )}
         <div className="user-chip">
           <Wifi size={15} aria-hidden="true" />
           <span>{user?.email ?? "Backend session"}</span>

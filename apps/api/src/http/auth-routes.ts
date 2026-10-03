@@ -15,6 +15,10 @@ const refreshRequestSchema = z.object({
   refresh_token: z.string().min(16),
 });
 
+const presenceRequestSchema = z.object({
+  online: z.boolean(),
+});
+
 function daysFromNow(days: number): Date {
   const date = new Date();
   date.setDate(date.getDate() + days);
@@ -79,7 +83,7 @@ export function createAuthRoutes() {
       refresh_token: refreshToken,
       token_type: "Bearer",
       expires_in: context.get("config").accessTokenTtlSeconds,
-      user: serializeAuthUser(user, await repository.listUserPermissions(user.id)),
+      user: serializeAuthUser({ ...user, is_online: true }, await repository.listUserPermissions(user.id)),
     });
   });
 
@@ -127,10 +131,33 @@ export function createAuthRoutes() {
     const auth = context.get("auth");
     const db = context.get("db");
     if (auth && db) {
-      await new AuthRepository(db).revokeSession(auth.session_public_id);
+      const repository = new AuthRepository(db);
+      await repository.revokeSession(auth.session_public_id);
+      await repository.setUserOnlineStatus(auth.user_public_id, false);
     }
 
     return context.json({ status: "ok" });
+  });
+
+  routes.patch("/presence", authenticate, async (context) => {
+    const payload = presenceRequestSchema.safeParse(await context.req.json());
+    if (!payload.success) {
+      return context.json({ error: { code: "invalid_request", message: "Invalid presence payload" } }, 400);
+    }
+
+    const db = context.get("db");
+    const auth = context.get("auth");
+    if (!db || !auth) {
+      return context.json({ error: { code: "unauthorized", message: "Session is not available" } }, 401);
+    }
+
+    const repository = new AuthRepository(db);
+    const user = await repository.setUserOnlineStatus(auth.user_public_id, payload.data.online);
+    if (!user) {
+      return context.json({ error: { code: "unauthorized", message: "Session is not available" } }, 401);
+    }
+
+    return context.json(serializeAuthUser(user, await repository.listUserPermissions(user.id)));
   });
 
   routes.get("/me", authenticate, async (context) => {

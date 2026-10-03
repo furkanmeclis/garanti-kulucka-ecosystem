@@ -122,6 +122,19 @@ const authMocks = vi.hoisted(() => {
     revokeSession: vi.fn(async (sessionPublicId: string) => {
       state.revokedSessions.add(sessionPublicId);
     }),
+    setUserOnlineStatus: vi.fn(async (userPublicId: string, online: boolean) => {
+      if (userPublicId === state.activeUser.public_id) {
+        state.activeUser.is_online = online;
+        return state.activeUser;
+      }
+
+      if (userPublicId === state.staffUser.public_id) {
+        state.staffUser.is_online = online;
+        return state.staffUser;
+      }
+
+      return null;
+    }),
   };
 
   const db = {
@@ -153,6 +166,7 @@ vi.mock("../src/auth/repository.js", () => ({
     last_name: user.last_name,
     role: user.role_name,
     permissions,
+    is_online: user.is_online,
     sip_username: user.sip_username,
   }),
 }));
@@ -196,6 +210,8 @@ describe("auth lifecycle", () => {
     authMocks.state.validRefreshToken = "initial_refresh_token_000000";
     authMocks.state.nextRefreshToken = "rotated_refresh_token_000000";
     authMocks.state.revokedSessions.clear();
+    authMocks.state.activeUser.is_online = false;
+    authMocks.state.staffUser.is_online = false;
     vi.clearAllMocks();
   });
 
@@ -245,6 +261,7 @@ describe("auth lifecycle", () => {
 
     expect(logoutResponse.status).toBe(200);
     expect(authMocks.repository.revokeSession).toHaveBeenCalledWith("ses_admin");
+    expect(authMocks.repository.setUserOnlineStatus).toHaveBeenCalledWith("usr_admin", false);
 
     const meResponse = await app.request("/auth/me", {
       headers: { authorization: `Bearer ${token}` },
@@ -288,5 +305,30 @@ describe("auth lifecycle", () => {
     await expect(response.json()).resolves.toMatchObject({
       error: { code: "forbidden" },
     });
+  });
+
+  it("updates authenticated user presence through the backend auth boundary", async () => {
+    const token = await accessToken({
+      userPublicId: "usr_staff",
+      sessionPublicId: "ses_staff",
+      role: "staff",
+    });
+
+    const response = await createTestApp().request("/auth/presence", {
+      method: "PATCH",
+      body: JSON.stringify({ online: true }),
+      headers: {
+        authorization: `Bearer ${token}`,
+        "content-type": "application/json",
+      },
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      public_id: "usr_staff",
+      role: "staff",
+      is_online: true,
+    });
+    expect(authMocks.repository.setUserOnlineStatus).toHaveBeenCalledWith("usr_staff", true);
   });
 });

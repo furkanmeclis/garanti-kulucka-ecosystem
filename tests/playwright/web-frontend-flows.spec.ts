@@ -10,6 +10,7 @@ interface PlaywrightUser {
   last_name: string;
   role: string;
   permissions: string[];
+  is_online: boolean;
   sip_username: string;
 }
 
@@ -66,9 +67,20 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     }
 
     if (url.pathname === "/auth/logout") {
+      currentUser = { ...currentUser, is_online: false };
       await route.fulfill({
         contentType: "application/json",
         body: JSON.stringify({ status: "ok" }),
+      });
+      return;
+    }
+
+    if (url.pathname === "/auth/presence") {
+      const payload = JSON.parse(route.request().postData() ?? "{}") as { online?: boolean };
+      currentUser = { ...currentUser, is_online: Boolean(payload.online) };
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify(currentUser),
       });
       return;
     }
@@ -333,6 +345,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByRole("link", { name: /arama/i })).toHaveCount(1);
     await expect(page.getByRole("link", { name: /vapi ai/i })).toHaveCount(1);
     await expect(page.getByRole("link", { name: /analizi/i })).toHaveCount(1);
+    await expect(page.getByRole("button", { name: /evrimiçi/i })).toHaveCount(0);
     await expect(page.getByTestId("inbox-flow")).toContainText("Merhaba");
     await page.getByRole("button", { name: /cevap gönder/i }).click();
     await expect(page.getByTestId("inbox-flow")).toContainText("Backend UI yaniti");
@@ -386,6 +399,12 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByRole("link", { name: /ayarlar/i })).toHaveCount(0);
     await expect(page.getByRole("link", { name: /dosya/i })).toHaveCount(0);
     await expect(page.getByRole("link", { name: /vapi ai/i })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /evrimiçi/i })).toBeVisible();
+    await Promise.all([
+      page.waitForResponse(`${backendBaseUrl}/auth/presence`),
+      page.getByRole("button", { name: /evrimiçi/i }).click(),
+    ]);
+    await expect(page.getByRole("button", { name: /evrimdışı/i })).toBeVisible();
   } finally {
     await closeWebApp(app.server);
   }
@@ -395,6 +414,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       "/auth/login",
       "/auth/me",
       "/auth/logout",
+      "/auth/presence",
       "/api/conversations",
       "/api/conversations/cnv_playwright/messages",
       "/api/orders",
@@ -418,6 +438,7 @@ function loginUser(overrides: Partial<PlaywrightUser> = {}): PlaywrightUser {
     last_name: "User",
     role: "admin",
     permissions: ["admin:settings:read"],
+    is_online: true,
     sip_username: "1001",
     ...overrides,
   };

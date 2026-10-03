@@ -98,7 +98,8 @@ nav {
 }
 
 .user-chip,
-.status-row span {
+.status-row span,
+.presence-toggle {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -108,6 +109,23 @@ nav {
   border-radius: 8px;
   color: #cbd5e1;
   background: #1e293b;
+}
+
+.presence-toggle {
+  border-color: #475569;
+  color: #94a3b8;
+  cursor: pointer;
+}
+
+.presence-toggle.online {
+  border-color: rgba(34, 197, 94, 0.42);
+  color: #86efac;
+  background: rgba(34, 197, 94, 0.1);
+}
+
+.presence-toggle:disabled {
+  cursor: wait;
+  opacity: 0.72;
 }
 
 .user-chip button {

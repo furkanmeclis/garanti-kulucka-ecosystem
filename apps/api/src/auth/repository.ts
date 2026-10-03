@@ -160,6 +160,18 @@ export class AuthRepository {
       .where("public_id", "=", sessionPublicId)
       .execute();
   }
+
+  async setUserOnlineStatus(userPublicId: string, online: boolean): Promise<AuthUserRecord | null> {
+    const now = new Date();
+    await this.db
+      .updateTable("users")
+      .set(online ? { is_online: online, last_seen_at: now, updated_at: now } : { is_online: online, updated_at: now })
+      .where("public_id", "=", userPublicId)
+      .where("is_active", "=", true)
+      .execute();
+
+    return this.findUserByPublicId(userPublicId);
+  }
 }
 
 export function isAdminRole(role: Selectable<RolesTable>["name"] | string): boolean {
@@ -174,6 +186,7 @@ export function serializeAuthUser(user: AuthUserRecord, permissions: string[]) {
     last_name: user.last_name,
     role: user.role_name,
     permissions,
+    is_online: user.is_online,
     sip_username: user.sip_username,
   };
 }

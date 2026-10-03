@@ -12,6 +12,7 @@ export interface LoginResponse {
     last_name: string;
     role: string;
     permissions: string[];
+    is_online: boolean;
     sip_username?: string | null;
   };
 }
@@ -38,6 +39,11 @@ export function createAuthClient(http: BackendHttpClient) {
     logout: () =>
       http.request<{ status: "ok" }>("/auth/logout", {
         method: "POST",
+      }),
+    setPresence: (online: boolean) =>
+      http.request<LoginResponse["user"]>("/auth/presence", {
+        method: "PATCH",
+        body: { online },
       }),
     me: () => http.request<LoginResponse["user"]>("/auth/me"),
   };

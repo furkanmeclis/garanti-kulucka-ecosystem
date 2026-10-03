@@ -28,6 +28,7 @@ describe("auth serialization", () => {
       public_id: "usr_test",
       role: "admin",
       permissions: ["settings:read", "settings:write"],
+      is_online: false,
       sip_username: "1001",
     });
     expect(serialized).not.toHaveProperty("password_hash");
