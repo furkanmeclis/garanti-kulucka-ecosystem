@@ -72,6 +72,12 @@ export function mapCanonicalRecordToInsert(record: CanonicalRecord): Record<stri
 export class DatabaseMigrationTarget implements MigrationTarget {
   constructor(private readonly db: AppDatabase) {}
 
+  async runInTransaction<T>(operation: (target: MigrationTarget) => Promise<T>): Promise<T> {
+    return this.db.transaction().execute((transaction) =>
+      operation(new DatabaseMigrationTarget(transaction as unknown as AppDatabase)),
+    );
+  }
+
   async writeCanonicalRecord(input: CanonicalRecord): Promise<CanonicalWriteResult> {
     const values = mapCanonicalRecordToInsert(input);
     const db = this.db as unknown as DynamicMigrationDatabase;

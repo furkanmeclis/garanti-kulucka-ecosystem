@@ -119,6 +119,25 @@ describe("database migration target", () => {
     expect(result).toMatchObject({ runId: "run_2026_09", createdAt });
   });
 
+  it("runs target operations inside a Kysely transaction", async () => {
+    const transactionTarget = { marker: "transaction" };
+    const execute = vi.fn(async (callback: (transaction: unknown) => Promise<string>) =>
+      callback(transactionTarget),
+    );
+    const db = {
+      transaction: vi.fn(() => ({ execute })),
+    };
+
+    const result = await new DatabaseMigrationTarget(db as never).runInTransaction(async (target) => {
+      expect(target).toBeInstanceOf(DatabaseMigrationTarget);
+      return "transaction-result";
+    });
+
+    expect(result).toBe("transaction-result");
+    expect(db.transaction).toHaveBeenCalledOnce();
+    expect(execute).toHaveBeenCalledOnce();
+  });
+
   it("rejects blank migration run ids before touching the database", async () => {
     const db = {
       insertInto: vi.fn(),

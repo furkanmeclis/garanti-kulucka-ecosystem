@@ -101,19 +101,8 @@ export async function applyMigrationBatchWithState(
     return migrationBatchResultFromState(existing);
   }
 
-  await input.target.recordMigrationBatchStarted({
-    runId: input.runId,
-    batch: input.batch,
-  });
-
   try {
-    const result = await applyMigrationBatch(input);
-    await input.target.recordMigrationBatchSucceeded({
-      runId: input.runId,
-      batch: input.batch,
-      result,
-    });
-    return result;
+    return await runSuccessfulBatchApply(input);
   } catch (error) {
     const safeError = toSafeMigratorError(error);
     await input.target.recordMigrationBatchFailed({
@@ -123,6 +112,29 @@ export async function applyMigrationBatchWithState(
     });
     throw safeError;
   }
+}
+
+async function runSuccessfulBatchApply(
+  input: ApplyMigrationBatchWithStateInput,
+): Promise<MigrationBatchApplyResult> {
+  const operation = async (target: MigrationTarget) => {
+    await target.recordMigrationBatchStarted({
+      runId: input.runId,
+      batch: input.batch,
+    });
+
+    const result = await applyMigrationBatch({ ...input, target });
+    await target.recordMigrationBatchSucceeded({
+      runId: input.runId,
+      batch: input.batch,
+      result,
+    });
+    return result;
+  };
+
+  return input.target.runInTransaction
+    ? input.target.runInTransaction(operation)
+    : operation(input.target);
 }
 
 function migrationBatchResultFromState(state: {

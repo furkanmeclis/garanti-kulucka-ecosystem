@@ -179,6 +179,33 @@ class MemoryTarget implements MigrationTarget {
   }
 }
 
+class TransactionalMemoryTarget extends MemoryTarget {
+  transactionCalls = 0;
+  readonly transactionTarget = new MemoryTarget();
+
+  async runInTransaction<T>(operation: (target: MigrationTarget) => Promise<T>): Promise<T> {
+    this.transactionCalls += 1;
+    const result = await operation(this.transactionTarget);
+    for (const record of this.transactionTarget.writtenRecords) {
+      await this.writeCanonicalRecord(record);
+    }
+    for (const state of this.transactionTarget.batchStateEvents) {
+      this.batchStateEvents.push(state);
+    }
+    return result;
+  }
+}
+
+class RollbackMemoryTarget extends MemoryTarget {
+  transactionCalls = 0;
+  readonly transactionTarget = new MemoryTarget();
+
+  async runInTransaction<T>(operation: (target: MigrationTarget) => Promise<T>): Promise<T> {
+    this.transactionCalls += 1;
+    return operation(this.transactionTarget);
+  }
+}
+
 describe("migration foundation", () => {
   it("anchors the default entity plan to the canonical table catalog", async () => {
     const plan = await createMigrationPlan({
@@ -462,6 +489,50 @@ describe("migration foundation", () => {
     });
   });
 
+  it("runs successful apply writes and succeeded checkpoint through a target transaction", async () => {
+    const source = new FixtureSource(
+      { customers: 1 },
+      {
+        customers: [
+          {
+            sourceSystem: "legacy_supabase",
+            sourceTable: "customers",
+            sourceId: "10",
+            payload: { full_name: "Ada Lovelace" },
+            checksum: "sha256:ada",
+          },
+        ],
+      },
+    );
+    const target = new TransactionalMemoryTarget();
+
+    await expect(
+      applyMigrationBatchWithState({
+        runId: "run_2026_01_01",
+        source,
+        target,
+        batch: {
+          entity: "customers",
+          batchNumber: 1,
+          limit: 10,
+          offset: 0,
+          expectedRows: 1,
+        },
+      }),
+    ).resolves.toMatchObject({
+      readRows: 1,
+      writtenRows: 1,
+    });
+
+    expect(target.transactionCalls).toBe(1);
+    expect(target.batchStateEvents.map((state) => state.status)).toEqual(["running", "succeeded"]);
+    expect(target.writtenRecords).toEqual([
+      expect.objectContaining({
+        payload: { full_name: "Ada Lovelace" },
+      }),
+    ]);
+  });
+
   it("records failed batch state and rethrows the apply error", async () => {
     const source = new FixtureSource(
       { customers: 1 },
@@ -505,6 +576,61 @@ describe("migration foundation", () => {
       batchNumber: 1,
       errorMessage: "cannot map legacy customer",
     });
+  });
+
+  it("keeps transactional writes isolated when apply fails and records failure outside the transaction", async () => {
+    const source = new FixtureSource(
+      { customers: 2 },
+      {
+        customers: [
+          {
+            sourceSystem: "legacy_supabase",
+            sourceTable: "customers",
+            sourceId: "10",
+            payload: { full_name: "Ada Lovelace" },
+            checksum: "sha256:ada",
+          },
+          {
+            sourceSystem: "legacy_supabase",
+            sourceTable: "customers",
+            sourceId: "11",
+            payload: { full_name: "Grace Hopper" },
+            checksum: "sha256:grace",
+          },
+        ],
+      },
+    );
+    const target = new RollbackMemoryTarget();
+
+    await expect(
+      applyMigrationBatchWithState({
+        runId: "run_2026_01_01",
+        source,
+        target,
+        batch: {
+          entity: "customers",
+          batchNumber: 1,
+          limit: 10,
+          offset: 0,
+          expectedRows: 2,
+        },
+        transform: (record) => {
+          if (record.sourceId === "11") throw new Error("cannot map second customer");
+          return {
+            targetTable: "customers",
+            targetId: "cus_10",
+            payload: { full_name: "Ada Lovelace" },
+            checksum: "sha256:ada",
+          };
+        },
+      }),
+    ).rejects.toThrow("cannot map second customer");
+
+    expect(target.transactionCalls).toBe(1);
+    expect(target.writtenRecords).toEqual([]);
+    expect(target.batchStateEvents.map((state) => state.status)).toEqual(["failed"]);
+    expect(target.transactionTarget.writtenRecords).toHaveLength(1);
+    expect(target.transactionTarget.batchStateEvents.map((state) => state.status)).toEqual(["running"]);
   });
 
   it("marks a short-read batch failed before writing any target rows", async () => {

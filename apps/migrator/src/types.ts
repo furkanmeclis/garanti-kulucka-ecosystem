@@ -100,6 +100,7 @@ export interface BatchReadOptions {
 }
 
 export interface MigrationTarget {
+  runInTransaction?<T>(operation: (target: MigrationTarget) => Promise<T>): Promise<T>;
   writeCanonicalRecord(input: CanonicalRecord): Promise<CanonicalWriteResult>;
   findLegacyIdMap(input: LegacyIdMapKey): Promise<LegacyIdMapEntry | null>;
   upsertLegacyIdMap(input: LegacyIdMapWrite): Promise<LegacyIdMapEntry>;
