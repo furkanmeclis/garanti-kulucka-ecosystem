@@ -216,6 +216,28 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       return;
     }
 
+    if (url.pathname === "/api/shipments/shp_surat_playwright/status") {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          public_id: "shp_surat_playwright",
+          provider: "Sürat",
+          tracking_number: "TRK-SURAT-PLAYWRIGHT",
+          barcode_number: "BAR-SURAT-PLAYWRIGHT",
+          status: "delivered",
+          recipient_name: "Surat Playwright Customer",
+          recipient_phone: "5551111111",
+          recipient_city: "Ankara",
+          recipient_district: "Cankaya",
+          last_event_text: "Selected shipment delivered",
+          order_number: "ORD-SURAT-PLAYWRIGHT",
+          customer_full_name: "Surat Playwright Customer",
+          updated_at: "2026-01-01T00:02:00.000Z",
+        }),
+      });
+      return;
+    }
+
     if (url.pathname === "/api/shipments") {
       await route.fulfill({
         contentType: "application/json",
@@ -235,6 +257,21 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
               order_number: "ORD-PLAYWRIGHT",
               customer_full_name: "Playwright Customer",
               updated_at: "2026-01-01T00:00:00.000Z",
+            },
+            {
+              public_id: "shp_surat_playwright",
+              provider: "Sürat",
+              tracking_number: "TRK-SURAT-PLAYWRIGHT",
+              barcode_number: "BAR-SURAT-PLAYWRIGHT",
+              status: "in_transit",
+              recipient_name: "Surat Playwright Customer",
+              recipient_phone: "5551111111",
+              recipient_city: "Ankara",
+              recipient_district: "Cankaya",
+              last_event_text: "Selected shipment at branch",
+              order_number: "ORD-SURAT-PLAYWRIGHT",
+              customer_full_name: "Surat Playwright Customer",
+              updated_at: "2026-01-01T00:01:00.000Z",
             },
           ],
         }),
@@ -554,7 +591,11 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("balances-flow")).toContainText("admin settings");
     await expect(page.getByTestId("balances-detail")).toContainText("125.50 TRY");
     await expect(page.getByTestId("balances-detail")).toContainText("ORD-PLAYWRIGHT");
-    await page.goto(`${app.url}/sms`);
+    await expect(page.getByTestId("balance-payment-detail")).toContainText("Ödeme İsteği Kuyruğu");
+    await expect(page.getByTestId("balance-payment-detail")).toContainText("12.55 TRY");
+    await expect(page.getByTestId("balance-payment-detail")).toContainText("1 talep");
+    await expect(page.getByTestId("balance-payment-detail")).toContainText("Kullanılabilir bakiye");
+    await page.getByRole("link", { name: /^sms$/i }).click();
     await expect(page.getByTestId("sms-template-detail")).toContainText("Manuel SMS Şablonu");
     await expect(page.getByTestId("sms-template-detail")).toContainText("{musteri_adi}");
     await expect(page.getByTestId("sms-template-detail")).toContainText("Playwright Customer");
@@ -612,16 +653,24 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("shipments-flow")).toContainText("TRK-PLAYWRIGHT");
     await expect(page.getByTestId("shipments-flow")).toContainText("PTT Kargo");
     await expect(page.getByTestId("shipments-flow")).toContainText("Yoldaki Kargolar");
-    await expect(page.getByTestId("shipment-section-tabs")).toContainText("Tüm kargolar 1");
+    await expect(page.getByTestId("shipment-section-tabs")).toContainText("Tüm kargolar 2");
     await expect(page.getByTestId("shipment-section-tabs")).toContainText("PTT 1");
+    await expect(page.getByTestId("shipment-section-tabs")).toContainText("Sürat 1");
     await expect(page.getByTestId("shipment-detail")).toContainText("Accepted at branch");
     await expect(page.getByTestId("shipment-detail")).toContainText("Kadikoy / Istanbul");
     await expect(page.getByTestId("shipment-detail")).toContainText("BAR-PLAYWRIGHT");
     await expect(page.getByTestId("shipment-detail")).toContainText("ORD-PLAYWRIGHT");
+    await page.getByRole("button", { name: /trk-surat-playwright detay/i }).click();
+    await expect(page.getByTestId("shipment-detail")).toContainText("Selected shipment at branch");
+    await expect(page.getByTestId("shipment-detail")).toContainText("Cankaya / Ankara");
     await page.getByRole("button", { name: /teslim edildi yap/i }).click();
     await expect(page.getByTestId("shipments-flow")).toContainText("delivered");
-    await expect(page.getByTestId("shipment-detail")).toContainText("Frontend teslim kaniti");
+    await expect(page.getByTestId("shipment-detail")).toContainText("Selected shipment delivered");
     await expect(page.getByTestId("shipment-detail")).toContainText("delivered");
+    await page.getByRole("link", { name: /^sms$/i }).click();
+    await expect(page.getByTestId("sms-template-detail")).toContainText("Surat Playwright Customer");
+    await expect(page.getByTestId("sms-template-detail")).toContainText("TRK-SURAT-PLAYWRIGHT");
+    await expect(page.getByTestId("sms-confirmation-detail")).toContainText("5551111111");
     await page.getByRole("link", { name: /ayarlar/i }).click();
     await expect(page.getByTestId("admin-flow")).toContainText("webphone.enabled");
     await page.getByRole("button", { name: /ptt canlı modu aç/i }).click();
@@ -699,7 +748,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       "/admin/integrations/accounts/iac_instagram/tokens/access_token",
       "/api/orders",
       "/api/shipments",
-      "/api/shipments/shp_playwright/status",
+      "/api/shipments/shp_surat_playwright/status",
       "/admin/settings",
       "/admin/settings/sip_config",
       "/admin/settings/netgsm_teyit_ayarlar",

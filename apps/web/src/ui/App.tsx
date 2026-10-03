@@ -71,6 +71,14 @@ interface SipServerSettings {
   stun: string;
 }
 
+interface BalanceSummary {
+  totalCommission: number;
+  totalDeduction: number;
+  pendingPayment: number;
+  availableBalance: number;
+  pendingRequestCount: number;
+}
+
 interface NavigationItem {
   key: string;
   label: string;
@@ -137,6 +145,22 @@ function formatMoney(value: number, currency: string) {
 
 function formatPercent(numerator: number, denominator: number) {
   return denominator > 0 ? `%${Math.round((numerator / denominator) * 100)}` : "%0";
+}
+
+function balanceSummaryFromOrders(orders: OrderSummary[]): BalanceSummary {
+  const payableOrders = orders.filter((order) => !["cancelled", "returned"].includes(order.status));
+  const pendingOrders = payableOrders.filter((order) => order.confirmation_status === null);
+  const cancelledOrders = orders.filter((order) => ["cancelled", "returned"].includes(order.status));
+  const totalCommission = payableOrders.reduce((sum, order) => sum + moneyValue(order.total_amount) * 0.1, 0);
+  const totalDeduction = cancelledOrders.reduce((sum, order) => sum + moneyValue(order.total_amount) * 0.1, 0);
+  const pendingPayment = pendingOrders.reduce((sum, order) => sum + moneyValue(order.total_amount) * 0.1, 0);
+  return {
+    totalCommission,
+    totalDeduction,
+    pendingPayment,
+    availableBalance: Math.max(totalCommission - totalDeduction - pendingPayment, 0),
+    pendingRequestCount: pendingOrders.length,
+  };
 }
 
 function smsSegmentInfo(message: string) {
@@ -405,7 +429,7 @@ export function App() {
   }
 
   async function handleUpdateShipment() {
-    const shipment = data.shipments[0];
+    const shipment = selectedShipment;
     if (!shipment) return;
 
     setStatus("Kargo durumu backend API üzerinden güncelleniyor");
@@ -577,6 +601,7 @@ export function App() {
   const smsInfo = smsSegmentInfo(smsPreview);
   const orderCurrency = data.orders[0]?.currency ?? "TRY";
   const reportTotalAmount = data.orders.reduce((sum, order) => sum + moneyValue(order.total_amount), 0);
+  const balanceSummary = balanceSummaryFromOrders(data.orders);
   const activeOrderCount = data.orders.filter((order) => !["cancelled", "returned", "delivered"].includes(order.status)).length;
   const deliveredOrderCount = data.orders.filter((order) => order.status === "delivered").length;
   const deliveredShipmentCount = data.shipments.filter((shipment) => shipment.status === "delivered").length;
@@ -988,6 +1013,17 @@ export function App() {
                 ]}
               />
             </DetailPanel>
+            <DetailPanel title="Ödeme İsteği Kuyruğu" testId="balance-payment-detail">
+              <DataRows
+                rows={[
+                  ["Toplam komisyon", formatMoney(balanceSummary.totalCommission, orderCurrency), "legacy bakiye"],
+                  ["Kesinti", formatMoney(balanceSummary.totalDeduction, orderCurrency), "iptal/iade"],
+                  ["Bekleyen ödeme", formatMoney(balanceSummary.pendingPayment, orderCurrency), `${balanceSummary.pendingRequestCount} talep`],
+                  ["Kullanılabilir bakiye", formatMoney(balanceSummary.availableBalance, orderCurrency), "ödeme isteği sonrası"],
+                  ["Son ödeme isteği", selectedOrder?.order_number ?? "-", selectedOrder?.customer_full_name ?? "-"],
+                ]}
+              />
+            </DetailPanel>
           </FlowPanel>
         )}
 
@@ -1015,7 +1051,7 @@ export function App() {
                   ["Durum", netgsmSettings.aktif ? "aktif" : "kapalı", "admin settings"],
                   ["İlk arama", `${netgsmSettings.ilk_arama_dakika} dakika`, "sipariş sonrası"],
                   ["Maksimum deneme", `${netgsmSettings.max_deneme} kez`, `${netgsmSettings.deneme_arasi_dakika} dakika arayla`],
-                  ["Müşteri telefonu", data.shipments[0]?.recipient_phone ?? "-", "shipments API"],
+                  ["Müşteri telefonu", selectedShipment?.recipient_phone ?? "-", "shipments API"],
                 ]}
               />
               {netgsmSettings.aktif && (
