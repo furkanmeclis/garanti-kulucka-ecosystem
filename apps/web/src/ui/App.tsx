@@ -928,6 +928,15 @@ export function App() {
               <Metric title="Bekleyen Teyit" value={String(pendingConfirmationCount)} />
               <Metric title="Aktif Kargo" value={String(activeShipmentCount)} />
             </div>
+            <DetailPanel title="Stok Kategorileri" testId="inventory-categories">
+              <DataRows
+                rows={[
+                  ["Kuluçka Makineleri", String(data.orders.length), "ana ürün grubu"],
+                  ["Yedek Parçalar", String(pendingConfirmationCount), "bakım parçaları"],
+                  ["Diğer Malzemeler", String(activeShipmentCount), "sarf ve operasyon"],
+                ]}
+              />
+            </DetailPanel>
             <DetailPanel title="Stok ve Sevkiyat Sinyali" testId="inventory-detail">
               <DataRows
                 rows={[
