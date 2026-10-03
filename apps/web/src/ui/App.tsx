@@ -641,6 +641,16 @@ export function App() {
     const provider = shipment.provider.toLocaleLowerCase("tr-TR");
     return provider.includes("sürat") || provider.includes("surat");
   }).length;
+  const pttNotDeliveredCount = data.shipments.filter(
+    (shipment) => shipment.provider.toLowerCase().includes("ptt") && shipment.status !== "delivered",
+  ).length;
+  const suratNotDeliveredCount = data.shipments.filter((shipment) => {
+    const provider = shipment.provider.toLocaleLowerCase("tr-TR");
+    return (provider.includes("sürat") || provider.includes("surat")) && shipment.status !== "delivered";
+  }).length;
+  const trackingMissingCount = data.shipments.filter(
+    (shipment) => !shipment.tracking_number && !shipment.barcode_number,
+  ).length;
   const otherShipmentCount = Math.max(data.shipments.length - pttShipmentCount - suratShipmentCount, 0);
   const openConversationCount = data.conversations.filter((conversation) => conversation.status === "open").length;
 
@@ -820,6 +830,16 @@ export function App() {
             <button className="primary-action" type="button" onClick={handleUpdateShipment}>
               Teslim edildi yap
             </button>
+            <DetailPanel title="Kargo Filtre Özeti" testId="shipment-filter-summary">
+              <DataRows
+                rows={[
+                  ["Yeni", String(activeShipmentCount), "sevk/teslim bekliyor"],
+                  ["PTT Almayan", String(pttNotDeliveredCount), "legacy filtre"],
+                  ["Sürat Almayan", String(suratNotDeliveredCount), "legacy filtre"],
+                  ["Takip No Yok", String(trackingMissingCount), "barkod kontrol"],
+                ]}
+              />
+            </DetailPanel>
             <DataRows
               rows={data.shipments.map((shipment) => [
                 shipment.provider,

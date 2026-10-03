@@ -675,6 +675,10 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("shipment-section-tabs")).toContainText("Tüm kargolar 2");
     await expect(page.getByTestId("shipment-section-tabs")).toContainText("PTT 1");
     await expect(page.getByTestId("shipment-section-tabs")).toContainText("Sürat 1");
+    await expect(page.getByTestId("shipment-filter-summary")).toContainText("Yeni");
+    await expect(page.getByTestId("shipment-filter-summary")).toContainText("PTT Almayan");
+    await expect(page.getByTestId("shipment-filter-summary")).toContainText("Sürat Almayan");
+    await expect(page.getByTestId("shipment-filter-summary")).toContainText("Takip No Yok");
     await expect(page.getByTestId("shipment-detail")).toContainText("Accepted at branch");
     await expect(page.getByTestId("shipment-detail")).toContainText("Kadikoy / Istanbul");
     await expect(page.getByTestId("shipment-detail")).toContainText("BAR-PLAYWRIGHT");
