@@ -6,11 +6,11 @@ Bu belge, projeye yeni bir sohbetten veya bağlamsız bir çalışma oturumundan
 
 - Repo: `/Users/furkanmeclis/Documents/Projects/garanti-kulucka-ecosystem`
 - GitHub çalışma modeli: monorepo, yalnız `main`, PR yok.
-- Yayımlanmış son checkpoint: `v0.1.165`
-- Yayımlanmış son commit: `7e94d5f64b28673527c1c2d38a1596996b910a19`
-- Commit mesajı: `test(web): prove role filtered navigation`
+- Yayımlanmış son checkpoint: `v0.1.167`
+- Yayımlanmış son commit: `2056fb5b4468d80924da71b5d1b6cda4001edc62`
+- Commit mesajı: `test(web): wait for role login before route restore`
 - Genel ilerleme: yaklaşık `%85`
-- Son tamamlanan çalışma: P5 backend-driven frontend shell checkpoint'i; auth/public route parity, legacy route surfaces, backend API-driven inbox/messages/orders/shipments/admin/file upload/webphone akışları ve role-filtered navigation browser E2E kanıtı yayımlandı.
+- Son tamamlanan çalışma: P5 backend-driven frontend shell checkpoint'i; auth/public route parity, legacy route surfaces, backend API-driven inbox/messages/orders/shipments/admin/file upload/webphone akışları, backend-owned presence toggle ve role-filtered navigation browser E2E kanıtı yayımlandı.
 - Sıradaki bağımlılık kapısı production apply prerequisites'tır: customer address ve external identity fan-out write path'leri, public-id-to-FK resolution, account snapshot enforcement, multi-record customer writer ve per-target `legacy_id_map.mapping_role` semantiği executable hale getirilmelidir. P5 frontend shell migration artık backend-driven kritik akışları kanıtlar; full legacy page visual parity, live provider adapters, object storage operations ve production operations runbooks kendi kapılarında devam eder.
 - Production `migrate --apply` kapısı kapalıdır. Tüm aktivasyon koşulları geçmeden açılmamalıdır.
 
@@ -379,13 +379,14 @@ Yayımlanan kanıt:
 - `v0.1.163` ile legacy navigation surface route'ları eklendi.
 - `v0.1.164` ile `/giris`, `/sifre-sifirla`, `/gizlilik-politikasi`, `/kullanim-kosullari` ve `/veri-silme` route'ları backend shell içinde geri geldi.
 - `v0.1.165` ile role-filtered navigation `admin` ve `kargo_operatoru` browser E2E üzerinden kanıtlandı. GitHub Actions run `37128356266`, tag `v0.1.165`, artifact `container-images-v0.1.165`, `411103422` byte, expired değil.
+- `v0.1.167` ile legacy personel/kargo çevrimiçi-çevrimdışı davranışı backend-owned `/auth/presence` sınırına taşındı; auth serialization `is_online` döndürür, logout offline'a çeker, admin topbar toggle görmez, `kargo_operatoru` toggle browser E2E ile kanıtlanır. GitHub Actions run `37129351973`, tag `v0.1.167`, artifact `container-images-v0.1.167`, `411118295` byte, expired değil.
 
 İş sırası:
 
 1. Kalan legacy sayfaları ve detay ekranlarını görsel davranışı koruyarak `apps/web` içine al; mevcut shell tamamlanan route yüzeyi olarak korunur.
 2. Production Nginx/web container sunumu CI artifact içinde doğrulanır; release hattı yeşil kalmalıdır.
 3. Supabase auth/table/storage/channel kullanımı kritik akışlarda backend auth/domain API/presigned S3/Socket.IO ile değiştirildi; kalan legacy sayfa portlarında aynı kural korunmalıdır.
-4. Login, inbox, conversation/message send, order, shipment, admin, file upload ve webphone ekranları backend'e bağlıdır; integration account UI ve detay ekran parity işleri kalır.
+4. Login, inbox, conversation/message send, order, shipment, admin, file upload, webphone ve personel presence ekran davranışları backend'e bağlıdır; integration account UI ve detay ekran parity işleri kalır.
 5. Repo genelinde doğrudan Supabase importu, URL’si, SDK kullanımı ve channel çağrısı kalmadığını guard ile kanıtlamaya devam et.
 6. Legacy ve yeni uygulama arasında kritik ekran görsel regresyon testleri oluştur.
 
