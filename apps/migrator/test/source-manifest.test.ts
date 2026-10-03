@@ -3,6 +3,7 @@ import {
   assertResumeManifestMatches,
   calculateSourceManifestHash,
   createSourceManifest,
+  createSourceRowContentChecksum,
   registerMigrationRun,
 } from "../src/source-manifest.js";
 import type { MigrationPlan, MigrationTarget, SourceManifest } from "../src/types.js";
@@ -16,6 +17,25 @@ describe("source migration manifest", () => {
     expect(first.planFingerprint).toMatch(/^sha256:[a-f0-9]{64}$/);
     expect(first.sourceManifestHash).toMatch(/^sha256:[a-f0-9]{64}$/);
     expect(first.tables[0]?.columns.map((column) => column.name)).toEqual(["id", "full_name"]);
+  });
+
+  it("creates deterministic source row-content checksums without exposing payload data", () => {
+    const first = createSourceRowContentChecksum("customers", [
+      legacyRecord("2", "sha256:grace"),
+      legacyRecord("1", "sha256:ada"),
+    ]);
+    const second = createSourceRowContentChecksum("customers", [
+      legacyRecord("1", "sha256:ada"),
+      legacyRecord("2", "sha256:grace"),
+    ]);
+
+    expect(first).toEqual(second);
+    expect(first).toEqual({
+      entity: "customers",
+      rows: 2,
+      checksum: expect.stringMatching(/^sha256:[a-f0-9]{64}$/),
+    });
+    expect(JSON.stringify(first)).not.toContain("Ada Lovelace");
   });
 
   it.each([
@@ -62,6 +82,21 @@ describe("source migration manifest", () => {
     expect(calculateSourceManifestHash(requested)).toBe(requested.sourceManifestHash);
   });
 
+  it("rejects resume when source row-content checksums change", () => {
+    const persisted = createSourceManifest({
+      ...manifestInput(),
+      rowContentChecksums: [createSourceRowContentChecksum("customers", [legacyRecord("1", "sha256:ada")])],
+    });
+    const requested = createSourceManifest({
+      ...manifestInput(),
+      rowContentChecksums: [createSourceRowContentChecksum("customers", [legacyRecord("1", "sha256:changed")])],
+    });
+
+    expect(() => assertResumeManifestMatches("run_2026_09", persisted, requested)).toThrow(
+      "row content checksums",
+    );
+  });
+
   it.each(["", "   ", "\t\n"])("rejects a blank migration run id %j", async (runId) => {
     const target = {
       registerMigrationRun: async () => {
@@ -101,5 +136,15 @@ function manifestInput(options: { reverseColumns?: boolean } = {}) {
     }],
     plan,
     mappingCatalogVersion: "p1-foundation-v1",
+  };
+}
+
+function legacyRecord(sourceId: string, checksum: string) {
+  return {
+    sourceSystem: "legacy_postgres",
+    sourceTable: "public.musteriler",
+    sourceId,
+    payload: { id: sourceId, full_name: "Ada Lovelace" },
+    checksum,
   };
 }

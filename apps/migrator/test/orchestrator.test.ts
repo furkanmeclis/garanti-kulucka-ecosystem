@@ -599,8 +599,35 @@ describe("customer dry-run validation", () => {
       unresolvedIdentities: 2,
       nameFallbackWarnings: 1,
     });
+    expect(result.sourceManifest.rowContentChecksums).toEqual([{
+      entity: "customers",
+      rows: 3,
+      checksum: expect.stringMatching(/^sha256:[a-f0-9]{64}$/),
+    }]);
     expect(result.dryRunReport?.totals).toEqual({ plannedRows: 3, plannedBatches: 2, blockedRows: 0 });
     expect(result.batches).toEqual([]);
+  });
+
+  it("binds the dry-run source manifest to row payload content checksums", async () => {
+    const unchanged = await customerDryRun(new LegacyCustomerSource(legacyCustomerRows), verifiedAccounts);
+    const changedRows = [
+      legacyCustomerRow("0a32ce63-4c3b-4fd4-917d-726d540a7216", {
+        telefon: "ig_ada.lovelace",
+        woocommerce_id: 101,
+        kolaybi_id: "kb-1",
+        adres: "Bağdat Caddesi 1",
+      }),
+      legacyCustomerRows[1]!,
+      legacyCustomerRows[2]!,
+    ];
+
+    const changed = await customerDryRun(new LegacyCustomerSource(changedRows), verifiedAccounts);
+
+    expect(changed.plan.totalRows).toBe(unchanged.plan.totalRows);
+    expect(changed.sourceManifest.tables).toEqual(unchanged.sourceManifest.tables);
+    expect(changed.sourceManifest.rowCounts).toEqual(unchanged.sourceManifest.rowCounts);
+    expect(changed.sourceManifest.rowContentChecksums).not.toEqual(unchanged.sourceManifest.rowContentChecksums);
+    expect(changed.sourceManifest.sourceManifestHash).not.toBe(unchanged.sourceManifest.sourceManifestHash);
   });
 
   it("leaves every identity candidate unresolved when no accounts are supplied", async () => {

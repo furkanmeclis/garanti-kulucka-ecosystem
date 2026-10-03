@@ -82,11 +82,18 @@ export interface SourceEntityRowCount {
   readonly rows: number;
 }
 
+export interface SourceEntityRowContentChecksum {
+  readonly entity: MigrationEntity;
+  readonly rows: number;
+  readonly checksum: string;
+}
+
 export interface SourceManifest {
   readonly sourceSystem: string;
   readonly databaseIdentity: SourceDatabaseIdentity;
   readonly tables: SourceTableSnapshot[];
   readonly rowCounts: SourceEntityRowCount[];
+  readonly rowContentChecksums?: SourceEntityRowContentChecksum[];
   readonly batchSize: number;
   readonly mappingCatalogVersion: string;
   readonly planFingerprint: string;

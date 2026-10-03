@@ -28,7 +28,7 @@ import {
   validateLegacySourceSnapshots,
   type LegacyMappingCatalog,
 } from "./mapping-catalog.js";
-import { createSourceManifest } from "./source-manifest.js";
+import { createSourceManifest, createSourceRowContentChecksum } from "./source-manifest.js";
 import type {
   ConversationTransformSummary,
   CustomerTransformSummary,
@@ -127,20 +127,15 @@ export async function runMigration(input: RunMigrationInput): Promise<MigrationR
     entities,
     ...(input.now ? { now: input.now } : {}),
   });
-  const sourceManifest = createSourceManifest({
-    sourceSystem: input.sourceSystem,
-    databaseIdentity: input.sourceDatabaseIdentity,
-    tables,
-    plan,
-    mappingCatalogVersion: catalog.version,
-  });
 
   if (input.mode === "dry-run") {
+    const rowContentRecords = createRowContentRecordMap(entities);
+    const source = trackSourceRowContent(input.source, rowContentRecords);
     const customers = validateCustomerRows
-      ? await validateCustomerBatches(input.source, plan, integrationAccounts)
+      ? await validateCustomerBatches(source, plan, integrationAccounts)
       : undefined;
     const conversations = validateConversationRows
-      ? await validateConversationBatches(input.source, plan, {
+      ? await validateConversationBatches(source, plan, {
         customerPublicIds: requireDependencyPublicIds(customers, "Conversation", "customers"),
         userPublicIds,
         accounts: conversationAccounts,
@@ -148,23 +143,23 @@ export async function runMigration(input: RunMigrationInput): Promise<MigrationR
       : undefined;
     const messageTransform = validateMessageRows
       ? await validateMessageBatches(
-        input.source,
+        source,
         plan,
         requireDependencyPublicIds(conversations, "Message", "conversations"),
       )
       : undefined;
     const productTransform = validateProductRows
-      ? await validateProductBatches(input.source, plan)
+      ? await validateProductBatches(source, plan)
       : undefined;
     const orders = validateOrderRows
-      ? await validateOrderBatches(input.source, plan, {
+      ? await validateOrderBatches(source, plan, {
         customerPublicIds: requireDependencyPublicIds(customers, "Order", "customers"),
         conversationPublicIds: conversations?.publicIds ?? new Map(),
         userPublicIds,
       })
       : undefined;
     const orderItemTransform = validateOrderItemRows
-      ? await validateOrderItemBatches(input.source, plan, {
+      ? await validateOrderItemBatches(source, plan, {
         orderPublicIds: requireDependencyPublicIds(orders, "Order item", "orders"),
         productPublicIdsBySku: requireProductDependency(productTransform).publicIdsBySku,
         productPublicIdsByExternalId: requireProductDependency(productTransform).publicIdsByExternalProductId,
@@ -172,11 +167,19 @@ export async function runMigration(input: RunMigrationInput): Promise<MigrationR
       : undefined;
     const shipmentTransform = validateShipmentRows
       ? await validateShipmentBatches(
-        input.source,
+        source,
         plan,
         requireDependencyPublicIds(customers, "Shipment", "customers"),
       )
       : undefined;
+    const sourceManifest = createSourceManifest({
+      sourceSystem: input.sourceSystem,
+      databaseIdentity: input.sourceDatabaseIdentity,
+      tables,
+      plan,
+      mappingCatalogVersion: catalog.version,
+      rowContentChecksums: createRowContentChecksums(entities, rowContentRecords),
+    });
     return {
       mode: input.mode,
       plan,
@@ -197,6 +200,34 @@ export async function runMigration(input: RunMigrationInput): Promise<MigrationR
   }
 
   throw new Error("Apply mode is unavailable until the mapping catalog declares apply-ready transforms");
+}
+
+function createRowContentRecordMap(
+  entities: readonly MigrationEntity[],
+): Map<MigrationEntity, LegacyRecord[]> {
+  return new Map(entities.map((entity) => [entity, []]));
+}
+
+function trackSourceRowContent(
+  source: LegacySource,
+  recordsByEntity: Map<MigrationEntity, LegacyRecord[]>,
+): LegacySource {
+  return {
+    count: (entity) => source.count(entity),
+    describeTables: (entities) => source.describeTables(entities),
+    readBatch: async (entity, options) => {
+      const records = await source.readBatch(entity, options);
+      recordsByEntity.get(entity)?.push(...records);
+      return records;
+    },
+  };
+}
+
+function createRowContentChecksums(
+  entities: readonly MigrationEntity[],
+  recordsByEntity: ReadonlyMap<MigrationEntity, readonly LegacyRecord[]>,
+) {
+  return entities.map((entity) => createSourceRowContentChecksum(entity, recordsByEntity.get(entity) ?? []));
 }
 
 interface ValidatedBatches<TSummary> {

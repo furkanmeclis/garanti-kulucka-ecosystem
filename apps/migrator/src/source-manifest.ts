@@ -1,9 +1,12 @@
 import { createHash } from "node:crypto";
 import type {
+  LegacyRecord,
   MigrationPlan,
+  MigrationEntity,
   MigrationRunState,
   MigrationTarget,
   SourceDatabaseIdentity,
+  SourceEntityRowContentChecksum,
   SourceManifest,
   SourceTableSnapshot,
 } from "./types.js";
@@ -14,6 +17,7 @@ export interface CreateSourceManifestInput {
   readonly tables: SourceTableSnapshot[];
   readonly plan: MigrationPlan;
   readonly mappingCatalogVersion: string;
+  readonly rowContentChecksums?: readonly SourceEntityRowContentChecksum[];
 }
 
 export function createSourceManifest(input: CreateSourceManifestInput): SourceManifest {
@@ -38,17 +42,23 @@ export function createSourceManifest(input: CreateSourceManifestInput): SourceMa
   const rowCounts = [...input.plan.entities]
     .map(({ entity, totalRows }) => ({ entity, rows: totalRows }))
     .sort((left, right) => compareStrings(left.entity, right.entity));
-  const planFingerprint = hashCanonical({
+  const rowContentChecksums = input.rowContentChecksums === undefined
+    ? undefined
+    : normalizeRowContentChecksums(input.rowContentChecksums);
+  const planFingerprintInput = {
     batchSize: input.plan.batchSize,
     mappingCatalogVersion: catalogVersion,
     entities: input.plan.entities,
     batches: input.plan.batches,
-  });
+    ...(rowContentChecksums ? { rowContentChecksums } : {}),
+  };
+  const planFingerprint = hashCanonical(planFingerprintInput);
   const manifestWithoutHash = {
     sourceSystem,
     databaseIdentity: input.databaseIdentity,
     tables,
     rowCounts,
+    ...(rowContentChecksums ? { rowContentChecksums } : {}),
     batchSize: input.plan.batchSize,
     mappingCatalogVersion: catalogVersion,
     planFingerprint,
@@ -58,6 +68,30 @@ export function createSourceManifest(input: CreateSourceManifestInput): SourceMa
     ...manifestWithoutHash,
     sourceManifestHash: hashCanonical(manifestWithoutHash),
   };
+}
+
+export function createSourceRowContentChecksum(
+  entity: MigrationEntity,
+  records: readonly LegacyRecord[],
+): SourceEntityRowContentChecksum {
+  const seenSourceIds = new Set<string>();
+  const rows = records
+    .map((record) => {
+      const sourceId = record.sourceId.trim();
+      if (!sourceId) throw new Error(`Source row content checksum for ${entity} received a blank source id`);
+      if (seenSourceIds.has(sourceId)) {
+        throw new Error(`Source row content checksum for ${entity} received duplicate source id ${sourceId}`);
+      }
+      seenSourceIds.add(sourceId);
+      return { sourceId, checksum: record.checksum };
+    })
+    .sort((left, right) => compareStrings(left.sourceId, right.sourceId));
+
+  return Object.freeze({
+    entity,
+    rows: rows.length,
+    checksum: hashCanonical({ entity, rows }),
+  });
 }
 
 function assertTableSnapshotCoverage(tables: SourceTableSnapshot[], plan: MigrationPlan): void {
@@ -108,6 +142,9 @@ export function assertResumeManifestMatches(
   if (persisted.sourceSystem !== requested.sourceSystem) mismatches.push("source system identity");
   if (canonicalJson(persisted.tables) !== canonicalJson(requested.tables)) mismatches.push("table snapshot");
   if (canonicalJson(persisted.rowCounts) !== canonicalJson(requested.rowCounts)) mismatches.push("row counts");
+  if (canonicalJson(optionalRowContentChecksums(persisted)) !== canonicalJson(optionalRowContentChecksums(requested))) {
+    mismatches.push("row content checksums");
+  }
   if (persisted.mappingCatalogVersion !== requested.mappingCatalogVersion) mismatches.push("mapping catalog version");
   if (persisted.batchSize !== requested.batchSize) mismatches.push("batch size");
   if (persisted.planFingerprint !== requested.planFingerprint) mismatches.push("plan fingerprint");
@@ -124,10 +161,33 @@ export function calculateSourceManifestHash(manifest: Omit<SourceManifest, "sour
     databaseIdentity: manifest.databaseIdentity,
     tables: manifest.tables,
     rowCounts: manifest.rowCounts,
+    ...(manifest.rowContentChecksums === undefined
+      ? {}
+      : { rowContentChecksums: normalizeRowContentChecksums(manifest.rowContentChecksums) }),
     batchSize: manifest.batchSize,
     mappingCatalogVersion: manifest.mappingCatalogVersion,
     planFingerprint: manifest.planFingerprint,
   });
+}
+
+function optionalRowContentChecksums(
+  manifest: SourceManifest,
+): SourceEntityRowContentChecksum[] | undefined {
+  return manifest.rowContentChecksums === undefined
+    ? undefined
+    : normalizeRowContentChecksums(manifest.rowContentChecksums);
+}
+
+function normalizeRowContentChecksums(
+  checksums: readonly SourceEntityRowContentChecksum[],
+): SourceEntityRowContentChecksum[] {
+  return [...checksums]
+    .map((checksum) => Object.freeze({
+      entity: checksum.entity,
+      rows: checksum.rows,
+      checksum: checksum.checksum,
+    }))
+    .sort((left, right) => compareStrings(left.entity, right.entity));
 }
 
 function hashCanonical(value: unknown): string {
