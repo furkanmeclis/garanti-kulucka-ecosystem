@@ -6,11 +6,11 @@ Bu belge, projeye yeni bir sohbetten veya bağlamsız bir çalışma oturumundan
 
 - Repo: `/Users/furkanmeclis/Documents/Projects/garanti-kulucka-ecosystem`
 - GitHub çalışma modeli: monorepo, yalnız `main`, PR yok.
-- Yayımlanmış son checkpoint: `v0.1.193`
-- Yayımlanmış son commit: `b261ffa10befe71ddc9d1b33f445f56d76d377a0`
-- Commit mesajı: `feat(web): add balance and vapi detail surfaces`
+- Yayımlanmış son checkpoint: `v0.1.195`
+- Yayımlanmış son commit: `d757b6304961b07feed64e103cf894b144a32d02`
+- Commit mesajı: `test(web): expand visual frame coverage`
 - Genel ilerleme: yaklaşık `%85`
-- Son tamamlanan çalışma: P5 backend-driven frontend shell checkpoint'i; auth/public route parity, legacy route surfaces, backend API-driven inbox/messages/orders/shipments/admin/file upload/webphone akışları, selectable conversation detail, comments moderation detail, cancellation review detail, inventory signal detail, balances detail, VAPI AI detail, selected order ve shipment detail panelleri, reports KPI/detail surface, NetGSM SMS confirmation settings write flow, SIP/santral config settings write flow, backend-owned presence toggle, role-filtered navigation, admin integration-account list/upsert/detail/settings/token masking route'ları ve desktop/mobile legacy visual frame smoke browser E2E kanıtıyla yayımlandı.
+- Son tamamlanan çalışma: P5 backend-driven frontend shell checkpoint'i; auth/public route parity, legacy route surfaces, backend API-driven inbox/messages/orders/shipments/admin/file upload/webphone akışları, selectable conversation detail, comments moderation detail, cancellation review detail, inventory signal detail, balances detail, VAPI AI detail, selected order ve shipment detail panelleri, reports KPI/detail surface, NetGSM SMS confirmation settings write flow, SIP/santral config settings write flow, backend-owned presence toggle, role-filtered navigation, admin integration-account list/upsert/detail/settings/token masking route'ları ve tüm admin route yüzeyleri için desktop/mobile visual frame browser E2E kanıtıyla yayımlandı.
 - Sıradaki bağımlılık kapısı production apply prerequisites'tır: customer address ve external identity fan-out write path'leri, public-id-to-FK resolution, account snapshot enforcement, multi-record customer writer ve per-target `legacy_id_map.mapping_role` semantiği executable hale getirilmelidir. P5 frontend shell migration artık backend-driven kritik akışları kanıtlar; full legacy page visual parity, live provider adapters, object storage operations ve production operations runbooks kendi kapılarında devam eder.
 - Production `migrate --apply` kapısı kapalıdır. Tüm aktivasyon koşulları geçmeden açılmamalıdır.
 
@@ -393,6 +393,7 @@ Yayımlanan kanıt:
 - `v0.1.189` ile İptaller yüzeyine backend order summary verilerinden iptal inceleme detayı eklendi; browser E2E sipariş numarası, müşteri ve notun Supabase kullanmadan render edildiğini kanıtlar. GitHub Actions run `37136979553`, tag `v0.1.189`, artifact `container-images-v0.1.189`, `411093213` byte, expired değil.
 - `v0.1.191` ile Stoklar yüzeyine backend order/shipment summary verilerinden stok ve sevkiyat sinyal detayı eklendi; browser E2E sipariş numarası, müşteri ve sevkiyat bağlı durumunu Supabase kullanmadan render edildiğini kanıtlar. GitHub Actions run `37137588211`, tag `v0.1.191`, artifact `container-images-v0.1.191`, `411113406` byte, expired değil.
 - `v0.1.193` ile Bakiyeler ve VAPI AI yüzeylerine backend order/settings ve webphone/settings verilerinden detay panelleri eklendi; browser E2E bakiye tutarı, sipariş numarası, SIP domain, SIP kullanıcı ve model ayarı sınırını Supabase kullanmadan render edildiğini kanıtlar. `LegacySurfacePanel` helper'ı `apps/web` içinden tamamen kaldırıldı. GitHub Actions run `37138248828`, tag `v0.1.193`, artifact `container-images-v0.1.193`, `411103327` byte, expired değil.
+- `v0.1.195` ile desktop/mobile visual frame browser E2E kapsamı tüm admin route yüzeylerine genişletildi; inbox, yorumlar, siparişler, kargo, iptaller, stok, bakiye, SMS, arama, VAPI AI, raporlar, entegrasyonlar, ayarlar, dosya ve santral ekranları panel boyutu, topbar overlap, yatay taşma ve nav collapse açısından doğrulanır. GitHub Actions run `37138891993`, tag `v0.1.195`, artifact `container-images-v0.1.195`, `411115579` byte, expired değil.
 
 İş sırası:
 
@@ -401,7 +402,7 @@ Yayımlanan kanıt:
 3. Supabase auth/table/storage/channel kullanımı kritik akışlarda backend auth/domain API/presigned S3/Socket.IO ile değiştirildi; kalan legacy sayfa portlarında aynı kural korunmalıdır.
 4. Login, inbox conversation summary/detail, comments moderation detail, cancellation review detail, inventory signal detail, balances detail, VAPI AI detail, conversation/message send, order summary/detail, shipment summary/detail, reports KPI/detail, admin, NetGSM SMS settings, SIP config settings, integration account list/upsert/detail/settings/token masking, file upload, webphone ve personel presence ekran davranışları backend'e bağlıdır; `LegacySurfacePanel` kaldırılmıştır. Kalan iş gerçek legacy sayfa/detay görsel davranış parity'sini genişletmektir.
 5. Repo genelinde doğrudan Supabase importu, URL’si, SDK kullanımı ve channel çağrısı kalmadığını guard ile kanıtlamaya devam et.
-6. Legacy ve yeni uygulama arasında kritik ekran görsel regresyon kapsamını genişlet; mevcut `v0.1.175` smoke kapısı desktop/mobile frame stabilitesini kanıtlar, birebir eski ekran karşılaştırması hâlâ genişletilecek alandır.
+6. Legacy ve yeni uygulama arasında kritik ekran görsel regresyon kapsamını genişlet; `v0.1.195` ile tüm admin route yüzeyleri desktop/mobile frame stabilitesini kanıtlar, birebir eski ekran karşılaştırması hâlâ genişletilecek alandır.
 
 Kabul kapısı: web container `/` adresinde gerçek uygulamayı döndürmeli; mevcut müşteri akışları görsel ve davranışsal olarak korunmalı; E2E browser testleri UI üzerinden çalışmalıdır.
 
