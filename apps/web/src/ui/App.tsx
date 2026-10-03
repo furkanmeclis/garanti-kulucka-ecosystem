@@ -886,15 +886,23 @@ export function App() {
         )}
 
         {activeFlow === "balances" && (
-          <LegacySurfacePanel
-            title="Bakiyeler"
-            icon={<Wallet size={18} />}
-            testId="balances-flow"
-            rows={[
-              ["Görünür ayar", String(activeSettings.length), "admin settings"],
-              ["Para birimi", data.orders[0]?.currency ?? "TRY", "orders API"],
-            ]}
-          />
+          <FlowPanel title="Bakiyeler" icon={<Wallet size={18} />} testId="balances-flow">
+            <div className="report-grid">
+              <Metric title="Görünür Ayar" value={String(activeSettings.length)} />
+              <Metric title="Sipariş Tutarı" value={formatMoney(reportTotalAmount, orderCurrency)} />
+              <Metric title="Para Birimi" value={orderCurrency} />
+            </div>
+            <DetailPanel title="Bakiye Özeti" testId="balances-detail">
+              <DataRows
+                rows={[
+                  ["Görünür ayar", String(activeSettings.length), "admin settings"],
+                  ["Para birimi", orderCurrency, "orders API"],
+                  ["Son sipariş", selectedOrder?.order_number ?? "-", selectedOrder ? `${selectedOrder.total_amount} ${selectedOrder.currency}` : "-"],
+                  ["Teyit bekleyen", String(pendingConfirmationCount), "orders API"],
+                ]}
+              />
+            </DetailPanel>
+          </FlowPanel>
         )}
 
         {activeFlow === "sms" && (
@@ -941,15 +949,18 @@ export function App() {
         )}
 
         {activeFlow === "vapi" && (
-          <LegacySurfacePanel
-            title="VAPI AI"
-            icon={<Bot size={18} />}
-            testId="vapi-flow"
-            rows={[
-              ["SIP sınırı", data.webphone?.enabled ? "aktif" : "kapalı", "webphone API"],
-              ["Model ayarı", activeSettings.find((setting) => setting.key.includes("ai"))?.key ?? "admin setting bekliyor", "settings API"],
-            ]}
-          />
+          <FlowPanel title="VAPI AI" icon={<Bot size={18} />} testId="vapi-flow">
+            <DetailPanel title="AI ve SIP Sınırı" testId="vapi-detail">
+              <DataRows
+                rows={[
+                  ["SIP sınırı", data.webphone?.enabled ? "aktif" : "kapalı", "webphone API"],
+                  ["SIP domain", data.webphone?.sip_domain ?? "-", data.webphone?.transport ?? "-"],
+                  ["Kullanıcı", data.webphone?.sip_username ?? user?.sip_username ?? "-", "webphone API"],
+                  ["Model ayarı", activeSettings.find((setting) => setting.key.includes("ai"))?.key ?? "admin setting bekliyor", "settings API"],
+                ]}
+              />
+            </DetailPanel>
+          </FlowPanel>
         )}
 
         {activeFlow === "reports" && (
@@ -1096,15 +1107,6 @@ function ResetPasswordScreen() {
         )}
       </form>
     </main>
-  );
-}
-
-function LegacySurfacePanel(props: { title: string; icon: ReactNode; testId: string; rows: string[][] }) {
-  return (
-    <FlowPanel title={props.title} icon={props.icon} testId={props.testId}>
-      <p className="result-line">Legacy müşteri route davranışı backend shell içinde korunuyor.</p>
-      <DataRows rows={props.rows} />
-    </FlowPanel>
   );
 }
 

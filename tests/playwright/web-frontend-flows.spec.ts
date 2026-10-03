@@ -549,6 +549,8 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("inventory-detail")).toContainText("sevkiyat bağlı");
     await page.goto(`${app.url}/bakiye`);
     await expect(page.getByTestId("balances-flow")).toContainText("admin settings");
+    await expect(page.getByTestId("balances-detail")).toContainText("125.50 TRY");
+    await expect(page.getByTestId("balances-detail")).toContainText("ORD-PLAYWRIGHT");
     await page.goto(`${app.url}/sms`);
     await expect(page.getByTestId("sms-confirmation-detail")).toContainText("kapalı");
     await expect(page.getByTestId("sms-confirmation-detail")).toContainText("5550000000");
@@ -562,6 +564,9 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("sip-config-detail")).toContainText("sip.example.com");
     await page.goto(`${app.url}/sesli-asistan/vapi`);
     await expect(page.getByTestId("vapi-flow")).toContainText("webphone API");
+    await expect(page.getByTestId("vapi-detail")).toContainText("sip.example.com");
+    await expect(page.getByTestId("vapi-detail")).toContainText("1001");
+    await expect(page.getByTestId("vapi-detail")).toContainText("admin setting bekliyor");
     await page.goto(`${app.url}/raporlar`);
     await expect(page.getByTestId("reports-flow")).toContainText("125.50 TRY");
     await expect(page.getByTestId("reports-detail")).toContainText("Açık konuşma");
