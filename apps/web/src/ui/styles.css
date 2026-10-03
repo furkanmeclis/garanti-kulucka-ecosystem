@@ -328,6 +328,11 @@ nav {
   color: #e2e8f0;
 }
 
+.detail-note {
+  margin: 0;
+  color: #86efac;
+}
+
 .integration-detail p {
   color: #94a3b8;
 }

@@ -47,6 +47,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
   let currentUser = loginUser();
   let savedIntegrationToken = false;
   let savedIntegrationSetting = false;
+  let savedNetgsmSetting = false;
 
   await page.route(`${backendBaseUrl}/**`, async (route) => {
     const url = new URL(route.request().url());
@@ -252,7 +253,40 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
               is_secret: false,
               updated_at: "2026-01-01T00:00:00.000Z",
             },
+            {
+              key: "netgsm_teyit_ayarlar",
+              scope: "global",
+              value: {
+                aktif: savedNetgsmSetting,
+                ilk_arama_dakika: 5,
+                max_deneme: 3,
+                deneme_arasi_dakika: 10,
+              },
+              is_secret: false,
+              updated_at: "2026-01-01T00:00:00.000Z",
+            },
           ],
+        }),
+      });
+      return;
+    }
+
+    if (url.pathname === "/admin/settings/netgsm_teyit_ayarlar") {
+      expect(route.request().method()).toBe("PUT");
+      savedNetgsmSetting = true;
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          key: "netgsm_teyit_ayarlar",
+          scope: "global",
+          value: {
+            aktif: true,
+            ilk_arama_dakika: 5,
+            max_deneme: 3,
+            deneme_arasi_dakika: 10,
+          },
+          is_secret: false,
+          updated_at: "2026-01-01T00:03:00.000Z",
         }),
       });
       return;
@@ -475,7 +509,11 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await page.goto(`${app.url}/bakiye`);
     await expect(page.getByTestId("balances-flow")).toContainText("admin settings");
     await page.goto(`${app.url}/sms`);
-    await expect(page.getByTestId("sms-flow")).toContainText("shipments API");
+    await expect(page.getByTestId("sms-confirmation-detail")).toContainText("kapalı");
+    await expect(page.getByTestId("sms-confirmation-detail")).toContainText("5550000000");
+    await page.getByRole("button", { name: /netgsm teyit ayarını kaydet/i }).click();
+    await expect(page.getByTestId("sms-confirmation-detail")).toContainText("aktif");
+    await expect(page.getByTestId("sms-confirmation-detail")).toContainText("5 dakika sonra aranacak");
     await page.goto(`${app.url}/sesli-asistan`);
     await expect(page.getByTestId("calls-flow")).toContainText("sip.example.com");
     await page.goto(`${app.url}/sesli-asistan/vapi`);
@@ -577,6 +615,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       "/api/shipments",
       "/api/shipments/shp_playwright/status",
       "/admin/settings",
+      "/admin/settings/netgsm_teyit_ayarlar",
       "/admin/settings/providers.ptt.live_mode",
       "/api/files/uploads",
       "/presigned/uploads/kanit.txt",

@@ -58,6 +58,13 @@ interface DashboardData {
   webphone: WebphoneConfig | null;
 }
 
+interface NetgsmConfirmationSettings {
+  aktif: boolean;
+  ilk_arama_dakika: number;
+  max_deneme: number;
+  deneme_arasi_dakika: number;
+}
+
 interface NavigationItem {
   key: string;
   label: string;
@@ -84,6 +91,13 @@ const navigationItems: NavigationItem[] = [
   { key: "webphone", label: "Santral", icon: Phone, roles: ["admin"], path: "/santral" },
 ];
 
+const defaultNetgsmSettings: NetgsmConfirmationSettings = {
+  aktif: false,
+  ilk_arama_dakika: 5,
+  max_deneme: 3,
+  deneme_arasi_dakika: 10,
+};
+
 function flowFromPath(pathname: string) {
   return [...navigationItems]
     .sort((first, second) => second.path.length - first.path.length)
@@ -96,6 +110,24 @@ function cx(...classes: Array<string | false | null | undefined>) {
 
 function readStoredToken() {
   return window.localStorage.getItem(tokenStorageKey);
+}
+
+function readNumberSetting(value: unknown, fallback: number) {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function netgsmSettingsFrom(settings: AdminSetting[]): NetgsmConfirmationSettings {
+  const value = settings.find((setting) => setting.key === "netgsm_teyit_ayarlar")?.value;
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return defaultNetgsmSettings;
+  }
+  const record = value as Record<string, unknown>;
+  return {
+    aktif: typeof record.aktif === "boolean" ? record.aktif : defaultNetgsmSettings.aktif,
+    ilk_arama_dakika: readNumberSetting(record.ilk_arama_dakika, defaultNetgsmSettings.ilk_arama_dakika),
+    max_deneme: readNumberSetting(record.max_deneme, defaultNetgsmSettings.max_deneme),
+    deneme_arasi_dakika: readNumberSetting(record.deneme_arasi_dakika, defaultNetgsmSettings.deneme_arasi_dakika),
+  };
 }
 
 export function App() {
@@ -352,6 +384,25 @@ export function App() {
     setStatus("Provider live flag backend API üzerinden güncellendi");
   }
 
+  async function handleSaveNetgsmSettings() {
+    const setting = await admin.upsertSetting(
+      "netgsm_teyit_ayarlar",
+      {
+        aktif: true,
+        ilk_arama_dakika: 5,
+        max_deneme: 3,
+        deneme_arasi_dakika: 10,
+      },
+      false,
+      "global",
+    );
+    setData((current) => ({
+      ...current,
+      settings: [setting, ...current.settings.filter((item) => item.key !== setting.key)],
+    }));
+    setStatus("NetGSM teyit ayarı backend admin settings üzerinden kaydedildi");
+  }
+
   async function handleUpsertIntegrationAccount() {
     setStatus("Entegrasyon hesabı backend API üzerinden kaydediliyor");
     const account = await admin.upsertIntegrationAccount({
@@ -447,6 +498,7 @@ export function App() {
   const visibleNavigation = navigationItems.filter((item) => item.roles.includes(user?.role ?? "guest"));
   const activeFlow = flowFromPath(location.pathname);
   const canTogglePresence = Boolean(user && user.role !== "admin");
+  const netgsmSettings = netgsmSettingsFrom(activeSettings);
   const selectedConversation =
     data.conversations.find((conversation) => conversation.public_id === selectedConversationId) ?? data.conversations[0] ?? null;
   const selectedOrder = data.orders.find((order) => order.public_id === selectedOrderId) ?? data.orders[0] ?? null;
@@ -734,15 +786,28 @@ export function App() {
         )}
 
         {activeFlow === "sms" && (
-          <LegacySurfacePanel
-            title="SMS"
-            icon={<MessageSquare size={18} />}
-            testId="sms-flow"
-            rows={[
-              ["NetGSM yönetimi", activeSettings.some((setting) => setting.key.includes("netgsm")) ? "tanımlı" : "bekliyor", "admin settings"],
-              ["Müşteri telefonu", data.shipments[0]?.recipient_phone ?? "-", "shipments API"],
-            ]}
-          />
+          <FlowPanel title="SMS" icon={<MessageSquare size={18} />} testId="sms-flow">
+            <DetailPanel title="Otomatik Teyit Araması" testId="sms-confirmation-detail">
+              <DataRows
+                rows={[
+                  ["Durum", netgsmSettings.aktif ? "aktif" : "kapalı", "admin settings"],
+                  ["İlk arama", `${netgsmSettings.ilk_arama_dakika} dakika`, "sipariş sonrası"],
+                  ["Maksimum deneme", `${netgsmSettings.max_deneme} kez`, `${netgsmSettings.deneme_arasi_dakika} dakika arayla`],
+                  ["Müşteri telefonu", data.shipments[0]?.recipient_phone ?? "-", "shipments API"],
+                ]}
+              />
+              {netgsmSettings.aktif && (
+                <p className="detail-note">
+                  Sipariş oluşturulduktan {netgsmSettings.ilk_arama_dakika} dakika sonra aranacak.
+                </p>
+              )}
+              {user?.role === "admin" && (
+                <button className="primary-action" type="button" onClick={handleSaveNetgsmSettings}>
+                  NetGSM teyit ayarını kaydet
+                </button>
+              )}
+            </DetailPanel>
+          </FlowPanel>
         )}
 
         {activeFlow === "calls" && (
