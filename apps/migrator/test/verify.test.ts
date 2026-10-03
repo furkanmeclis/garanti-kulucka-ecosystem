@@ -413,6 +413,44 @@ describe("migration verification", () => {
       ...value,
       tables: [...value.tables.slice(0, -1), value.tables[0]!],
     })],
+    ["missing row content entity", (value: SourceManifest) => ({
+      ...value,
+      rowContentChecksums: value.rowCounts.slice(1).map(({ entity, rows }) => ({
+        entity,
+        rows,
+        checksum: `sha256:${entity}`,
+      })),
+    })],
+    ["duplicate row content entity", (value: SourceManifest) => ({
+      ...value,
+      rowContentChecksums: [
+        ...value.rowCounts.slice(0, -1).map(({ entity, rows }) => ({
+          entity,
+          rows,
+          checksum: `sha256:${entity}`,
+        })),
+        {
+          entity: value.rowCounts[0]!.entity,
+          rows: value.rowCounts[0]!.rows,
+          checksum: `sha256:${value.rowCounts[0]!.entity}`,
+        },
+      ],
+    })],
+    ["unknown row content entity", (value: SourceManifest) => ({
+      ...value,
+      rowContentChecksums: [
+        ...value.rowCounts.slice(0, -1).map(({ entity, rows }) => ({
+          entity,
+          rows,
+          checksum: `sha256:${entity}`,
+        })),
+        {
+          entity: "unknown_entity",
+          rows: 0,
+          checksum: "sha256:unknown",
+        },
+      ],
+    })],
   ])("fails source manifest entity coverage for a %s", (_case, mutate) => {
     const changed = mutate(manifest({}));
     const invalid = {

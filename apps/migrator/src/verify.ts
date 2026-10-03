@@ -120,7 +120,7 @@ export function verifySourceManifestEntityCoverage(manifest: SourceManifest | nu
     expected: 1,
     actual: valid ? 1 : 0,
     ...(valid ? {} : {
-      message: "Persisted source manifest tables and rowCounts must each contain every canonical entity exactly once",
+      message: "Persisted source manifest tables, rowCounts, and optional rowContentChecksums must each contain every canonical entity exactly once",
     }),
   };
 }
@@ -292,16 +292,24 @@ function hasCompleteManifestEntityCoverage(manifest: SourceManifest): boolean {
   const expected = new Set<string>(canonicalMigrationEntities);
   const tableEntities = manifest.tables.map(({ entity }) => entity);
   const rowCountEntities = manifest.rowCounts.map(({ entity }) => entity);
+  const rowContentEntities = manifest.rowContentChecksums?.map(({ entity }) => entity) ?? null;
   const tableSet = new Set<string>(tableEntities);
   const rowCountSet = new Set<string>(rowCountEntities);
+  const rowContentSet = rowContentEntities ? new Set<string>(rowContentEntities) : null;
 
   return tableEntities.length === canonicalMigrationEntities.length &&
     rowCountEntities.length === canonicalMigrationEntities.length &&
+    (rowContentEntities === null || rowContentEntities.length === canonicalMigrationEntities.length) &&
     tableSet.size === canonicalMigrationEntities.length &&
     rowCountSet.size === canonicalMigrationEntities.length &&
-    canonicalMigrationEntities.every((entity) => tableSet.has(entity) && rowCountSet.has(entity)) &&
+    (rowContentSet === null || rowContentSet.size === canonicalMigrationEntities.length) &&
+    canonicalMigrationEntities.every((entity) =>
+      tableSet.has(entity) &&
+      rowCountSet.has(entity) &&
+      (rowContentSet === null || rowContentSet.has(entity))) &&
     [...tableSet].every((entity) => expected.has(entity)) &&
-    [...rowCountSet].every((entity) => expected.has(entity));
+    [...rowCountSet].every((entity) => expected.has(entity)) &&
+    (rowContentSet === null || [...rowContentSet].every((entity) => expected.has(entity)));
 }
 
 function manifestSourceTableIdentities(manifest: SourceManifest | null, entity: string): Set<string> {
