@@ -45,7 +45,7 @@ describe("legacy mapping catalog", () => {
       "guncelleme_tarihi",
       "username",
     ]);
-    expect(mappingCatalogVersion).toBe("p2-product-catalog-v1");
+    expect(mappingCatalogVersion).toBe("p2-order-item-catalog-v1");
   });
 
   it("declares konusmalar and mesajlar as direct dry-run tables after musteriler", () => {
@@ -245,10 +245,10 @@ describe("legacy mapping catalog", () => {
       "customers",
       "conversations",
       "messages",
+      "products",
       "orders",
       "order_items",
       "shipments",
-      "products",
     ]);
   });
 

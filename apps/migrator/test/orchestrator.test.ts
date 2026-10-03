@@ -377,20 +377,20 @@ describe("migration orchestrator", () => {
       "customers",
       "conversations",
       "messages",
+      "products",
       "orders",
       "order_items",
       "shipments",
-      "products",
     ]);
     expect(source.operations).toEqual([
       "describe",
       "count:customers",
       "count:conversations",
       "count:messages",
+      "count:products",
       "count:orders",
       "count:order_items",
       "count:shipments",
-      "count:products",
     ]);
   });
 
@@ -799,9 +799,9 @@ describe("conversation dry-run validation", () => {
 
     expect(source.operations).toEqual([
       "describe",
-      "count:messages",
-      "count:conversations",
       "count:customers",
+      "count:conversations",
+      "count:messages",
       "read:customers",
       "read:customers",
       "read:conversations",
@@ -1108,6 +1108,38 @@ const legacyOrderRows: LegacyRecord[] = [
   }),
 ];
 
+function legacyOrderItemRow(id: string, overrides: Record<string, unknown> = {}): LegacyRecord {
+  const payload = {
+    id,
+    siparis_id: "a1000000-0000-4000-8000-000000000001",
+    stok_id: "00000000-0000-4000-8000-000000000001",
+    urun_adi: "Urun 1",
+    urun_kodu: "SKU-1",
+    miktar: 2,
+    birim: "adet",
+    birim_fiyat: "10.00",
+    kdv_orani: "20.00",
+    toplam_fiyat: "20.00",
+    olusturma_tarihi: "2024-01-02T03:04:05Z",
+    kolaybi_product_id: null,
+    ...overrides,
+  };
+  return legacyRow("public.siparis_kalemleri", id, payload);
+}
+
+const legacyOrderItemRows: LegacyRecord[] = [
+  legacyOrderItemRow("b1000000-0000-4000-8000-000000000001"),
+  legacyOrderItemRow("b1000000-0000-4000-8000-000000000002", {
+    siparis_id: "a1000000-0000-4000-8000-000000000002",
+    urun_kodu: null,
+    kolaybi_product_id: "kb-product-2",
+  }),
+  legacyOrderItemRow("b1000000-0000-4000-8000-000000000003", {
+    siparis_id: "a1000000-0000-4000-8000-000000000003",
+    urun_kodu: "UNKNOWN-SKU",
+  }),
+];
+
 function orderDryRun(source: LegacySource) {
   return runMigration({
     mode: "dry-run",
@@ -1115,6 +1147,20 @@ function orderDryRun(source: LegacySource) {
     mappingCatalog: legacyMappingCatalog,
     batchSize: 2,
     entities: ["orders", "customers"],
+    now: new Date("2026-09-30T00:00:00.000Z"),
+    sourceSystem: "legacy_postgres",
+    sourceDatabaseIdentity: sourceIdentity,
+    userPublicIds: new Map([[assignedUserId, "usr_agent_1"]]),
+  });
+}
+
+function orderItemDryRun(source: LegacySource, entities: MigrationEntity[] = ["order_items", "orders", "customers", "products"]) {
+  return runMigration({
+    mode: "dry-run",
+    source,
+    mappingCatalog: legacyMappingCatalog,
+    batchSize: 2,
+    entities,
     now: new Date("2026-09-30T00:00:00.000Z"),
     sourceSystem: "legacy_postgres",
     sourceDatabaseIdentity: sourceIdentity,
@@ -1139,8 +1185,8 @@ describe("order dry-run validation", () => {
     ]);
     expect(source.operations).toEqual([
       "describe",
-      "count:orders",
       "count:customers",
+      "count:orders",
       "read:customers",
       "read:customers",
       "read:orders",
@@ -1154,6 +1200,81 @@ describe("order dry-run validation", () => {
     });
     expect(result.dryRunReport?.totals).toEqual({ plannedRows: 6, plannedBatches: 4, blockedRows: 0 });
     expect(result.batches).toEqual([]);
+  });
+});
+
+describe("order item dry-run validation", () => {
+  it("transforms customers, products, orders, then order items without a target", async () => {
+    const source = new LegacyTableSource({
+      customers: legacyCustomerRows,
+      products: [
+        legacyProductRow(1, { kod: "SKU-1" }),
+        legacyProductRow(2, { kod: null, kolaybi_product_id: "kb-product-2" }),
+      ],
+      orders: legacyOrderRows,
+      order_items: legacyOrderItemRows,
+    });
+
+    const result = await orderItemDryRun(source);
+
+    expect(source.operations).toEqual([
+      "describe",
+      "count:customers",
+      "count:products",
+      "count:orders",
+      "count:order_items",
+      "read:customers",
+      "read:customers",
+      "read:products",
+      "read:orders",
+      "read:orders",
+      "read:order_items",
+      "read:order_items",
+    ]);
+    expect(result.dryRunReport?.productTransform).toEqual({
+      transformedRows: 2,
+      inactiveProducts: 0,
+    });
+    expect(result.dryRunReport?.orderTransform).toEqual({
+      transformedRows: 3,
+      unresolvedConversations: 1,
+      unresolvedCreators: 1,
+    });
+    expect(result.dryRunReport?.orderItemTransform).toEqual({
+      transformedRows: 3,
+      resolvedProducts: 2,
+      unresolvedProducts: 1,
+      skuProductMatches: 1,
+      externalProductMatches: 1,
+    });
+    expect(result.dryRunReport?.totals).toEqual({ plannedRows: 11, plannedBatches: 7, blockedRows: 0 });
+    expect(result.batches).toEqual([]);
+  });
+
+  it("rejects order items without orders and products before source access", async () => {
+    const source = new LegacyTableSource({ order_items: legacyOrderItemRows });
+
+    await expect(orderItemDryRun(source, ["order_items", "products"])).rejects.toThrow(
+      "Order item dry-run requires orders in the same plan",
+    );
+    await expect(orderItemDryRun(source, ["order_items", "orders", "customers"])).rejects.toThrow(
+      "Order item dry-run requires products in the same plan",
+    );
+    expect(source.operations).toEqual([]);
+  });
+
+  it("fails closed when product lookup keys are ambiguous", async () => {
+    const source = new LegacyTableSource({
+      customers: legacyCustomerRows,
+      products: [
+        legacyProductRow(1, { kod: "SKU-DUPLICATE" }),
+        legacyProductRow(2, { kod: "SKU-DUPLICATE" }),
+      ],
+      orders: legacyOrderRows,
+      order_items: [legacyOrderItemRow("b1000000-0000-4000-8000-000000000001", { urun_kodu: "SKU-DUPLICATE" })],
+    });
+
+    await expect(orderItemDryRun(source)).rejects.toThrow("Product dry-run found duplicate sku values");
   });
 });
 

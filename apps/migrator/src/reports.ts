@@ -5,6 +5,7 @@ import type {
   MessageTransformSummary,
   MigrationPlan,
   MigrationWarning,
+  OrderItemTransformSummary,
   OrderTransformSummary,
   ProductTransformSummary,
   VerificationCheck,
@@ -19,6 +20,7 @@ export function createDryRunReport(input: {
   readonly messageTransform?: MessageTransformSummary;
   readonly productTransform?: ProductTransformSummary;
   readonly orderTransform?: OrderTransformSummary;
+  readonly orderItemTransform?: OrderItemTransformSummary;
   readonly now?: Date;
 }): DryRunReport {
   const warnings = input.warnings ?? [];
@@ -47,6 +49,7 @@ export function createDryRunReport(input: {
     ...(input.messageTransform ? { messageTransform: input.messageTransform } : {}),
     ...(input.productTransform ? { productTransform: input.productTransform } : {}),
     ...(input.orderTransform ? { orderTransform: input.orderTransform } : {}),
+    ...(input.orderItemTransform ? { orderItemTransform: input.orderItemTransform } : {}),
     generatedAt: (input.now ?? new Date()).toISOString(),
   };
 }

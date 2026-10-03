@@ -14,7 +14,8 @@ import {
   type UnresolvedCustomerExternalIdentity,
   type VerifiedIntegrationAccount,
 } from "./customer-mapping.js";
-import { createMigrationPlan } from "./plan.js";
+import { canonicalMigrationEntities, createMigrationPlan } from "./plan.js";
+import { legacyOrderItemTable, transformLegacyOrderItem } from "./order-item-mapping.js";
 import { legacyOrderTable, transformLegacyOrder } from "./order-mapping.js";
 import { legacyProductTable, transformLegacyProduct } from "./product-mapping.js";
 import { createDryRunReport } from "./reports.js";
@@ -39,6 +40,7 @@ import type {
   MigrationEntity,
   MigrationPlan,
   MigrationTarget,
+  OrderItemTransformSummary,
   OrderTransformSummary,
   ProductTransformSummary,
   SourceDatabaseIdentity,
@@ -83,8 +85,9 @@ export interface MigrationRunResult {
 export async function runMigration(input: RunMigrationInput): Promise<MigrationRunResult> {
   const catalog = createLegacyMappingCatalog(input.mappingCatalog);
   const readyEntities = dryRunMigrationEntities(catalog);
-  const entities = input.entities ?? readyEntities;
-  assertDryRunReadyEntitySelection(entities, readyEntities);
+  const requestedEntities = input.entities ?? readyEntities;
+  assertDryRunReadyEntitySelection(requestedEntities, readyEntities);
+  const entities = orderMigrationEntities(requestedEntities);
   if (input.mode === "apply") {
     assertApplyPrerequisites(catalog, entities);
     throw new Error("Apply mode is unavailable until the mapping catalog declares apply-ready transforms");
@@ -96,6 +99,7 @@ export async function runMigration(input: RunMigrationInput): Promise<MigrationR
   const validateMessageRows = entities.includes("messages");
   const validateProductRows = entities.includes("products");
   const validateOrderRows = entities.includes("orders");
+  const validateOrderItemRows = entities.includes("order_items");
   if (validateCustomerRows) assertEntityRoutesFromLegacyTable(catalog, "customers", legacyCustomerTable, "Customer");
   if (validateConversationRows) {
     assertEntityRoutesFromLegacyTable(catalog, "conversations", legacyConversationTable, "Conversation");
@@ -103,6 +107,9 @@ export async function runMigration(input: RunMigrationInput): Promise<MigrationR
   if (validateMessageRows) assertEntityRoutesFromLegacyTable(catalog, "messages", legacyMessageTable, "Message");
   if (validateProductRows) assertEntityRoutesFromLegacyTable(catalog, "products", legacyProductTable, "Product");
   if (validateOrderRows) assertEntityRoutesFromLegacyTable(catalog, "orders", legacyOrderTable, "Order");
+  if (validateOrderItemRows) {
+    assertEntityRoutesFromLegacyTable(catalog, "order_items", legacyOrderItemTable, "Order item");
+  }
   const integrationAccounts = ownIntegrationAccounts(input.integrationAccounts);
   const conversationAccounts = ownConversationAccounts(input.conversationAccounts);
   const userPublicIds = ownUserPublicIds(input.userPublicIds);
@@ -145,11 +152,18 @@ export async function runMigration(input: RunMigrationInput): Promise<MigrationR
     const productTransform = validateProductRows
       ? await validateProductBatches(input.source, plan)
       : undefined;
-    const orderTransform = validateOrderRows
+    const orders = validateOrderRows
       ? await validateOrderBatches(input.source, plan, {
         customerPublicIds: requireDependencyPublicIds(customers, "Order", "customers"),
         conversationPublicIds: conversations?.publicIds ?? new Map(),
         userPublicIds,
+      })
+      : undefined;
+    const orderItemTransform = validateOrderItemRows
+      ? await validateOrderItemBatches(input.source, plan, {
+        orderPublicIds: requireDependencyPublicIds(orders, "Order item", "orders"),
+        productPublicIdsBySku: requireProductDependency(productTransform).publicIdsBySku,
+        productPublicIdsByExternalId: requireProductDependency(productTransform).publicIdsByExternalProductId,
       })
       : undefined;
     return {
@@ -161,8 +175,9 @@ export async function runMigration(input: RunMigrationInput): Promise<MigrationR
         ...(customers ? { customerTransform: customers.summary } : {}),
         ...(conversations ? { conversationTransform: conversations.summary } : {}),
         ...(messageTransform ? { messageTransform } : {}),
-        ...(productTransform ? { productTransform } : {}),
-        ...(orderTransform ? { orderTransform } : {}),
+        ...(productTransform ? { productTransform: productTransform.summary } : {}),
+        ...(orders ? { orderTransform: orders.summary } : {}),
+        ...(orderItemTransform ? { orderItemTransform } : {}),
         ...(input.now ? { now: input.now } : {}),
       }),
       batches: [],
@@ -177,6 +192,11 @@ interface ValidatedBatches<TSummary> {
   readonly publicIds: ReadonlyMap<string, string>;
 }
 
+interface ValidatedProductBatches extends ValidatedBatches<ProductTransformSummary> {
+  readonly publicIdsBySku: ReadonlyMap<string, string>;
+  readonly publicIdsByExternalProductId: ReadonlyMap<string, string>;
+}
+
 function assertDryRunEntityDependencies(entities: readonly MigrationEntity[]): void {
   if (entities.includes("conversations") && !entities.includes("customers")) {
     throw new Error("Conversation dry-run requires customers in the same plan");
@@ -187,6 +207,17 @@ function assertDryRunEntityDependencies(entities: readonly MigrationEntity[]): v
   if (entities.includes("orders") && !entities.includes("customers")) {
     throw new Error("Order dry-run requires customers in the same plan");
   }
+  if (entities.includes("order_items") && !entities.includes("orders")) {
+    throw new Error("Order item dry-run requires orders in the same plan");
+  }
+  if (entities.includes("order_items") && !entities.includes("products")) {
+    throw new Error("Order item dry-run requires products in the same plan");
+  }
+}
+
+function orderMigrationEntities(entities: readonly MigrationEntity[]): MigrationEntity[] {
+  const selected = new Set(entities);
+  return canonicalMigrationEntities.filter((entity) => selected.has(entity));
 }
 
 function requireDependencyPublicIds(
@@ -196,6 +227,13 @@ function requireDependencyPublicIds(
 ): ReadonlyMap<string, string> {
   if (!dependency) throw new Error(`${label} dry-run requires ${entity} in the same plan`);
   return dependency.publicIds;
+}
+
+function requireProductDependency(
+  dependency: ValidatedProductBatches | undefined,
+): ValidatedProductBatches {
+  if (!dependency) throw new Error("Order item dry-run requires products in the same plan");
+  return dependency;
 }
 
 function assertEntityRoutesFromLegacyTable(
@@ -376,9 +414,12 @@ async function validateMessageBatches(
 async function validateProductBatches(
   source: LegacySource,
   plan: MigrationPlan,
-): Promise<ProductTransformSummary> {
+): Promise<ValidatedProductBatches> {
   let transformedRows = 0;
   let inactiveProducts = 0;
+  const publicIds = new Map<string, string>();
+  const publicIdsBySku = new Map<string, string>();
+  const publicIdsByExternalProductId = new Map<string, string>();
 
   for (const batch of plan.batches) {
     if (batch.entity !== "products") continue;
@@ -387,11 +428,38 @@ async function validateProductBatches(
     for (const row of rows) {
       const result = transformLegacyProduct(row);
       transformedRows += 1;
+      publicIds.set(row.sourceId.toLowerCase(), result.product.publicId);
+      addUniqueProductLookup(publicIdsBySku, result.product.sku, result.product.publicId, "sku");
+      addUniqueProductLookup(
+        publicIdsByExternalProductId,
+        result.product.externalProductId,
+        result.product.publicId,
+        "external product id",
+      );
       if (!result.product.isActive) inactiveProducts += 1;
     }
   }
 
-  return Object.freeze({ transformedRows, inactiveProducts });
+  return {
+    summary: Object.freeze({ transformedRows, inactiveProducts }),
+    publicIds,
+    publicIdsBySku,
+    publicIdsByExternalProductId,
+  };
+}
+
+function addUniqueProductLookup(
+  index: Map<string, string>,
+  key: string | null,
+  publicId: string,
+  label: string,
+): void {
+  if (key === null) return;
+  const existing = index.get(key);
+  if (existing !== undefined && existing !== publicId) {
+    throw new Error(`Product dry-run found duplicate ${label} values`);
+  }
+  index.set(key, publicId);
 }
 
 async function validateOrderBatches(
@@ -402,10 +470,11 @@ async function validateOrderBatches(
     readonly conversationPublicIds: ReadonlyMap<string, string>;
     readonly userPublicIds: ReadonlyMap<string, string>;
   },
-): Promise<OrderTransformSummary> {
+): Promise<ValidatedBatches<OrderTransformSummary>> {
   let transformedRows = 0;
   let unresolvedConversations = 0;
   let unresolvedCreators = 0;
+  const publicIds = new Map<string, string>();
 
   for (const batch of plan.batches) {
     if (batch.entity !== "orders") continue;
@@ -414,6 +483,7 @@ async function validateOrderBatches(
     for (const row of rows) {
       const result = transformLegacyOrder(row, context);
       transformedRows += 1;
+      publicIds.set(row.sourceId.toLowerCase(), result.order.publicId);
       for (const entry of result.reconciliation) {
         if (entry.code === "unresolved_conversation") unresolvedConversations += 1;
         if (entry.code === "unresolved_created_by") unresolvedCreators += 1;
@@ -421,7 +491,55 @@ async function validateOrderBatches(
     }
   }
 
-  return Object.freeze({ transformedRows, unresolvedConversations, unresolvedCreators });
+  return {
+    summary: Object.freeze({ transformedRows, unresolvedConversations, unresolvedCreators }),
+    publicIds,
+  };
+}
+
+async function validateOrderItemBatches(
+  source: LegacySource,
+  plan: MigrationPlan,
+  context: {
+    readonly orderPublicIds: ReadonlyMap<string, string>;
+    readonly productPublicIdsBySku: ReadonlyMap<string, string>;
+    readonly productPublicIdsByExternalId: ReadonlyMap<string, string>;
+  },
+): Promise<OrderItemTransformSummary> {
+  let transformedRows = 0;
+  let resolvedProducts = 0;
+  let unresolvedProducts = 0;
+  let skuProductMatches = 0;
+  let externalProductMatches = 0;
+
+  for (const batch of plan.batches) {
+    if (batch.entity !== "order_items") continue;
+    const rows = await readPlannedBatch(source, batch, "Order item");
+
+    for (const row of rows) {
+      const result = transformLegacyOrderItem(row, context);
+      transformedRows += 1;
+      if (result.orderItem.productPublicId === null) {
+        unresolvedProducts += 1;
+      } else {
+        resolvedProducts += 1;
+        if (result.orderItem.productLookup === "external_product_id") {
+          externalProductMatches += 1;
+        }
+        if (result.orderItem.productLookup === "sku") {
+          skuProductMatches += 1;
+        }
+      }
+    }
+  }
+
+  return Object.freeze({
+    transformedRows,
+    resolvedProducts,
+    unresolvedProducts,
+    skuProductMatches,
+    externalProductMatches,
+  });
 }
 
 function ownSourceTableSnapshots(snapshots: readonly SourceTableSnapshot[]): SourceTableSnapshot[] {

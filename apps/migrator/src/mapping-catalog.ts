@@ -25,7 +25,7 @@ export interface LegacyMappingCatalog {
   readonly tables: readonly LegacyTableMapping[];
 }
 
-export const mappingCatalogVersion = "p2-product-catalog-v1";
+export const mappingCatalogVersion = "p2-order-item-catalog-v1";
 
 const canonicalMigrationEntitySet = new Set<string>(canonicalMigrationEntities);
 const targetMappingValues = new Set<string>(["direct", "synthetic"]);
@@ -339,9 +339,10 @@ export function validateLegacyMappingCatalog(catalog: LegacyMappingCatalog): voi
 
 export function dryRunMigrationEntities(catalog: LegacyMappingCatalog): MigrationEntity[] {
   validateLegacyMappingCatalog(catalog);
-  return catalog.tables.flatMap((table) => table.targetEntities
+  const ready = new Set(catalog.tables.flatMap((table) => table.targetEntities
     .filter((target) => target.readiness === "dry-run")
-    .map((target) => target.entity));
+    .map((target) => target.entity)));
+  return canonicalMigrationEntities.filter((entity) => ready.has(entity));
 }
 
 export function assertApplyPrerequisites(
