@@ -6,15 +6,15 @@ Bu belge, projeye yeni bir sohbetten veya bağlamsız bir çalışma oturumundan
 
 - Repo: `/Users/furkanmeclis/Documents/Projects/garanti-kulucka-ecosystem`
 - GitHub çalışma modeli: monorepo, yalnız `main`, PR yok.
-- Yayımlanmış son checkpoint: `v0.1.150`
-- Yayımlanmış son commit: `c5d2a25dd902938d411839c5a84902b43daec468`
-- Commit mesajı: `test(migrator): add real postgres dry-run evidence`
-- Genel ilerleme: yaklaşık `%81`
-- Son tamamlanan çalışma: P4 real PostgreSQL dry-run evidence checkpoint'i; real source runtime, catalog-derived legacy tables, clean canonical target migrations `001` through `005`, row-content manifest checksums, zero target writes, and apply-disabled proof with source/target URLs are covered.
-- Sıradaki bağımlılık kapısı kalan P4 activation evidence'dır: customer address/external identity apply-readiness, backup/restore runbook rehearsal, process-kill/network-failure E2E, and full `npm run check` checkpoint. Frontend migration, live provider adapters, and production operations runbooks kendi kapılarında devam eder.
+- Yayımlanmış son checkpoint: `v0.1.152`
+- Yayımlanmış son commit: `b8b21a0002085a4edca6b7f5a44f251d772416a3`
+- Commit mesajı: `fix(migrator): gate customer apply on address readiness`
+- Genel ilerleme: yaklaşık `%82`
+- Son tamamlanan çalışma: P4 customer apply-readiness decision checkpoint'i; real PostgreSQL dry-run evidence'a ek olarak customer apply artık hem `customer_external_identities` hem `customer_addresses` executable olmadığı sürece source/target erişiminden önce fail-closed kalır.
+- Sıradaki bağımlılık kapısı kalan P4 activation evidence'dır: backup/restore runbook rehearsal, process-kill/network-failure E2E, and final full `npm run check` checkpoint. Frontend migration, live provider adapters, and production operations runbooks kendi kapılarında devam eder.
 - Production `migrate --apply` kapısı kapalıdır. Tüm aktivasyon koşulları geçmeden açılmamalıdır.
 
-`%81` tahmini; önceki temellere ek olarak customer, conversation, message, product, order, order item ve shipment dry-run dönüşümlerini, transaction/lock safety guardlarını, row-content fingerprint persistence'ını, retry/redaction test kanıtını ve real PostgreSQL dry-run source/target evidence'ını içerir. Canlı provider adapterları, gerçek frontend taşıması ve P4 production veri taşıma aktivasyonu tamamlanmış kabul edilmez.
+`%82` tahmini; önceki temellere ek olarak customer, conversation, message, product, order, order item ve shipment dry-run dönüşümlerini, transaction/lock safety guardlarını, row-content fingerprint persistence'ını, retry/redaction test kanıtını, real PostgreSQL dry-run source/target evidence'ını ve customer address/external identity apply blocker kararını içerir. Canlı provider adapterları, gerçek frontend taşıması ve P4 production veri taşıma aktivasyonu tamamlanmış kabul edilmez.
 
 ## 2. Tarihsel Schema Kimliği Checkpoint'i (`v0.1.116`)
 
@@ -181,7 +181,7 @@ Kapsam:
 - Migrator source transaction’ı `set local timezone = 'UTC'` ve `set local datestyle = 'ISO, MDY'` ile sabitlenir. Timestamp metni altı haneye kadar korunur.
 - Migration `004` canonical WooCommerce provider seed’ini ekler ve çakışan mevcut satırı reddeder. Down migration seed’i silmez.
 - `mappingCatalogVersion` `p2-customer-catalog-v1` olarak kalır. Yalnız `customers` dry-run-ready’dir. Address ve external identity hedefleri synthetic ve descriptive kalır.
-- Customer apply, `customer_external_identities` descriptive veya tanımsızken orchestrator’da fail-closed durur.
+- Customer apply, `customer_external_identities` veya `customer_addresses` descriptive ya da tanımsızken orchestrator’da fail-closed durur.
 - Core ve production apply, source veya target erişiminden önce kapalı kalır.
 
 Kanıt:
@@ -283,7 +283,7 @@ Kabul kapısı: kaynaktan sessizce atlanan bir satır verification tarafından b
 
 ### P2. Legacy Schema Introspection ve Mapping Catalog
 
-Durum: customer, conversation, message, product, order, order item ve shipment schema/dry-run dönüşüm dilimleri `v0.1.146` çizgisine kadar yayımlandı. Dry-run bu satırları dönüştürür ve target’a yazmaz. Address ve external identity hedefleri descriptive kalır; production apply kapısı kapalıdır.
+Durum: customer, conversation, message, product, order, order item ve shipment schema/dry-run dönüşüm dilimleri `v0.1.146` çizgisine kadar yayımlandı. Dry-run bu satırları dönüştürür ve target’a yazmaz. Address ve external identity hedefleri descriptive kalır; customer apply için ikisi de explicit prerequisite kabul edilir ve production apply kapısı kapalıdır.
 
 Önce kaynak database gerçek yapısı `information_schema` üzerinden çıkarılmalıdır. Legacy migration dosyaları tek başına doğru kaynak kabul edilmemelidir; çalışan kod ile migration geçmişi arasında drift vardır.
 
@@ -645,11 +645,10 @@ Bu maddeler ihtiyaç varsa genişletilir; mevcut davranış sebepsiz yere yenide
 
 İlk görev P4 activation evidence hazırlığıdır:
 
-1. Yayımlanmış `v0.1.150` real PostgreSQL dry-run checkpoint’ini taban kabul et. Apply kapalı kalsın.
-2. Customer address ve external identity hedefleri için apply-readiness kararını netleştir; descriptive kalacaksa P4 checklist bunu neden production apply blocker kabul ettiğini açıklamalı.
-3. Process-kill/network-failure E2E veya eşdeğer retry/resume harness ekle.
-4. Backup/restore runbook rehearsal kanıtını ekle.
-5. Full `npm run check` checkpoint'i al; production apply activation checklist'inde açık kalan maddeleri ayrı ayrı kapat.
-6. Bu kanıtlar tamamlanmadan `migrate --apply` açma; frontend migration ve live provider adapter tracks bu kapıdan bağımsız fakat aynı CI/tag disiplininde ilerler.
+1. Yayımlanmış `v0.1.152` customer apply blocker checkpoint’ini taban kabul et. Apply kapalı kalsın.
+2. Process-kill/network-failure E2E veya eşdeğer retry/resume harness ekle.
+3. Backup/restore runbook rehearsal kanıtını ekle.
+4. Full `npm run check` checkpoint'i al; production apply activation checklist'inde açık kalan maddeleri ayrı ayrı kapat.
+5. Bu kanıtlar tamamlanmadan `migrate --apply` açma; frontend migration ve live provider adapter tracks bu kapıdan bağımsız fakat aynı CI/tag disiplininde ilerler.
 
 P4 apply aktivasyonu, kalan checklist maddeleri kanıtlanmadan başlatılmamalıdır. Dry-run kapsamı genişlemiş olsa da production yazım kapısı fail-closed kalır.
