@@ -17,6 +17,7 @@ import { createAuthClient, type LoginResponse } from "../api/auth-client.js";
 import {
   createDomainClient,
   type ConversationSummary,
+  type MessageSummary,
   type OrderSummary,
   type ShipmentSummary,
 } from "../api/domain-client.js";
@@ -30,6 +31,7 @@ const tokenStorageKey = "garanti.web.access_token";
 
 interface DashboardData {
   conversations: ConversationSummary[];
+  messages: MessageSummary[];
   orders: OrderSummary[];
   shipments: ShipmentSummary[];
   settings: AdminSetting[];
@@ -66,6 +68,7 @@ export function App() {
   const [authChecked, setAuthChecked] = useState(false);
   const [data, setData] = useState<DashboardData>({
     conversations: [],
+    messages: [],
     orders: [],
     shipments: [],
     settings: [],
@@ -145,9 +148,14 @@ export function App() {
       admin.listSettings("global"),
       webphone.getConfig(),
     ]);
+    const firstConversation = conversations.data[0]?.public_id;
+    const messages = firstConversation
+      ? await domain.listMessages(firstConversation, 50)
+      : { data: [] };
 
     setData({
       conversations: conversations.data,
+      messages: messages.data,
       orders: orders.data,
       shipments: shipments.data,
       settings: settings.data,
@@ -179,6 +187,7 @@ export function App() {
       setUser(null);
       setData({
         conversations: [],
+        messages: [],
         orders: [],
         shipments: [],
         settings: [],
@@ -208,6 +217,25 @@ export function App() {
 
     setUploadedFile(response.file);
     setStatus("Dosya akışı presigned S3 sınırından geçti");
+  }
+
+  async function handleSendMessage() {
+    const firstConversation = data.conversations[0];
+    if (!firstConversation) return;
+
+    setStatus("Mesaj backend API üzerinden gönderiliyor");
+    const message = await domain.createMessage(firstConversation.public_id, {
+      sender_type: "user",
+      sender_name: user?.email ?? "Admin",
+      body: "Backend UI yaniti",
+      external_message_id: null,
+      raw_payload: null,
+    });
+    setData((current) => ({
+      ...current,
+      messages: [...current.messages, message],
+    }));
+    setStatus("Mesaj backend API üzerinden gönderildi");
   }
 
   if (token && !authChecked) {
@@ -281,8 +309,20 @@ export function App() {
                   </li>
                 ))}
               </List>
-              <Metric title="Okunmamış" value={String(data.conversations.reduce((sum, item) => sum + item.unread_count, 0))} />
+              <div className="message-thread">
+                <h2>Mesaj akışı</h2>
+                {data.messages.map((message) => (
+                  <article key={message.public_id}>
+                    <strong>{message.sender_name ?? message.sender_type}</strong>
+                    <span>{message.body ?? "Boş mesaj"}</span>
+                  </article>
+                ))}
+                <button className="primary-action" type="button" onClick={handleSendMessage}>
+                  Cevap gönder
+                </button>
+              </div>
             </div>
+            <Metric title="Okunmamış" value={String(data.conversations.reduce((sum, item) => sum + item.unread_count, 0))} />
           </FlowPanel>
         )}
 

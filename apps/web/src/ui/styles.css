@@ -162,6 +162,7 @@ nav {
 }
 
 .list-panel,
+.message-thread,
 .metric,
 .webphone-card {
   border: 1px solid #334155;
@@ -169,11 +170,13 @@ nav {
   background: #0f172a;
 }
 
-.list-panel {
+.list-panel,
+.message-thread {
   padding: 16px;
 }
 
-.list-panel h2 {
+.list-panel h2,
+.message-thread h2 {
   margin: 0 0 10px;
   font-size: 15px;
   color: #cbd5e1;
@@ -188,6 +191,7 @@ nav {
 }
 
 .list-panel li,
+.message-thread article,
 .data-row,
 .webphone-card {
   display: grid;
@@ -198,9 +202,15 @@ nav {
 }
 
 .list-panel span,
+.message-thread span,
 .webphone-card span,
 .result-line {
   color: #94a3b8;
+}
+
+.message-thread {
+  display: grid;
+  gap: 8px;
 }
 
 .metric {

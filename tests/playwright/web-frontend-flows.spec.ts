@@ -87,6 +87,42 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       return;
     }
 
+    if (url.pathname === "/api/conversations/cnv_playwright/messages") {
+      if (route.request().method() === "POST") {
+        await route.fulfill({
+          contentType: "application/json",
+          body: JSON.stringify({
+            public_id: "msg_playwright_reply",
+            sender_type: "user",
+            sender_name: "admin@example.com",
+            body: "Backend UI yaniti",
+            external_message_id: null,
+            is_read: true,
+            sent_at: "2026-01-01T00:01:00.000Z",
+          }),
+        });
+        return;
+      }
+
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          data: [
+            {
+              public_id: "msg_playwright_1",
+              sender_type: "customer",
+              sender_name: "Playwright Customer",
+              body: "Merhaba",
+              external_message_id: "external_msg_1",
+              is_read: false,
+              sent_at: "2026-01-01T00:00:00.000Z",
+            },
+          ],
+        }),
+      });
+      return;
+    }
+
     if (url.pathname === "/api/orders") {
       await route.fulfill({
         contentType: "application/json",
@@ -212,6 +248,9 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await page.goto(app.url);
     await page.getByRole("button", { name: /giriş yap/i }).click();
     await expect(page.getByTestId("inbox-flow")).toContainText("Playwright Customer");
+    await expect(page.getByTestId("inbox-flow")).toContainText("Merhaba");
+    await page.getByRole("button", { name: /cevap gönder/i }).click();
+    await expect(page.getByTestId("inbox-flow")).toContainText("Backend UI yaniti");
     await page.reload();
     await expect(page.getByTestId("inbox-flow")).toContainText("Playwright Customer");
     await page.getByRole("button", { name: /siparişler/i }).click();
@@ -237,6 +276,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       "/auth/me",
       "/auth/logout",
       "/api/conversations",
+      "/api/conversations/cnv_playwright/messages",
       "/api/orders",
       "/api/shipments",
       "/admin/settings",
