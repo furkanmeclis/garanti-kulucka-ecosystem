@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
 import { createServer, type ViteDevServer } from "vite";
 
 const backendBaseUrl = "http://127.0.0.1:65530";
@@ -509,6 +509,20 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("file-upload-flow")).toContainText("kanit.txt kaydedildi");
     await page.getByRole("link", { name: /santral/i }).click();
     await expect(page.getByTestId("webphone-flow")).toContainText("sip.example.com");
+    await assertLegacyVisualFrame(page, app.url, "desktop", [
+      { path: "/mesajlar", testId: "inbox-flow" },
+      { path: "/siparisler", testId: "orders-flow" },
+      { path: "/kargo", testId: "shipments-flow" },
+      { path: "/ayarlar/entegrasyonlar", testId: "integrations-flow" },
+      { path: "/santral", testId: "webphone-flow" },
+    ]);
+    await assertLegacyVisualFrame(page, app.url, "mobile", [
+      { path: "/mesajlar", testId: "inbox-flow" },
+      { path: "/siparisler", testId: "orders-flow" },
+      { path: "/kargo", testId: "shipments-flow" },
+      { path: "/ayarlar/entegrasyonlar", testId: "integrations-flow" },
+    ]);
+    await page.setViewportSize({ width: 1280, height: 720 });
     await page.getByRole("button", { name: /çıkış/i }).click();
     await expect(page.getByRole("button", { name: /giriş yap/i })).toBeVisible();
     currentUser = loginUser({ email: "cargo@example.com", role: "kargo_operatoru" });
@@ -582,4 +596,56 @@ function loginBody(user = loginUser()) {
     expires_in: 900,
     user,
   };
+}
+
+async function assertLegacyVisualFrame(
+  page: Page,
+  appUrl: string,
+  viewport: "desktop" | "mobile",
+  routes: Array<{ path: string; testId: string }>,
+) {
+  await page.setViewportSize(viewport === "desktop" ? { width: 1280, height: 720 } : { width: 390, height: 844 });
+
+  for (const route of routes) {
+    await page.goto(`${appUrl}${route.path}`);
+    const panel = page.getByTestId(route.testId);
+    await expect(panel).toBeVisible();
+
+    const frame = await page.evaluate((testId) => {
+      const topbar = document.querySelector<HTMLElement>(".topbar");
+      const workspace = document.querySelector<HTMLElement>(".workspace");
+      const panelElement = document.querySelector<HTMLElement>(`[data-testid="${testId}"]`);
+      const nav = document.querySelector<HTMLElement>("nav");
+      const viewportWidth = document.documentElement.clientWidth;
+
+      if (!topbar || !workspace || !panelElement || !nav) {
+        return { ok: false, reason: "missing-shell-node" };
+      }
+
+      const topbarRect = topbar.getBoundingClientRect();
+      const workspaceRect = workspace.getBoundingClientRect();
+      const panelRect = panelElement.getBoundingClientRect();
+      const navRect = nav.getBoundingClientRect();
+
+      if (panelRect.width < 240 || panelRect.height < 120) {
+        return { ok: false, reason: "panel-too-small" };
+      }
+      if (workspaceRect.top < topbarRect.bottom - 1) {
+        return { ok: false, reason: "workspace-overlaps-topbar" };
+      }
+      if (panelRect.left < -1 || panelRect.right > viewportWidth + 1) {
+        return { ok: false, reason: "panel-horizontal-overflow" };
+      }
+      if (document.documentElement.scrollWidth > viewportWidth + 1) {
+        return { ok: false, reason: "document-horizontal-scroll" };
+      }
+      if (navRect.width < 240 || navRect.height < 30) {
+        return { ok: false, reason: "nav-collapsed" };
+      }
+
+      return { ok: true, reason: "ok" };
+    }, route.testId);
+
+    expect(frame, `${viewport} ${route.path} visual frame`).toMatchObject({ ok: true });
+  }
 }
