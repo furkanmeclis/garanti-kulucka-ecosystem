@@ -31,8 +31,8 @@ const canonicalMigrationEntitySet = new Set<string>(canonicalMigrationEntities);
 const targetMappingValues = new Set<string>(["direct", "synthetic"]);
 const targetReadinessValues = new Set<string>(["dry-run", "descriptive"]);
 const applyPrerequisites: Partial<Record<MigrationEntity, readonly MigrationEntity[]>> = {
-  // Customer drafts clear social placeholder phones; only the external identity target carries those ids.
-  customers: ["customer_external_identities"],
+  // Customer drafts fan out into identity/address targets; apply stays closed until both are executable.
+  customers: ["customer_external_identities", "customer_addresses"],
 };
 
 export const legacyMappingCatalog = createLegacyMappingCatalog({

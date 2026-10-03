@@ -1047,6 +1047,7 @@ const identityReadyCatalog = createLegacyMappingCatalog({
     targetEntities: [
       { entity: "customers", mapping: "direct", readiness: "dry-run" },
       { entity: "customer_external_identities", mapping: "direct", readiness: "dry-run" },
+      { entity: "customer_addresses", mapping: "direct", readiness: "dry-run" },
     ],
     columns: [{ name: "id", dataType: "bigint", udtName: "int8", nullable: false, required: true }],
   }],

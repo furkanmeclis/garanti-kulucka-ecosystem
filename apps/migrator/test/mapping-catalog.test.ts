@@ -252,7 +252,7 @@ describe("legacy mapping catalog", () => {
     ]);
   });
 
-  it("blocks customer apply while external identities are descriptive or undeclared", () => {
+  it("blocks customer apply while external identities or addresses are descriptive or undeclared", () => {
     expect(() => assertApplyPrerequisites(legacyMappingCatalog, ["customers"])).toThrow(
       "Migration entity customers cannot be applied while customer_external_identities is descriptive in catalog",
     );
@@ -274,6 +274,36 @@ describe("legacy mapping catalog", () => {
         targetEntities: customerMapping.targetEntities.map((target) => target.entity === "customer_external_identities"
           ? { ...target, mapping: "direct" as const, readiness: "dry-run" as const }
           : target),
+      }],
+    }), ["customers"])).toThrow(
+      "Migration entity customers cannot be applied while customer_addresses is descriptive in catalog",
+    );
+    expect(() => assertApplyPrerequisites(createLegacyMappingCatalog({
+      ...legacyMappingCatalog,
+      tables: [{
+        ...customerMapping,
+        targetEntities: customerMapping.targetEntities.filter(
+          (target) => target.entity !== "customer_addresses",
+        ).map((target) => target.entity === "customer_external_identities"
+          ? { ...target, mapping: "direct" as const, readiness: "dry-run" as const }
+          : target),
+      }],
+    }), ["customers"])).toThrow(
+      "Migration entity customers cannot be applied while customer_addresses is undeclared in catalog",
+    );
+    expect(() => assertApplyPrerequisites(createLegacyMappingCatalog({
+      ...legacyMappingCatalog,
+      tables: [{
+        ...customerMapping,
+        targetEntities: customerMapping.targetEntities.map((target) => {
+          if (target.entity === "customer_external_identities") {
+            return { ...target, mapping: "direct" as const, readiness: "dry-run" as const };
+          }
+          if (target.entity === "customer_addresses") {
+            return { ...target, mapping: "direct" as const, readiness: "dry-run" as const };
+          }
+          return target;
+        }),
       }],
     }), ["customers"])).not.toThrow();
   });
