@@ -4,6 +4,7 @@ import type {
   ConversationsTable,
   MessagesTable,
   OrdersTable,
+  ProductsTable,
   ShipmentsTable,
 } from "@garanti-kulucka/database";
 import { newPublicId } from "../auth/crypto.js";
@@ -18,6 +19,7 @@ export type MessageRecord = Selectable<MessagesTable>;
 export type OrderRecord = Selectable<OrdersTable> & {
   customer_full_name: string | null;
 };
+export type ProductRecord = Selectable<ProductsTable>;
 export type ShipmentRecord = Selectable<ShipmentsTable> & {
   order_number: string | null;
   customer_full_name: string | null;
@@ -164,6 +166,16 @@ export class DomainRepository {
       .execute();
   }
 
+  async listProducts(limit: number): Promise<ProductRecord[]> {
+    return this.db
+      .selectFrom("products")
+      .selectAll()
+      .orderBy("updated_at", "desc")
+      .orderBy("name", "asc")
+      .limit(limit)
+      .execute();
+  }
+
   async createOrder(input: CreateOrderInput): Promise<OrderRecord> {
     return this.db.transaction().execute(async (transaction) => {
       const [customer, conversation] = await Promise.all([
@@ -293,6 +305,20 @@ export function serializeOrder(order: OrderRecord) {
     customer_full_name: order.customer_full_name,
     created_at: order.created_at,
     updated_at: order.updated_at,
+  };
+}
+
+export function serializeProduct(product: ProductRecord) {
+  return {
+    public_id: product.public_id,
+    sku: product.sku,
+    name: product.name,
+    category: product.category,
+    unit_price: product.unit_price,
+    stock_quantity: product.stock_quantity,
+    is_active: product.is_active,
+    external_product_id: product.external_product_id,
+    updated_at: product.updated_at,
   };
 }
 

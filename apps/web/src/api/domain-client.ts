@@ -42,6 +42,18 @@ export interface OrderSummary {
   updated_at: string;
 }
 
+export interface ProductSummary {
+  public_id: string;
+  sku: string | null;
+  name: string;
+  category: string | null;
+  unit_price: string;
+  stock_quantity: number;
+  is_active: boolean;
+  external_product_id: string | null;
+  updated_at: string;
+}
+
 export interface ShipmentSummary {
   public_id: string;
   provider: string;
@@ -91,6 +103,8 @@ export function createDomainClient(http: BackendHttpClient) {
       ),
     listOrders: (limit = 50) =>
       http.request<{ data: OrderSummary[] }>(`/api/orders?limit=${limit}`),
+    listProducts: (limit = 50) =>
+      http.request<{ data: ProductSummary[] }>(`/api/products?limit=${limit}`),
     createOrder: (input: {
       customer_public_id?: string | null;
       conversation_public_id?: string | null;

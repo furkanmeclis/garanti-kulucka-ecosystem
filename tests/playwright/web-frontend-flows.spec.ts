@@ -293,6 +293,50 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       return;
     }
 
+    if (url.pathname === "/api/products") {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          data: [
+            {
+              public_id: "prd_incubator",
+              sku: "SKU-KUL-56",
+              name: "Kuluçka Pro 56",
+              category: "incubator",
+              unit_price: "1250.00",
+              stock_quantity: 7,
+              is_active: true,
+              external_product_id: "kb_prd_56",
+              updated_at: "2026-01-01T00:00:00.000Z",
+            },
+            {
+              public_id: "prd_fan",
+              sku: "SKU-FAN",
+              name: "Yedek Fan",
+              category: "spare_part",
+              unit_price: "85.00",
+              stock_quantity: 0,
+              is_active: true,
+              external_product_id: "kb_fan",
+              updated_at: "2026-01-01T00:00:00.000Z",
+            },
+            {
+              public_id: "prd_meter",
+              sku: "SKU-METER",
+              name: "Nem Ölçer",
+              category: "other",
+              unit_price: "40.00",
+              stock_quantity: 2,
+              is_active: false,
+              external_product_id: "kb_meter",
+              updated_at: "2026-01-01T00:00:00.000Z",
+            },
+          ],
+        }),
+      });
+      return;
+    }
+
     if (url.pathname === "/admin/settings") {
       await route.fulfill({
         contentType: "application/json",
@@ -418,7 +462,15 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
               display_name: "Instagram Main",
               external_account_id: "ig_main",
               status: "active",
-              metadata: {},
+              metadata: {
+                analytics: {
+                  followers: 1240,
+                  reach: 980,
+                  impressions: 1450,
+                  profile_views: 87,
+                  engagement_rate: 6,
+                },
+              },
               updated_at: "2026-01-01T00:00:00.000Z",
             },
           ],
@@ -438,7 +490,15 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
             display_name: "Instagram Main",
             external_account_id: "ig_main",
             status: "active",
-            metadata: {},
+            metadata: {
+              analytics: {
+                followers: 1240,
+                reach: 980,
+                impressions: 1450,
+                profile_views: 87,
+                engagement_rate: 6,
+              },
+            },
             updated_at: "2026-01-01T00:00:00.000Z",
           },
           settings: [
@@ -599,10 +659,20 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("cancellation-detail")).toContainText("Playwright Customer");
     await expect(page.getByTestId("cancellation-detail")).toContainText("fixture order");
     await page.goto(`${app.url}/stok`);
+    await expect(page.getByTestId("inventory-flow")).toContainText("Ürün");
+    await expect(page.getByTestId("inventory-flow")).toContainText("Kritik Stok");
     await expect(page.getByTestId("inventory-flow")).toContainText("orders API");
     await expect(page.getByTestId("inventory-categories")).toContainText("Kuluçka Makineleri");
     await expect(page.getByTestId("inventory-categories")).toContainText("Yedek Parçalar");
     await expect(page.getByTestId("inventory-categories")).toContainText("Diğer Malzemeler");
+    await expect(page.getByTestId("inventory-categories")).toContainText("products API");
+    await expect(page.getByTestId("inventory-products-detail")).toContainText("Kuluçka Pro 56");
+    await expect(page.getByTestId("inventory-products-detail")).toContainText("SKU-KUL-56");
+    await expect(page.getByTestId("inventory-products-detail")).toContainText("7 adet");
+    await expect(page.getByTestId("inventory-products-detail")).toContainText("1250.00 TRY");
+    await expect(page.getByTestId("inventory-critical-stock")).toContainText("Yedek Fan");
+    await expect(page.getByTestId("inventory-critical-stock")).toContainText("0 adet");
+    await expect(page.getByTestId("inventory-critical-stock")).toContainText("kritik stok");
     await expect(page.getByTestId("inventory-detail")).toContainText("ORD-PLAYWRIGHT");
     await expect(page.getByTestId("inventory-detail")).toContainText("Playwright Customer");
     await expect(page.getByTestId("inventory-detail")).toContainText("sevkiyat bağlı");
@@ -652,6 +722,10 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("instagram-publish-preview")).toContainText("2200 karakter");
     await expect(page.getByTestId("instagram-publish-preview")).toContainText("taslak");
     await page.getByRole("button", { name: /instagram main detay/i }).click();
+    await expect(page.getByTestId("instagram-analytics-summary")).toContainText("Instagram Analitik Özeti");
+    await expect(page.getByTestId("instagram-analytics-summary")).toContainText("1240");
+    await expect(page.getByTestId("instagram-analytics-summary")).toContainText("980");
+    await expect(page.getByTestId("instagram-analytics-summary")).toContainText("6% etkileşim");
     await expect(page.getByTestId("integration-detail")).toContainText("webhook.enabled");
     await expect(page.getByTestId("integration-detail")).toContainText("false");
     await page.getByRole("button", { name: /webhook ayarını kaydet/i }).click();
@@ -778,6 +852,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       "/admin/integrations/accounts/iac_instagram/settings/webhook.enabled",
       "/admin/integrations/accounts/iac_instagram/tokens/access_token",
       "/api/orders",
+      "/api/products",
       "/api/shipments",
       "/api/shipments/shp_surat_playwright/status",
       "/admin/settings",

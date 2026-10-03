@@ -7,6 +7,7 @@ import {
   serializeConversation,
   serializeMessage,
   serializeOrder,
+  serializeProduct,
   serializeShipment,
 } from "../domain/repository.js";
 
@@ -106,6 +107,16 @@ export function createDomainRoutes() {
 
     const orders = await new DomainRepository(db).listOrders(limitSchema.parse(context.req.query("limit")));
     return context.json({ data: orders.map(serializeOrder) });
+  });
+
+  routes.get("/products", async (context) => {
+    const db = context.get("db");
+    if (!db) {
+      return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
+    }
+
+    const products = await new DomainRepository(db).listProducts(limitSchema.parse(context.req.query("limit")));
+    return context.json({ data: products.map(serializeProduct) });
   });
 
   routes.post("/orders", async (context) => {

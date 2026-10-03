@@ -109,6 +109,35 @@ const orders = [
   },
 ];
 
+const products = [
+  {
+    id: 250,
+    public_id: "prd_incubator",
+    sku: "SKU-KUL-56",
+    name: "Kuluçka Pro 56",
+    category: "incubator",
+    unit_price: "1250.00",
+    stock_quantity: 7,
+    is_active: true,
+    external_product_id: "kb_prd_56",
+    created_at: date,
+    updated_at: date,
+  },
+  {
+    id: 251,
+    public_id: "prd_fan",
+    sku: "SKU-FAN",
+    name: "Yedek Fan",
+    category: "spare_part",
+    unit_price: "85.00",
+    stock_quantity: 0,
+    is_active: true,
+    external_product_id: "kb_fan",
+    created_at: date,
+    updated_at: date,
+  },
+];
+
 const shipments = [
   {
     id: 300,
@@ -236,6 +265,8 @@ class FixtureQuery {
         return messages;
       case "orders":
         return orders;
+      case "products":
+        return products;
       case "shipments":
         return shipments;
       case "settings":
@@ -318,11 +349,12 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
   const api = await startFixtureApi();
 
   try {
-    const [conversationResponse, messageResponse, orderResponse, shipmentResponse, settingsResponse, webphoneResponse] =
+    const [conversationResponse, messageResponse, orderResponse, productResponse, shipmentResponse, settingsResponse, webphoneResponse] =
       await Promise.all([
         api.client.get("/api/conversations?limit=10"),
         api.client.get(`/api/conversations/${conversation.public_id}/messages?limit=10`),
         api.client.get("/api/orders?limit=10"),
+        api.client.get("/api/products?limit=10"),
         api.client.get("/api/shipments?limit=10"),
         api.client.get("/admin/settings?scope=global"),
         api.client.get("/api/webphone/config"),
@@ -360,6 +392,23 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
         },
       ],
     });
+
+    expect(productResponse.status()).toBe(200);
+    const productBody = await productResponse.json();
+    expect(productBody.data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          public_id: "prd_incubator",
+          sku: "SKU-KUL-56",
+          name: "Kuluçka Pro 56",
+          category: "incubator",
+          unit_price: "1250.00",
+          stock_quantity: 7,
+          is_active: true,
+          external_product_id: "kb_prd_56",
+        }),
+      ]),
+    );
 
     expect(shipmentResponse.status()).toBe(200);
     expect(await shipmentResponse.json()).toMatchObject({

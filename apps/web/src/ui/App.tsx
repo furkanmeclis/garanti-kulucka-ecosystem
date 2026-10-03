@@ -38,6 +38,7 @@ import {
   type ConversationSummary,
   type MessageSummary,
   type OrderSummary,
+  type ProductSummary,
   type ShipmentSummary,
 } from "../api/domain-client.js";
 import { createFileClient, type FileMetadata } from "../api/file-client.js";
@@ -52,6 +53,7 @@ interface DashboardData {
   conversations: ConversationSummary[];
   messages: MessageSummary[];
   orders: OrderSummary[];
+  products: ProductSummary[];
   shipments: ShipmentSummary[];
   settings: AdminSetting[];
   integrationAccounts: IntegrationAccount[];
@@ -85,6 +87,14 @@ interface CommentModerationSummary {
   answered: number;
   instagram: number;
   facebook: number;
+}
+
+interface InstagramAnalyticsSummary {
+  followers: number;
+  reach: number;
+  impressions: number;
+  profileViews: number;
+  engagementRate: number;
 }
 
 interface NavigationItem {
@@ -156,6 +166,36 @@ function formatMoney(value: number, currency: string) {
 
 function formatPercent(numerator: number, denominator: number) {
   return denominator > 0 ? `%${Math.round((numerator / denominator) * 100)}` : "%0";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function numberFrom(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function instagramAnalyticsFrom(metadata: unknown): InstagramAnalyticsSummary {
+  const analytics = isRecord(metadata) && isRecord(metadata.analytics) ? metadata.analytics : {};
+  return {
+    followers: numberFrom(analytics.followers),
+    reach: numberFrom(analytics.reach),
+    impressions: numberFrom(analytics.impressions),
+    profileViews: numberFrom(analytics.profile_views),
+    engagementRate: numberFrom(analytics.engagement_rate),
+  };
+}
+
+function inventoryCategoryLabel(category: string | null) {
+  switch (category) {
+    case "incubator":
+      return "Kuluçka Makineleri";
+    case "spare_part":
+      return "Yedek Parçalar";
+    default:
+      return "Diğer Malzemeler";
+  }
 }
 
 function balanceSummaryFromOrders(orders: OrderSummary[]): BalanceSummary {
@@ -242,6 +282,7 @@ export function App() {
     conversations: [],
     messages: [],
     orders: [],
+    products: [],
     shipments: [],
     settings: [],
     integrationAccounts: [],
@@ -318,9 +359,10 @@ export function App() {
 
   async function loadDashboard() {
     setStatus("Backend API akışları yükleniyor");
-    const [conversations, orders, shipments, settings, webphoneConfig] = await Promise.all([
+    const [conversations, orders, products, shipments, settings, webphoneConfig] = await Promise.all([
       domain.listConversations({ limit: 20 }),
       domain.listOrders(20),
+      domain.listProducts(50),
       domain.listShipments(20),
       user?.role === "admin" ? admin.listSettings("global") : Promise.resolve({ data: [] }),
       webphone.getConfig(),
@@ -337,6 +379,7 @@ export function App() {
       conversations: conversations.data,
       messages: messages.data,
       orders: orders.data,
+      products: products.data,
       shipments: shipments.data,
       settings: settings.data,
       integrationAccounts: integrationAccounts.data,
@@ -373,6 +416,7 @@ export function App() {
         conversations: [],
         messages: [],
         orders: [],
+        products: [],
         shipments: [],
         settings: [],
         integrationAccounts: [],
@@ -634,6 +678,7 @@ export function App() {
   const reportTotalAmount = data.orders.reduce((sum, order) => sum + moneyValue(order.total_amount), 0);
   const balanceSummary = balanceSummaryFromOrders(data.orders);
   const commentSummary = commentModerationSummaryFrom(data.conversations);
+  const instagramAnalytics = instagramAnalyticsFrom(integrationSnapshot?.account.metadata);
   const activeOrderCount = data.orders.filter((order) => !["cancelled", "returned", "delivered"].includes(order.status)).length;
   const deliveredOrderCount = data.orders.filter((order) => order.status === "delivered").length;
   const deliveredShipmentCount = data.shipments.filter((shipment) => shipment.status === "delivered").length;
@@ -657,6 +702,12 @@ export function App() {
   ).length;
   const otherShipmentCount = Math.max(data.shipments.length - pttShipmentCount - suratShipmentCount, 0);
   const openConversationCount = data.conversations.filter((conversation) => conversation.status === "open").length;
+  const activeProductCount = data.products.filter((product) => product.is_active).length;
+  const criticalProducts = data.products.filter((product) => product.stock_quantity <= 3);
+  const selectedProduct = data.products[0] ?? null;
+  const incubatorProductCount = data.products.filter((product) => product.category === "incubator").length;
+  const sparePartProductCount = data.products.filter((product) => product.category === "spare_part").length;
+  const otherProductCount = Math.max(data.products.length - incubatorProductCount - sparePartProductCount, 0);
 
   return (
     <div className="app-shell">
@@ -909,6 +960,16 @@ export function App() {
                 ]}
               />
             </DetailPanel>
+            <DetailPanel title="Instagram Analitik Özeti" testId="instagram-analytics-summary">
+              <DataRows
+                rows={[
+                  ["Takipçi", String(instagramAnalytics.followers), "backend snapshot"],
+                  ["Erişim", String(instagramAnalytics.reach), "legacy analitik"],
+                  ["Gösterim", String(instagramAnalytics.impressions), "legacy analitik"],
+                  ["Profil Görüntüleme", String(instagramAnalytics.profileViews), `${instagramAnalytics.engagementRate}% etkileşim`],
+                ]}
+              />
+            </DetailPanel>
             <div className="integration-actions">
               {data.integrationAccounts.map((account) => (
                 <button
@@ -1044,17 +1105,54 @@ export function App() {
         {activeFlow === "inventory" && (
           <FlowPanel title="Stoklar" icon={<Package size={18} />} testId="inventory-flow">
             <div className="report-grid">
-              <Metric title="Sipariş Sinyali" value={String(data.orders.length)} />
-              <Metric title="Bekleyen Teyit" value={String(pendingConfirmationCount)} />
-              <Metric title="Aktif Kargo" value={String(activeShipmentCount)} />
+              <Metric title="Ürün" value={String(data.products.length)} />
+              <Metric title="Aktif Stok" value={String(activeProductCount)} />
+              <Metric title="Kritik Stok" value={String(criticalProducts.length)} />
             </div>
             <DetailPanel title="Stok Kategorileri" testId="inventory-categories">
               <DataRows
                 rows={[
-                  ["Kuluçka Makineleri", String(data.orders.length), "ana ürün grubu"],
-                  ["Yedek Parçalar", String(pendingConfirmationCount), "bakım parçaları"],
-                  ["Diğer Malzemeler", String(activeShipmentCount), "sarf ve operasyon"],
+                  ["Kuluçka Makineleri", String(incubatorProductCount), "products API"],
+                  ["Yedek Parçalar", String(sparePartProductCount), "products API"],
+                  ["Diğer Malzemeler", String(otherProductCount), "products API"],
                 ]}
+              />
+            </DetailPanel>
+            <DetailPanel title="Ürün Stok Özeti" testId="inventory-products-detail">
+              <DataRows
+                rows={data.products.map((product) => [
+                  product.name,
+                  product.sku ?? "SKU yok",
+                  `${product.stock_quantity} adet`,
+                ])}
+              />
+              <DataRows
+                rows={[
+                  [
+                    "Seçili ürün",
+                    selectedProduct?.name ?? "-",
+                    selectedProduct ? `${selectedProduct.unit_price} TRY` : "products API",
+                  ],
+                  [
+                    "Kategori",
+                    selectedProduct ? inventoryCategoryLabel(selectedProduct.category) : "-",
+                    selectedProduct?.is_active ? "aktif" : "pasif",
+                  ],
+                  [
+                    "Harici ürün",
+                    selectedProduct?.external_product_id ?? "-",
+                    selectedProduct?.updated_at ?? "-",
+                  ],
+                ]}
+              />
+            </DetailPanel>
+            <DetailPanel title="Kritik Stok Takibi" testId="inventory-critical-stock">
+              <DataRows
+                rows={(criticalProducts.length > 0 ? criticalProducts : data.products.slice(0, 1)).map((product) => [
+                  product.name,
+                  `${product.stock_quantity} adet`,
+                  product.stock_quantity <= 3 ? "kritik stok" : "normal stok",
+                ])}
               />
             </DetailPanel>
             <DetailPanel title="Stok ve Sevkiyat Sinyali" testId="inventory-detail">
