@@ -228,6 +228,22 @@ nav {
   color: #94a3b8;
 }
 
+.conversation-button {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  text-align: left;
+  background: transparent;
+  cursor: pointer;
+}
+
+.conversation-button.selected {
+  color: #86efac;
+}
+
 .message-thread {
   display: grid;
   gap: 8px;

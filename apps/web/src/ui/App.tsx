@@ -117,6 +117,7 @@ export function App() {
   const [uploadedFile, setUploadedFile] = useState<FileMetadata | null>(null);
   const [presenceUpdating, setPresenceUpdating] = useState(false);
   const [integrationSnapshot, setIntegrationSnapshot] = useState<IntegrationAccountSnapshot | null>(null);
+  const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [selectedShipmentId, setSelectedShipmentId] = useState<string | null>(null);
 
@@ -207,6 +208,7 @@ export function App() {
       integrationAccounts: integrationAccounts.data,
       webphone: webphoneConfig,
     });
+    setSelectedConversationId((current) => current ?? firstConversation ?? null);
     setSelectedOrderId((current) => current ?? orders.data[0]?.public_id ?? null);
     setSelectedShipmentId((current) => current ?? shipments.data[0]?.public_id ?? null);
     setStatus("Backend API, presigned dosya ve Socket.IO sınırları aktif");
@@ -243,6 +245,7 @@ export function App() {
         webphone: null,
       });
       setIntegrationSnapshot(null);
+      setSelectedConversationId(null);
       setSelectedOrderId(null);
       setSelectedShipmentId(null);
       setAuthChecked(true);
@@ -272,11 +275,11 @@ export function App() {
   }
 
   async function handleSendMessage() {
-    const firstConversation = data.conversations[0];
-    if (!firstConversation) return;
+    const conversationId = selectedConversationId ?? data.conversations[0]?.public_id;
+    if (!conversationId) return;
 
     setStatus("Mesaj backend API üzerinden gönderiliyor");
-    const message = await domain.createMessage(firstConversation.public_id, {
+    const message = await domain.createMessage(conversationId, {
       sender_type: "user",
       sender_name: user?.email ?? "Admin",
       body: "Backend UI yaniti",
@@ -290,11 +293,22 @@ export function App() {
     setStatus("Mesaj backend API üzerinden gönderildi");
   }
 
+  async function handleSelectConversation(conversationPublicId: string) {
+    setSelectedConversationId(conversationPublicId);
+    setStatus("Konuşma mesajları backend API üzerinden yükleniyor");
+    const messages = await domain.listMessages(conversationPublicId, 50);
+    setData((current) => ({
+      ...current,
+      messages: messages.data,
+    }));
+    setStatus("Konuşma detayı backend API üzerinden yüklendi");
+  }
+
   async function handleCreateOrder() {
     setStatus("Sipariş backend API üzerinden oluşturuluyor");
     const order = await domain.createOrder({
       customer_public_id: null,
-      conversation_public_id: data.conversations[0]?.public_id ?? null,
+      conversation_public_id: selectedConversationId ?? data.conversations[0]?.public_id ?? null,
       order_number: "ORD-WEB-NEW",
       status: "draft",
       source: "manual",
@@ -433,6 +447,8 @@ export function App() {
   const visibleNavigation = navigationItems.filter((item) => item.roles.includes(user?.role ?? "guest"));
   const activeFlow = flowFromPath(location.pathname);
   const canTogglePresence = Boolean(user && user.role !== "admin");
+  const selectedConversation =
+    data.conversations.find((conversation) => conversation.public_id === selectedConversationId) ?? data.conversations[0] ?? null;
   const selectedOrder = data.orders.find((order) => order.public_id === selectedOrderId) ?? data.orders[0] ?? null;
   const selectedShipment = data.shipments.find((shipment) => shipment.public_id === selectedShipmentId) ?? data.shipments[0] ?? null;
 
@@ -491,13 +507,30 @@ export function App() {
               <List title="Konuşmalar">
                 {data.conversations.map((conversation) => (
                   <li key={conversation.public_id}>
-                    <strong>{conversation.customer?.full_name ?? conversation.public_id}</strong>
-                    <span>{conversation.last_message_text ?? "Mesaj yok"}</span>
+                    <button
+                      className={cx("conversation-button", selectedConversation?.public_id === conversation.public_id && "selected")}
+                      type="button"
+                      onClick={() => void handleSelectConversation(conversation.public_id)}
+                    >
+                      <strong>{conversation.customer?.full_name ?? conversation.public_id}</strong>
+                      <span>{conversation.last_message_text ?? "Mesaj yok"}</span>
+                    </button>
                   </li>
                 ))}
               </List>
               <div className="message-thread">
                 <h2>Mesaj akışı</h2>
+                {selectedConversation && (
+                  <DetailPanel title="Konuşma Detayı" testId="conversation-detail">
+                    <DataRows
+                      rows={[
+                        ["Müşteri", selectedConversation.customer?.full_name ?? selectedConversation.public_id, selectedConversation.channel],
+                        ["Durum", selectedConversation.status, selectedConversation.assigned_user_email ?? "havuz"],
+                        ["Okunmamış", String(selectedConversation.unread_count), selectedConversation.last_message_sender_type ?? "-"],
+                      ]}
+                    />
+                  </DetailPanel>
+                )}
                 {data.messages.map((message) => (
                   <article key={message.public_id}>
                     <strong>{message.sender_name ?? message.sender_type}</strong>
