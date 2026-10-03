@@ -233,6 +233,20 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       return;
     }
 
+    if (url.pathname === "/admin/settings/providers.ptt.live_mode") {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          key: "providers.ptt.live_mode",
+          scope: "global",
+          value: true,
+          is_secret: false,
+          updated_at: "2026-01-01T00:03:00.000Z",
+        }),
+      });
+      return;
+    }
+
     if (url.pathname === "/api/webphone/config") {
       await route.fulfill({
         contentType: "application/json",
@@ -305,6 +319,8 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("shipments-flow")).toContainText("delivered");
     await page.getByRole("button", { name: /ayarlar/i }).click();
     await expect(page.getByTestId("admin-flow")).toContainText("webphone.enabled");
+    await page.getByRole("button", { name: /ptt canlı modu aç/i }).click();
+    await expect(page.getByTestId("admin-flow")).toContainText("providers.ptt.live_mode");
     await page.getByRole("button", { name: /dosya/i }).click();
     await page.getByRole("button", { name: /presigned upload testi/i }).click();
     await expect(page.getByTestId("file-upload-flow")).toContainText("kanit.txt kaydedildi");
@@ -327,6 +343,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       "/api/shipments",
       "/api/shipments/shp_playwright/status",
       "/admin/settings",
+      "/admin/settings/providers.ptt.live_mode",
       "/api/files/uploads",
       "/presigned/uploads/kanit.txt",
       "/api/webphone/config",

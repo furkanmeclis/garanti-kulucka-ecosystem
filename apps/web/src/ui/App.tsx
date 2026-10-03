@@ -274,6 +274,16 @@ export function App() {
     setStatus("Kargo durumu backend API üzerinden güncellendi");
   }
 
+  async function handleEnableProviderLiveMode() {
+    setStatus("Provider live flag backend API üzerinden güncelleniyor");
+    const setting = await admin.upsertSetting("providers.ptt.live_mode", true, false, "global");
+    setData((current) => ({
+      ...current,
+      settings: [setting, ...current.settings.filter((item) => item.key !== setting.key)],
+    }));
+    setStatus("Provider live flag backend API üzerinden güncellendi");
+  }
+
   if (token && !authChecked) {
     return (
       <main className="login-screen">
@@ -382,6 +392,9 @@ export function App() {
 
         {activeFlow === "admin" && (
           <FlowPanel title="Admin Ayarları" icon={<Settings size={18} />} testId="admin-flow">
+            <button className="primary-action" type="button" onClick={handleEnableProviderLiveMode}>
+              PTT canlı modu aç
+            </button>
             <DataRows rows={activeSettings.map((setting) => [setting.key, setting.scope, JSON.stringify(setting.value)])} />
           </FlowPanel>
         )}
