@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { NavLink, useLocation } from "react-router-dom";
 import {
   Boxes,
   FileUp,
@@ -43,16 +44,21 @@ interface NavigationItem {
   label: string;
   icon: LucideIcon;
   roles: string[];
+  path: string;
 }
 
 const navigationItems: NavigationItem[] = [
-  { key: "inbox", label: "Mesajlar", icon: MessageCircle, roles: ["admin", "calisan", "kargo_operatoru"] },
-  { key: "orders", label: "Siparişler", icon: ShoppingCart, roles: ["admin", "calisan", "kargo_operatoru"] },
-  { key: "shipments", label: "Kargo", icon: Truck, roles: ["admin", "calisan", "kargo_operatoru"] },
-  { key: "admin", label: "Ayarlar", icon: Settings, roles: ["admin"] },
-  { key: "files", label: "Dosya", icon: FileUp, roles: ["admin", "calisan"] },
-  { key: "webphone", label: "Santral", icon: Phone, roles: ["admin"] },
+  { key: "inbox", label: "Mesajlar", icon: MessageCircle, roles: ["admin", "calisan", "kargo_operatoru"], path: "/mesajlar" },
+  { key: "orders", label: "Siparişler", icon: ShoppingCart, roles: ["admin", "calisan", "kargo_operatoru"], path: "/siparisler" },
+  { key: "shipments", label: "Kargo", icon: Truck, roles: ["admin", "calisan", "kargo_operatoru"], path: "/kargo" },
+  { key: "admin", label: "Ayarlar", icon: Settings, roles: ["admin"], path: "/ayarlar" },
+  { key: "files", label: "Dosya", icon: FileUp, roles: ["admin", "calisan"], path: "/dosya" },
+  { key: "webphone", label: "Santral", icon: Phone, roles: ["admin"], path: "/santral" },
 ];
+
+function flowFromPath(pathname: string) {
+  return navigationItems.find((item) => pathname === item.path || pathname.startsWith(`${item.path}/`))?.key ?? "inbox";
+}
 
 function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
@@ -63,6 +69,7 @@ function readStoredToken() {
 }
 
 export function App() {
+  const location = useLocation();
   const [token, setToken] = useState<string | null>(() => readStoredToken());
   const [user, setUser] = useState<LoginResponse["user"] | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
@@ -74,7 +81,6 @@ export function App() {
     settings: [],
     webphone: null,
   });
-  const [activeFlow, setActiveFlow] = useState("inbox");
   const [status, setStatus] = useState("Hazır");
   const [uploadedFile, setUploadedFile] = useState<FileMetadata | null>(null);
 
@@ -304,6 +310,7 @@ export function App() {
 
   const activeSettings = data.settings.filter((setting) => !setting.is_secret);
   const visibleNavigation = navigationItems.filter((item) => item.roles.includes(user?.role ?? "guest"));
+  const activeFlow = flowFromPath(location.pathname);
 
   return (
     <div className="app-shell">
@@ -316,15 +323,14 @@ export function App() {
           {visibleNavigation.map((item) => {
             const Icon = item.icon;
             return (
-              <button
+              <NavLink
                 key={item.key}
-                className={cx("nav-button", activeFlow === item.key && "active")}
-                onClick={() => setActiveFlow(item.key)}
-                type="button"
+                className={({ isActive }) => cx("nav-button", (isActive || activeFlow === item.key) && "active")}
+                to={item.path}
               >
                 <Icon aria-hidden="true" size={16} />
                 <span>{item.label}</span>
-              </button>
+              </NavLink>
             );
           })}
         </nav>
