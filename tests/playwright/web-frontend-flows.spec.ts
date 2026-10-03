@@ -270,6 +270,44 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       return;
     }
 
+    if (url.pathname === "/admin/integrations/accounts") {
+      if (route.request().method() === "POST") {
+        await route.fulfill({
+          contentType: "application/json",
+          body: JSON.stringify({
+            public_id: "iac_instagram_playwright",
+            provider_key: "instagram",
+            provider_name: "Instagram",
+            display_name: "Instagram Playwright",
+            external_account_id: "ig_playwright",
+            status: "active",
+            metadata: { source: "frontend" },
+            updated_at: "2026-01-01T00:04:00.000Z",
+          }),
+        });
+        return;
+      }
+
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          data: [
+            {
+              public_id: "iac_instagram",
+              provider_key: "instagram",
+              provider_name: "Instagram",
+              display_name: "Instagram Main",
+              external_account_id: "ig_main",
+              status: "active",
+              metadata: {},
+              updated_at: "2026-01-01T00:00:00.000Z",
+            },
+          ],
+        }),
+      });
+      return;
+    }
+
     if (url.pathname === "/api/webphone/config") {
       await route.fulfill({
         contentType: "application/json",
@@ -345,6 +383,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByRole("link", { name: /arama/i })).toHaveCount(1);
     await expect(page.getByRole("link", { name: /vapi ai/i })).toHaveCount(1);
     await expect(page.getByRole("link", { name: /analizi/i })).toHaveCount(1);
+    await expect(page.getByRole("link", { name: /entegrasyonlar/i })).toHaveCount(1);
     await expect(page.getByRole("button", { name: /evrimiçi/i })).toHaveCount(0);
     await expect(page.getByTestId("inbox-flow")).toContainText("Merhaba");
     await page.getByRole("button", { name: /cevap gönder/i }).click();
@@ -367,6 +406,10 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("vapi-flow")).toContainText("webphone API");
     await page.goto(`${app.url}/raporlar`);
     await expect(page.getByTestId("reports-flow")).toContainText("domain API");
+    await page.goto(`${app.url}/ayarlar/entegrasyonlar`);
+    await expect(page.getByTestId("integrations-flow")).toContainText("Instagram Main");
+    await page.getByRole("button", { name: /instagram hesabı kaydet/i }).click();
+    await expect(page.getByTestId("integrations-flow")).toContainText("Instagram Playwright");
     await page.getByRole("link", { name: /siparişler/i }).click();
     await expect(page.getByTestId("orders-flow")).toContainText("ORD-PLAYWRIGHT");
     await page.getByRole("button", { name: /sipariş oluştur/i }).click();
@@ -418,6 +461,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       "/auth/presence",
       "/api/conversations",
       "/api/conversations/cnv_playwright/messages",
+      "/admin/integrations/accounts",
       "/api/orders",
       "/api/shipments",
       "/api/shipments/shp_playwright/status",

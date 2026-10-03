@@ -26,7 +26,7 @@ import {
   XCircle,
   type LucideIcon,
 } from "lucide-react";
-import { createAdminClient, type AdminSetting } from "../api/admin-client.js";
+import { createAdminClient, type AdminSetting, type IntegrationAccount } from "../api/admin-client.js";
 import { createAuthClient, type LoginResponse } from "../api/auth-client.js";
 import {
   createDomainClient,
@@ -49,6 +49,7 @@ interface DashboardData {
   orders: OrderSummary[];
   shipments: ShipmentSummary[];
   settings: AdminSetting[];
+  integrationAccounts: IntegrationAccount[];
   webphone: WebphoneConfig | null;
 }
 
@@ -72,6 +73,7 @@ const navigationItems: NavigationItem[] = [
   { key: "calls", label: "Arama", icon: Phone, roles: ["admin"], path: "/sesli-asistan" },
   { key: "vapi", label: "VAPI AI", icon: Bot, roles: ["admin"], path: "/sesli-asistan/vapi" },
   { key: "reports", label: "İş Analizi", icon: BarChart3, roles: ["admin"], path: "/raporlar" },
+  { key: "integrations", label: "Entegrasyonlar", icon: Settings, roles: ["admin"], path: "/ayarlar/entegrasyonlar" },
   { key: "admin", label: "Ayarlar", icon: Settings, roles: ["admin"], path: "/ayarlar" },
   { key: "files", label: "Dosya", icon: FileUp, roles: ["admin", "calisan"], path: "/dosya" },
   { key: "webphone", label: "Santral", icon: Phone, roles: ["admin"], path: "/santral" },
@@ -103,6 +105,7 @@ export function App() {
     orders: [],
     shipments: [],
     settings: [],
+    integrationAccounts: [],
     webphone: null,
   });
   const [status, setStatus] = useState("Hazır");
@@ -166,9 +169,9 @@ export function App() {
   }, [auth, token]);
 
   useEffect(() => {
-    if (!token || !authChecked) return;
+    if (!token || !authChecked || !user) return;
     void loadDashboard();
-  }, [authChecked, token]);
+  }, [authChecked, token, user]);
 
   async function loadDashboard() {
     setStatus("Backend API akışları yükleniyor");
@@ -176,9 +179,12 @@ export function App() {
       domain.listConversations({ limit: 20 }),
       domain.listOrders(20),
       domain.listShipments(20),
-      admin.listSettings("global"),
+      user?.role === "admin" ? admin.listSettings("global") : Promise.resolve({ data: [] }),
       webphone.getConfig(),
     ]);
+    const integrationAccounts = user?.role === "admin"
+      ? await admin.listIntegrationAccounts()
+      : { data: [] };
     const firstConversation = conversations.data[0]?.public_id;
     const messages = firstConversation
       ? await domain.listMessages(firstConversation, 50)
@@ -190,6 +196,7 @@ export function App() {
       orders: orders.data,
       shipments: shipments.data,
       settings: settings.data,
+      integrationAccounts: integrationAccounts.data,
       webphone: webphoneConfig,
     });
     setStatus("Backend API, presigned dosya ve Socket.IO sınırları aktif");
@@ -222,6 +229,7 @@ export function App() {
         orders: [],
         shipments: [],
         settings: [],
+        integrationAccounts: [],
         webphone: null,
       });
       setAuthChecked(true);
@@ -313,6 +321,24 @@ export function App() {
       settings: [setting, ...current.settings.filter((item) => item.key !== setting.key)],
     }));
     setStatus("Provider live flag backend API üzerinden güncellendi");
+  }
+
+  async function handleUpsertIntegrationAccount() {
+    setStatus("Entegrasyon hesabı backend API üzerinden kaydediliyor");
+    const account = await admin.upsertIntegrationAccount({
+      provider_key: "instagram",
+      display_name: "Instagram Playwright",
+      external_account_id: "ig_playwright",
+      metadata: { source: "frontend" },
+    });
+    setData((current) => ({
+      ...current,
+      integrationAccounts: [
+        account,
+        ...current.integrationAccounts.filter((item) => item.public_id !== account.public_id),
+      ],
+    }));
+    setStatus("Entegrasyon hesabı backend API üzerinden kaydedildi");
   }
 
   async function handleTogglePresence() {
@@ -462,6 +488,15 @@ export function App() {
               PTT canlı modu aç
             </button>
             <DataRows rows={activeSettings.map((setting) => [setting.key, setting.scope, JSON.stringify(setting.value)])} />
+          </FlowPanel>
+        )}
+
+        {activeFlow === "integrations" && (
+          <FlowPanel title="Entegrasyon Hesapları" icon={<Settings size={18} />} testId="integrations-flow">
+            <button className="primary-action" type="button" onClick={handleUpsertIntegrationAccount}>
+              Instagram hesabı kaydet
+            </button>
+            <DataRows rows={data.integrationAccounts.map((account) => [account.provider_name, account.display_name, account.status])} />
           </FlowPanel>
         )}
 
