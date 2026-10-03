@@ -566,7 +566,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("vapi-flow")).toContainText("webphone API");
     await expect(page.getByTestId("vapi-detail")).toContainText("sip.example.com");
     await expect(page.getByTestId("vapi-detail")).toContainText("1001");
-    await expect(page.getByTestId("vapi-detail")).toContainText("admin setting bekliyor");
+    await expect(page.getByTestId("vapi-detail")).toContainText("AI model ayarı tanımlı değil");
     await page.goto(`${app.url}/raporlar`);
     await expect(page.getByTestId("reports-flow")).toContainText("125.50 TRY");
     await expect(page.getByTestId("reports-detail")).toContainText("Açık konuşma");
@@ -652,6 +652,14 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       page.getByRole("button", { name: /evrimiçi/i }).click(),
     ]);
     await expect(page.getByRole("button", { name: /evrimdışı/i })).toBeVisible();
+    const cargoVisualRoutes = [
+      { path: "/mesajlar", testId: "inbox-flow" },
+      { path: "/siparisler", testId: "orders-flow" },
+      { path: "/kargo", testId: "shipments-flow" },
+      { path: "/sms", testId: "sms-flow" },
+    ];
+    await assertLegacyVisualFrame(page, app.url, "desktop", cargoVisualRoutes);
+    await assertLegacyVisualFrame(page, app.url, "mobile", cargoVisualRoutes);
   } finally {
     await closeWebApp(app.server);
   }

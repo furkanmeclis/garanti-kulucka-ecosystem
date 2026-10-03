@@ -878,7 +878,7 @@ export function App() {
                   ["Sipariş kaynaklı stok sinyali", String(data.orders.length), "orders API"],
                   ["Son sipariş", selectedOrder?.order_number ?? "-", selectedOrder?.status ?? "-"],
                   ["Müşteri", selectedOrder?.customer_full_name ?? "-", selectedOrder?.source ?? "-"],
-                  ["Depo entegrasyonu", data.shipments.length > 0 ? "sevkiyat bağlı" : "hazır", "backend boundary"],
+                  ["Depo entegrasyonu", data.shipments.length > 0 ? "sevkiyat bağlı" : "hazır", "API senkron"],
                 ]}
               />
             </DetailPanel>
@@ -956,7 +956,7 @@ export function App() {
                   ["SIP sınırı", data.webphone?.enabled ? "aktif" : "kapalı", "webphone API"],
                   ["SIP domain", data.webphone?.sip_domain ?? "-", data.webphone?.transport ?? "-"],
                   ["Kullanıcı", data.webphone?.sip_username ?? user?.sip_username ?? "-", "webphone API"],
-                  ["Model ayarı", activeSettings.find((setting) => setting.key.includes("ai"))?.key ?? "admin setting bekliyor", "settings API"],
+                  ["Model ayarı", activeSettings.find((setting) => setting.key.includes("ai"))?.key ?? "AI model ayarı tanımlı değil", "settings API"],
                 ]}
               />
             </DetailPanel>
