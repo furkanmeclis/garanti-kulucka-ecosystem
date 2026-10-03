@@ -133,6 +133,10 @@ function formatMoney(value: number, currency: string) {
   return `${value.toFixed(2)} ${currency}`;
 }
 
+function formatPercent(numerator: number, denominator: number) {
+  return denominator > 0 ? `%${Math.round((numerator / denominator) * 100)}` : "%0";
+}
+
 function readNumberSetting(value: unknown, fallback: number) {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
@@ -562,6 +566,7 @@ export function App() {
   const deliveredShipmentCount = data.shipments.filter((shipment) => shipment.status === "delivered").length;
   const activeShipmentCount = data.shipments.filter((shipment) => shipment.status !== "delivered").length;
   const pendingConfirmationCount = data.orders.filter((order) => order.confirmation_status === null).length;
+  const confirmedOrderCount = data.orders.length - pendingConfirmationCount;
   const pttShipmentCount = data.shipments.filter((shipment) => shipment.provider.toLowerCase().includes("ptt")).length;
   const suratShipmentCount = data.shipments.filter((shipment) => {
     const provider = shipment.provider.toLocaleLowerCase("tr-TR");
@@ -1043,6 +1048,15 @@ export function App() {
                   ["Teyit bekleyen", String(pendingConfirmationCount), "orders API"],
                   ["Aktif kargo", String(activeShipmentCount), "shipments API"],
                   ["Teslim edilen", String(deliveredShipmentCount), "shipments API"],
+                ]}
+              />
+            </DetailPanel>
+            <DetailPanel title="Oran Özeti" testId="reports-ratio-summary">
+              <DataRows
+                rows={[
+                  ["Teslim Oranı", formatPercent(deliveredShipmentCount, data.shipments.length), "teslim / toplam kargo"],
+                  ["Teyit Oranı", formatPercent(confirmedOrderCount, data.orders.length), `${pendingConfirmationCount} teyit bekliyor`],
+                  ["Kargo Hareketi", formatPercent(activeShipmentCount, data.shipments.length), "aktif / toplam kargo"],
                 ]}
               />
             </DetailPanel>

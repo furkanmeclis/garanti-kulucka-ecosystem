@@ -574,6 +574,9 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("reports-flow")).toContainText("125.50 TRY");
     await expect(page.getByTestId("reports-detail")).toContainText("Açık konuşma");
     await expect(page.getByTestId("reports-detail")).toContainText("Aktif kargo");
+    await expect(page.getByTestId("reports-ratio-summary")).toContainText("Teslim Oranı");
+    await expect(page.getByTestId("reports-ratio-summary")).toContainText("Teyit Oranı");
+    await expect(page.getByTestId("reports-ratio-summary")).toContainText("%0");
     await page.goto(`${app.url}/ayarlar/entegrasyonlar`);
     await expect(page.getByTestId("integrations-flow")).toContainText("Instagram Main");
     await page.getByRole("button", { name: /instagram main detay/i }).click();
