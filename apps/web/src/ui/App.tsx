@@ -238,6 +238,42 @@ export function App() {
     setStatus("Mesaj backend API üzerinden gönderildi");
   }
 
+  async function handleCreateOrder() {
+    setStatus("Sipariş backend API üzerinden oluşturuluyor");
+    const order = await domain.createOrder({
+      customer_public_id: null,
+      conversation_public_id: data.conversations[0]?.public_id ?? null,
+      order_number: "ORD-WEB-NEW",
+      status: "draft",
+      source: "manual",
+      total_amount: "250.00",
+      currency: "TRY",
+      notes: "Frontend backend create smoke",
+    });
+    setData((current) => ({
+      ...current,
+      orders: [order, ...current.orders],
+    }));
+    setStatus("Sipariş backend API üzerinden oluşturuldu");
+  }
+
+  async function handleUpdateShipment() {
+    const shipment = data.shipments[0];
+    if (!shipment) return;
+
+    setStatus("Kargo durumu backend API üzerinden güncelleniyor");
+    const updated = await domain.updateShipmentStatus(shipment.public_id, {
+      status: "delivered",
+      last_event_text: "Frontend teslim kaniti",
+      raw_payload: null,
+    });
+    setData((current) => ({
+      ...current,
+      shipments: current.shipments.map((item) => (item.public_id === updated.public_id ? updated : item)),
+    }));
+    setStatus("Kargo durumu backend API üzerinden güncellendi");
+  }
+
   if (token && !authChecked) {
     return (
       <main className="login-screen">
@@ -328,12 +364,18 @@ export function App() {
 
         {activeFlow === "orders" && (
           <FlowPanel title="Siparişler" icon={<ShoppingCart size={18} />} testId="orders-flow">
+            <button className="primary-action" type="button" onClick={handleCreateOrder}>
+              Sipariş oluştur
+            </button>
             <DataRows rows={data.orders.map((order) => [order.order_number, order.status, `${order.total_amount} ${order.currency}`])} />
           </FlowPanel>
         )}
 
         {activeFlow === "shipments" && (
           <FlowPanel title="Kargo" icon={<Truck size={18} />} testId="shipments-flow">
+            <button className="primary-action" type="button" onClick={handleUpdateShipment}>
+              Teslim edildi yap
+            </button>
             <DataRows rows={data.shipments.map((shipment) => [shipment.provider, shipment.tracking_number ?? "-", shipment.status])} />
           </FlowPanel>
         )}

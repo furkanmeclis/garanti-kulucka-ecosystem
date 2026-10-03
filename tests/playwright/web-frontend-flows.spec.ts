@@ -124,6 +124,26 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     }
 
     if (url.pathname === "/api/orders") {
+      if (route.request().method() === "POST") {
+        await route.fulfill({
+          contentType: "application/json",
+          body: JSON.stringify({
+            public_id: "ord_web_new",
+            order_number: "ORD-WEB-NEW",
+            status: "draft",
+            source: "manual",
+            total_amount: "250.00",
+            currency: "TRY",
+            confirmation_status: null,
+            notes: "Frontend backend create smoke",
+            customer_full_name: "Playwright Customer",
+            created_at: "2026-01-01T00:02:00.000Z",
+            updated_at: "2026-01-01T00:02:00.000Z",
+          }),
+        });
+        return;
+      }
+
       await route.fulfill({
         contentType: "application/json",
         body: JSON.stringify({
@@ -142,6 +162,28 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
               updated_at: "2026-01-01T00:00:00.000Z",
             },
           ],
+        }),
+      });
+      return;
+    }
+
+    if (url.pathname === "/api/shipments/shp_playwright/status") {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          public_id: "shp_playwright",
+          provider: "ptt",
+          tracking_number: "TRK-PLAYWRIGHT",
+          barcode_number: "BAR-PLAYWRIGHT",
+          status: "delivered",
+          recipient_name: "Playwright Customer",
+          recipient_phone: "5550000000",
+          recipient_city: "Istanbul",
+          recipient_district: "Kadikoy",
+          last_event_text: "Frontend teslim kaniti",
+          order_number: "ORD-PLAYWRIGHT",
+          customer_full_name: "Playwright Customer",
+          updated_at: "2026-01-01T00:02:00.000Z",
         }),
       });
       return;
@@ -255,8 +297,12 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("inbox-flow")).toContainText("Playwright Customer");
     await page.getByRole("button", { name: /siparişler/i }).click();
     await expect(page.getByTestId("orders-flow")).toContainText("ORD-PLAYWRIGHT");
+    await page.getByRole("button", { name: /sipariş oluştur/i }).click();
+    await expect(page.getByTestId("orders-flow")).toContainText("ORD-WEB-NEW");
     await page.getByRole("button", { name: /kargo/i }).click();
     await expect(page.getByTestId("shipments-flow")).toContainText("TRK-PLAYWRIGHT");
+    await page.getByRole("button", { name: /teslim edildi yap/i }).click();
+    await expect(page.getByTestId("shipments-flow")).toContainText("delivered");
     await page.getByRole("button", { name: /ayarlar/i }).click();
     await expect(page.getByTestId("admin-flow")).toContainText("webphone.enabled");
     await page.getByRole("button", { name: /dosya/i }).click();
@@ -279,6 +325,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       "/api/conversations/cnv_playwright/messages",
       "/api/orders",
       "/api/shipments",
+      "/api/shipments/shp_playwright/status",
       "/admin/settings",
       "/api/files/uploads",
       "/presigned/uploads/kanit.txt",
