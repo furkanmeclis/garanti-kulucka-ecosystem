@@ -110,6 +110,16 @@ nav {
   background: #1e293b;
 }
 
+.user-chip button {
+  min-height: 26px;
+  border: 0;
+  border-radius: 6px;
+  padding: 0 8px;
+  color: #f8fafc;
+  background: #334155;
+  cursor: pointer;
+}
+
 .workspace {
   display: grid;
   gap: 18px;

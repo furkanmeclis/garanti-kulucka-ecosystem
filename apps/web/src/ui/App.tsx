@@ -40,15 +40,16 @@ interface NavigationItem {
   key: string;
   label: string;
   icon: LucideIcon;
+  roles: string[];
 }
 
 const navigationItems: NavigationItem[] = [
-  { key: "inbox", label: "Mesajlar", icon: MessageCircle },
-  { key: "orders", label: "Siparişler", icon: ShoppingCart },
-  { key: "shipments", label: "Kargo", icon: Truck },
-  { key: "admin", label: "Ayarlar", icon: Settings },
-  { key: "files", label: "Dosya", icon: FileUp },
-  { key: "webphone", label: "Santral", icon: Phone },
+  { key: "inbox", label: "Mesajlar", icon: MessageCircle, roles: ["admin", "calisan", "kargo_operatoru"] },
+  { key: "orders", label: "Siparişler", icon: ShoppingCart, roles: ["admin", "calisan", "kargo_operatoru"] },
+  { key: "shipments", label: "Kargo", icon: Truck, roles: ["admin", "calisan", "kargo_operatoru"] },
+  { key: "admin", label: "Ayarlar", icon: Settings, roles: ["admin"] },
+  { key: "files", label: "Dosya", icon: FileUp, roles: ["admin", "calisan"] },
+  { key: "webphone", label: "Santral", icon: Phone, roles: ["admin"] },
 ];
 
 function cx(...classes: Array<string | false | null | undefined>) {
@@ -62,6 +63,7 @@ function readStoredToken() {
 export function App() {
   const [token, setToken] = useState<string | null>(() => readStoredToken());
   const [user, setUser] = useState<LoginResponse["user"] | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
   const [data, setData] = useState<DashboardData>({
     conversations: [],
     orders: [],
@@ -99,9 +101,40 @@ export function App() {
   }, [token]);
 
   useEffect(() => {
-    if (!token) return;
+    let cancelled = false;
+    async function restoreSession() {
+      if (!token) {
+        setAuthChecked(true);
+        return;
+      }
+
+      try {
+        const currentUser = await auth.me();
+        if (!cancelled) {
+          setUser(currentUser);
+          setAuthChecked(true);
+        }
+      } catch {
+        window.localStorage.removeItem(tokenStorageKey);
+        if (!cancelled) {
+          setToken(null);
+          setUser(null);
+          setAuthChecked(true);
+        }
+      }
+    }
+
+    void restoreSession();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [auth, token]);
+
+  useEffect(() => {
+    if (!token || !authChecked) return;
     void loadDashboard();
-  }, [token]);
+  }, [authChecked, token]);
 
   async function loadDashboard() {
     setStatus("Backend API akışları yükleniyor");
@@ -136,6 +169,26 @@ export function App() {
     setStatus("Oturum backend auth üzerinden açıldı");
   }
 
+  async function handleLogout() {
+    setStatus("Çıkış yapılıyor");
+    try {
+      await auth.logout();
+    } finally {
+      window.localStorage.removeItem(tokenStorageKey);
+      setToken(null);
+      setUser(null);
+      setData({
+        conversations: [],
+        orders: [],
+        shipments: [],
+        settings: [],
+        webphone: null,
+      });
+      setAuthChecked(true);
+      setStatus("Oturum kapatıldı");
+    }
+  }
+
   async function handleUpload() {
     setStatus("Presigned upload instruction isteniyor");
     const response = await files.createUpload({
@@ -157,11 +210,26 @@ export function App() {
     setStatus("Dosya akışı presigned S3 sınırından geçti");
   }
 
+  if (token && !authChecked) {
+    return (
+      <main className="login-screen">
+        <div className="login-card">
+          <div className="brand large">
+            <span className="brand-mark">G</span>
+            <span>Garanti Kuluçka</span>
+          </div>
+          <p>Oturum backend üzerinden doğrulanıyor</p>
+        </div>
+      </main>
+    );
+  }
+
   if (!token) {
     return <LoginScreen onLogin={handleLogin} status={status} />;
   }
 
   const activeSettings = data.settings.filter((setting) => !setting.is_secret);
+  const visibleNavigation = navigationItems.filter((item) => item.roles.includes(user?.role ?? "guest"));
 
   return (
     <div className="app-shell">
@@ -171,7 +239,7 @@ export function App() {
           <span>Garanti Kuluçka</span>
         </div>
         <nav aria-label="Ana gezinme">
-          {navigationItems.map((item) => {
+          {visibleNavigation.map((item) => {
             const Icon = item.icon;
             return (
               <button
@@ -189,6 +257,9 @@ export function App() {
         <div className="user-chip">
           <Wifi size={15} aria-hidden="true" />
           <span>{user?.email ?? "Backend session"}</span>
+          <button type="button" onClick={handleLogout}>
+            Çıkış
+          </button>
         </div>
       </header>
 

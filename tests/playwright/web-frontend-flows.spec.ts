@@ -41,21 +41,23 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     if (url.pathname === "/auth/login") {
       await route.fulfill({
         contentType: "application/json",
-        body: JSON.stringify({
-          access_token: "playwright-token",
-          refresh_token: "refresh-token",
-          token_type: "Bearer",
-          expires_in: 900,
-          user: {
-            public_id: "usr_playwright",
-            email: "admin@example.com",
-            first_name: "Admin",
-            last_name: "User",
-            role: "admin",
-            permissions: ["admin:settings:read"],
-            sip_username: "1001",
-          },
-        }),
+        body: JSON.stringify(loginBody()),
+      });
+      return;
+    }
+
+    if (url.pathname === "/auth/me") {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify(loginBody().user),
+      });
+      return;
+    }
+
+    if (url.pathname === "/auth/logout") {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({ status: "ok" }),
       });
       return;
     }
@@ -210,6 +212,8 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await page.goto(app.url);
     await page.getByRole("button", { name: /giriş yap/i }).click();
     await expect(page.getByTestId("inbox-flow")).toContainText("Playwright Customer");
+    await page.reload();
+    await expect(page.getByTestId("inbox-flow")).toContainText("Playwright Customer");
     await page.getByRole("button", { name: /siparişler/i }).click();
     await expect(page.getByTestId("orders-flow")).toContainText("ORD-PLAYWRIGHT");
     await page.getByRole("button", { name: /kargo/i }).click();
@@ -221,6 +225,8 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("file-upload-flow")).toContainText("kanit.txt kaydedildi");
     await page.getByRole("button", { name: /santral/i }).click();
     await expect(page.getByTestId("webphone-flow")).toContainText("sip.example.com");
+    await page.getByRole("button", { name: /çıkış/i }).click();
+    await expect(page.getByRole("button", { name: /giriş yap/i })).toBeVisible();
   } finally {
     await closeWebApp(app.server);
   }
@@ -228,6 +234,8 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
   expect(requestedUrls).toEqual(
     expect.arrayContaining([
       "/auth/login",
+      "/auth/me",
+      "/auth/logout",
       "/api/conversations",
       "/api/orders",
       "/api/shipments",
@@ -239,3 +247,21 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
   );
   expect(requestedUrls.some((path) => path.includes("supabase"))).toBe(false);
 });
+
+function loginBody() {
+  return {
+    access_token: "playwright-token",
+    refresh_token: "refresh-token",
+    token_type: "Bearer",
+    expires_in: 900,
+    user: {
+      public_id: "usr_playwright",
+      email: "admin@example.com",
+      first_name: "Admin",
+      last_name: "User",
+      role: "admin",
+      permissions: ["admin:settings:read"],
+      sip_username: "1001",
+    },
+  };
+}
