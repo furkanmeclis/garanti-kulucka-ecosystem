@@ -65,6 +65,12 @@ interface NetgsmConfirmationSettings {
   deneme_arasi_dakika: number;
 }
 
+interface SipServerSettings {
+  ws_url: string;
+  domain: string;
+  stun: string;
+}
+
 interface NavigationItem {
   key: string;
   label: string;
@@ -98,6 +104,12 @@ const defaultNetgsmSettings: NetgsmConfirmationSettings = {
   deneme_arasi_dakika: 10,
 };
 
+const defaultSipServerSettings: SipServerSettings = {
+  ws_url: "",
+  domain: "",
+  stun: "stun:stun.l.google.com:19302",
+};
+
 function flowFromPath(pathname: string) {
   return [...navigationItems]
     .sort((first, second) => second.path.length - first.path.length)
@@ -127,6 +139,18 @@ function netgsmSettingsFrom(settings: AdminSetting[]): NetgsmConfirmationSetting
     ilk_arama_dakika: readNumberSetting(record.ilk_arama_dakika, defaultNetgsmSettings.ilk_arama_dakika),
     max_deneme: readNumberSetting(record.max_deneme, defaultNetgsmSettings.max_deneme),
     deneme_arasi_dakika: readNumberSetting(record.deneme_arasi_dakika, defaultNetgsmSettings.deneme_arasi_dakika),
+  };
+}
+
+function sipServerSettingsFrom(settings: AdminSetting[], webphoneConfig: WebphoneConfig | null): SipServerSettings {
+  const value = settings.find((setting) => setting.key === "sip_config")?.value;
+  const record = typeof value === "object" && value !== null && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+  return {
+    ws_url: typeof record.ws_url === "string" ? record.ws_url : webphoneConfig?.sip_websocket_url ?? defaultSipServerSettings.ws_url,
+    domain: typeof record.domain === "string" ? record.domain : webphoneConfig?.sip_domain ?? defaultSipServerSettings.domain,
+    stun: typeof record.stun === "string" ? record.stun : defaultSipServerSettings.stun,
   };
 }
 
@@ -403,6 +427,24 @@ export function App() {
     setStatus("NetGSM teyit ayarı backend admin settings üzerinden kaydedildi");
   }
 
+  async function handleSaveSipConfig() {
+    const setting = await admin.upsertSetting(
+      "sip_config",
+      {
+        ws_url: sipServerSettings.ws_url,
+        domain: sipServerSettings.domain,
+        stun: sipServerSettings.stun,
+      },
+      false,
+      "global",
+    );
+    setData((current) => ({
+      ...current,
+      settings: [setting, ...current.settings.filter((item) => item.key !== setting.key)],
+    }));
+    setStatus("Santral SIP ayarı backend admin settings üzerinden kaydedildi");
+  }
+
   async function handleUpsertIntegrationAccount() {
     setStatus("Entegrasyon hesabı backend API üzerinden kaydediliyor");
     const account = await admin.upsertIntegrationAccount({
@@ -499,6 +541,7 @@ export function App() {
   const activeFlow = flowFromPath(location.pathname);
   const canTogglePresence = Boolean(user && user.role !== "admin");
   const netgsmSettings = netgsmSettingsFrom(activeSettings);
+  const sipServerSettings = sipServerSettingsFrom(activeSettings, data.webphone);
   const selectedConversation =
     data.conversations.find((conversation) => conversation.public_id === selectedConversationId) ?? data.conversations[0] ?? null;
   const selectedOrder = data.orders.find((order) => order.public_id === selectedOrderId) ?? data.orders[0] ?? null;
@@ -811,15 +854,21 @@ export function App() {
         )}
 
         {activeFlow === "calls" && (
-          <LegacySurfacePanel
-            title="Arama"
-            icon={<Phone size={18} />}
-            testId="calls-flow"
-            rows={[
-              ["SIP domain", data.webphone?.sip_domain ?? "-", "webphone API"],
-              ["Transport", data.webphone?.transport ?? "-", "backend config"],
-            ]}
-          />
+          <FlowPanel title="Arama" icon={<Phone size={18} />} testId="calls-flow">
+            <DetailPanel title="Santral Sunucu Bilgileri" testId="sip-config-detail">
+              <DataRows
+                rows={[
+                  ["WebSocket", sipServerSettings.ws_url || "-", "admin settings"],
+                  ["Domain", sipServerSettings.domain || "-", "webphone API"],
+                  ["STUN", sipServerSettings.stun, "browser WebRTC"],
+                  ["Transport", data.webphone?.transport ?? "-", data.webphone?.enabled ? "aktif" : "kapalı"],
+                ]}
+              />
+              <button className="primary-action" type="button" onClick={handleSaveSipConfig}>
+                Santral ayarını kaydet
+              </button>
+            </DetailPanel>
+          </FlowPanel>
         )}
 
         {activeFlow === "vapi" && (

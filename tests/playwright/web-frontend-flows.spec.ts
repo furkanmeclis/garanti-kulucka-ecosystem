@@ -48,6 +48,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
   let savedIntegrationToken = false;
   let savedIntegrationSetting = false;
   let savedNetgsmSetting = false;
+  let savedSipConfig = false;
 
   await page.route(`${backendBaseUrl}/**`, async (route) => {
     const url = new URL(route.request().url());
@@ -254,6 +255,17 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
               updated_at: "2026-01-01T00:00:00.000Z",
             },
             {
+              key: "sip_config",
+              scope: "global",
+              value: {
+                ws_url: "wss://sip.example.com/ws",
+                domain: "sip.example.com",
+                stun: "stun:stun.l.google.com:19302",
+              },
+              is_secret: false,
+              updated_at: "2026-01-01T00:00:00.000Z",
+            },
+            {
               key: "netgsm_teyit_ayarlar",
               scope: "global",
               value: {
@@ -266,6 +278,26 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
               updated_at: "2026-01-01T00:00:00.000Z",
             },
           ],
+        }),
+      });
+      return;
+    }
+
+    if (url.pathname === "/admin/settings/sip_config") {
+      expect(route.request().method()).toBe("PUT");
+      savedSipConfig = true;
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          key: "sip_config",
+          scope: "global",
+          value: {
+            ws_url: "wss://sip.example.com/ws",
+            domain: "sip.example.com",
+            stun: "stun:stun.l.google.com:19302",
+          },
+          is_secret: false,
+          updated_at: "2026-01-01T00:04:00.000Z",
         }),
       });
       return;
@@ -515,7 +547,10 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("sms-confirmation-detail")).toContainText("aktif");
     await expect(page.getByTestId("sms-confirmation-detail")).toContainText("5 dakika sonra aranacak");
     await page.goto(`${app.url}/sesli-asistan`);
-    await expect(page.getByTestId("calls-flow")).toContainText("sip.example.com");
+    await expect(page.getByTestId("sip-config-detail")).toContainText("wss://sip.example.com/ws");
+    await expect(page.getByTestId("sip-config-detail")).toContainText("stun:stun.l.google.com:19302");
+    await page.getByRole("button", { name: /santral ayarını kaydet/i }).click();
+    await expect(page.getByTestId("sip-config-detail")).toContainText("sip.example.com");
     await page.goto(`${app.url}/sesli-asistan/vapi`);
     await expect(page.getByTestId("vapi-flow")).toContainText("webphone API");
     await page.goto(`${app.url}/raporlar`);
@@ -615,6 +650,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       "/api/shipments",
       "/api/shipments/shp_playwright/status",
       "/admin/settings",
+      "/admin/settings/sip_config",
       "/admin/settings/netgsm_teyit_ayarlar",
       "/admin/settings/providers.ptt.live_mode",
       "/api/files/uploads",
@@ -623,6 +659,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     ]),
   );
   expect(requestedUrls.some((path) => path.includes("supabase"))).toBe(false);
+  expect(savedSipConfig).toBe(true);
 });
 
 function loginUser(overrides: Partial<PlaywrightUser> = {}): PlaywrightUser {
