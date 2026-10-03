@@ -391,6 +391,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       page.waitForResponse(`${backendBaseUrl}/auth/login`),
       page.getByRole("button", { name: /giriş yap/i }).click(),
     ]);
+    await expect(page.getByText("cargo@example.com")).toBeVisible();
     await page.goto(`${app.url}/mesajlar`);
     await expect(page.getByTestId("inbox-flow")).toContainText("Playwright Customer");
     await expect(page.getByRole("link", { name: /siparişler/i })).toHaveCount(1);
