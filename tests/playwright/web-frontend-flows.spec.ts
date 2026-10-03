@@ -301,7 +301,17 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
   });
 
   try {
-    await page.goto(app.url);
+    await page.goto(`${app.url}/gizlilik-politikasi`);
+    await expect(page.getByTestId("privacy-public-page")).toContainText("Backend API");
+    await page.goto(`${app.url}/kullanim-kosullari`);
+    await expect(page.getByTestId("terms-public-page")).toContainText("PTT");
+    await page.goto(`${app.url}/veri-silme`);
+    await expect(page.getByTestId("deletion-public-page")).toContainText("Talep");
+    await page.goto(`${app.url}/sifre-sifirla`);
+    await expect(page.getByTestId("reset-password-flow")).toContainText("Şifre sıfırlama");
+    await page.getByRole("button", { name: /sıfırlama bağlantısı gönder/i }).click();
+    await expect(page.getByTestId("reset-password-flow")).toContainText("backend auth");
+    await page.goto(`${app.url}/giris`);
     await page.getByRole("button", { name: /giriş yap/i }).click();
     await expect(page.getByTestId("inbox-flow")).toContainText("Playwright Customer");
     await expect(page.getByRole("link", { name: /yorumlar/i })).toHaveCount(1);

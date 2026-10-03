@@ -204,7 +204,8 @@ nav {
 .list-panel span,
 .message-thread span,
 .webphone-card span,
-.result-line {
+.result-line,
+.public-card p {
   color: #94a3b8;
 }
 
@@ -277,6 +278,82 @@ nav {
   padding: 0 12px;
   color: #f8fafc;
   background: #0f172a;
+}
+
+.auth-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.auth-links a,
+.back-link {
+  color: #86efac;
+  text-decoration: none;
+}
+
+.auth-links a:hover,
+.back-link:hover {
+  color: #bbf7d0;
+}
+
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  width: max-content;
+}
+
+.success-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #86efac;
+}
+
+.public-page {
+  min-height: 100vh;
+  padding: 40px 18px;
+  background: #0f172a;
+}
+
+.public-card {
+  display: grid;
+  gap: 22px;
+  width: min(760px, 100%);
+  margin: 0 auto;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 24px;
+  background: #1e293b;
+  box-shadow: 0 16px 44px rgba(2, 6, 23, 0.28);
+}
+
+.public-title {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.public-title h1 {
+  margin: 0;
+  font-size: 24px;
+}
+
+.public-title p {
+  margin: 4px 0 0;
+}
+
+.public-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  color: #86efac;
+  background: rgba(34, 197, 94, 0.1);
 }
 
 @media (max-width: 860px) {
