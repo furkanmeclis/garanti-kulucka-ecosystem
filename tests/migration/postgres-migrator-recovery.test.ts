@@ -2,10 +2,10 @@ import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
-import { createDatabase } from "@garanti-kulucka/database";
 import { describe, expect, it } from "vitest";
 import { applyMigrationBatchWithState } from "../../apps/migrator/src/apply.js";
 import { DatabaseMigrationTarget } from "../../apps/migrator/src/target.js";
+import { createDatabase } from "../../packages/database/src/index.js";
 import type {
   CanonicalRecord,
   CanonicalWriteResult,
