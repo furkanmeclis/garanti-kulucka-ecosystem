@@ -3,6 +3,16 @@ import { createServer, type ViteDevServer } from "vite";
 
 const backendBaseUrl = "http://127.0.0.1:65530";
 
+interface PlaywrightUser {
+  public_id: string;
+  email: string;
+  first_name: string;
+  last_name: string;
+  role: string;
+  permissions: string[];
+  sip_username: string;
+}
+
 async function startWebApp() {
   const server = await createServer({
     root: "apps/web",
@@ -33,6 +43,7 @@ async function closeWebApp(server: ViteDevServer) {
 test("real frontend shell uses backend auth, domain, file, and webphone APIs", async ({ page }) => {
   const app = await startWebApp();
   const requestedUrls: string[] = [];
+  let currentUser = loginUser();
 
   await page.route(`${backendBaseUrl}/**`, async (route) => {
     const url = new URL(route.request().url());
@@ -41,7 +52,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     if (url.pathname === "/auth/login") {
       await route.fulfill({
         contentType: "application/json",
-        body: JSON.stringify(loginBody()),
+        body: JSON.stringify(loginBody(currentUser)),
       });
       return;
     }
@@ -49,7 +60,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     if (url.pathname === "/auth/me") {
       await route.fulfill({
         contentType: "application/json",
-        body: JSON.stringify(loginBody().user),
+        body: JSON.stringify(currentUser),
       });
       return;
     }
@@ -362,6 +373,19 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("webphone-flow")).toContainText("sip.example.com");
     await page.getByRole("button", { name: /çıkış/i }).click();
     await expect(page.getByRole("button", { name: /giriş yap/i })).toBeVisible();
+    currentUser = loginUser({ email: "cargo@example.com", role: "kargo_operatoru" });
+    await Promise.all([
+      page.waitForResponse(`${backendBaseUrl}/auth/login`),
+      page.getByRole("button", { name: /giriş yap/i }).click(),
+    ]);
+    await page.goto(`${app.url}/mesajlar`);
+    await expect(page.getByTestId("inbox-flow")).toContainText("Playwright Customer");
+    await expect(page.getByRole("link", { name: /siparişler/i })).toHaveCount(1);
+    await expect(page.getByRole("link", { name: /kargo/i })).toHaveCount(1);
+    await expect(page.getByRole("link", { name: /^sms$/i })).toHaveCount(1);
+    await expect(page.getByRole("link", { name: /ayarlar/i })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: /dosya/i })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: /vapi ai/i })).toHaveCount(0);
   } finally {
     await closeWebApp(app.server);
   }
@@ -386,20 +410,25 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
   expect(requestedUrls.some((path) => path.includes("supabase"))).toBe(false);
 });
 
-function loginBody() {
+function loginUser(overrides: Partial<PlaywrightUser> = {}): PlaywrightUser {
+  return {
+    public_id: "usr_playwright",
+    email: "admin@example.com",
+    first_name: "Admin",
+    last_name: "User",
+    role: "admin",
+    permissions: ["admin:settings:read"],
+    sip_username: "1001",
+    ...overrides,
+  };
+}
+
+function loginBody(user = loginUser()) {
   return {
     access_token: "playwright-token",
     refresh_token: "refresh-token",
     token_type: "Bearer",
     expires_in: 900,
-    user: {
-      public_id: "usr_playwright",
-      email: "admin@example.com",
-      first_name: "Admin",
-      last_name: "User",
-      role: "admin",
-      permissions: ["admin:settings:read"],
-      sip_username: "1001",
-    },
+    user,
   };
 }
