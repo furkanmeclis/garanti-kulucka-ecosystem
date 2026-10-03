@@ -26,7 +26,12 @@ import {
   XCircle,
   type LucideIcon,
 } from "lucide-react";
-import { createAdminClient, type AdminSetting, type IntegrationAccount } from "../api/admin-client.js";
+import {
+  createAdminClient,
+  type AdminSetting,
+  type IntegrationAccount,
+  type IntegrationAccountSnapshot,
+} from "../api/admin-client.js";
 import { createAuthClient, type LoginResponse } from "../api/auth-client.js";
 import {
   createDomainClient,
@@ -111,6 +116,7 @@ export function App() {
   const [status, setStatus] = useState("Hazır");
   const [uploadedFile, setUploadedFile] = useState<FileMetadata | null>(null);
   const [presenceUpdating, setPresenceUpdating] = useState(false);
+  const [integrationSnapshot, setIntegrationSnapshot] = useState<IntegrationAccountSnapshot | null>(null);
 
   const http = useMemo(
     () =>
@@ -232,6 +238,7 @@ export function App() {
         integrationAccounts: [],
         webphone: null,
       });
+      setIntegrationSnapshot(null);
       setAuthChecked(true);
       setStatus("Oturum kapatıldı");
     }
@@ -339,6 +346,27 @@ export function App() {
       ],
     }));
     setStatus("Entegrasyon hesabı backend API üzerinden kaydedildi");
+  }
+
+  async function handleOpenIntegrationAccount(accountPublicId: string) {
+    setStatus("Entegrasyon hesabı detayları backend API üzerinden yükleniyor");
+    const snapshot = await admin.getIntegrationAccount(accountPublicId);
+    setIntegrationSnapshot(snapshot);
+    setStatus("Entegrasyon hesabı detayları backend API üzerinden yüklendi");
+  }
+
+  async function handleSaveIntegrationToken() {
+    const accountPublicId = integrationSnapshot?.account.public_id ?? data.integrationAccounts[0]?.public_id;
+    if (!accountPublicId) return;
+
+    setStatus("Entegrasyon token bilgisi backend API üzerinden kaydediliyor");
+    await admin.upsertIntegrationToken(accountPublicId, "access_token", {
+      secret: "frontend-playwright-token",
+      source: "admin-ui",
+    });
+    const snapshot = await admin.getIntegrationAccount(accountPublicId);
+    setIntegrationSnapshot(snapshot);
+    setStatus("Entegrasyon token bilgisi maskeli backend API üzerinden kaydedildi");
   }
 
   async function handleTogglePresence() {
@@ -497,6 +525,50 @@ export function App() {
               Instagram hesabı kaydet
             </button>
             <DataRows rows={data.integrationAccounts.map((account) => [account.provider_name, account.display_name, account.status])} />
+            <div className="integration-actions">
+              {data.integrationAccounts.map((account) => (
+                <button
+                  className="secondary-action"
+                  key={account.public_id}
+                  type="button"
+                  onClick={() => handleOpenIntegrationAccount(account.public_id)}
+                >
+                  {account.display_name} detay
+                </button>
+              ))}
+              <button className="secondary-action" type="button" onClick={handleSaveIntegrationToken}>
+                Access token kaydet
+              </button>
+            </div>
+            {integrationSnapshot && (
+              <div className="integration-detail" data-testid="integration-detail">
+                <div>
+                  <h2>{integrationSnapshot.account.display_name}</h2>
+                  <p>{integrationSnapshot.account.external_account_id ?? "Harici hesap yok"}</p>
+                </div>
+                <DataRows
+                  rows={[
+                    ["Provider", integrationSnapshot.account.provider_name, integrationSnapshot.account.status],
+                    ["Ayar", String(integrationSnapshot.settings.length), "backend snapshot"],
+                    ["Token", String(integrationSnapshot.tokens.length), "value masked"],
+                  ]}
+                />
+                <DataRows
+                  rows={integrationSnapshot.settings.map((setting) => [
+                    setting.key,
+                    setting.is_secret ? "secret" : JSON.stringify(setting.value),
+                    "backend setting",
+                  ])}
+                />
+                <DataRows
+                  rows={integrationSnapshot.tokens.map((token) => [
+                    token.token_type,
+                    token.expires_at ?? "süresiz",
+                    token.value === null ? "maskeli" : "gizli veri gösterilmedi",
+                  ])}
+                />
+              </div>
+            )}
           </FlowPanel>
         )}
 

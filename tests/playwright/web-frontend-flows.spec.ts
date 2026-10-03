@@ -45,6 +45,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
   const app = await startWebApp();
   const requestedUrls: string[] = [];
   let currentUser = loginUser();
+  let savedIntegrationToken = false;
 
   await page.route(`${backendBaseUrl}/**`, async (route) => {
     const url = new URL(route.request().url());
@@ -308,6 +309,60 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       return;
     }
 
+    if (url.pathname === "/admin/integrations/accounts/iac_instagram") {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          account: {
+            public_id: "iac_instagram",
+            provider_key: "instagram",
+            provider_name: "Instagram",
+            display_name: "Instagram Main",
+            external_account_id: "ig_main",
+            status: "active",
+            metadata: {},
+            updated_at: "2026-01-01T00:00:00.000Z",
+          },
+          settings: [
+            {
+              public_id: "ias_webhook",
+              key: "webhook.enabled",
+              value: true,
+              is_secret: false,
+              updated_at: "2026-01-01T00:00:00.000Z",
+            },
+          ],
+          tokens: savedIntegrationToken
+            ? [
+                {
+                  public_id: "iat_access",
+                  token_type: "access_token",
+                  value: null,
+                  expires_at: null,
+                  last_refreshed_at: "2026-01-01T00:05:00.000Z",
+                  updated_at: "2026-01-01T00:05:00.000Z",
+                },
+              ]
+            : [],
+        }),
+      });
+      return;
+    }
+
+    if (url.pathname === "/admin/integrations/accounts/iac_instagram/tokens/access_token") {
+      expect(route.request().method()).toBe("PUT");
+      savedIntegrationToken = true;
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          public_id: "iat_access",
+          token_type: "access_token",
+          value: null,
+        }),
+      });
+      return;
+    }
+
     if (url.pathname === "/api/webphone/config") {
       await route.fulfill({
         contentType: "application/json",
@@ -408,6 +463,13 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("reports-flow")).toContainText("domain API");
     await page.goto(`${app.url}/ayarlar/entegrasyonlar`);
     await expect(page.getByTestId("integrations-flow")).toContainText("Instagram Main");
+    await page.getByRole("button", { name: /instagram main detay/i }).click();
+    await expect(page.getByTestId("integration-detail")).toContainText("webhook.enabled");
+    await expect(page.getByTestId("integration-detail")).toContainText("value masked");
+    await page.getByRole("button", { name: /access token kaydet/i }).click();
+    await expect(page.getByTestId("integration-detail")).toContainText("access_token");
+    await expect(page.getByTestId("integration-detail")).toContainText("maskeli");
+    await expect(page.getByTestId("integration-detail")).not.toContainText("frontend-playwright-token");
     await page.getByRole("button", { name: /instagram hesabı kaydet/i }).click();
     await expect(page.getByTestId("integrations-flow")).toContainText("Instagram Playwright");
     await page.getByRole("link", { name: /siparişler/i }).click();
@@ -462,6 +524,8 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       "/api/conversations",
       "/api/conversations/cnv_playwright/messages",
       "/admin/integrations/accounts",
+      "/admin/integrations/accounts/iac_instagram",
+      "/admin/integrations/accounts/iac_instagram/tokens/access_token",
       "/api/orders",
       "/api/shipments",
       "/api/shipments/shp_playwright/status",
