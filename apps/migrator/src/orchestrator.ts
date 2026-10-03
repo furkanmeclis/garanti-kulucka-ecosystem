@@ -19,6 +19,7 @@ import { legacyOrderItemTable, transformLegacyOrderItem } from "./order-item-map
 import { legacyOrderTable, transformLegacyOrder } from "./order-mapping.js";
 import { legacyProductTable, transformLegacyProduct } from "./product-mapping.js";
 import { createDryRunReport } from "./reports.js";
+import { legacyShipmentTable, transformLegacyShipment } from "./shipment-mapping.js";
 import {
   assertApplyPrerequisites,
   createLegacyMappingCatalog,
@@ -43,6 +44,7 @@ import type {
   OrderItemTransformSummary,
   OrderTransformSummary,
   ProductTransformSummary,
+  ShipmentTransformSummary,
   SourceDatabaseIdentity,
   SourceManifest,
   SourceTableSnapshot,
@@ -100,6 +102,7 @@ export async function runMigration(input: RunMigrationInput): Promise<MigrationR
   const validateProductRows = entities.includes("products");
   const validateOrderRows = entities.includes("orders");
   const validateOrderItemRows = entities.includes("order_items");
+  const validateShipmentRows = entities.includes("shipments");
   if (validateCustomerRows) assertEntityRoutesFromLegacyTable(catalog, "customers", legacyCustomerTable, "Customer");
   if (validateConversationRows) {
     assertEntityRoutesFromLegacyTable(catalog, "conversations", legacyConversationTable, "Conversation");
@@ -110,6 +113,7 @@ export async function runMigration(input: RunMigrationInput): Promise<MigrationR
   if (validateOrderItemRows) {
     assertEntityRoutesFromLegacyTable(catalog, "order_items", legacyOrderItemTable, "Order item");
   }
+  if (validateShipmentRows) assertEntityRoutesFromLegacyTable(catalog, "shipments", legacyShipmentTable, "Shipment");
   const integrationAccounts = ownIntegrationAccounts(input.integrationAccounts);
   const conversationAccounts = ownConversationAccounts(input.conversationAccounts);
   const userPublicIds = ownUserPublicIds(input.userPublicIds);
@@ -166,6 +170,13 @@ export async function runMigration(input: RunMigrationInput): Promise<MigrationR
         productPublicIdsByExternalId: requireProductDependency(productTransform).publicIdsByExternalProductId,
       })
       : undefined;
+    const shipmentTransform = validateShipmentRows
+      ? await validateShipmentBatches(
+        input.source,
+        plan,
+        requireDependencyPublicIds(customers, "Shipment", "customers"),
+      )
+      : undefined;
     return {
       mode: input.mode,
       plan,
@@ -178,6 +189,7 @@ export async function runMigration(input: RunMigrationInput): Promise<MigrationR
         ...(productTransform ? { productTransform: productTransform.summary } : {}),
         ...(orders ? { orderTransform: orders.summary } : {}),
         ...(orderItemTransform ? { orderItemTransform } : {}),
+        ...(shipmentTransform ? { shipmentTransform } : {}),
         ...(input.now ? { now: input.now } : {}),
       }),
       batches: [],
@@ -212,6 +224,9 @@ function assertDryRunEntityDependencies(entities: readonly MigrationEntity[]): v
   }
   if (entities.includes("order_items") && !entities.includes("products")) {
     throw new Error("Order item dry-run requires products in the same plan");
+  }
+  if (entities.includes("shipments") && !entities.includes("customers")) {
+    throw new Error("Shipment dry-run requires customers in the same plan");
   }
 }
 
@@ -539,6 +554,41 @@ async function validateOrderItemBatches(
     unresolvedProducts,
     skuProductMatches,
     externalProductMatches,
+  });
+}
+
+async function validateShipmentBatches(
+  source: LegacySource,
+  plan: MigrationPlan,
+  customerPublicIds: ReadonlyMap<string, string>,
+): Promise<ShipmentTransformSummary> {
+  let transformedRows = 0;
+  let unresolvedCustomers = 0;
+  let pttShipments = 0;
+  let suratShipments = 0;
+  let manualShipments = 0;
+
+  for (const batch of plan.batches) {
+    if (batch.entity !== "shipments") continue;
+    const rows = await readPlannedBatch(source, batch, "Shipment");
+
+    for (const row of rows) {
+      const result = transformLegacyShipment(row, { customerPublicIds });
+      transformedRows += 1;
+      unresolvedCustomers += result.reconciliation
+        .filter((entry) => entry.code === "unresolved_customer").length;
+      if (result.shipment.provider === "ptt") pttShipments += 1;
+      if (result.shipment.provider === "surat") suratShipments += 1;
+      if (result.shipment.provider === "manual") manualShipments += 1;
+    }
+  }
+
+  return Object.freeze({
+    transformedRows,
+    unresolvedCustomers,
+    pttShipments,
+    suratShipments,
+    manualShipments,
   });
 }
 

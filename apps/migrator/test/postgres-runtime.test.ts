@@ -143,19 +143,19 @@ describe("PostgreSQL migration runtime", () => {
       { entity: "customers", totalRows: 0, batches: 0 },
       { entity: "conversations", totalRows: 0, batches: 0 },
       { entity: "messages", totalRows: 0, batches: 0 },
+      { entity: "products", totalRows: 0, batches: 0 },
       { entity: "orders", totalRows: 0, batches: 0 },
       { entity: "order_items", totalRows: 0, batches: 0 },
       { entity: "shipments", totalRows: 0, batches: 0 },
-      { entity: "products", totalRows: 0, batches: 0 },
     ]);
     expect(client.queries.filter((sql) => /select count\(\*\)/i.test(sql))).toEqual([
       'select count(*) as count from "public"."musteriler"',
       'select count(*) as count from "public"."konusmalar"',
       'select count(*) as count from "public"."mesajlar"',
+      'select count(*) as count from "public"."urunler"',
       'select count(*) as count from "public"."siparisler"',
       'select count(*) as count from "public"."siparis_kalemleri"',
       'select count(*) as count from "public"."kargo_gonderimleri"',
-      'select count(*) as count from "public"."urunler"',
     ]);
   });
 

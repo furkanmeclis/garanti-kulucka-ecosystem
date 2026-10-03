@@ -1140,6 +1140,61 @@ const legacyOrderItemRows: LegacyRecord[] = [
   }),
 ];
 
+function legacyShipmentRow(id: string, overrides: Record<string, unknown> = {}): LegacyRecord {
+  const payload = {
+    id,
+    musteri_id: "0a32ce63-4c3b-4fd4-917d-726d540a7216",
+    kargo_firmasi: "ptt",
+    takip_no: "TRK-1",
+    barkod_url: null,
+    alici_ad: "Ada Lovelace",
+    alici_telefon: "+90 555 000 00 00",
+    alici_adres: "Atatürk Cad. 1",
+    alici_il: "İstanbul",
+    alici_ilce: "Kadıköy",
+    alici_posta_kodu: null,
+    gonderi_tipi: null,
+    agirlik: null,
+    desi: null,
+    ucret: null,
+    odeme_tipi: null,
+    durum: "beklemede",
+    notlar: null,
+    olusturan_id: null,
+    olusturma_tarihi: "2024-01-02T03:04:05Z",
+    guncelleme_tarihi: null,
+    alici_email: null,
+    kargo_turu: null,
+    tasima_sekli: null,
+    teslim_sekli: null,
+    adet: null,
+    kapida_odeme_tutari: null,
+    kargo_icerigi: null,
+    son_hareket: null,
+    son_hareket_tarihi: null,
+    surat_web_siparis_kodu: null,
+    surat_kargo_takip_no: null,
+    surat_hesap_tipi: null,
+    surat_barkod_no: null,
+    ...overrides,
+  };
+  return legacyRow("public.kargo_gonderimleri", id, payload);
+}
+
+const legacyShipmentRows: LegacyRecord[] = [
+  legacyShipmentRow("c1000000-0000-4000-8000-000000000001"),
+  legacyShipmentRow("c1000000-0000-4000-8000-000000000002", {
+    musteri_id: "1b43df74-5d4c-4fe5-a28e-837e651b8327",
+    kargo_firmasi: "Sürat Kargo",
+    durum: "yolda",
+  }),
+  legacyShipmentRow("c1000000-0000-4000-8000-000000000003", {
+    musteri_id: "ffffffff-ffff-4fff-8fff-ffffffffffff",
+    kargo_firmasi: "manuel",
+    durum: null,
+  }),
+];
+
 function orderDryRun(source: LegacySource) {
   return runMigration({
     mode: "dry-run",
@@ -1165,6 +1220,19 @@ function orderItemDryRun(source: LegacySource, entities: MigrationEntity[] = ["o
     sourceSystem: "legacy_postgres",
     sourceDatabaseIdentity: sourceIdentity,
     userPublicIds: new Map([[assignedUserId, "usr_agent_1"]]),
+  });
+}
+
+function shipmentDryRun(source: LegacySource, entities: MigrationEntity[] = ["shipments", "customers"]) {
+  return runMigration({
+    mode: "dry-run",
+    source,
+    mappingCatalog: legacyMappingCatalog,
+    batchSize: 2,
+    entities,
+    now: new Date("2026-09-30T00:00:00.000Z"),
+    sourceSystem: "legacy_postgres",
+    sourceDatabaseIdentity: sourceIdentity,
   });
 }
 
@@ -1200,6 +1268,46 @@ describe("order dry-run validation", () => {
     });
     expect(result.dryRunReport?.totals).toEqual({ plannedRows: 6, plannedBatches: 4, blockedRows: 0 });
     expect(result.batches).toEqual([]);
+  });
+});
+
+describe("shipment dry-run validation", () => {
+  it("transforms customers, then shipments, without a target", async () => {
+    const source = new LegacyTableSource({
+      customers: legacyCustomerRows,
+      shipments: legacyShipmentRows,
+    });
+
+    const result = await shipmentDryRun(source);
+
+    expect(source.operations).toEqual([
+      "describe",
+      "count:customers",
+      "count:shipments",
+      "read:customers",
+      "read:customers",
+      "read:shipments",
+      "read:shipments",
+    ]);
+    expect(result.dryRunReport?.customerTransform).toMatchObject({ transformedRows: 3 });
+    expect(result.dryRunReport?.shipmentTransform).toEqual({
+      transformedRows: 3,
+      unresolvedCustomers: 1,
+      pttShipments: 1,
+      suratShipments: 1,
+      manualShipments: 1,
+    });
+    expect(result.dryRunReport?.totals).toEqual({ plannedRows: 6, plannedBatches: 4, blockedRows: 0 });
+    expect(result.batches).toEqual([]);
+  });
+
+  it("rejects shipments without customers before source access", async () => {
+    const source = new LegacyTableSource({ shipments: legacyShipmentRows });
+
+    await expect(shipmentDryRun(source, ["shipments"])).rejects.toThrow(
+      "Shipment dry-run requires customers in the same plan",
+    );
+    expect(source.operations).toEqual([]);
   });
 });
 

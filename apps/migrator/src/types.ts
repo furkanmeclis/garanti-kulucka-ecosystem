@@ -234,6 +234,7 @@ export interface DryRunReport {
   readonly productTransform?: ProductTransformSummary;
   readonly orderTransform?: OrderTransformSummary;
   readonly orderItemTransform?: OrderItemTransformSummary;
+  readonly shipmentTransform?: ShipmentTransformSummary;
   readonly generatedAt: string;
 }
 
@@ -273,6 +274,14 @@ export interface OrderItemTransformSummary {
   readonly unresolvedProducts: number;
   readonly skuProductMatches: number;
   readonly externalProductMatches: number;
+}
+
+export interface ShipmentTransformSummary {
+  readonly transformedRows: number;
+  readonly unresolvedCustomers: number;
+  readonly pttShipments: number;
+  readonly suratShipments: number;
+  readonly manualShipments: number;
 }
 
 export interface VerificationReport {

@@ -25,7 +25,7 @@ export interface LegacyMappingCatalog {
   readonly tables: readonly LegacyTableMapping[];
 }
 
-export const mappingCatalogVersion = "p2-order-item-catalog-v1";
+export const mappingCatalogVersion = "p2-shipment-transform-v1";
 
 const canonicalMigrationEntitySet = new Set<string>(canonicalMigrationEntities);
 const targetMappingValues = new Set<string>(["direct", "synthetic"]);
