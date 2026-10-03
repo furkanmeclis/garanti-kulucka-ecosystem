@@ -6,11 +6,11 @@ Bu belge, projeye yeni bir sohbetten veya bağlamsız bir çalışma oturumundan
 
 - Repo: `/Users/furkanmeclis/Documents/Projects/garanti-kulucka-ecosystem`
 - GitHub çalışma modeli: monorepo, yalnız `main`, PR yok.
-- Yayımlanmış son checkpoint: `v0.1.146`
-- Yayımlanmış son commit: `a630733eb0c0369595ca43a8100eb75d99af1d19`
-- Commit mesajı: `test(migrator): harden order item dry-run failures`
+- Yayımlanmış son checkpoint: `v0.1.148`
+- Yayımlanmış son commit: `5fa96eac8e3b4951142b064413a2aa42cd9c0c2a`
+- Commit mesajı: `test(migrator): harden shipment dry-run failures`
 - Genel ilerleme: yaklaşık `%80`
-- Son tamamlanan çalışma: on commitlik migrator checkpoint'i; order item ve shipment dry-run dönüşümleri, transaction-bound apply batches, run-scoped apply lock, persisted row-content fingerprints, retry/resume idempotency proof, and strengthened secret redaction guards.
+- Son tamamlanan çalışma: shipment dry-run failure guard checkpoint'i; route mismatch before source access, checksum mismatch, malformed checksum format, unsupported provider/status, and short shipment batch failures are now covered in migrator tests.
 - Sıradaki bağımlılık kapısı P4 real PostgreSQL source/target E2E ve production apply activation evidence hazırlığıdır. Customer address/external identity apply-readiness, frontend migration, live provider adapters, and production operations runbooks kendi kapılarında devam eder.
 - Production `migrate --apply` kapısı kapalıdır. Tüm aktivasyon koşulları geçmeden açılmamalıdır.
 
@@ -537,8 +537,8 @@ git diff --check
 Beklenen yayımlanmış taban:
 
 ```text
-a630733eb0c0369595ca43a8100eb75d99af1d19
-v0.1.146
+5fa96eac8e3b4951142b064413a2aa42cd9c0c2a
+v0.1.148
 ```
 
 Aktif schema checkpoint kaybolmuşsa otomatik olarak yeniden üretme. Önce `git status`, `git reflog`, stash, başka worktree ve kullanıcı tarafından bırakılmış değişiklikleri araştır. Mevcut değişiklikleri koru.
@@ -645,7 +645,7 @@ Bu maddeler ihtiyaç varsa genişletilir; mevcut davranış sebepsiz yere yenide
 
 İlk görev P4 activation evidence hazırlığıdır:
 
-1. Yayımlanmış `v0.1.146` migrator safety checkpoint’ini taban kabul et. Apply kapalı kalsın.
+1. Yayımlanmış `v0.1.148` migrator safety checkpoint’ini taban kabul et. Apply kapalı kalsın.
 2. Gerçek PostgreSQL source/target E2E fixture'ını kur: customer, conversation, message, product, order, order item ve shipment dry-run akışlarını aynı run içinde çalıştır.
 3. Row-content manifest/fingerprint persistence, operation report redaction, unresolved reconciliation counts ve short-read fail-closed davranışını fixture üzerinde doğrula.
 4. Production apply activation checklist'inde açık kalan customer address/external identity apply-readiness, backup/restore runbook ve real source/target E2E maddelerini ayrı ayrı kanıtla.
