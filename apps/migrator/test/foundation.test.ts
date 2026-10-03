@@ -199,6 +199,25 @@ class TransactionalMemoryTarget extends MemoryTarget {
   }
 }
 
+class FreshTransactionalMemoryTarget extends MemoryTarget {
+  transactionCalls = 0;
+  transactionTargets: MemoryTarget[] = [];
+
+  async runInTransaction<T>(operation: (target: MigrationTarget) => Promise<T>): Promise<T> {
+    this.transactionCalls += 1;
+    const transactionTarget = new MemoryTarget();
+    this.transactionTargets.push(transactionTarget);
+    const result = await operation(transactionTarget);
+    for (const record of transactionTarget.writtenRecords) {
+      await this.writeCanonicalRecord(record);
+    }
+    for (const state of transactionTarget.batchStateEvents) {
+      this.seedBatchState(state);
+    }
+    return result;
+  }
+}
+
 class RollbackMemoryTarget extends MemoryTarget {
   transactionCalls = 0;
   readonly transactionTarget = new MemoryTarget();
@@ -833,6 +852,102 @@ describe("migration foundation", () => {
     });
 
     expect(target.batchStateEvents.map((state) => state.status)).toEqual(["succeeded"]);
+  });
+
+  it("retries a failed transactional batch without committing partial rows or duplicating on resume", async () => {
+    const source = new FixtureSource(
+      { customers: 2 },
+      {
+        customers: [
+          {
+            sourceSystem: "legacy_supabase",
+            sourceTable: "customers",
+            sourceId: "10",
+            payload: { full_name: "Ada Lovelace" },
+            checksum: "sha256:ada",
+          },
+          {
+            sourceSystem: "legacy_supabase",
+            sourceTable: "customers",
+            sourceId: "11",
+            payload: { full_name: "Grace Hopper" },
+            checksum: "sha256:grace",
+          },
+        ],
+      },
+    );
+    const target = new FreshTransactionalMemoryTarget();
+    const batch = {
+      entity: "customers",
+      batchNumber: 1,
+      limit: 10,
+      offset: 0,
+      expectedRows: 2,
+    } as const;
+
+    await expect(
+      applyMigrationBatchWithState({
+        runId: "run_2026_01_01",
+        source,
+        target,
+        batch,
+        transform: (record) => {
+          if (record.sourceId === "11") throw new Error("temporary network failure");
+          return {
+            targetTable: "customers",
+            targetId: "cus_10",
+            payload: { full_name: "Ada Lovelace" },
+            checksum: "sha256:ada",
+          };
+        },
+      }),
+    ).rejects.toThrow("temporary network failure");
+
+    expect(target.transactionCalls).toBe(1);
+    expect(target.writtenRecords).toEqual([]);
+    expect(target.transactionTargets[0]?.writtenRecords).toHaveLength(1);
+    expect(target.batchStateEvents.map((state) => state.status)).toEqual(["failed"]);
+
+    await expect(
+      applyMigrationBatchWithState({
+        runId: "run_2026_01_01",
+        source,
+        target,
+        batch,
+        transform: (record) => ({
+          targetTable: "customers",
+          targetId: `cus_${record.sourceId}`,
+          payload: record.payload,
+          checksum: record.checksum,
+        }),
+      }),
+    ).resolves.toMatchObject({
+      readRows: 2,
+      writtenRows: 2,
+      idMapCreated: 2,
+    });
+
+    expect(target.transactionCalls).toBe(2);
+    expect(target.writtenRecords.map((record) => record.targetId)).toEqual(["cus_10", "cus_11"]);
+    expect(target.batchStateEvents.map((state) => state.status)).toEqual(["failed", "running", "succeeded"]);
+    expect(source.reads).toHaveLength(2);
+
+    await expect(
+      applyMigrationBatchWithState({
+        runId: "run_2026_01_01",
+        source,
+        target,
+        batch,
+      }),
+    ).resolves.toMatchObject({
+      readRows: 2,
+      writtenRows: 2,
+      idMapCreated: 2,
+    });
+
+    expect(target.transactionCalls).toBe(2);
+    expect(source.reads).toHaveLength(2);
+    expect(target.writtenRecords.map((record) => record.targetId)).toEqual(["cus_10", "cus_11"]);
   });
 
   it("marks a short-read batch failed before writing any target rows", async () => {
