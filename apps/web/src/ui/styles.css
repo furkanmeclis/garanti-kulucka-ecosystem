@@ -278,12 +278,20 @@ nav {
   border-color: rgba(34, 197, 94, 0.45);
 }
 
+.secondary-action.selected {
+  color: #86efac;
+  border-color: rgba(34, 197, 94, 0.55);
+  background: rgba(34, 197, 94, 0.1);
+}
+
+.detail-actions,
 .integration-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
 }
 
+.detail-panel,
 .integration-detail {
   display: grid;
   gap: 14px;
@@ -293,9 +301,15 @@ nav {
   background: #0f172a;
 }
 
+.detail-panel h2,
 .integration-detail h2,
 .integration-detail p {
   margin: 0;
+}
+
+.detail-panel h2 {
+  font-size: 16px;
+  color: #e2e8f0;
 }
 
 .integration-detail p {

@@ -117,6 +117,8 @@ export function App() {
   const [uploadedFile, setUploadedFile] = useState<FileMetadata | null>(null);
   const [presenceUpdating, setPresenceUpdating] = useState(false);
   const [integrationSnapshot, setIntegrationSnapshot] = useState<IntegrationAccountSnapshot | null>(null);
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+  const [selectedShipmentId, setSelectedShipmentId] = useState<string | null>(null);
 
   const http = useMemo(
     () =>
@@ -205,6 +207,8 @@ export function App() {
       integrationAccounts: integrationAccounts.data,
       webphone: webphoneConfig,
     });
+    setSelectedOrderId((current) => current ?? orders.data[0]?.public_id ?? null);
+    setSelectedShipmentId((current) => current ?? shipments.data[0]?.public_id ?? null);
     setStatus("Backend API, presigned dosya ve Socket.IO sınırları aktif");
   }
 
@@ -239,6 +243,8 @@ export function App() {
         webphone: null,
       });
       setIntegrationSnapshot(null);
+      setSelectedOrderId(null);
+      setSelectedShipmentId(null);
       setAuthChecked(true);
       setStatus("Oturum kapatıldı");
     }
@@ -300,6 +306,7 @@ export function App() {
       ...current,
       orders: [order, ...current.orders],
     }));
+    setSelectedOrderId(order.public_id);
     setStatus("Sipariş backend API üzerinden oluşturuldu");
   }
 
@@ -317,6 +324,7 @@ export function App() {
       ...current,
       shipments: current.shipments.map((item) => (item.public_id === updated.public_id ? updated : item)),
     }));
+    setSelectedShipmentId(updated.public_id);
     setStatus("Kargo durumu backend API üzerinden güncellendi");
   }
 
@@ -425,6 +433,8 @@ export function App() {
   const visibleNavigation = navigationItems.filter((item) => item.roles.includes(user?.role ?? "guest"));
   const activeFlow = flowFromPath(location.pathname);
   const canTogglePresence = Boolean(user && user.role !== "admin");
+  const selectedOrder = data.orders.find((order) => order.public_id === selectedOrderId) ?? data.orders[0] ?? null;
+  const selectedShipment = data.shipments.find((shipment) => shipment.public_id === selectedShipmentId) ?? data.shipments[0] ?? null;
 
   return (
     <div className="app-shell">
@@ -509,6 +519,34 @@ export function App() {
               Sipariş oluştur
             </button>
             <DataRows rows={data.orders.map((order) => [order.order_number, order.status, `${order.total_amount} ${order.currency}`])} />
+            <div className="detail-actions">
+              {data.orders.map((order) => (
+                <button
+                  className={cx("secondary-action", selectedOrder?.public_id === order.public_id && "selected")}
+                  key={order.public_id}
+                  type="button"
+                  onClick={() => setSelectedOrderId(order.public_id)}
+                >
+                  {order.order_number} detay
+                </button>
+              ))}
+            </div>
+            {selectedOrder && (
+              <DetailPanel title="Sipariş Detayı" testId="order-detail">
+                <DataRows
+                  rows={[
+                    ["Sipariş No", selectedOrder.order_number, selectedOrder.status],
+                    ["Müşteri", selectedOrder.customer_full_name ?? "Müşteri eşleşmedi", selectedOrder.source],
+                    [
+                      "Tutar",
+                      `${selectedOrder.total_amount} ${selectedOrder.currency}`,
+                      selectedOrder.confirmation_status ?? "teyit bekliyor",
+                    ],
+                    ["Not", selectedOrder.notes ?? "-", selectedOrder.updated_at],
+                  ]}
+                />
+              </DetailPanel>
+            )}
           </FlowPanel>
         )}
 
@@ -518,6 +556,34 @@ export function App() {
               Teslim edildi yap
             </button>
             <DataRows rows={data.shipments.map((shipment) => [shipment.provider, shipment.tracking_number ?? "-", shipment.status])} />
+            <div className="detail-actions">
+              {data.shipments.map((shipment) => (
+                <button
+                  className={cx("secondary-action", selectedShipment?.public_id === shipment.public_id && "selected")}
+                  key={shipment.public_id}
+                  type="button"
+                  onClick={() => setSelectedShipmentId(shipment.public_id)}
+                >
+                  {(shipment.tracking_number ?? shipment.provider).toUpperCase()} detay
+                </button>
+              ))}
+            </div>
+            {selectedShipment && (
+              <DetailPanel title="Kargo Detayı" testId="shipment-detail">
+                <DataRows
+                  rows={[
+                    ["Takip No", selectedShipment.tracking_number ?? "-", selectedShipment.provider],
+                    ["Alıcı", selectedShipment.recipient_name, selectedShipment.recipient_phone ?? "-"],
+                    [
+                      "Adres",
+                      [selectedShipment.recipient_district, selectedShipment.recipient_city].filter(Boolean).join(" / ") || "-",
+                      selectedShipment.barcode_number ?? "-",
+                    ],
+                    ["Son Hareket", selectedShipment.last_event_text ?? "-", selectedShipment.status],
+                  ]}
+                />
+              </DetailPanel>
+            )}
           </FlowPanel>
         )}
 
@@ -857,6 +923,15 @@ function FlowPanel(props: { title: string; icon: ReactNode; testId: string; chil
         {props.icon}
         {props.title}
       </h1>
+      {props.children}
+    </section>
+  );
+}
+
+function DetailPanel(props: { title: string; testId: string; children: ReactNode }) {
+  return (
+    <section className="detail-panel" data-testid={props.testId}>
+      <h2>{props.title}</h2>
       {props.children}
     </section>
   );
