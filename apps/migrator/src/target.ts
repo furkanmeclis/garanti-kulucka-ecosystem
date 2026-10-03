@@ -5,7 +5,7 @@ import type {
   MigrationBatchesTable,
   MigrationRunsTable,
 } from "@garanti-kulucka/database";
-import type { Insertable, Selectable } from "kysely";
+import { sql, type Insertable, type QueryExecutorProvider, type Selectable } from "kysely";
 import { assertMigrationRunId } from "./source-manifest.js";
 import type {
   CanonicalRecord,
@@ -70,12 +70,32 @@ export function mapCanonicalRecordToInsert(record: CanonicalRecord): Record<stri
 }
 
 export class DatabaseMigrationTarget implements MigrationTarget {
-  constructor(private readonly db: AppDatabase) {}
+  constructor(
+    private readonly db: AppDatabase,
+    private readonly transactionBoundaryEnabled = true,
+  ) {}
 
   async runInTransaction<T>(operation: (target: MigrationTarget) => Promise<T>): Promise<T> {
+    if (!this.transactionBoundaryEnabled) return operation(this);
+
     return this.db.transaction().execute((transaction) =>
-      operation(new DatabaseMigrationTarget(transaction as unknown as AppDatabase)),
+      operation(new DatabaseMigrationTarget(transaction as unknown as AppDatabase, false)),
     );
+  }
+
+  async runWithMigrationRunLock<T>(
+    runId: string,
+    operation: (target: MigrationTarget) => Promise<T>,
+  ): Promise<T> {
+    assertMigrationRunId(runId);
+    const lockKey = `garanti-kulucka:migration:${runId}`;
+
+    return this.db.transaction().execute(async (transaction) => {
+      await sql`select pg_advisory_xact_lock(hashtext(${lockKey}))`.execute(
+        transaction as unknown as QueryExecutorProvider,
+      );
+      return operation(new DatabaseMigrationTarget(transaction as unknown as AppDatabase, false));
+    });
   }
 
   async writeCanonicalRecord(input: CanonicalRecord): Promise<CanonicalWriteResult> {
@@ -304,15 +324,27 @@ export class DatabaseMigrationTarget implements MigrationTarget {
         finished_at: finishedAt,
       })
       .onConflict((conflict) =>
-        conflict.columns(["run_id", "entity", "batch_number"]).doUpdateSet({
-          status: "failed",
-          error_message: input.error.message,
-          finished_at: finishedAt,
-          updated_at: finishedAt,
-        }),
+        conflict
+          .columns(["run_id", "entity", "batch_number"])
+          .doUpdateSet({
+            status: "failed",
+            error_message: input.error.message,
+            finished_at: finishedAt,
+            updated_at: finishedAt,
+          })
+          .where("migration_batches.status", "!=", "succeeded"),
       )
       .returningAll()
-      .executeTakeFirstOrThrow();
+      .executeTakeFirst();
+
+    if (!row) {
+      const existing = await this.findMigrationBatchState({
+        runId: input.runId,
+        batch: input.batch,
+      });
+      if (existing) return existing;
+      throw new Error(`Failed to record migration batch failure: ${input.batch.entity} batch ${input.batch.batchNumber}`);
+    }
 
     return mapMigrationBatchStateRow(row);
   }
@@ -335,6 +367,7 @@ interface DynamicInsertBuilder {
   onConflict(callback: (conflict: DynamicConflictBuilder) => unknown): DynamicInsertBuilder;
   returningAll(): DynamicInsertBuilder;
   execute(): Promise<unknown>;
+  executeTakeFirst(): Promise<Insertable<LegacyIdMapTable> & { migrated_at?: Date | string } | undefined>;
   executeTakeFirstOrThrow(): Promise<Insertable<LegacyIdMapTable> & { migrated_at?: Date | string }>;
 }
 
@@ -343,6 +376,7 @@ interface DynamicConflictBuilder {
   columns(columns: string[]): DynamicConflictBuilder;
   doNothing(): DynamicConflictBuilder;
   doUpdateSet(values: Record<string, unknown>): DynamicConflictBuilder;
+  where(column: string, operator: string, value: unknown): DynamicConflictBuilder;
 }
 
 function mapLegacyIdMapRow(row: Insertable<LegacyIdMapTable> & { migrated_at?: Date | string }): LegacyIdMapEntry {

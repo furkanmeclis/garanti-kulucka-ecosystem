@@ -138,6 +138,59 @@ describe("database migration target", () => {
     expect(execute).toHaveBeenCalledOnce();
   });
 
+  it("runs migration-run locked operations inside one transaction", async () => {
+    const executeQuery = vi.fn().mockResolvedValue({ rows: [] });
+    const executor = {
+      transformQuery: vi.fn((node: unknown) => node),
+      compileQuery: vi.fn(() => ({
+        sql: "select pg_advisory_xact_lock(hashtext($1))",
+        parameters: ["garanti-kulucka:migration:run_2026_09"],
+      })),
+      executeQuery,
+    };
+    const transactionTarget = {
+      getExecutor: vi.fn(() => executor),
+    };
+    const execute = vi.fn(async (callback: (transaction: unknown) => Promise<string>) =>
+      callback(transactionTarget),
+    );
+    const db = {
+      transaction: vi.fn(() => ({ execute })),
+    };
+
+    const result = await new DatabaseMigrationTarget(db as never).runWithMigrationRunLock(
+      "run_2026_09",
+      async (target) => {
+        expect(target).toBeInstanceOf(DatabaseMigrationTarget);
+        return target.runInTransaction
+          ? target.runInTransaction(async (nestedTarget) => {
+            expect(nestedTarget).toBe(target);
+            return "locked-result";
+          })
+          : "missing-transaction-port";
+      },
+    );
+
+    expect(result).toBe("locked-result");
+    expect(db.transaction).toHaveBeenCalledOnce();
+    expect(execute).toHaveBeenCalledOnce();
+    expect(transactionTarget.getExecutor).toHaveBeenCalledOnce();
+    expect(executeQuery).toHaveBeenCalledOnce();
+    expect(String(executeQuery.mock.calls[0]?.[0]?.sql)).toContain("pg_advisory_xact_lock");
+    expect(executeQuery.mock.calls[0]?.[0]?.parameters).toEqual(["garanti-kulucka:migration:run_2026_09"]);
+  });
+
+  it("rejects blank migration run ids before taking a lock", async () => {
+    const db = {
+      transaction: vi.fn(),
+    };
+
+    await expect(new DatabaseMigrationTarget(db as never).runWithMigrationRunLock("  ", async () => "unused")).rejects.toThrow(
+      "runId must not be blank",
+    );
+    expect(db.transaction).not.toHaveBeenCalled();
+  });
+
   it("rejects blank migration run ids before touching the database", async () => {
     const db = {
       insertInto: vi.fn(),

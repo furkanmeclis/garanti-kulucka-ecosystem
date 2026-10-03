@@ -126,6 +126,9 @@ class MemoryTarget implements MigrationTarget {
   }
 
   async recordMigrationBatchFailed(input: MigrationBatchStateFailure): Promise<MigrationBatchState> {
+    const existing = await this.findMigrationBatchState({ runId: input.runId, batch: input.batch });
+    if (existing?.status === "succeeded") return existing;
+
     const state = this.batchState(input.runId, input.batch, "failed", {
       errorMessage: input.error.message,
       finishedAt: input.finishedAt ?? new Date("2026-01-02T03:05:05.000Z"),
@@ -203,6 +206,33 @@ class RollbackMemoryTarget extends MemoryTarget {
   async runInTransaction<T>(operation: (target: MigrationTarget) => Promise<T>): Promise<T> {
     this.transactionCalls += 1;
     return operation(this.transactionTarget);
+  }
+}
+
+class LockingMemoryTarget extends TransactionalMemoryTarget {
+  readonly lockedRunIds: string[] = [];
+
+  async runWithMigrationRunLock<T>(
+    runId: string,
+    operation: (target: MigrationTarget) => Promise<T>,
+  ): Promise<T> {
+    this.lockedRunIds.push(runId);
+    return operation(this);
+  }
+}
+
+class SucceedingBeforeLockOperationTarget extends LockingMemoryTarget {
+  constructor(private readonly succeededState: MigrationBatchState) {
+    super();
+  }
+
+  override async runWithMigrationRunLock<T>(
+    runId: string,
+    operation: (target: MigrationTarget) => Promise<T>,
+  ): Promise<T> {
+    this.lockedRunIds.push(runId);
+    this.seedBatchState(this.succeededState);
+    return operation(this);
   }
 }
 
@@ -533,6 +563,139 @@ describe("migration foundation", () => {
     ]);
   });
 
+  it("takes a run-scoped lock before applying a non-resumed batch when supported by the target", async () => {
+    const source = new FixtureSource(
+      { customers: 1 },
+      {
+        customers: [
+          {
+            sourceSystem: "legacy_supabase",
+            sourceTable: "customers",
+            sourceId: "10",
+            payload: { full_name: "Ada Lovelace" },
+            checksum: "sha256:ada",
+          },
+        ],
+      },
+    );
+    const target = new LockingMemoryTarget();
+
+    await expect(
+      applyMigrationBatchWithState({
+        runId: "run_2026_01_01",
+        source,
+        target,
+        batch: {
+          entity: "customers",
+          batchNumber: 1,
+          limit: 10,
+          offset: 0,
+          expectedRows: 1,
+        },
+      }),
+    ).resolves.toMatchObject({ writtenRows: 1 });
+
+    expect(target.lockedRunIds).toEqual(["run_2026_01_01"]);
+    expect(target.transactionCalls).toBe(1);
+  });
+
+  it("does not take a run-scoped lock when a succeeded batch is skipped on resume", async () => {
+    const source = new FixtureSource({ customers: 1 });
+    const target = new LockingMemoryTarget();
+    target.seedBatchState({
+      runId: "run_2026_01_01",
+      entity: "customers",
+      batchNumber: 1,
+      status: "succeeded",
+      limit: 10,
+      offset: 0,
+      expectedRows: 1,
+      readRows: 1,
+      writtenRows: 1,
+      skippedRows: 0,
+      idMapCreated: 1,
+      idMapUpdated: 0,
+      idMapUnchanged: 0,
+      warnings: [],
+      errorMessage: null,
+      startedAt: new Date("2026-01-02T03:04:05.000Z"),
+      finishedAt: new Date("2026-01-02T03:05:05.000Z"),
+    });
+
+    await expect(
+      applyMigrationBatchWithState({
+        runId: "run_2026_01_01",
+        source,
+        target,
+        batch: {
+          entity: "customers",
+          batchNumber: 1,
+          limit: 10,
+          offset: 0,
+          expectedRows: 1,
+        },
+      }),
+    ).resolves.toMatchObject({ writtenRows: 1 });
+
+    expect(target.lockedRunIds).toEqual([]);
+    expect(target.transactionCalls).toBe(0);
+  });
+
+  it("rechecks succeeded batch state after taking the run-scoped lock", async () => {
+    const source = new FixtureSource(
+      { customers: 1 },
+      {
+        customers: [
+          {
+            sourceSystem: "legacy_supabase",
+            sourceTable: "customers",
+            sourceId: "10",
+            payload: { full_name: "Ada Lovelace" },
+            checksum: "sha256:ada",
+          },
+        ],
+      },
+    );
+    const target = new SucceedingBeforeLockOperationTarget({
+      runId: "run_2026_01_01",
+      entity: "customers",
+      batchNumber: 1,
+      status: "succeeded",
+      limit: 10,
+      offset: 0,
+      expectedRows: 1,
+      readRows: 1,
+      writtenRows: 1,
+      skippedRows: 0,
+      idMapCreated: 1,
+      idMapUpdated: 0,
+      idMapUnchanged: 0,
+      warnings: [],
+      errorMessage: null,
+      startedAt: new Date("2026-01-02T03:04:05.000Z"),
+      finishedAt: new Date("2026-01-02T03:05:05.000Z"),
+    });
+
+    await expect(
+      applyMigrationBatchWithState({
+        runId: "run_2026_01_01",
+        source,
+        target,
+        batch: {
+          entity: "customers",
+          batchNumber: 1,
+          limit: 10,
+          offset: 0,
+          expectedRows: 1,
+        },
+      }),
+    ).resolves.toMatchObject({ writtenRows: 1 });
+
+    expect(target.lockedRunIds).toEqual(["run_2026_01_01"]);
+    expect(target.transactionCalls).toBe(0);
+    expect(source.reads).toEqual([]);
+  });
+
   it("records failed batch state and rethrows the apply error", async () => {
     const source = new FixtureSource(
       { customers: 1 },
@@ -631,6 +794,45 @@ describe("migration foundation", () => {
     expect(target.batchStateEvents.map((state) => state.status)).toEqual(["failed"]);
     expect(target.transactionTarget.writtenRecords).toHaveLength(1);
     expect(target.transactionTarget.batchStateEvents.map((state) => state.status)).toEqual(["running"]);
+  });
+
+  it("does not let a late failure record clobber an already succeeded batch", async () => {
+    const target = new MemoryTarget();
+    const batch = {
+      entity: "customers",
+      batchNumber: 1,
+      limit: 10,
+      offset: 0,
+      expectedRows: 1,
+    } as const;
+    target.seedBatchState({
+      runId: "run_2026_01_01",
+      ...batch,
+      status: "succeeded",
+      readRows: 1,
+      writtenRows: 1,
+      skippedRows: 0,
+      idMapCreated: 1,
+      idMapUpdated: 0,
+      idMapUnchanged: 0,
+      warnings: [],
+      errorMessage: null,
+      startedAt: new Date("2026-01-02T03:04:05.000Z"),
+      finishedAt: new Date("2026-01-02T03:05:05.000Z"),
+    });
+
+    await expect(
+      target.recordMigrationBatchFailed({
+        runId: "run_2026_01_01",
+        batch,
+        error: new Error("late failure"),
+      }),
+    ).resolves.toMatchObject({
+      status: "succeeded",
+      errorMessage: null,
+    });
+
+    expect(target.batchStateEvents.map((state) => state.status)).toEqual(["succeeded"]);
   });
 
   it("marks a short-read batch failed before writing any target rows", async () => {

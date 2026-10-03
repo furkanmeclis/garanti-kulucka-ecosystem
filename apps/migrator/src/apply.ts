@@ -102,7 +102,7 @@ export async function applyMigrationBatchWithState(
   }
 
   try {
-    return await runSuccessfulBatchApply(input);
+    return await runExclusiveSuccessfulBatchApply(input);
   } catch (error) {
     const safeError = toSafeMigratorError(error);
     await input.target.recordMigrationBatchFailed({
@@ -112,6 +112,23 @@ export async function applyMigrationBatchWithState(
     });
     throw safeError;
   }
+}
+
+async function runExclusiveSuccessfulBatchApply(
+  input: ApplyMigrationBatchWithStateInput,
+): Promise<MigrationBatchApplyResult> {
+  return input.target.runWithMigrationRunLock
+    ? input.target.runWithMigrationRunLock(input.runId, async (target) => {
+      const existing = await target.findMigrationBatchState({
+        runId: input.runId,
+        batch: input.batch,
+      });
+      if (existing?.status === "succeeded") {
+        return migrationBatchResultFromState(existing);
+      }
+      return runSuccessfulBatchApply({ ...input, target });
+    })
+    : runSuccessfulBatchApply(input);
 }
 
 async function runSuccessfulBatchApply(
