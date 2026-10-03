@@ -6,15 +6,15 @@ Bu belge, projeye yeni bir sohbetten veya bağlamsız bir çalışma oturumundan
 
 - Repo: `/Users/furkanmeclis/Documents/Projects/garanti-kulucka-ecosystem`
 - GitHub çalışma modeli: monorepo, yalnız `main`, PR yok.
-- Yayımlanmış son checkpoint: `v0.1.144`
-- Yayımlanmış son commit: `dadd20a2f421cae3b8f41c81b276cd53fc1a2ab2`
-- Commit mesajı: `feat(migrator): validate order rows during dry-run`
-- Genel ilerleme: yaklaşık `%75`
-- Son tamamlanan çalışma: dry-run artık `public.siparisler` satırlarını dönüştürüyor. Müşteri haritası aynı dry-run’daki müşteri taslaklarından gelir. Konuşma seçilmezse konuşma haritası boş kalır ve çözülemeyen konuşma reconciliation üretir.
-- Sıradaki bağımlılık kapısı sipariş kalemi dönüşümü, ardından kargo dönüşümüdür. Kalem `urun_kodu` veya `kolaybi_product_id` ile ürüne bağlanır. `stok_id` kullanılmaz.
+- Yayımlanmış son checkpoint: `v0.1.146`
+- Yayımlanmış son commit: `a630733eb0c0369595ca43a8100eb75d99af1d19`
+- Commit mesajı: `test(migrator): harden order item dry-run failures`
+- Genel ilerleme: yaklaşık `%80`
+- Son tamamlanan çalışma: on commitlik migrator checkpoint'i; order item ve shipment dry-run dönüşümleri, transaction-bound apply batches, run-scoped apply lock, persisted row-content fingerprints, retry/resume idempotency proof, and strengthened secret redaction guards.
+- Sıradaki bağımlılık kapısı P4 real PostgreSQL source/target E2E ve production apply activation evidence hazırlığıdır. Customer address/external identity apply-readiness, frontend migration, live provider adapters, and production operations runbooks kendi kapılarında devam eder.
 - Production `migrate --apply` kapısı kapalıdır. Tüm aktivasyon koşulları geçmeden açılmamalıdır.
 
-`%75` tahmini; önceki temellere ek olarak conversation ve message kolon sözleşmesini, satır dönüşümünü ve dry-run doğrulamasını içerir. Kalan legacy commerce tabloları, canlı provider adapterları, gerçek frontend taşıması, P3 transaction snapshot isolation ve P4 production veri taşıma aktivasyonu tamamlanmış kabul edilmez.
+`%80` tahmini; önceki temellere ek olarak customer, conversation, message, product, order, order item ve shipment dry-run dönüşümlerini, transaction/lock safety guardlarını, row-content fingerprint persistence'ını ve retry/redaction test kanıtını içerir. Canlı provider adapterları, gerçek frontend taşıması ve P4 production veri taşıma aktivasyonu tamamlanmış kabul edilmez.
 
 ## 2. Tarihsel Schema Kimliği Checkpoint'i (`v0.1.116`)
 
@@ -283,7 +283,7 @@ Kabul kapısı: kaynaktan sessizce atlanan bir satır verification tarafından b
 
 ### P2. Legacy Schema Introspection ve Mapping Catalog
 
-Durum: conversation ve message satır dönüşümü `v0.1.130` ile yayımlandı. Catalog sürümü `p2-conversation-catalog-v1`. Tam P2 tamamlanmadı. Dry-run müşteri, konuşma ve mesaj satırlarını dönüştürür ve target’a yazmaz. Address ve external identity hedefleri descriptive kalır. Orders, shipments ve products catalogları açıktır.
+Durum: customer, conversation, message, product, order, order item ve shipment schema/dry-run dönüşüm dilimleri `v0.1.146` çizgisine kadar yayımlandı. Dry-run bu satırları dönüştürür ve target’a yazmaz. Address ve external identity hedefleri descriptive kalır; production apply kapısı kapalıdır.
 
 Önce kaynak database gerçek yapısı `information_schema` üzerinden çıkarılmalıdır. Legacy migration dosyaları tek başına doğru kaynak kabul edilmemelidir; çalışan kod ile migration geçmişi arasında drift vardır.
 
@@ -294,7 +294,11 @@ Zorunlu mapping sırası:
 3. `public.musteriler -> customer_external_identities`
 4. `public.konusmalar -> conversations`
 5. `public.mesajlar -> messages`
-6. Sonraki dilimde orders, order items, shipments, products, integrations ve diğer kullanılan tablolar
+6. `public.urunler -> products`
+7. `public.siparisler -> orders`
+8. `public.siparis_kalemleri -> order_items`
+9. `public.kargo_gonderimleri -> shipments`
+10. Sonraki dilimlerde integrations ve diğer kullanılan tablolar
 
 Catalog gereksinimleri:
 
@@ -320,15 +324,15 @@ Kabul kapısı: sentetik Türkçe/karma legacy PostgreSQL fixture’ı sıfır v
 
 ### P3. Migrator Transaction, Resume ve Validation Güvenliği
 
-1. Canonical row, `legacy_id_map` ve batch checkpoint yazımlarını transaction içinde atomik hale getir.
-2. Aynı migration run’ın paralel çalışmasını PostgreSQL advisory lock veya eşdeğer lease ile engelle.
+1. Canonical row, `legacy_id_map` ve batch checkpoint yazımları `v0.1.146` ile transaction içinde atomik hale getirildi.
+2. Aynı migration run’ın paralel çalışmasını engelleyen PostgreSQL advisory lock `v0.1.146` ile eklendi.
 3. Source okumalarını `REPEATABLE READ READ ONLY` snapshot içinde tut.
 4. Offset tabanlı riskleri azalt; stabil primary-key cursor veya manifest ile sabitlenmiş aralık kullan.
-5. P1'de tamamlanan temel: persisted source manifest ile `readRows !== expectedRows` kontrolü target yazımından önce fail-closed çalışır. P3'te kalan iş: bu garantiyi transaction snapshot isolation ve source row-content checksum ile aynı tutarlı kaynak görünümüne bağla.
-6. P1'de tamamlanan temel: resume fingerprint source identity, mapping version, plan, batch size ve source manifest hash içerir. P3'te kalan iş: fingerprint'i snapshot/row-content kimliğiyle güçlendir ve process/network retry sonrasında tam idempotency kanıtını tamamla.
-7. Yarım yazım, process kill, network failure ve retry sonrasında idempotent resume testleri ekle.
-8. Dry-run yalnız count üretmemeli; tüm satırları transform, enum, zorunlu alan, FK çözümleme, duplicate ve schema-gap kontrollerinden geçirmeli fakat target’a yazmamalı.
-9. Error ve report redaction testleri connection URL, password query parametreleri, token, header ve nested cause alanlarını kapsamalı.
+5. P1'de tamamlanan persisted source manifest ile `readRows !== expectedRows` kontrolü target yazımından önce fail-closed çalışır; `v0.1.146` row-content fingerprintlerini manifest ve migration `005` ile persisted state kapsamına aldı.
+6. P1 resume fingerprint temeli source identity, mapping version, plan, batch size ve source manifest hash içerir; `v0.1.146` row-content identity ve retry/resume idempotency kanıtını ekledi.
+7. Retry sonrasında idempotent resume testleri `v0.1.146` ile eklendi; process-kill ve network-failure E2E kanıtı P4 gerçek PostgreSQL hattında tamamlanacaktır.
+8. Dry-run artık customer, conversation, message, product, order, order item ve shipment satırlarını transform/enum/FK/schema-gap kontrollerinden geçirir fakat target’a yazmaz.
+9. Error ve report redaction testleri connection URL, password query parametreleri, token, header ve nested cause alanlarını `v0.1.146` ile kapsar.
 
 Kabul kapısı: dry-run target bağlantısı açmadan gerçek uygulanabilirlik raporu üretmeli; apply tekrarlandığında duplicate oluşturmamalı; yarım batch atomik olarak geri alınmalı veya güvenli resume edilmelidir.
 
@@ -533,8 +537,8 @@ git diff --check
 Beklenen yayımlanmış taban:
 
 ```text
-dadd20a2f421cae3b8f41c81b276cd53fc1a2ab2
-v0.1.144
+a630733eb0c0369595ca43a8100eb75d99af1d19
+v0.1.146
 ```
 
 Aktif schema checkpoint kaybolmuşsa otomatik olarak yeniden üretme. Önce `git status`, `git reflog`, stash, başka worktree ve kullanıcı tarafından bırakılmış değişiklikleri araştır. Mevcut değişiklikleri koru.
@@ -601,7 +605,7 @@ Bu listenin tamamı işaretlenmeden `migrate --apply` açılmayacaktır:
 
 - [x] `001 -> 002 -> 003` temiz PostgreSQL migration zinciri başarılı
 - [x] BIGINT runtime type politikası tamam
-- [ ] Source schema introspection tamam
+- [x] Source schema introspection tamamlanan legacy dry-run entity'leri için tamam
 - [x] Source manifest ve completeness doğrulaması tamam
 - [ ] Customer mapping tamam
 - [ ] Customer address sentetik mapping tamam
@@ -609,10 +613,10 @@ Bu listenin tamamı işaretlenmeden `migrate --apply` açılmayacaktır:
 - [ ] Conversation mapping ve account/provider uyumu tamam
 - [ ] Message mapping ve media/medya drift çözümü tamam
 - [ ] Zorunlu FK çözümleme ve deferred reconciliation tamam
-- [ ] Atomic transaction ve concurrent-run lock tamam
-- [ ] Resume fingerprint ve idempotency tamam (P1 fingerprint temeli hazır; P3 transaction snapshot isolation, source row-content checksum, process/network retry ve tam idempotency kanıtı bekliyor)
-- [ ] Full-transform dry-run validation tamam
-- [ ] Secret redaction ve operation report testleri tamam
+- [x] Atomic transaction ve concurrent-run lock tamam
+- [x] Resume fingerprint, row-content persistence ve retry idempotency tamam
+- [x] Full-transform dry-run validation tamamlanan P2 legacy entity'leri için tamam
+- [x] Secret redaction ve operation report testleri tamam
 - [ ] Gerçek PostgreSQL source/target E2E tamam
 - [ ] Backup ve restore runbook tatbikatı tamam
 - [ ] Full `npm run check` başarılı
@@ -639,11 +643,12 @@ Bu maddeler ihtiyaç varsa genişletilir; mevcut davranış sebepsiz yere yenide
 
 ## 10. Bir Sonraki Sohbet İçin İlk Somut Görev
 
-İlk görev sipariş kalemi dönüşümüdür:
+İlk görev P4 activation evidence hazırlığıdır:
 
-1. Yayımlanmış `v0.1.144` sipariş dry-run checkpoint’ini taban kabul et. Apply kapalı kalsın.
-2. `public.siparis_kalemleri` satırını canonical order item draft’ına çevir. Sipariş kimliği aynı dry-run’daki sipariş taslağından çözülür. Çözülemezse kalem durur.
-3. Ürün eşlemesi `urun_kodu` veya `kolaybi_product_id` ile yapılır. `stok_id` ürün kimliği değildir.
-4. Ardından kargo dönüşümünü ekle. Dry-run target’a yazmaz. Tam `npm run check`, CI, tag ve artifact doğrulanır.
+1. Yayımlanmış `v0.1.146` migrator safety checkpoint’ini taban kabul et. Apply kapalı kalsın.
+2. Gerçek PostgreSQL source/target E2E fixture'ını kur: customer, conversation, message, product, order, order item ve shipment dry-run akışlarını aynı run içinde çalıştır.
+3. Row-content manifest/fingerprint persistence, operation report redaction, unresolved reconciliation counts ve short-read fail-closed davranışını fixture üzerinde doğrula.
+4. Production apply activation checklist'inde açık kalan customer address/external identity apply-readiness, backup/restore runbook ve real source/target E2E maddelerini ayrı ayrı kanıtla.
+5. Bu kanıt tamamlanmadan `migrate --apply` açma; frontend migration ve live provider adapter tracks bu kapıdan bağımsız fakat aynı CI/tag disiplininde ilerler.
 
-P2 mapping ve introspection kabul kapısı tamamlanmadan P3 güvenlik çalışmalarına veya apply aktivasyonuna geçilmemelidir. P1 resume guard tamamlanmış olsa da tam resume/idempotency aktivasyon maddesi P3 transaction snapshot isolation ve source row-content checksum/idempotency kanıtları bitene kadar açık kalır.
+P4 apply aktivasyonu, kalan checklist maddeleri kanıtlanmadan başlatılmamalıdır. Dry-run kapsamı genişlemiş olsa da production yazım kapısı fail-closed kalır.
