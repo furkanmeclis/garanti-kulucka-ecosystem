@@ -372,6 +372,7 @@ export interface MigrationRunsTable {
   source_database_identity: Json;
   table_snapshot: Json;
   row_counts: Json;
+  row_content_checksums: Json;
   batch_size: number;
   mapping_catalog_version: string;
   plan_fingerprint: string;

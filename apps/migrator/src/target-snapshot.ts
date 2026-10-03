@@ -105,12 +105,13 @@ async function selectSourceManifest(client: Client, runId: string): Promise<Sour
     source_database_identity: SourceDatabaseIdentity;
     table_snapshot: SourceTableSnapshot[];
     row_counts: SourceEntityRowCount[];
+    row_content_checksums: SourceManifest["rowContentChecksums"];
     batch_size: number;
     mapping_catalog_version: string;
     plan_fingerprint: string;
     source_manifest_hash: string;
   }>(
-    `select source_system, source_database_identity, table_snapshot, row_counts,
+    `select source_system, source_database_identity, table_snapshot, row_counts, row_content_checksums,
             batch_size, mapping_catalog_version, plan_fingerprint, source_manifest_hash
      from migration_runs
      where run_id = $1`,
@@ -118,17 +119,25 @@ async function selectSourceManifest(client: Client, runId: string): Promise<Sour
   );
   const row = result.rows[0];
   if (!row) return null;
+  const rowContentChecksums = mapRowContentChecksums(row.row_content_checksums);
 
   return {
     sourceSystem: row.source_system,
     databaseIdentity: row.source_database_identity,
     tables: row.table_snapshot,
     rowCounts: row.row_counts,
+    ...(rowContentChecksums ? { rowContentChecksums } : {}),
     batchSize: Number(row.batch_size),
     mappingCatalogVersion: row.mapping_catalog_version,
     planFingerprint: row.plan_fingerprint,
     sourceManifestHash: row.source_manifest_hash,
   };
+}
+
+function mapRowContentChecksums(
+  value: SourceManifest["rowContentChecksums"],
+): SourceManifest["rowContentChecksums"] {
+  return Array.isArray(value) && value.length > 0 ? value : undefined;
 }
 
 async function selectCustomers(client: Client, publicIds: readonly string[]) {

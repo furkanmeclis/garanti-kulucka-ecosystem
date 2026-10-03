@@ -20,6 +20,7 @@ describe("target verification snapshot", () => {
               source_database_identity: { host: "source", port: "5432", database: "legacy" },
               table_snapshot: persistedManifest.tables,
               row_counts: persistedManifest.rowCounts,
+              row_content_checksums: persistedManifest.rowContentChecksums,
               batch_size: 500,
               mapping_catalog_version: "p1-foundation-v1",
               plan_fingerprint: "sha256:plan",
@@ -162,6 +163,11 @@ describe("target verification snapshot", () => {
     expect(queries.some((query) => /^select public_id from [a-z_]+ order by/.test(query))).toBe(false);
     expect(canonicalMigrationEntities).toHaveLength(15);
     expect(snapshot.sourceManifest?.rowCounts).toHaveLength(15);
+    expect(snapshot.sourceManifest?.rowContentChecksums).toEqual([{
+      entity: "customers",
+      rows: 1,
+      checksum: "sha256:rows",
+    }]);
     expect(snapshot.targetPublicIds.customers).toEqual(["cus_1"]);
     expect(snapshot.targetPublicIds.orders).toEqual(["ord_1"]);
     expect(snapshot.targetPublicIds.products).toEqual([]);
@@ -193,6 +199,7 @@ describe("target verification snapshot", () => {
             source_database_identity: persistedManifest.databaseIdentity,
             table_snapshot: persistedManifest.tables,
             row_counts: persistedManifest.rowCounts,
+            row_content_checksums: persistedManifest.rowContentChecksums,
             batch_size: persistedManifest.batchSize,
             mapping_catalog_version: persistedManifest.mappingCatalogVersion,
             plan_fingerprint: persistedManifest.planFingerprint,
@@ -226,6 +233,11 @@ function manifest(): SourceManifest {
       entity,
       rows: ["customers", "customer_external_identities", "conversations", "messages", "orders", "order_items", "shipments"].includes(entity) ? 1 : 0,
     })),
+    rowContentChecksums: [{
+      entity: "customers" as const,
+      rows: 1,
+      checksum: "sha256:rows",
+    }],
     batchSize: 500,
     mappingCatalogVersion: "p1-foundation-v1",
     planFingerprint: "sha256:plan",

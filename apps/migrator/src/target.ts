@@ -176,6 +176,7 @@ export class DatabaseMigrationTarget implements MigrationTarget {
         source_database_identity: input.manifest.databaseIdentity,
         table_snapshot: input.manifest.tables,
         row_counts: input.manifest.rowCounts,
+        row_content_checksums: input.manifest.rowContentChecksums ?? [],
         batch_size: input.manifest.batchSize,
         mapping_catalog_version: input.manifest.mappingCatalogVersion,
         plan_fingerprint: input.manifest.planFingerprint,
@@ -431,6 +432,7 @@ function migrationRunPublicId(runId: string): string {
 }
 
 function mapMigrationRunState(row: Selectable<MigrationRunsTable>): MigrationRunState {
+  const rowContentChecksums = mapMigrationRunRowContentChecksums(row.row_content_checksums);
   return {
     runId: row.run_id,
     manifest: {
@@ -438,6 +440,7 @@ function mapMigrationRunState(row: Selectable<MigrationRunsTable>): MigrationRun
       databaseIdentity: row.source_database_identity as SourceDatabaseIdentity,
       tables: row.table_snapshot as SourceTableSnapshot[],
       rowCounts: row.row_counts as SourceEntityRowCount[],
+      ...(rowContentChecksums ? { rowContentChecksums } : {}),
       batchSize: Number(row.batch_size),
       mappingCatalogVersion: row.mapping_catalog_version,
       planFingerprint: row.plan_fingerprint,
@@ -445,4 +448,12 @@ function mapMigrationRunState(row: Selectable<MigrationRunsTable>): MigrationRun
     },
     createdAt: row.created_at,
   };
+}
+
+function mapMigrationRunRowContentChecksums(
+  value: MigrationRunsTable["row_content_checksums"] | undefined,
+): MigrationRunState["manifest"]["rowContentChecksums"] {
+  return Array.isArray(value) && value.length > 0
+    ? value as MigrationRunState["manifest"]["rowContentChecksums"]
+    : undefined;
 }

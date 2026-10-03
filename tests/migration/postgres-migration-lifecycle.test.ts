@@ -31,6 +31,7 @@ describe("PostgreSQL migration lifecycle", () => {
         "002_add_migration_identity_targets.sql",
         "003_add_migration_run_manifests.sql",
         "004_add_woocommerce_provider.sql",
+        "005_add_migration_row_content_checksums.sql",
       ]) {
         executeSql(container, "garanti_kulucka", await migrationSection(migration, "up"));
       }
@@ -40,6 +41,11 @@ describe("PostgreSQL migration lifecycle", () => {
         FROM integration_providers
         WHERE key = 'woocommerce'
       `)).toBe("prv_woocommerce:woocommerce:WooCommerce:true");
+      expect(query(container, "garanti_kulucka", `
+        SELECT column_name || ':' || data_type
+        FROM information_schema.columns
+        WHERE table_name = 'migration_runs' AND column_name = 'row_content_checksums'
+      `)).toBe("row_content_checksums:jsonb");
 
       executeSql(container, "garanti_kulucka", `
         WITH provider AS (

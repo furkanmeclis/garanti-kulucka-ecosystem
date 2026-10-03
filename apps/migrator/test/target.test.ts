@@ -83,6 +83,11 @@ describe("database migration target", () => {
       source_database_identity: { host: "source", port: "5432", database: "legacy" },
       table_snapshot: [],
       row_counts: [],
+      row_content_checksums: [{
+        entity: "customers",
+        rows: 1,
+        checksum: "sha256:rows",
+      }],
       batch_size: 500,
       mapping_catalog_version: "p1-foundation-v1",
       plan_fingerprint: "sha256:plan",
@@ -106,6 +111,11 @@ describe("database migration target", () => {
         databaseIdentity: { host: "source", port: "5432", database: "legacy" },
         tables: [],
         rowCounts: [],
+        rowContentChecksums: [{
+          entity: "customers",
+          rows: 1,
+          checksum: "sha256:rows",
+        }],
         batchSize: 500,
         mappingCatalogVersion: "p1-foundation-v1",
         planFingerprint: "sha256:plan",
@@ -115,8 +125,25 @@ describe("database migration target", () => {
 
     expect(conflict.column).toHaveBeenCalledWith("run_id");
     expect(doNothing).toHaveBeenCalledOnce();
+    expect(insert.values).toHaveBeenCalledWith(expect.objectContaining({
+      row_content_checksums: [{
+        entity: "customers",
+        rows: 1,
+        checksum: "sha256:rows",
+      }],
+    }));
     expect(select.where).toHaveBeenCalledWith("run_id", "=", "run_2026_09");
-    expect(result).toMatchObject({ runId: "run_2026_09", createdAt });
+    expect(result).toMatchObject({
+      runId: "run_2026_09",
+      createdAt,
+      manifest: {
+        rowContentChecksums: [{
+          entity: "customers",
+          rows: 1,
+          checksum: "sha256:rows",
+        }],
+      },
+    });
   });
 
   it("runs target operations inside a Kysely transaction", async () => {
