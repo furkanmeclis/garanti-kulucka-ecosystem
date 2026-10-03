@@ -557,6 +557,8 @@ export function App() {
   const selectedShipment = data.shipments.find((shipment) => shipment.public_id === selectedShipmentId) ?? data.shipments[0] ?? null;
   const orderCurrency = data.orders[0]?.currency ?? "TRY";
   const reportTotalAmount = data.orders.reduce((sum, order) => sum + moneyValue(order.total_amount), 0);
+  const activeOrderCount = data.orders.filter((order) => !["cancelled", "returned", "delivered"].includes(order.status)).length;
+  const deliveredOrderCount = data.orders.filter((order) => order.status === "delivered").length;
   const deliveredShipmentCount = data.shipments.filter((shipment) => shipment.status === "delivered").length;
   const activeShipmentCount = data.shipments.filter((shipment) => shipment.status !== "delivered").length;
   const pendingConfirmationCount = data.orders.filter((order) => order.confirmation_status === null).length;
@@ -664,6 +666,26 @@ export function App() {
 
         {activeFlow === "orders" && (
           <FlowPanel title="Siparişler" icon={<ShoppingCart size={18} />} testId="orders-flow">
+            <div className="report-grid">
+              <Metric title="Toplam Sipariş" value={String(data.orders.length)} />
+              <Metric title="Aktif Sipariş" value={String(activeOrderCount)} />
+              <Metric title="Teyit Bekleyen" value={String(pendingConfirmationCount)} />
+              <Metric title="Ciro" value={formatMoney(reportTotalAmount, orderCurrency)} />
+            </div>
+            <div className="detail-actions" data-testid="order-section-filters">
+              <button className="secondary-action selected" type="button">
+                Hepsi {data.orders.length}
+              </button>
+              <button className="secondary-action" type="button">
+                Aktif {activeOrderCount}
+              </button>
+              <button className="secondary-action" type="button">
+                Teyit {pendingConfirmationCount}
+              </button>
+              <button className="secondary-action" type="button">
+                Teslim {deliveredOrderCount}
+              </button>
+            </div>
             <button className="primary-action" type="button" onClick={handleCreateOrder}>
               Sipariş oluştur
             </button>

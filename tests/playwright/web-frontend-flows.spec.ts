@@ -587,6 +587,10 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("integrations-flow")).toContainText("Instagram Playwright");
     await page.getByRole("link", { name: /siparişler/i }).click();
     await expect(page.getByTestId("orders-flow")).toContainText("ORD-PLAYWRIGHT");
+    await expect(page.getByTestId("orders-flow")).toContainText("Toplam Sipariş");
+    await expect(page.getByTestId("orders-flow")).toContainText("Aktif Sipariş");
+    await expect(page.getByTestId("order-section-filters")).toContainText("Hepsi 1");
+    await expect(page.getByTestId("order-section-filters")).toContainText("Teyit 1");
     await expect(page.getByTestId("order-detail")).toContainText("Playwright Customer");
     await expect(page.getByTestId("order-detail")).toContainText("fixture order");
     await page.getByRole("button", { name: /sipariş oluştur/i }).click();
