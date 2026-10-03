@@ -626,6 +626,7 @@ export function App() {
     .replace("{takip_no}", selectedShipment?.tracking_number ?? selectedShipment?.barcode_number ?? "takip bekliyor")
     .replace("{kargo_firmasi}", selectedShipment?.provider ?? "Kargo");
   const smsInfo = smsSegmentInfo(smsPreview);
+  const smsRecipientCount = data.shipments.filter((shipment) => Boolean(shipment.recipient_phone)).length;
   const orderCurrency = data.orders[0]?.currency ?? "TRY";
   const reportTotalAmount = data.orders.reduce((sum, order) => sum + moneyValue(order.total_amount), 0);
   const balanceSummary = balanceSummaryFromOrders(data.orders);
@@ -1104,6 +1105,16 @@ export function App() {
                   </button>
                 ))}
               </div>
+            </DetailPanel>
+            <DetailPanel title="SMS Gönderim Kayıtları" testId="sms-history-detail">
+              <DataRows
+                rows={[
+                  ["Alıcı listesi", `${smsRecipientCount} alıcı`, "shipments API"],
+                  ["Seçili alıcı", selectedShipment?.recipient_phone ?? "-", selectedShipment?.recipient_name ?? "-"],
+                  ["Son taslak", smsPreview, `${smsInfo.segmentCount} SMS`],
+                  ["Şablon durumu", "aktif", "manuel gönderim"],
+                ]}
+              />
             </DetailPanel>
             <DetailPanel title="Otomatik Teyit Araması" testId="sms-confirmation-detail">
               <DataRows

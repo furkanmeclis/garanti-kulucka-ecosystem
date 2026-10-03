@@ -620,6 +620,9 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("sms-template-detail")).toContainText("Playwright Customer");
     await expect(page.getByTestId("sms-template-detail")).toContainText("TRK-PLAYWRIGHT");
     await expect(page.getByTestId("sms-template-detail")).toContainText("1 SMS");
+    await expect(page.getByTestId("sms-history-detail")).toContainText("SMS Gönderim Kayıtları");
+    await expect(page.getByTestId("sms-history-detail")).toContainText("2 alıcı");
+    await expect(page.getByTestId("sms-history-detail")).toContainText("5550000000");
     await expect(page.getByTestId("sms-confirmation-detail")).toContainText("kapalı");
     await expect(page.getByTestId("sms-confirmation-detail")).toContainText("5550000000");
     await page.getByRole("button", { name: /netgsm teyit ayarını kaydet/i }).click();
@@ -693,6 +696,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await page.getByRole("link", { name: /^sms$/i }).click();
     await expect(page.getByTestId("sms-template-detail")).toContainText("Surat Playwright Customer");
     await expect(page.getByTestId("sms-template-detail")).toContainText("TRK-SURAT-PLAYWRIGHT");
+    await expect(page.getByTestId("sms-history-detail")).toContainText("5551111111");
     await expect(page.getByTestId("sms-confirmation-detail")).toContainText("5551111111");
     await page.getByRole("link", { name: /ayarlar/i }).click();
     await expect(page.getByTestId("admin-flow")).toContainText("webphone.enabled");
