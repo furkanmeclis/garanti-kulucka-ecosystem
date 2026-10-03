@@ -6,11 +6,11 @@ Bu belge, projeye yeni bir sohbetten veya bağlamsız bir çalışma oturumundan
 
 - Repo: `/Users/furkanmeclis/Documents/Projects/garanti-kulucka-ecosystem`
 - GitHub çalışma modeli: monorepo, yalnız `main`, PR yok.
-- Yayımlanmış son checkpoint: `v0.1.173`
-- Yayımlanmış son commit: `08c55b5e51a58de7db15d2d9a584e81a224673aa`
-- Commit mesajı: `feat(web): wire integration account settings flow`
+- Yayımlanmış son checkpoint: `v0.1.175`
+- Yayımlanmış son commit: `0abcea5957feee53eff8493edae23e800296c1e9`
+- Commit mesajı: `test(web): add legacy visual frame smoke`
 - Genel ilerleme: yaklaşık `%85`
-- Son tamamlanan çalışma: P5 backend-driven frontend shell checkpoint'i; auth/public route parity, legacy route surfaces, backend API-driven inbox/messages/orders/shipments/admin/file upload/webphone akışları, backend-owned presence toggle, role-filtered navigation ve admin integration-account list/upsert/detail/settings/token masking route'ları browser E2E kanıtıyla yayımlandı.
+- Son tamamlanan çalışma: P5 backend-driven frontend shell checkpoint'i; auth/public route parity, legacy route surfaces, backend API-driven inbox/messages/orders/shipments/admin/file upload/webphone akışları, backend-owned presence toggle, role-filtered navigation, admin integration-account list/upsert/detail/settings/token masking route'ları ve desktop/mobile legacy visual frame smoke browser E2E kanıtıyla yayımlandı.
 - Sıradaki bağımlılık kapısı production apply prerequisites'tır: customer address ve external identity fan-out write path'leri, public-id-to-FK resolution, account snapshot enforcement, multi-record customer writer ve per-target `legacy_id_map.mapping_role` semantiği executable hale getirilmelidir. P5 frontend shell migration artık backend-driven kritik akışları kanıtlar; full legacy page visual parity, live provider adapters, object storage operations ve production operations runbooks kendi kapılarında devam eder.
 - Production `migrate --apply` kapısı kapalıdır. Tüm aktivasyon koşulları geçmeden açılmamalıdır.
 
@@ -383,6 +383,7 @@ Yayımlanan kanıt:
 - `v0.1.169` ile admin `Entegrasyonlar` route'u backend admin integration-account API'sine bağlandı; listeleme ve `Instagram hesabı kaydet` upsert akışı browser E2E ile kanıtlandı. GitHub Actions run `37130025381`, tag `v0.1.169`, artifact `container-images-v0.1.169`, `411117537` byte, expired değil.
 - `v0.1.171` ile admin integration account snapshot/detail ve access-token upsert akışı backend API'ye bağlandı; token değeri ekranda gösterilmeden maskeli kalır ve browser E2E ile kanıtlanır. GitHub Actions run `37130631339`, tag `v0.1.171`, artifact `container-images-v0.1.171`, `411126145` byte, expired değil.
 - `v0.1.173` ile admin integration account settings write akışı backend API'ye bağlandı; `webhook.enabled` account setting değeri UI'dan kaydedilir, snapshot yeniden yüklenir ve browser E2E ile kanıtlanır. GitHub Actions run `37131273095`, tag `v0.1.173`, artifact `container-images-v0.1.173`, `411136746` byte, expired değil.
+- `v0.1.175` ile core legacy shell route'ları için desktop/mobile visual frame smoke eklendi; inbox, orders, shipments, integrations ve webphone panellerinde boş frame, yatay taşma, topbar/workspace overlap ve nav collapse browser E2E ile reddedilir. GitHub Actions run `37131946791`, tag `v0.1.175`, artifact `container-images-v0.1.175`, `411061523` byte, expired değil.
 
 İş sırası:
 
@@ -391,7 +392,7 @@ Yayımlanan kanıt:
 3. Supabase auth/table/storage/channel kullanımı kritik akışlarda backend auth/domain API/presigned S3/Socket.IO ile değiştirildi; kalan legacy sayfa portlarında aynı kural korunmalıdır.
 4. Login, inbox, conversation/message send, order, shipment, admin, integration account list/upsert/detail/settings/token masking, file upload, webphone ve personel presence ekran davranışları backend'e bağlıdır; kalan iş gerçek legacy sayfa/detay görsel davranış parity'sidir.
 5. Repo genelinde doğrudan Supabase importu, URL’si, SDK kullanımı ve channel çağrısı kalmadığını guard ile kanıtlamaya devam et.
-6. Legacy ve yeni uygulama arasında kritik ekran görsel regresyon testleri oluştur.
+6. Legacy ve yeni uygulama arasında kritik ekran görsel regresyon kapsamını genişlet; mevcut `v0.1.175` smoke kapısı desktop/mobile frame stabilitesini kanıtlar, birebir eski ekran karşılaştırması hâlâ genişletilecek alandır.
 
 Kabul kapısı: web container `/` adresinde gerçek uygulamayı döndürmeli; mevcut müşteri akışları görsel ve davranışsal olarak korunmalı; E2E browser testleri UI üzerinden çalışmalıdır.
 
