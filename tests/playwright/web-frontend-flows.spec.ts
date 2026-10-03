@@ -46,6 +46,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
   const requestedUrls: string[] = [];
   let currentUser = loginUser();
   let savedIntegrationToken = false;
+  let savedIntegrationSetting = false;
 
   await page.route(`${backendBaseUrl}/**`, async (route) => {
     const url = new URL(route.request().url());
@@ -327,7 +328,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
             {
               public_id: "ias_webhook",
               key: "webhook.enabled",
-              value: true,
+              value: savedIntegrationSetting,
               is_secret: false,
               updated_at: "2026-01-01T00:00:00.000Z",
             },
@@ -358,6 +359,22 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
           public_id: "iat_access",
           token_type: "access_token",
           value: null,
+        }),
+      });
+      return;
+    }
+
+    if (url.pathname === "/admin/integrations/accounts/iac_instagram/settings/webhook.enabled") {
+      expect(route.request().method()).toBe("PUT");
+      savedIntegrationSetting = true;
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          public_id: "ias_webhook",
+          key: "webhook.enabled",
+          value: true,
+          is_secret: false,
+          updated_at: "2026-01-01T00:06:00.000Z",
         }),
       });
       return;
@@ -465,6 +482,9 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("integrations-flow")).toContainText("Instagram Main");
     await page.getByRole("button", { name: /instagram main detay/i }).click();
     await expect(page.getByTestId("integration-detail")).toContainText("webhook.enabled");
+    await expect(page.getByTestId("integration-detail")).toContainText("false");
+    await page.getByRole("button", { name: /webhook ayarını kaydet/i }).click();
+    await expect(page.getByTestId("integration-detail")).toContainText("true");
     await expect(page.getByTestId("integration-detail")).toContainText("value masked");
     await page.getByRole("button", { name: /access token kaydet/i }).click();
     await expect(page.getByTestId("integration-detail")).toContainText("access_token");
@@ -525,6 +545,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       "/api/conversations/cnv_playwright/messages",
       "/admin/integrations/accounts",
       "/admin/integrations/accounts/iac_instagram",
+      "/admin/integrations/accounts/iac_instagram/settings/webhook.enabled",
       "/admin/integrations/accounts/iac_instagram/tokens/access_token",
       "/api/orders",
       "/api/shipments",

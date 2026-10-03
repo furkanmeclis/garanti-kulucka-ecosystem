@@ -222,6 +222,17 @@ export function createAdminClient(http: BackendHttpClient) {
           metadata: input.metadata ?? {},
         },
       }),
+    upsertIntegrationSetting: (accountPublicId: string, key: string, value: unknown, isSecret = false) =>
+      http.request<IntegrationSetting>(
+        `/admin/integrations/accounts/${encodeURIComponent(accountPublicId)}/settings/${encodeURIComponent(key)}`,
+        {
+          method: "PUT",
+          body: {
+            value,
+            is_secret: isSecret,
+          },
+        },
+      ),
     upsertIntegrationToken: (accountPublicId: string, tokenType: string, value: unknown, expiresAt: string | null = null) =>
       http.request<{ public_id: string; token_type: string; value: null }>(
         `/admin/integrations/accounts/${encodeURIComponent(accountPublicId)}/tokens/${encodeURIComponent(tokenType)}`,

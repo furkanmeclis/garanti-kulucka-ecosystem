@@ -369,6 +369,17 @@ export function App() {
     setStatus("Entegrasyon token bilgisi maskeli backend API üzerinden kaydedildi");
   }
 
+  async function handleSaveIntegrationSetting() {
+    const accountPublicId = integrationSnapshot?.account.public_id ?? data.integrationAccounts[0]?.public_id;
+    if (!accountPublicId) return;
+
+    setStatus("Entegrasyon ayarı backend API üzerinden kaydediliyor");
+    await admin.upsertIntegrationSetting(accountPublicId, "webhook.enabled", true, false);
+    const snapshot = await admin.getIntegrationAccount(accountPublicId);
+    setIntegrationSnapshot(snapshot);
+    setStatus("Entegrasyon ayarı backend API üzerinden kaydedildi");
+  }
+
   async function handleTogglePresence() {
     if (!user || user.role === "admin") return;
 
@@ -538,6 +549,9 @@ export function App() {
               ))}
               <button className="secondary-action" type="button" onClick={handleSaveIntegrationToken}>
                 Access token kaydet
+              </button>
+              <button className="secondary-action" type="button" onClick={handleSaveIntegrationSetting}>
+                Webhook ayarını kaydet
               </button>
             </div>
             {integrationSnapshot && (

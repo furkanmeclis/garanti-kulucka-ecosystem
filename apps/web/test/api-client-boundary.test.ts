@@ -86,6 +86,34 @@ describe("web API client boundary", () => {
     });
   });
 
+  it("maps admin integration setting updates to backend routes", async () => {
+    const requests: Request[] = [];
+    const client = createApiClient("http://localhost:3000", {
+      fetchImpl: async (input, init) => {
+        requests.push(new Request(input, init));
+        return Response.json({
+          public_id: "ias_webhook",
+          key: "webhook.enabled",
+          value: true,
+          is_secret: false,
+          updated_at: "2026-01-01T00:00:00.000Z",
+        });
+      },
+    });
+
+    await expect(
+      client.admin.upsertIntegrationSetting("iac_instagram", "webhook.enabled", true),
+    ).resolves.toMatchObject({
+      key: "webhook.enabled",
+      value: true,
+      is_secret: false,
+    });
+    expect(requests[0]?.method).toBe("PUT");
+    expect(requests[0]?.url).toBe(
+      "http://localhost:3000/admin/integrations/accounts/iac_instagram/settings/webhook.enabled",
+    );
+  });
+
   it("maps admin integration account snapshots to backend routes", async () => {
     const requests: Request[] = [];
     const client = createApiClient("http://localhost:3000", {
