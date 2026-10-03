@@ -610,19 +610,25 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("file-upload-flow")).toContainText("kanit.txt kaydedildi");
     await page.getByRole("link", { name: /santral/i }).click();
     await expect(page.getByTestId("webphone-flow")).toContainText("sip.example.com");
-    await assertLegacyVisualFrame(page, app.url, "desktop", [
+    const adminVisualRoutes = [
       { path: "/mesajlar", testId: "inbox-flow" },
+      { path: "/yorumlar", testId: "comments-flow" },
       { path: "/siparisler", testId: "orders-flow" },
       { path: "/kargo", testId: "shipments-flow" },
+      { path: "/iptaller", testId: "cancellations-flow" },
+      { path: "/stok", testId: "inventory-flow" },
+      { path: "/bakiye", testId: "balances-flow" },
+      { path: "/sms", testId: "sms-flow" },
+      { path: "/sesli-asistan", testId: "calls-flow" },
+      { path: "/sesli-asistan/vapi", testId: "vapi-flow" },
+      { path: "/raporlar", testId: "reports-flow" },
       { path: "/ayarlar/entegrasyonlar", testId: "integrations-flow" },
+      { path: "/ayarlar", testId: "admin-flow" },
+      { path: "/dosya", testId: "file-upload-flow" },
       { path: "/santral", testId: "webphone-flow" },
-    ]);
-    await assertLegacyVisualFrame(page, app.url, "mobile", [
-      { path: "/mesajlar", testId: "inbox-flow" },
-      { path: "/siparisler", testId: "orders-flow" },
-      { path: "/kargo", testId: "shipments-flow" },
-      { path: "/ayarlar/entegrasyonlar", testId: "integrations-flow" },
-    ]);
+    ];
+    await assertLegacyVisualFrame(page, app.url, "desktop", adminVisualRoutes);
+    await assertLegacyVisualFrame(page, app.url, "mobile", adminVisualRoutes);
     await page.setViewportSize({ width: 1280, height: 720 });
     await page.getByRole("button", { name: /çıkış/i }).click();
     await expect(page.getByRole("button", { name: /giriş yap/i })).toBeVisible();
