@@ -2,15 +2,22 @@ import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "re
 import { NavLink, useLocation } from "react-router-dom";
 import {
   Boxes,
+  BarChart3,
+  Bot,
   FileUp,
   Headphones,
   LogIn,
   MessageCircle,
+  MessageSquare,
+  MessageSquareText,
+  Package,
   Phone,
   Settings,
   ShoppingCart,
   Truck,
+  Wallet,
   Wifi,
+  XCircle,
   type LucideIcon,
 } from "lucide-react";
 import { createAdminClient, type AdminSetting } from "../api/admin-client.js";
@@ -49,15 +56,25 @@ interface NavigationItem {
 
 const navigationItems: NavigationItem[] = [
   { key: "inbox", label: "Mesajlar", icon: MessageCircle, roles: ["admin", "calisan", "kargo_operatoru"], path: "/mesajlar" },
+  { key: "comments", label: "Yorumlar", icon: MessageSquareText, roles: ["admin", "calisan"], path: "/yorumlar" },
   { key: "orders", label: "Siparişler", icon: ShoppingCart, roles: ["admin", "calisan", "kargo_operatoru"], path: "/siparisler" },
   { key: "shipments", label: "Kargo", icon: Truck, roles: ["admin", "calisan", "kargo_operatoru"], path: "/kargo" },
+  { key: "cancellations", label: "İptaller", icon: XCircle, roles: ["admin", "calisan"], path: "/iptaller" },
+  { key: "inventory", label: "Stoklar", icon: Package, roles: ["admin", "calisan"], path: "/stok" },
+  { key: "balances", label: "Bakiyeler", icon: Wallet, roles: ["admin", "calisan"], path: "/bakiye" },
+  { key: "sms", label: "SMS", icon: MessageSquare, roles: ["admin", "calisan", "kargo_operatoru"], path: "/sms" },
+  { key: "calls", label: "Arama", icon: Phone, roles: ["admin"], path: "/sesli-asistan" },
+  { key: "vapi", label: "VAPI AI", icon: Bot, roles: ["admin"], path: "/sesli-asistan/vapi" },
+  { key: "reports", label: "İş Analizi", icon: BarChart3, roles: ["admin"], path: "/raporlar" },
   { key: "admin", label: "Ayarlar", icon: Settings, roles: ["admin"], path: "/ayarlar" },
   { key: "files", label: "Dosya", icon: FileUp, roles: ["admin", "calisan"], path: "/dosya" },
   { key: "webphone", label: "Santral", icon: Phone, roles: ["admin"], path: "/santral" },
 ];
 
 function flowFromPath(pathname: string) {
-  return navigationItems.find((item) => pathname === item.path || pathname.startsWith(`${item.path}/`))?.key ?? "inbox";
+  return [...navigationItems]
+    .sort((first, second) => second.path.length - first.path.length)
+    .find((item) => pathname === item.path || pathname.startsWith(`${item.path}/`))?.key ?? "inbox";
 }
 
 function cx(...classes: Array<string | false | null | undefined>) {
@@ -405,6 +422,103 @@ export function App() {
           </FlowPanel>
         )}
 
+        {activeFlow === "comments" && (
+          <LegacySurfacePanel
+            title="Yorumlar"
+            icon={<MessageSquareText size={18} />}
+            testId="comments-flow"
+            rows={[
+              ["Açık konuşma", String(data.conversations.length), "backend conversations"],
+              ["Okunmamış mesaj", String(data.conversations.reduce((sum, item) => sum + item.unread_count, 0)), "domain API"],
+            ]}
+          />
+        )}
+
+        {activeFlow === "cancellations" && (
+          <LegacySurfacePanel
+            title="İptaller"
+            icon={<XCircle size={18} />}
+            testId="cancellations-flow"
+            rows={[
+              ["Sipariş kaydı", String(data.orders.length), "backend orders"],
+              ["İptal kuyruğu", "0", "backend action bekliyor"],
+            ]}
+          />
+        )}
+
+        {activeFlow === "inventory" && (
+          <LegacySurfacePanel
+            title="Stoklar"
+            icon={<Package size={18} />}
+            testId="inventory-flow"
+            rows={[
+              ["Sipariş kaynaklı stok sinyali", String(data.orders.length), "orders API"],
+              ["Depo entegrasyonu", "hazır", "backend boundary"],
+            ]}
+          />
+        )}
+
+        {activeFlow === "balances" && (
+          <LegacySurfacePanel
+            title="Bakiyeler"
+            icon={<Wallet size={18} />}
+            testId="balances-flow"
+            rows={[
+              ["Görünür ayar", String(activeSettings.length), "admin settings"],
+              ["Para birimi", data.orders[0]?.currency ?? "TRY", "orders API"],
+            ]}
+          />
+        )}
+
+        {activeFlow === "sms" && (
+          <LegacySurfacePanel
+            title="SMS"
+            icon={<MessageSquare size={18} />}
+            testId="sms-flow"
+            rows={[
+              ["NetGSM yönetimi", activeSettings.some((setting) => setting.key.includes("netgsm")) ? "tanımlı" : "bekliyor", "admin settings"],
+              ["Müşteri telefonu", data.shipments[0]?.recipient_phone ?? "-", "shipments API"],
+            ]}
+          />
+        )}
+
+        {activeFlow === "calls" && (
+          <LegacySurfacePanel
+            title="Arama"
+            icon={<Phone size={18} />}
+            testId="calls-flow"
+            rows={[
+              ["SIP domain", data.webphone?.sip_domain ?? "-", "webphone API"],
+              ["Transport", data.webphone?.transport ?? "-", "backend config"],
+            ]}
+          />
+        )}
+
+        {activeFlow === "vapi" && (
+          <LegacySurfacePanel
+            title="VAPI AI"
+            icon={<Bot size={18} />}
+            testId="vapi-flow"
+            rows={[
+              ["SIP sınırı", data.webphone?.enabled ? "aktif" : "kapalı", "webphone API"],
+              ["Model ayarı", activeSettings.find((setting) => setting.key.includes("ai"))?.key ?? "admin setting bekliyor", "settings API"],
+            ]}
+          />
+        )}
+
+        {activeFlow === "reports" && (
+          <LegacySurfacePanel
+            title="İş Analizi"
+            icon={<BarChart3 size={18} />}
+            testId="reports-flow"
+            rows={[
+              ["Konuşma", String(data.conversations.length), "domain API"],
+              ["Sipariş", String(data.orders.length), "domain API"],
+              ["Kargo", String(data.shipments.length), "domain API"],
+            ]}
+          />
+        )}
+
         {activeFlow === "files" && (
           <FlowPanel title="Dosya Upload" icon={<FileUp size={18} />} testId="file-upload-flow">
             <button className="primary-action" type="button" onClick={handleUpload}>
@@ -427,6 +541,15 @@ export function App() {
         )}
       </main>
     </div>
+  );
+}
+
+function LegacySurfacePanel(props: { title: string; icon: ReactNode; testId: string; rows: string[][] }) {
+  return (
+    <FlowPanel title={props.title} icon={props.icon} testId={props.testId}>
+      <p className="result-line">Legacy müşteri route davranışı backend shell içinde korunuyor.</p>
+      <DataRows rows={props.rows} />
+    </FlowPanel>
   );
 }
 
