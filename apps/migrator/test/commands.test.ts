@@ -232,8 +232,12 @@ describe("migrator commands", () => {
   it("redacts database URLs and password parameters from command reports and thrown errors", async () => {
     const directory = await mkdtemp(join(tmpdir(), "migrator-report-"));
     const reportFile = join(directory, "failure.json");
-    const secret = "postgres://admin:top-secret@db.internal:5432/legacy?sslmode=require";
-    const executeMigration = vi.fn().mockRejectedValue(new Error(`connection failed for ${secret} password=top-secret`));
+    const secret = "postgres://admin:top-secret@db.internal:5432/legacy?sslmode=require&access_token=query-secret";
+    const error = Object.assign(
+      new Error(`connection failed for ${secret} password=top-secret Authorization: Bearer provider-secret`),
+      { cause: new Error("nested cause access_token=nested-secret") },
+    );
+    const executeMigration = vi.fn().mockRejectedValue(error);
 
     try {
       await expect(
@@ -247,7 +251,11 @@ describe("migrator commands", () => {
 
       const report = await readFile(reportFile, "utf8");
       expect(report).not.toContain("top-secret");
+      expect(report).not.toContain("query-secret");
+      expect(report).not.toContain("provider-secret");
+      expect(report).not.toContain("nested-secret");
       expect(report).not.toContain("db.internal");
+      expect(report).not.toContain("cause");
     } finally {
       await rm(directory, { recursive: true, force: true });
     }

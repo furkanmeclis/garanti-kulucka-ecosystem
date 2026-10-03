@@ -1,8 +1,30 @@
 import { describe, expect, it } from "vitest";
-import { toSafeMigratorError } from "../src/errors.js";
+import { sanitizeMigratorErrorMessage, toSafeMigratorError } from "../src/errors.js";
 import { createMigratorFailureLogPayload } from "../src/logging.js";
 
 describe("migrator error safety", () => {
+  it("redacts URL query secrets, quoted parameters, and authorization headers", () => {
+    const message = [
+      "request failed",
+      "postgres://admin:top-secret@db.internal/legacy?password=query-secret&access_token=token-secret",
+      "Authorization: Bearer provider-secret",
+      "password=\"quoted-secret\"",
+      "token='single-quoted-secret'",
+    ].join(" ");
+
+    const sanitized = sanitizeMigratorErrorMessage(message);
+
+    expect(sanitized).toContain("[REDACTED_DATABASE_URL]");
+    expect(sanitized).toContain("authorization=[REDACTED]");
+    expect(sanitized).toContain("password=[REDACTED]");
+    expect(sanitized).toContain("token=[REDACTED]");
+    expect(sanitized).not.toContain("top-secret");
+    expect(sanitized).not.toContain("query-secret");
+    expect(sanitized).not.toContain("token-secret");
+    expect(sanitized).not.toContain("provider-secret");
+    expect(sanitized).not.toContain("quoted-secret");
+  });
+
   it("creates a new error without copying enumerable secrets when the message is unchanged", () => {
     const original = Object.assign(new Error("connection failed"), {
       connectionString: "postgres://admin:database-secret@db.internal/legacy",
