@@ -6,15 +6,15 @@ Bu belge, projeye yeni bir sohbetten veya bağlamsız bir çalışma oturumundan
 
 - Repo: `/Users/furkanmeclis/Documents/Projects/garanti-kulucka-ecosystem`
 - GitHub çalışma modeli: monorepo, yalnız `main`, PR yok.
-- Yayımlanmış son checkpoint: `v0.1.171`
-- Yayımlanmış son commit: `4cc0b6410d99758206c1143baa3d7f10ab11f6eb`
-- Commit mesajı: `feat(web): add integration account detail token flow`
+- Yayımlanmış son checkpoint: `v0.1.173`
+- Yayımlanmış son commit: `08c55b5e51a58de7db15d2d9a584e81a224673aa`
+- Commit mesajı: `feat(web): wire integration account settings flow`
 - Genel ilerleme: yaklaşık `%85`
-- Son tamamlanan çalışma: P5 backend-driven frontend shell checkpoint'i; auth/public route parity, legacy route surfaces, backend API-driven inbox/messages/orders/shipments/admin/file upload/webphone akışları, backend-owned presence toggle, role-filtered navigation ve admin integration-account list/upsert/detail/token masking route'ları browser E2E kanıtıyla yayımlandı.
+- Son tamamlanan çalışma: P5 backend-driven frontend shell checkpoint'i; auth/public route parity, legacy route surfaces, backend API-driven inbox/messages/orders/shipments/admin/file upload/webphone akışları, backend-owned presence toggle, role-filtered navigation ve admin integration-account list/upsert/detail/settings/token masking route'ları browser E2E kanıtıyla yayımlandı.
 - Sıradaki bağımlılık kapısı production apply prerequisites'tır: customer address ve external identity fan-out write path'leri, public-id-to-FK resolution, account snapshot enforcement, multi-record customer writer ve per-target `legacy_id_map.mapping_role` semantiği executable hale getirilmelidir. P5 frontend shell migration artık backend-driven kritik akışları kanıtlar; full legacy page visual parity, live provider adapters, object storage operations ve production operations runbooks kendi kapılarında devam eder.
 - Production `migrate --apply` kapısı kapalıdır. Tüm aktivasyon koşulları geçmeden açılmamalıdır.
 
-`%85` tahmini; önceki temellere ek olarak customer, conversation, message, product, order, order item ve shipment dry-run dönüşümlerini, transaction/lock safety guardlarını, row-content fingerprint persistence'ını, retry/redaction test kanıtını, real PostgreSQL dry-run source/target evidence'ını, customer address/external identity apply blocker kararını, real PostgreSQL recovery E2E'sini, backup/restore rehearsal kanıtını ve backend-driven P5 frontend shell/browser E2E kanıtını içerir. Canlı provider adapterları, full legacy page visual parity, provider-specific integration account settings parity, production object storage operations, observability/runbook kapıları ve production data apply açılışı tamamlanmış kabul edilmez.
+`%85` tahmini; önceki temellere ek olarak customer, conversation, message, product, order, order item ve shipment dry-run dönüşümlerini, transaction/lock safety guardlarını, row-content fingerprint persistence'ını, retry/redaction test kanıtını, real PostgreSQL dry-run source/target evidence'ını, customer address/external identity apply blocker kararını, real PostgreSQL recovery E2E'sini, backup/restore rehearsal kanıtını ve backend-driven P5 frontend shell/browser E2E kanıtını içerir. Canlı provider adapterları, full legacy page visual parity, production object storage operations, observability/runbook kapıları ve production data apply açılışı tamamlanmış kabul edilmez.
 
 ## 2. Tarihsel Schema Kimliği Checkpoint'i (`v0.1.116`)
 
@@ -382,13 +382,14 @@ Yayımlanan kanıt:
 - `v0.1.167` ile legacy personel/kargo çevrimiçi-çevrimdışı davranışı backend-owned `/auth/presence` sınırına taşındı; auth serialization `is_online` döndürür, logout offline'a çeker, admin topbar toggle görmez, `kargo_operatoru` toggle browser E2E ile kanıtlanır. GitHub Actions run `37129351973`, tag `v0.1.167`, artifact `container-images-v0.1.167`, `411118295` byte, expired değil.
 - `v0.1.169` ile admin `Entegrasyonlar` route'u backend admin integration-account API'sine bağlandı; listeleme ve `Instagram hesabı kaydet` upsert akışı browser E2E ile kanıtlandı. GitHub Actions run `37130025381`, tag `v0.1.169`, artifact `container-images-v0.1.169`, `411117537` byte, expired değil.
 - `v0.1.171` ile admin integration account snapshot/detail ve access-token upsert akışı backend API'ye bağlandı; token değeri ekranda gösterilmeden maskeli kalır ve browser E2E ile kanıtlanır. GitHub Actions run `37130631339`, tag `v0.1.171`, artifact `container-images-v0.1.171`, `411126145` byte, expired değil.
+- `v0.1.173` ile admin integration account settings write akışı backend API'ye bağlandı; `webhook.enabled` account setting değeri UI'dan kaydedilir, snapshot yeniden yüklenir ve browser E2E ile kanıtlanır. GitHub Actions run `37131273095`, tag `v0.1.173`, artifact `container-images-v0.1.173`, `411136746` byte, expired değil.
 
 İş sırası:
 
 1. Kalan legacy sayfaları ve detay ekranlarını görsel davranışı koruyarak `apps/web` içine al; mevcut shell tamamlanan route yüzeyi olarak korunur.
 2. Production Nginx/web container sunumu CI artifact içinde doğrulanır; release hattı yeşil kalmalıdır.
 3. Supabase auth/table/storage/channel kullanımı kritik akışlarda backend auth/domain API/presigned S3/Socket.IO ile değiştirildi; kalan legacy sayfa portlarında aynı kural korunmalıdır.
-4. Login, inbox, conversation/message send, order, shipment, admin, integration account list/upsert/detail/token masking, file upload, webphone ve personel presence ekran davranışları backend'e bağlıdır; provider-specific integration account settings parity işleri kalır.
+4. Login, inbox, conversation/message send, order, shipment, admin, integration account list/upsert/detail/settings/token masking, file upload, webphone ve personel presence ekran davranışları backend'e bağlıdır; kalan iş gerçek legacy sayfa/detay görsel davranış parity'sidir.
 5. Repo genelinde doğrudan Supabase importu, URL’si, SDK kullanımı ve channel çağrısı kalmadığını guard ile kanıtlamaya devam et.
 6. Legacy ve yeni uygulama arasında kritik ekran görsel regresyon testleri oluştur.
 
