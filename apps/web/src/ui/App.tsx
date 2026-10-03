@@ -124,6 +124,15 @@ function readStoredToken() {
   return window.localStorage.getItem(tokenStorageKey);
 }
 
+function moneyValue(value: string) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function formatMoney(value: number, currency: string) {
+  return `${value.toFixed(2)} ${currency}`;
+}
+
 function readNumberSetting(value: unknown, fallback: number) {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
@@ -546,6 +555,12 @@ export function App() {
     data.conversations.find((conversation) => conversation.public_id === selectedConversationId) ?? data.conversations[0] ?? null;
   const selectedOrder = data.orders.find((order) => order.public_id === selectedOrderId) ?? data.orders[0] ?? null;
   const selectedShipment = data.shipments.find((shipment) => shipment.public_id === selectedShipmentId) ?? data.shipments[0] ?? null;
+  const orderCurrency = data.orders[0]?.currency ?? "TRY";
+  const reportTotalAmount = data.orders.reduce((sum, order) => sum + moneyValue(order.total_amount), 0);
+  const deliveredShipmentCount = data.shipments.filter((shipment) => shipment.status === "delivered").length;
+  const activeShipmentCount = data.shipments.filter((shipment) => shipment.status !== "delivered").length;
+  const pendingConfirmationCount = data.orders.filter((order) => order.confirmation_status === null).length;
+  const openConversationCount = data.conversations.filter((conversation) => conversation.status === "open").length;
 
   return (
     <div className="app-shell">
@@ -884,16 +899,24 @@ export function App() {
         )}
 
         {activeFlow === "reports" && (
-          <LegacySurfacePanel
-            title="İş Analizi"
-            icon={<BarChart3 size={18} />}
-            testId="reports-flow"
-            rows={[
-              ["Konuşma", String(data.conversations.length), "domain API"],
-              ["Sipariş", String(data.orders.length), "domain API"],
-              ["Kargo", String(data.shipments.length), "domain API"],
-            ]}
-          />
+          <FlowPanel title="İş Analizi" icon={<BarChart3 size={18} />} testId="reports-flow">
+            <div className="report-grid">
+              <Metric title="Konuşma" value={String(data.conversations.length)} />
+              <Metric title="Sipariş" value={String(data.orders.length)} />
+              <Metric title="Kargo" value={String(data.shipments.length)} />
+              <Metric title="Ciro" value={formatMoney(reportTotalAmount, orderCurrency)} />
+            </div>
+            <DetailPanel title="Operasyon Dağılımı" testId="reports-detail">
+              <DataRows
+                rows={[
+                  ["Açık konuşma", String(openConversationCount), "domain API"],
+                  ["Teyit bekleyen", String(pendingConfirmationCount), "orders API"],
+                  ["Aktif kargo", String(activeShipmentCount), "shipments API"],
+                  ["Teslim edilen", String(deliveredShipmentCount), "shipments API"],
+                ]}
+              />
+            </DetailPanel>
+          </FlowPanel>
         )}
 
         {activeFlow === "files" && (

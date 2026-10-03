@@ -249,6 +249,12 @@ nav {
   gap: 8px;
 }
 
+.report-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
 .metric {
   display: grid;
   align-content: center;
@@ -457,5 +463,9 @@ nav {
   .split-grid,
   .data-row {
     grid-template-columns: 1fr;
+  }
+
+  .report-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

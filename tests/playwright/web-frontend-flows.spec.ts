@@ -554,7 +554,9 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await page.goto(`${app.url}/sesli-asistan/vapi`);
     await expect(page.getByTestId("vapi-flow")).toContainText("webphone API");
     await page.goto(`${app.url}/raporlar`);
-    await expect(page.getByTestId("reports-flow")).toContainText("domain API");
+    await expect(page.getByTestId("reports-flow")).toContainText("125.50 TRY");
+    await expect(page.getByTestId("reports-detail")).toContainText("Açık konuşma");
+    await expect(page.getByTestId("reports-detail")).toContainText("Aktif kargo");
     await page.goto(`${app.url}/ayarlar/entegrasyonlar`);
     await expect(page.getByTestId("integrations-flow")).toContainText("Instagram Main");
     await page.getByRole("button", { name: /instagram main detay/i }).click();
