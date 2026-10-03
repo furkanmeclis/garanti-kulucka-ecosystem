@@ -595,8 +595,14 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("order-detail")).toContainText("Frontend backend create smoke");
     await page.getByRole("link", { name: /kargo/i }).click();
     await expect(page.getByTestId("shipments-flow")).toContainText("TRK-PLAYWRIGHT");
+    await expect(page.getByTestId("shipments-flow")).toContainText("PTT Kargo");
+    await expect(page.getByTestId("shipments-flow")).toContainText("Yoldaki Kargolar");
+    await expect(page.getByTestId("shipment-section-tabs")).toContainText("Tüm kargolar 1");
+    await expect(page.getByTestId("shipment-section-tabs")).toContainText("PTT 1");
     await expect(page.getByTestId("shipment-detail")).toContainText("Accepted at branch");
     await expect(page.getByTestId("shipment-detail")).toContainText("Kadikoy / Istanbul");
+    await expect(page.getByTestId("shipment-detail")).toContainText("BAR-PLAYWRIGHT");
+    await expect(page.getByTestId("shipment-detail")).toContainText("ORD-PLAYWRIGHT");
     await page.getByRole("button", { name: /teslim edildi yap/i }).click();
     await expect(page.getByTestId("shipments-flow")).toContainText("delivered");
     await expect(page.getByTestId("shipment-detail")).toContainText("Frontend teslim kaniti");

@@ -560,6 +560,12 @@ export function App() {
   const deliveredShipmentCount = data.shipments.filter((shipment) => shipment.status === "delivered").length;
   const activeShipmentCount = data.shipments.filter((shipment) => shipment.status !== "delivered").length;
   const pendingConfirmationCount = data.orders.filter((order) => order.confirmation_status === null).length;
+  const pttShipmentCount = data.shipments.filter((shipment) => shipment.provider.toLowerCase().includes("ptt")).length;
+  const suratShipmentCount = data.shipments.filter((shipment) => {
+    const provider = shipment.provider.toLocaleLowerCase("tr-TR");
+    return provider.includes("sürat") || provider.includes("surat");
+  }).length;
+  const otherShipmentCount = Math.max(data.shipments.length - pttShipmentCount - suratShipmentCount, 0);
   const openConversationCount = data.conversations.filter((conversation) => conversation.status === "open").length;
 
   return (
@@ -695,10 +701,36 @@ export function App() {
 
         {activeFlow === "shipments" && (
           <FlowPanel title="Kargo" icon={<Truck size={18} />} testId="shipments-flow">
+            <div className="report-grid">
+              <Metric title="PTT Kargo" value={String(pttShipmentCount)} />
+              <Metric title="Sürat Kargo" value={String(suratShipmentCount)} />
+              <Metric title="Yoldaki Kargolar" value={String(activeShipmentCount)} />
+              <Metric title="Teslim Edilen" value={String(deliveredShipmentCount)} />
+            </div>
+            <div className="detail-actions" data-testid="shipment-section-tabs">
+              <button className="secondary-action selected" type="button">
+                Tüm kargolar {data.shipments.length}
+              </button>
+              <button className="secondary-action" type="button">
+                PTT {pttShipmentCount}
+              </button>
+              <button className="secondary-action" type="button">
+                Sürat {suratShipmentCount}
+              </button>
+              <button className="secondary-action" type="button">
+                Diğer {otherShipmentCount}
+              </button>
+            </div>
             <button className="primary-action" type="button" onClick={handleUpdateShipment}>
               Teslim edildi yap
             </button>
-            <DataRows rows={data.shipments.map((shipment) => [shipment.provider, shipment.tracking_number ?? "-", shipment.status])} />
+            <DataRows
+              rows={data.shipments.map((shipment) => [
+                shipment.provider,
+                shipment.tracking_number ?? shipment.barcode_number ?? "-",
+                shipment.order_number ?? shipment.customer_full_name ?? shipment.status,
+              ])}
+            />
             <div className="detail-actions">
               {data.shipments.map((shipment) => (
                 <button
@@ -723,6 +755,8 @@ export function App() {
                       selectedShipment.barcode_number ?? "-",
                     ],
                     ["Son Hareket", selectedShipment.last_event_text ?? "-", selectedShipment.status],
+                    ["Sipariş", selectedShipment.order_number ?? "-", selectedShipment.customer_full_name ?? "-"],
+                    ["Barkod", selectedShipment.barcode_number ?? "barkod bekliyor", "shipments API"],
                   ]}
                 />
               </DetailPanel>
