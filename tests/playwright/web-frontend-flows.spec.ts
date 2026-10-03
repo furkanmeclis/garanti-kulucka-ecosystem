@@ -647,6 +647,10 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("reports-ratio-summary")).toContainText("%0");
     await page.goto(`${app.url}/ayarlar/entegrasyonlar`);
     await expect(page.getByTestId("integrations-flow")).toContainText("Instagram Main");
+    await expect(page.getByTestId("instagram-publish-preview")).toContainText("Instagram Yayın Önizleme");
+    await expect(page.getByTestId("instagram-publish-preview")).toContainText("https://example.com/garanti-kulucka.jpg");
+    await expect(page.getByTestId("instagram-publish-preview")).toContainText("2200 karakter");
+    await expect(page.getByTestId("instagram-publish-preview")).toContainText("taslak");
     await page.getByRole("button", { name: /instagram main detay/i }).click();
     await expect(page.getByTestId("integration-detail")).toContainText("webhook.enabled");
     await expect(page.getByTestId("integration-detail")).toContainText("false");

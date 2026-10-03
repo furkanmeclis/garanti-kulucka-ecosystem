@@ -127,6 +127,9 @@ const defaultSipServerSettings: SipServerSettings = {
 };
 
 const smsTemplate = "{musteri_adi}, {takip_no} takip numarali kargonuz {kargo_firmasi} ile yoldadir.";
+const instagramDraftImageUrl = "https://example.com/garanti-kulucka.jpg";
+const instagramDraftCaption = "Kuluçka makineleri ve yedek parça operasyonundan güncel ürün duyurusu.";
+const instagramCaptionLimit = 2200;
 
 function flowFromPath(pathname: string) {
   return [...navigationItems]
@@ -896,6 +899,16 @@ export function App() {
               Instagram hesabı kaydet
             </button>
             <DataRows rows={data.integrationAccounts.map((account) => [account.provider_name, account.display_name, account.status])} />
+            <DetailPanel title="Instagram Yayın Önizleme" testId="instagram-publish-preview">
+              <DataRows
+                rows={[
+                  ["Fotoğraf URL", instagramDraftImageUrl, "Graph publish"],
+                  ["Caption", instagramDraftCaption, `${instagramDraftCaption.length} / ${instagramCaptionLimit} karakter`],
+                  ["Önizleme hesabı", integrationSnapshot?.account.display_name ?? "garantikulucka", "Instagram"],
+                  ["Yayın modu", "taslak", "canlı provider kapalı"],
+                ]}
+              />
+            </DetailPanel>
             <div className="integration-actions">
               {data.integrationAccounts.map((account) => (
                 <button
