@@ -796,15 +796,44 @@ export function App() {
         )}
 
         {activeFlow === "comments" && (
-          <LegacySurfacePanel
-            title="Yorumlar"
-            icon={<MessageSquareText size={18} />}
-            testId="comments-flow"
-            rows={[
-              ["Açık konuşma", String(data.conversations.length), "backend conversations"],
-              ["Okunmamış mesaj", String(data.conversations.reduce((sum, item) => sum + item.unread_count, 0)), "domain API"],
-            ]}
-          />
+          <FlowPanel title="Yorumlar" icon={<MessageSquareText size={18} />} testId="comments-flow">
+            <div className="split-grid">
+              <List title="Yorum Kuyruğu">
+                {data.conversations.map((conversation) => (
+                  <li key={conversation.public_id}>
+                    <button
+                      className={cx("conversation-button", selectedConversation?.public_id === conversation.public_id && "selected")}
+                      type="button"
+                      onClick={() => void handleSelectConversation(conversation.public_id)}
+                    >
+                      <strong>{conversation.customer?.full_name ?? conversation.public_id}</strong>
+                      <span>{conversation.channel} / {conversation.status}</span>
+                    </button>
+                  </li>
+                ))}
+              </List>
+              <DetailPanel title="Yorum Moderasyonu" testId="comments-detail">
+                <DataRows
+                  rows={[
+                    ["Açık konuşma", String(openConversationCount), "backend conversations"],
+                    ["Okunmamış mesaj", String(data.conversations.reduce((sum, item) => sum + item.unread_count, 0)), "domain API"],
+                    [
+                      "Müşteri",
+                      selectedConversation?.customer?.full_name ?? selectedConversation?.public_id ?? "-",
+                      selectedConversation?.customer?.phone ?? "-",
+                    ],
+                    ["Son yorum", selectedConversation?.last_message_text ?? "-", selectedConversation?.channel ?? "-"],
+                  ]}
+                />
+                {data.messages.map((message) => (
+                  <article key={message.public_id}>
+                    <strong>{message.sender_name ?? message.sender_type}</strong>
+                    <span>{message.body ?? "Boş mesaj"}</span>
+                  </article>
+                ))}
+              </DetailPanel>
+            </div>
+          </FlowPanel>
         )}
 
         {activeFlow === "cancellations" && (

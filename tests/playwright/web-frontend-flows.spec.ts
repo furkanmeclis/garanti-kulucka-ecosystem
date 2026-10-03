@@ -534,6 +534,9 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("inbox-flow")).toContainText("Playwright Customer");
     await page.goto(`${app.url}/yorumlar`);
     await expect(page.getByTestId("comments-flow")).toContainText("backend conversations");
+    await expect(page.getByTestId("comments-detail")).toContainText("Playwright Customer");
+    await expect(page.getByTestId("comments-detail")).toContainText("instagram");
+    await expect(page.getByTestId("comments-detail")).toContainText("Merhaba");
     await page.goto(`${app.url}/iptaller`);
     await expect(page.getByTestId("cancellations-flow")).toContainText("backend orders");
     await page.goto(`${app.url}/stok`);
