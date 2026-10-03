@@ -171,6 +171,13 @@ describe("transformLegacyShipment", () => {
     );
   });
 
+  it("fails when the source payload checksum format is invalid", () => {
+    expect(() => transformLegacyShipment(
+      fixture({}, { checksum: "sha256:not-a-real-checksum" }),
+      context(),
+    )).toThrow("Invalid legacy shipment row: source payload checksum is invalid");
+  });
+
   it("does not echo recipient or tracking secrets in row errors", () => {
     const errors = [
       captureError(() => transformLegacyShipment(fixture({

@@ -1065,6 +1065,24 @@ const customerCatalog = createLegacyMappingCatalog({
   }],
 });
 
+const shipmentFixtureCatalog = createLegacyMappingCatalog({
+  version: "shipment-fixture-catalog-v1",
+  tables: [
+    {
+      sourceTable: "public.musteriler",
+      idColumn: "id",
+      targetEntities: [{ entity: "customers", mapping: "direct", readiness: "dry-run" }],
+      columns: [{ name: "id", dataType: "bigint", udtName: "int8", nullable: false, required: true }],
+    },
+    {
+      sourceTable: "public.shipments",
+      idColumn: "id",
+      targetEntities: [{ entity: "shipments", mapping: "direct", readiness: "dry-run" }],
+      columns: [{ name: "id", dataType: "bigint", udtName: "int8", nullable: false, required: true }],
+    },
+  ],
+});
+
 function legacyOrderRow(id: string, overrides: Record<string, unknown> = {}): LegacyRecord {
   const payload = {
     id,
@@ -1335,6 +1353,71 @@ describe("shipment dry-run validation", () => {
       "Shipment dry-run requires customers in the same plan",
     );
     expect(source.operations).toEqual([]);
+  });
+
+  it("rejects a shipment dry-run from a non-legacy source table before source access", async () => {
+    const source = new FixtureSource({ shipments: legacyShipmentRows });
+
+    await expect(runMigration({
+      mode: "dry-run",
+      source,
+      mappingCatalog: shipmentFixtureCatalog,
+      batchSize: 100,
+      entities: ["shipments", "customers"],
+      sourceSystem: "legacy_postgres",
+      sourceDatabaseIdentity: sourceIdentity,
+    })).rejects.toThrow(
+      "Shipment dry-run requires catalog source table public.kargo_gonderimleri; catalog routes shipments from public.shipments",
+    );
+    expect(source.operations).toEqual([]);
+  });
+
+  it("fails closed when a shipment row checksum is invalid", async () => {
+    const source = new LegacyTableSource({
+      customers: legacyCustomerRows,
+      shipments: [{
+        ...legacyShipmentRows[0]!,
+        checksum: `sha256:${"0".repeat(64)}`,
+      }],
+    });
+
+    await expect(shipmentDryRun(source)).rejects.toThrow(
+      "Invalid legacy shipment row: source payload checksum does not match payload",
+    );
+  });
+
+  it("fails closed when a shipment provider or status is unsupported", async () => {
+    const providerSource = new LegacyTableSource({
+      customers: legacyCustomerRows,
+      shipments: [legacyShipmentRow("c1000000-0000-4000-8000-000000000001", { kargo_firmasi: "aras" })],
+    });
+    const statusSource = new LegacyTableSource({
+      customers: legacyCustomerRows,
+      shipments: [legacyShipmentRow("c1000000-0000-4000-8000-000000000001", { durum: "bilinmeyen" })],
+    });
+
+    await expect(shipmentDryRun(providerSource)).rejects.toThrow(
+      "Invalid legacy shipment row: field kargo_firmasi has an unsupported value",
+    );
+    await expect(shipmentDryRun(statusSource)).rejects.toThrow(
+      "Invalid legacy shipment row: field durum has an unsupported value",
+    );
+  });
+
+  it("fails closed when a shipment batch returns fewer rows than planned", async () => {
+    const source = new LegacyTableSource({
+      customers: legacyCustomerRows,
+      shipments: legacyShipmentRows,
+    });
+    const readBatch = source.readBatch.bind(source);
+    source.readBatch = async (entity, options) => {
+      const rows = await readBatch(entity, options);
+      return entity === "shipments" ? rows.slice(0, 1) : rows;
+    };
+
+    await expect(shipmentDryRun(source)).rejects.toThrow(
+      "Shipment dry-run batch 1 returned 1 rows; expected 2",
+    );
   });
 });
 
