@@ -555,6 +555,11 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("balances-detail")).toContainText("125.50 TRY");
     await expect(page.getByTestId("balances-detail")).toContainText("ORD-PLAYWRIGHT");
     await page.goto(`${app.url}/sms`);
+    await expect(page.getByTestId("sms-template-detail")).toContainText("Manuel SMS Şablonu");
+    await expect(page.getByTestId("sms-template-detail")).toContainText("{musteri_adi}");
+    await expect(page.getByTestId("sms-template-detail")).toContainText("Playwright Customer");
+    await expect(page.getByTestId("sms-template-detail")).toContainText("TRK-PLAYWRIGHT");
+    await expect(page.getByTestId("sms-template-detail")).toContainText("1 SMS");
     await expect(page.getByTestId("sms-confirmation-detail")).toContainText("kapalı");
     await expect(page.getByTestId("sms-confirmation-detail")).toContainText("5550000000");
     await page.getByRole("button", { name: /netgsm teyit ayarını kaydet/i }).click();

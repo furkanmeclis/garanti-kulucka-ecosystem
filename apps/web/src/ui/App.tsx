@@ -110,6 +110,8 @@ const defaultSipServerSettings: SipServerSettings = {
   stun: "stun:stun.l.google.com:19302",
 };
 
+const smsTemplate = "{musteri_adi}, {takip_no} takip numarali kargonuz {kargo_firmasi} ile yoldadir.";
+
 function flowFromPath(pathname: string) {
   return [...navigationItems]
     .sort((first, second) => second.path.length - first.path.length)
@@ -135,6 +137,15 @@ function formatMoney(value: number, currency: string) {
 
 function formatPercent(numerator: number, denominator: number) {
   return denominator > 0 ? `%${Math.round((numerator / denominator) * 100)}` : "%0";
+}
+
+function smsSegmentInfo(message: string) {
+  const usesUnicode = /[şıİŞĞğ]/.test(message);
+  const singleLimit = usesUnicode ? 70 : 160;
+  const multiLimit = usesUnicode ? 67 : 153;
+  const length = message.length;
+  const segmentCount = length <= singleLimit ? 1 : Math.ceil(length / multiLimit);
+  return { length, segmentCount, usesUnicode };
 }
 
 function readNumberSetting(value: unknown, fallback: number) {
@@ -559,6 +570,11 @@ export function App() {
     data.conversations.find((conversation) => conversation.public_id === selectedConversationId) ?? data.conversations[0] ?? null;
   const selectedOrder = data.orders.find((order) => order.public_id === selectedOrderId) ?? data.orders[0] ?? null;
   const selectedShipment = data.shipments.find((shipment) => shipment.public_id === selectedShipmentId) ?? data.shipments[0] ?? null;
+  const smsPreview = smsTemplate
+    .replace("{musteri_adi}", selectedShipment?.recipient_name ?? selectedOrder?.customer_full_name ?? "Müşteri")
+    .replace("{takip_no}", selectedShipment?.tracking_number ?? selectedShipment?.barcode_number ?? "takip bekliyor")
+    .replace("{kargo_firmasi}", selectedShipment?.provider ?? "Kargo");
+  const smsInfo = smsSegmentInfo(smsPreview);
   const orderCurrency = data.orders[0]?.currency ?? "TRY";
   const reportTotalAmount = data.orders.reduce((sum, order) => sum + moneyValue(order.total_amount), 0);
   const activeOrderCount = data.orders.filter((order) => !["cancelled", "returned", "delivered"].includes(order.status)).length;
@@ -977,6 +993,22 @@ export function App() {
 
         {activeFlow === "sms" && (
           <FlowPanel title="SMS" icon={<MessageSquare size={18} />} testId="sms-flow">
+            <DetailPanel title="Manuel SMS Şablonu" testId="sms-template-detail">
+              <DataRows
+                rows={[
+                  ["Şablon", smsTemplate, "değişkenli mesaj"],
+                  ["Önizleme", smsPreview, smsInfo.usesUnicode ? "Türkçe karakter" : "GSM karakter"],
+                  ["Sayaç", `${smsInfo.length} karakter`, `${smsInfo.segmentCount} SMS`],
+                ]}
+              />
+              <div className="detail-actions">
+                {["{musteri_adi}", "{takip_no}", "{kargo_firmasi}"].map((variable) => (
+                  <button className="secondary-action" key={variable} type="button">
+                    {variable}
+                  </button>
+                ))}
+              </div>
+            </DetailPanel>
             <DetailPanel title="Otomatik Teyit Araması" testId="sms-confirmation-detail">
               <DataRows
                 rows={[
