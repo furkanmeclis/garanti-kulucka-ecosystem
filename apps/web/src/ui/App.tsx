@@ -866,15 +866,23 @@ export function App() {
         )}
 
         {activeFlow === "inventory" && (
-          <LegacySurfacePanel
-            title="Stoklar"
-            icon={<Package size={18} />}
-            testId="inventory-flow"
-            rows={[
-              ["Sipariş kaynaklı stok sinyali", String(data.orders.length), "orders API"],
-              ["Depo entegrasyonu", "hazır", "backend boundary"],
-            ]}
-          />
+          <FlowPanel title="Stoklar" icon={<Package size={18} />} testId="inventory-flow">
+            <div className="report-grid">
+              <Metric title="Sipariş Sinyali" value={String(data.orders.length)} />
+              <Metric title="Bekleyen Teyit" value={String(pendingConfirmationCount)} />
+              <Metric title="Aktif Kargo" value={String(activeShipmentCount)} />
+            </div>
+            <DetailPanel title="Stok ve Sevkiyat Sinyali" testId="inventory-detail">
+              <DataRows
+                rows={[
+                  ["Sipariş kaynaklı stok sinyali", String(data.orders.length), "orders API"],
+                  ["Son sipariş", selectedOrder?.order_number ?? "-", selectedOrder?.status ?? "-"],
+                  ["Müşteri", selectedOrder?.customer_full_name ?? "-", selectedOrder?.source ?? "-"],
+                  ["Depo entegrasyonu", data.shipments.length > 0 ? "sevkiyat bağlı" : "hazır", "backend boundary"],
+                ]}
+              />
+            </DetailPanel>
+          </FlowPanel>
         )}
 
         {activeFlow === "balances" && (
