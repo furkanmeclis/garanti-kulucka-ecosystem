@@ -108,6 +108,20 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
               assigned_user_email: null,
               updated_at: "2026-01-01T00:00:00.000Z",
             },
+            {
+              public_id: "cnv_facebook_playwright",
+              channel: "facebook",
+              status: "closed",
+              is_in_pool: false,
+              human_agent_enabled: false,
+              unread_count: 0,
+              last_message_text: "Cevaplandı",
+              last_message_sender_type: "user",
+              last_message_at: "2026-01-01T00:00:30.000Z",
+              customer: { full_name: "Facebook Customer", phone: "5552222222" },
+              assigned_user_email: "admin@example.com",
+              updated_at: "2026-01-01T00:00:30.000Z",
+            },
           ],
         }),
       });
@@ -571,6 +585,11 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("inbox-flow")).toContainText("Playwright Customer");
     await page.goto(`${app.url}/yorumlar`);
     await expect(page.getByTestId("comments-flow")).toContainText("backend conversations");
+    await expect(page.getByTestId("comments-ai-summary")).toContainText("Manuel bekleyen");
+    await expect(page.getByTestId("comments-ai-summary")).toContainText("Instagram");
+    await expect(page.getByTestId("comments-ai-summary")).toContainText("Facebook");
+    await expect(page.getByTestId("comments-ai-summary")).toContainText("Cevaplı");
+    await expect(page.getByTestId("comments-ai-summary")).toContainText("AI cevap tipi");
     await expect(page.getByTestId("comments-detail")).toContainText("Playwright Customer");
     await expect(page.getByTestId("comments-detail")).toContainText("instagram");
     await expect(page.getByTestId("comments-detail")).toContainText("Merhaba");

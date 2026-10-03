@@ -79,6 +79,14 @@ interface BalanceSummary {
   pendingRequestCount: number;
 }
 
+interface CommentModerationSummary {
+  manualQueue: number;
+  automaticQueue: number;
+  answered: number;
+  instagram: number;
+  facebook: number;
+}
+
 interface NavigationItem {
   key: string;
   label: string;
@@ -161,6 +169,25 @@ function balanceSummaryFromOrders(orders: OrderSummary[]): BalanceSummary {
     availableBalance: Math.max(totalCommission - totalDeduction - pendingPayment, 0),
     pendingRequestCount: pendingOrders.length,
   };
+}
+
+function commentModerationSummaryFrom(conversations: ConversationSummary[]): CommentModerationSummary {
+  return conversations.reduce<CommentModerationSummary>(
+    (summary, conversation) => {
+      const channel = conversation.channel.toLocaleLowerCase("tr-TR");
+      if (channel.includes("instagram")) summary.instagram += 1;
+      if (channel.includes("facebook") || channel.includes("messenger")) summary.facebook += 1;
+      if (conversation.status === "closed" || conversation.status === "resolved") {
+        summary.answered += 1;
+      } else if (conversation.human_agent_enabled || conversation.unread_count > 0) {
+        summary.manualQueue += 1;
+      } else if (conversation.is_in_pool) {
+        summary.automaticQueue += 1;
+      }
+      return summary;
+    },
+    { manualQueue: 0, automaticQueue: 0, answered: 0, instagram: 0, facebook: 0 },
+  );
 }
 
 function smsSegmentInfo(message: string) {
@@ -602,6 +629,7 @@ export function App() {
   const orderCurrency = data.orders[0]?.currency ?? "TRY";
   const reportTotalAmount = data.orders.reduce((sum, order) => sum + moneyValue(order.total_amount), 0);
   const balanceSummary = balanceSummaryFromOrders(data.orders);
+  const commentSummary = commentModerationSummaryFrom(data.conversations);
   const activeOrderCount = data.orders.filter((order) => !["cancelled", "returned", "delivered"].includes(order.status)).length;
   const deliveredOrderCount = data.orders.filter((order) => order.status === "delivered").length;
   const deliveredShipmentCount = data.shipments.filter((shipment) => shipment.status === "delivered").length;
@@ -914,6 +942,18 @@ export function App() {
                   </li>
                 ))}
               </List>
+              <DetailPanel title="Yorum AI Kuyruğu" testId="comments-ai-summary">
+                <DataRows
+                  rows={[
+                    ["Manuel bekleyen", String(commentSummary.manualQueue), "legacy durum filtresi"],
+                    ["Otomatik", String(commentSummary.automaticQueue), "AI pipeline"],
+                    ["Cevaplı", String(commentSummary.answered), "moderasyon durumu"],
+                    ["Instagram", String(commentSummary.instagram), "platform filtresi"],
+                    ["Facebook", String(commentSummary.facebook), "platform filtresi"],
+                    ["AI cevap tipi", "public", "admin ayarı"],
+                  ]}
+                />
+              </DetailPanel>
               <DetailPanel title="Yorum Moderasyonu" testId="comments-detail">
                 <DataRows
                   rows={[
