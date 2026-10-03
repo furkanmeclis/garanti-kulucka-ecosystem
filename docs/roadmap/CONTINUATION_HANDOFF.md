@@ -6,15 +6,15 @@ Bu belge, projeye yeni bir sohbetten veya bağlamsız bir çalışma oturumundan
 
 - Repo: `/Users/furkanmeclis/Documents/Projects/garanti-kulucka-ecosystem`
 - GitHub çalışma modeli: monorepo, yalnız `main`, PR yok.
-- Yayımlanmış son checkpoint: `v0.1.155`
-- Yayımlanmış son commit: `51f7fdc831f594c5177ed34c700496b40e92e529`
-- Commit mesajı: `test(migrator): add postgres backup restore rehearsal`
-- Genel ilerleme: yaklaşık `%83`
-- Son tamamlanan çalışma: P4 real PostgreSQL activation evidence checkpoint'i; dry-run source/target kanıtı, customer apply blocker kararı, simulated network drop sonrası transaction rollback/retry/resume E2E'si ve `pg_dump`/`pg_restore` backup/restore rehearsal kanıtı yayımlandı.
-- Sıradaki bağımlılık kapısı production apply prerequisites'tır: customer address ve external identity fan-out write path'leri, public-id-to-FK resolution, account snapshot enforcement, multi-record customer writer ve per-target `legacy_id_map.mapping_role` semantiği executable hale getirilmelidir. Frontend migration, live provider adapters, and production operations runbooks kendi kapılarında devam eder.
+- Yayımlanmış son checkpoint: `v0.1.165`
+- Yayımlanmış son commit: `7e94d5f64b28673527c1c2d38a1596996b910a19`
+- Commit mesajı: `test(web): prove role filtered navigation`
+- Genel ilerleme: yaklaşık `%85`
+- Son tamamlanan çalışma: P5 backend-driven frontend shell checkpoint'i; auth/public route parity, legacy route surfaces, backend API-driven inbox/messages/orders/shipments/admin/file upload/webphone akışları ve role-filtered navigation browser E2E kanıtı yayımlandı.
+- Sıradaki bağımlılık kapısı production apply prerequisites'tır: customer address ve external identity fan-out write path'leri, public-id-to-FK resolution, account snapshot enforcement, multi-record customer writer ve per-target `legacy_id_map.mapping_role` semantiği executable hale getirilmelidir. P5 frontend shell migration artık backend-driven kritik akışları kanıtlar; full legacy page visual parity, live provider adapters, object storage operations ve production operations runbooks kendi kapılarında devam eder.
 - Production `migrate --apply` kapısı kapalıdır. Tüm aktivasyon koşulları geçmeden açılmamalıdır.
 
-`%83` tahmini; önceki temellere ek olarak customer, conversation, message, product, order, order item ve shipment dry-run dönüşümlerini, transaction/lock safety guardlarını, row-content fingerprint persistence'ını, retry/redaction test kanıtını, real PostgreSQL dry-run source/target evidence'ını, customer address/external identity apply blocker kararını, real PostgreSQL recovery E2E'sini ve backup/restore rehearsal kanıtını içerir. Canlı provider adapterları, gerçek frontend taşıması ve production data apply açılışı tamamlanmış kabul edilmez.
+`%85` tahmini; önceki temellere ek olarak customer, conversation, message, product, order, order item ve shipment dry-run dönüşümlerini, transaction/lock safety guardlarını, row-content fingerprint persistence'ını, retry/redaction test kanıtını, real PostgreSQL dry-run source/target evidence'ını, customer address/external identity apply blocker kararını, real PostgreSQL recovery E2E'sini, backup/restore rehearsal kanıtını ve backend-driven P5 frontend shell/browser E2E kanıtını içerir. Canlı provider adapterları, full legacy page visual parity, production object storage operations, observability/runbook kapıları ve production data apply açılışı tamamlanmış kabul edilmez.
 
 ## 2. Tarihsel Schema Kimliği Checkpoint'i (`v0.1.116`)
 
@@ -366,19 +366,28 @@ Gerçek PostgreSQL E2E senaryoları:
 
 ### P5. Gerçek Frontend Taşıması
 
-`apps/web` şu anda esas olarak typed client sınırıdır; müşterinin çalışan frontend’i henüz gerçek uygulama olarak buraya taşınmış değildir. UI yeniden tasarlanmayacaktır.
+`apps/web` artık gerçek Vite/React uygulama shell'i olarak çalışır ve kritik müşteri akışlarını backend API, presigned upload ve Socket.IO sınırları üzerinden kanıtlar. Tüm legacy sayfaların birebir görsel/işlevsel portu ve görsel regresyon kapısı hâlâ tamamlanmış değildir; UI yeniden tasarlanmayacaktır.
+
+Yayımlanan kanıt:
+
+- `v0.1.157` ile backend-driven frontend shell, Vite entrypoint ve login/inbox/orders/shipments/admin/file upload/webphone browser E2E temeli eklendi.
+- `v0.1.158` ile backend auth session restore ve logout akışı eklendi.
+- `v0.1.159` ile inbox message list/send action backend API'ye bağlandı.
+- `v0.1.160` ile order create ve shipment status update actionları backend API'ye bağlandı.
+- `v0.1.161` ile admin setting update actionı backend API'ye bağlandı.
+- `v0.1.162` ile URL tabanlı route davranışı eklendi.
+- `v0.1.163` ile legacy navigation surface route'ları eklendi.
+- `v0.1.164` ile `/giris`, `/sifre-sifirla`, `/gizlilik-politikasi`, `/kullanim-kosullari` ve `/veri-silme` route'ları backend shell içinde geri geldi.
+- `v0.1.165` ile role-filtered navigation `admin` ve `kargo_operatoru` browser E2E üzerinden kanıtlandı. GitHub Actions run `37128356266`, tag `v0.1.165`, artifact `container-images-v0.1.165`, `411103422` byte, expired değil.
 
 İş sırası:
 
-1. Legacy frontend sayfalarını, routing yapısını, stilleri ve assetleri görsel davranışı koruyarak `apps/web` içine al.
-2. Çalışır browser entrypoint, `index.html`, build assetleri ve production Nginx sunumunu tamamla.
-3. Supabase auth çağrılarını backend auth clientına geçir.
-4. `supabase.from` sorgularını domain API clientlarına geçir.
-5. Supabase storage kullanımını backend presigned S3 akışına geçir.
-6. Supabase channel kullanımını Socket.IO clientına geçir.
-7. Login, inbox, conversation, message send, order, shipment, admin, file upload, integration account ve webphone ekranlarını backend’e bağla.
-8. Repo genelinde doğrudan Supabase importu, URL’si, SDK kullanımı ve channel çağrısı kalmadığını guard ile kanıtla.
-9. Legacy ve yeni uygulama arasında kritik ekran görsel regresyon testleri oluştur.
+1. Kalan legacy sayfaları ve detay ekranlarını görsel davranışı koruyarak `apps/web` içine al; mevcut shell tamamlanan route yüzeyi olarak korunur.
+2. Production Nginx/web container sunumu CI artifact içinde doğrulanır; release hattı yeşil kalmalıdır.
+3. Supabase auth/table/storage/channel kullanımı kritik akışlarda backend auth/domain API/presigned S3/Socket.IO ile değiştirildi; kalan legacy sayfa portlarında aynı kural korunmalıdır.
+4. Login, inbox, conversation/message send, order, shipment, admin, file upload ve webphone ekranları backend'e bağlıdır; integration account UI ve detay ekran parity işleri kalır.
+5. Repo genelinde doğrudan Supabase importu, URL’si, SDK kullanımı ve channel çağrısı kalmadığını guard ile kanıtlamaya devam et.
+6. Legacy ve yeni uygulama arasında kritik ekran görsel regresyon testleri oluştur.
 
 Kabul kapısı: web container `/` adresinde gerçek uygulamayı döndürmeli; mevcut müşteri akışları görsel ve davranışsal olarak korunmalı; E2E browser testleri UI üzerinden çalışmalıdır.
 
