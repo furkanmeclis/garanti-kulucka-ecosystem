@@ -6,15 +6,15 @@ Bu belge, projeye yeni bir sohbetten veya bağlamsız bir çalışma oturumundan
 
 - Repo: `/Users/furkanmeclis/Documents/Projects/garanti-kulucka-ecosystem`
 - GitHub çalışma modeli: monorepo, yalnız `main`, PR yok.
-- Yayımlanmış son checkpoint: `v0.1.183`
-- Yayımlanmış son commit: `a05b8c6bf74164396cf348318c21e1d61fdbc4c9`
-- Commit mesajı: `feat(web): add sip config settings flow`
+- Yayımlanmış son checkpoint: `v0.1.185`
+- Yayımlanmış son commit: `076e1121c794b0ac509e37d577a4ed8ad1a61f7c`
+- Commit mesajı: `feat(web): add reports metrics surface`
 - Genel ilerleme: yaklaşık `%85`
-- Son tamamlanan çalışma: P5 backend-driven frontend shell checkpoint'i; auth/public route parity, legacy route surfaces, backend API-driven inbox/messages/orders/shipments/admin/file upload/webphone akışları, selectable conversation detail, selected order ve shipment detail panelleri, NetGSM SMS confirmation settings write flow, SIP/santral config settings write flow, backend-owned presence toggle, role-filtered navigation, admin integration-account list/upsert/detail/settings/token masking route'ları ve desktop/mobile legacy visual frame smoke browser E2E kanıtıyla yayımlandı.
+- Son tamamlanan çalışma: P5 backend-driven frontend shell checkpoint'i; auth/public route parity, legacy route surfaces, backend API-driven inbox/messages/orders/shipments/admin/file upload/webphone akışları, selectable conversation detail, selected order ve shipment detail panelleri, reports KPI/detail surface, NetGSM SMS confirmation settings write flow, SIP/santral config settings write flow, backend-owned presence toggle, role-filtered navigation, admin integration-account list/upsert/detail/settings/token masking route'ları ve desktop/mobile legacy visual frame smoke browser E2E kanıtıyla yayımlandı.
 - Sıradaki bağımlılık kapısı production apply prerequisites'tır: customer address ve external identity fan-out write path'leri, public-id-to-FK resolution, account snapshot enforcement, multi-record customer writer ve per-target `legacy_id_map.mapping_role` semantiği executable hale getirilmelidir. P5 frontend shell migration artık backend-driven kritik akışları kanıtlar; full legacy page visual parity, live provider adapters, object storage operations ve production operations runbooks kendi kapılarında devam eder.
 - Production `migrate --apply` kapısı kapalıdır. Tüm aktivasyon koşulları geçmeden açılmamalıdır.
 
-`%85` tahmini; önceki temellere ek olarak customer, conversation, message, product, order, order item ve shipment dry-run dönüşümlerini, transaction/lock safety guardlarını, row-content fingerprint persistence'ını, retry/redaction test kanıtını, real PostgreSQL dry-run source/target evidence'ını, customer address/external identity apply blocker kararını, real PostgreSQL recovery E2E'sini, backup/restore rehearsal kanıtını, backend-driven P5 frontend shell/browser E2E kanıtını, inbox/order/shipment detail panel taşımasını, NetGSM SMS settings flow taşımasını ve SIP config settings flow taşımasını içerir. Canlı provider adapterları, full legacy page visual parity, production object storage operations, observability/runbook kapıları ve production data apply açılışı tamamlanmış kabul edilmez.
+`%85` tahmini; önceki temellere ek olarak customer, conversation, message, product, order, order item ve shipment dry-run dönüşümlerini, transaction/lock safety guardlarını, row-content fingerprint persistence'ını, retry/redaction test kanıtını, real PostgreSQL dry-run source/target evidence'ını, customer address/external identity apply blocker kararını, real PostgreSQL recovery E2E'sini, backup/restore rehearsal kanıtını, backend-driven P5 frontend shell/browser E2E kanıtını, inbox/order/shipment detail panel taşımasını, reports KPI/detail surface taşımasını, NetGSM SMS settings flow taşımasını ve SIP config settings flow taşımasını içerir. Canlı provider adapterları, full legacy page visual parity, production object storage operations, observability/runbook kapıları ve production data apply açılışı tamamlanmış kabul edilmez.
 
 ## 2. Tarihsel Schema Kimliği Checkpoint'i (`v0.1.116`)
 
@@ -388,13 +388,14 @@ Yayımlanan kanıt:
 - `v0.1.179` ile inbox yüzeyine selectable conversation detail eklendi; seçili konuşma backend `listMessages` ile yeniden yüklenir, message send seçili conversation'a gider ve browser E2E conversation detail state'ini kanıtlar. GitHub Actions run `37133426940`, tag `v0.1.179`, artifact `container-images-v0.1.179`, `411102356` byte, expired değil.
 - `v0.1.181` ile SMS yüzeyine NetGSM otomatik teyit araması ayar paneli eklendi; legacy `netgsm_teyit_ayarlar` Supabase write davranışı backend admin settings API'ye taşındı ve browser E2E `/admin/settings/netgsm_teyit_ayarlar` write akışını kanıtlar. GitHub Actions run `37134151255`, tag `v0.1.181`, artifact `container-images-v0.1.181`, `411103455` byte, expired değil.
 - `v0.1.183` ile Arama/Santral yüzeyine SIP sunucu ayar paneli eklendi; legacy `sip_config` Supabase write davranışı backend admin settings API'ye taşındı ve browser E2E `/admin/settings/sip_config` write akışını kanıtlar. GitHub Actions run `37134841047`, tag `v0.1.183`, artifact `container-images-v0.1.183`, `411120486` byte, expired değil.
+- `v0.1.185` ile Raporlar yüzeyine backend domain summary verilerinden KPI ve operasyon dağılımı paneli eklendi; browser E2E ciro, açık konuşma ve aktif kargo metriklerini kanıtlar. GitHub Actions run `37135646900`, tag `v0.1.185`, artifact `container-images-v0.1.185`, `411120231` byte, expired değil.
 
 İş sırası:
 
 1. Kalan legacy sayfaları ve detay ekranlarını görsel davranışı koruyarak `apps/web` içine al; mevcut shell tamamlanan route yüzeyi olarak korunur.
 2. Production Nginx/web container sunumu CI artifact içinde doğrulanır; release hattı yeşil kalmalıdır.
 3. Supabase auth/table/storage/channel kullanımı kritik akışlarda backend auth/domain API/presigned S3/Socket.IO ile değiştirildi; kalan legacy sayfa portlarında aynı kural korunmalıdır.
-4. Login, inbox conversation summary/detail, conversation/message send, order summary/detail, shipment summary/detail, admin, NetGSM SMS settings, SIP config settings, integration account list/upsert/detail/settings/token masking, file upload, webphone ve personel presence ekran davranışları backend'e bağlıdır; kalan iş gerçek legacy sayfa/detay görsel davranış parity'sini genişletmektir.
+4. Login, inbox conversation summary/detail, conversation/message send, order summary/detail, shipment summary/detail, reports KPI/detail, admin, NetGSM SMS settings, SIP config settings, integration account list/upsert/detail/settings/token masking, file upload, webphone ve personel presence ekran davranışları backend'e bağlıdır; kalan iş gerçek legacy sayfa/detay görsel davranış parity'sini genişletmektir.
 5. Repo genelinde doğrudan Supabase importu, URL’si, SDK kullanımı ve channel çağrısı kalmadığını guard ile kanıtlamaya devam et.
 6. Legacy ve yeni uygulama arasında kritik ekran görsel regresyon kapsamını genişlet; mevcut `v0.1.175` smoke kapısı desktop/mobile frame stabilitesini kanıtlar, birebir eski ekran karşılaştırması hâlâ genişletilecek alandır.
 
