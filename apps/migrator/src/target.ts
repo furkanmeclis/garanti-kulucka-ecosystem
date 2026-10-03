@@ -173,10 +173,10 @@ export class DatabaseMigrationTarget implements MigrationTarget {
         public_id: migrationRunPublicId(input.runId),
         run_id: input.runId,
         source_system: input.manifest.sourceSystem,
-        source_database_identity: input.manifest.databaseIdentity,
-        table_snapshot: input.manifest.tables,
-        row_counts: input.manifest.rowCounts,
-        row_content_checksums: input.manifest.rowContentChecksums ?? [],
+        source_database_identity: jsonb(input.manifest.databaseIdentity),
+        table_snapshot: jsonb(input.manifest.tables),
+        row_counts: jsonb(input.manifest.rowCounts),
+        row_content_checksums: jsonb(input.manifest.rowContentChecksums ?? []),
         batch_size: input.manifest.batchSize,
         mapping_catalog_version: input.manifest.mappingCatalogVersion,
         plan_fingerprint: input.manifest.planFingerprint,
@@ -225,7 +225,7 @@ export class DatabaseMigrationTarget implements MigrationTarget {
         id_map_created: 0,
         id_map_updated: 0,
         id_map_unchanged: 0,
-        warnings: [],
+        warnings: jsonb([]),
         error_message: null,
         started_at: startedAt,
         finished_at: null,
@@ -242,7 +242,7 @@ export class DatabaseMigrationTarget implements MigrationTarget {
           id_map_created: 0,
           id_map_updated: 0,
           id_map_unchanged: 0,
-          warnings: [],
+          warnings: jsonb([]),
           error_message: null,
           started_at: startedAt,
           finished_at: null,
@@ -274,7 +274,7 @@ export class DatabaseMigrationTarget implements MigrationTarget {
         id_map_created: input.result.idMapCreated,
         id_map_updated: input.result.idMapUpdated,
         id_map_unchanged: input.result.idMapUnchanged,
-        warnings: input.result.warnings,
+        warnings: jsonb(input.result.warnings),
         error_message: null,
         started_at: null,
         finished_at: finishedAt,
@@ -288,7 +288,7 @@ export class DatabaseMigrationTarget implements MigrationTarget {
           id_map_created: input.result.idMapCreated,
           id_map_updated: input.result.idMapUpdated,
           id_map_unchanged: input.result.idMapUnchanged,
-          warnings: input.result.warnings,
+          warnings: jsonb(input.result.warnings),
           error_message: null,
           finished_at: finishedAt,
           updated_at: finishedAt,
@@ -319,7 +319,7 @@ export class DatabaseMigrationTarget implements MigrationTarget {
         id_map_created: 0,
         id_map_updated: 0,
         id_map_unchanged: 0,
-        warnings: [],
+        warnings: jsonb([]),
         error_message: input.error.message,
         started_at: null,
         finished_at: finishedAt,
@@ -429,6 +429,10 @@ function migrationBatchPublicId(runId: string, entity: MigrationEntity, batchNum
 function migrationRunPublicId(runId: string): string {
   const hash = createHash("sha256").update(runId).digest("hex").slice(0, 24);
   return `mrn_${hash}`;
+}
+
+function jsonb(value: unknown): string {
+  return JSON.stringify(value);
 }
 
 function mapMigrationRunState(row: Selectable<MigrationRunsTable>): MigrationRunState {

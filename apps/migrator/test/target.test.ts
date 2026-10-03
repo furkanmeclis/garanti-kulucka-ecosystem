@@ -126,11 +126,14 @@ describe("database migration target", () => {
     expect(conflict.column).toHaveBeenCalledWith("run_id");
     expect(doNothing).toHaveBeenCalledOnce();
     expect(insert.values).toHaveBeenCalledWith(expect.objectContaining({
-      row_content_checksums: [{
+      source_database_identity: "{\"host\":\"source\",\"port\":\"5432\",\"database\":\"legacy\"}",
+      table_snapshot: "[]",
+      row_counts: "[]",
+      row_content_checksums: JSON.stringify([{
         entity: "customers",
         rows: 1,
         checksum: "sha256:rows",
-      }],
+      }]),
     }));
     expect(select.where).toHaveBeenCalledWith("run_id", "=", "run_2026_09");
     expect(result).toMatchObject({
