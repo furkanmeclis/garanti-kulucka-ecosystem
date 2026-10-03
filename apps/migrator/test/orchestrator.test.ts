@@ -1411,6 +1411,60 @@ describe("order item dry-run validation", () => {
 
     await expect(orderItemDryRun(source)).rejects.toThrow("Product dry-run found duplicate sku values");
   });
+
+  it("fails closed when an order item references an unresolved order", async () => {
+    const source = new LegacyTableSource({
+      customers: legacyCustomerRows,
+      products: [legacyProductRow(1, { kod: "SKU-1" })],
+      orders: legacyOrderRows,
+      order_items: [
+        legacyOrderItemRow("b1000000-0000-4000-8000-000000000001", {
+          siparis_id: "ffffffff-ffff-4fff-8fff-ffffffffffff",
+        }),
+      ],
+    });
+
+    await expect(orderItemDryRun(source)).rejects.toThrow(
+      "Invalid legacy order item row: field siparis_id does not resolve to a migrated order",
+    );
+  });
+
+  it("fails closed when an order item row checksum is invalid", async () => {
+    const source = new LegacyTableSource({
+      customers: legacyCustomerRows,
+      products: [legacyProductRow(1, { kod: "SKU-1" })],
+      orders: legacyOrderRows,
+      order_items: [{
+        ...legacyOrderItemRows[0]!,
+        checksum: `sha256:${"0".repeat(64)}`,
+      }],
+    });
+
+    await expect(orderItemDryRun(source)).rejects.toThrow(
+      "Invalid legacy order item row: source payload checksum does not match payload",
+    );
+  });
+
+  it("fails closed when an order-item batch returns fewer rows than planned", async () => {
+    const source = new LegacyTableSource({
+      customers: legacyCustomerRows,
+      products: [
+        legacyProductRow(1, { kod: "SKU-1" }),
+        legacyProductRow(2, { kod: null, kolaybi_product_id: "kb-product-2" }),
+      ],
+      orders: legacyOrderRows,
+      order_items: legacyOrderItemRows,
+    });
+    const readBatch = source.readBatch.bind(source);
+    source.readBatch = async (entity, options) => {
+      const rows = await readBatch(entity, options);
+      return entity === "order_items" ? rows.slice(0, 1) : rows;
+    };
+
+    await expect(orderItemDryRun(source)).rejects.toThrow(
+      "Order item dry-run batch 1 returned 1 rows; expected 2",
+    );
+  });
 });
 
 const productFixtureCatalog = createLegacyMappingCatalog({
