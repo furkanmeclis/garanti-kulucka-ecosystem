@@ -6,15 +6,15 @@ Bu belge, projeye yeni bir sohbetten veya bağlamsız bir çalışma oturumundan
 
 - Repo: `/Users/furkanmeclis/Documents/Projects/garanti-kulucka-ecosystem`
 - GitHub çalışma modeli: monorepo, yalnız `main`, PR yok.
-- Yayımlanmış son checkpoint: `v0.1.152`
-- Yayımlanmış son commit: `b8b21a0002085a4edca6b7f5a44f251d772416a3`
-- Commit mesajı: `fix(migrator): gate customer apply on address readiness`
-- Genel ilerleme: yaklaşık `%82`
-- Son tamamlanan çalışma: P4 customer apply-readiness decision checkpoint'i; real PostgreSQL dry-run evidence'a ek olarak customer apply artık hem `customer_external_identities` hem `customer_addresses` executable olmadığı sürece source/target erişiminden önce fail-closed kalır.
-- Sıradaki bağımlılık kapısı kalan P4 activation evidence'dır: backup/restore runbook rehearsal, process-kill/network-failure E2E, and final full `npm run check` checkpoint. Frontend migration, live provider adapters, and production operations runbooks kendi kapılarında devam eder.
+- Yayımlanmış son checkpoint: `v0.1.155`
+- Yayımlanmış son commit: `51f7fdc831f594c5177ed34c700496b40e92e529`
+- Commit mesajı: `test(migrator): add postgres backup restore rehearsal`
+- Genel ilerleme: yaklaşık `%83`
+- Son tamamlanan çalışma: P4 real PostgreSQL activation evidence checkpoint'i; dry-run source/target kanıtı, customer apply blocker kararı, simulated network drop sonrası transaction rollback/retry/resume E2E'si ve `pg_dump`/`pg_restore` backup/restore rehearsal kanıtı yayımlandı.
+- Sıradaki bağımlılık kapısı production apply prerequisites'tır: customer address ve external identity fan-out write path'leri, public-id-to-FK resolution, account snapshot enforcement, multi-record customer writer ve per-target `legacy_id_map.mapping_role` semantiği executable hale getirilmelidir. Frontend migration, live provider adapters, and production operations runbooks kendi kapılarında devam eder.
 - Production `migrate --apply` kapısı kapalıdır. Tüm aktivasyon koşulları geçmeden açılmamalıdır.
 
-`%82` tahmini; önceki temellere ek olarak customer, conversation, message, product, order, order item ve shipment dry-run dönüşümlerini, transaction/lock safety guardlarını, row-content fingerprint persistence'ını, retry/redaction test kanıtını, real PostgreSQL dry-run source/target evidence'ını ve customer address/external identity apply blocker kararını içerir. Canlı provider adapterları, gerçek frontend taşıması ve P4 production veri taşıma aktivasyonu tamamlanmış kabul edilmez.
+`%83` tahmini; önceki temellere ek olarak customer, conversation, message, product, order, order item ve shipment dry-run dönüşümlerini, transaction/lock safety guardlarını, row-content fingerprint persistence'ını, retry/redaction test kanıtını, real PostgreSQL dry-run source/target evidence'ını, customer address/external identity apply blocker kararını, real PostgreSQL recovery E2E'sini ve backup/restore rehearsal kanıtını içerir. Canlı provider adapterları, gerçek frontend taşıması ve production data apply açılışı tamamlanmış kabul edilmez.
 
 ## 2. Tarihsel Schema Kimliği Checkpoint'i (`v0.1.116`)
 
@@ -330,7 +330,7 @@ Kabul kapısı: sentetik Türkçe/karma legacy PostgreSQL fixture’ı sıfır v
 4. Offset tabanlı riskleri azalt; stabil primary-key cursor veya manifest ile sabitlenmiş aralık kullan.
 5. P1'de tamamlanan persisted source manifest ile `readRows !== expectedRows` kontrolü target yazımından önce fail-closed çalışır; `v0.1.146` row-content fingerprintlerini manifest ve migration `005` ile persisted state kapsamına aldı.
 6. P1 resume fingerprint temeli source identity, mapping version, plan, batch size ve source manifest hash içerir; `v0.1.146` row-content identity ve retry/resume idempotency kanıtını ekledi.
-7. Retry sonrasında idempotent resume testleri `v0.1.146` ile eklendi; process-kill ve network-failure E2E kanıtı P4 gerçek PostgreSQL hattında tamamlanacaktır.
+7. Retry sonrasında idempotent resume testleri `v0.1.146` ile eklendi; network-failure eşdeğeri recovery E2E kanıtı P4 gerçek PostgreSQL hattında `v0.1.154` ile tamamlandı.
 8. Dry-run artık customer, conversation, message, product, order, order item ve shipment satırlarını transform/enum/FK/schema-gap kontrollerinden geçirir fakat target’a yazmaz.
 9. Error ve report redaction testleri connection URL, password query parametreleri, token, header ve nested cause alanlarını `v0.1.146` ile kapsar.
 
@@ -537,8 +537,8 @@ git diff --check
 Beklenen yayımlanmış taban:
 
 ```text
-c5d2a25dd902938d411839c5a84902b43daec468
-v0.1.150
+51f7fdc831f594c5177ed34c700496b40e92e529
+v0.1.155
 ```
 
 Aktif schema checkpoint kaybolmuşsa otomatik olarak yeniden üretme. Önce `git status`, `git reflog`, stash, başka worktree ve kullanıcı tarafından bırakılmış değişiklikleri araştır. Mevcut değişiklikleri koru.
@@ -618,8 +618,10 @@ Bu listenin tamamı işaretlenmeden `migrate --apply` açılmayacaktır:
 - [x] Full-transform dry-run validation tamamlanan P2 legacy entity'leri için tamam
 - [x] Secret redaction ve operation report testleri tamam
 - [x] Gerçek PostgreSQL source/target dry-run E2E tamam
-- [ ] Backup ve restore runbook tatbikatı tamam
-- [ ] Full `npm run check` başarılı
+- [x] Gerçek PostgreSQL recovery E2E tamam
+- [x] Backup ve restore runbook tatbikatı tamam
+- [x] P4 evidence checkpoint'i için full `npm run check` başarılı
+- [ ] Production apply açılışı öncesi final full `npm run check` başarılı
 
 ## 9. Tamamlanmış ve Yeniden Yapılmayacak Temeller
 
@@ -643,12 +645,12 @@ Bu maddeler ihtiyaç varsa genişletilir; mevcut davranış sebepsiz yere yenide
 
 ## 10. Bir Sonraki Sohbet İçin İlk Somut Görev
 
-İlk görev P4 activation evidence hazırlığıdır:
+İlk görev production apply prerequisites dilimidir:
 
-1. Yayımlanmış `v0.1.152` customer apply blocker checkpoint’ini taban kabul et. Apply kapalı kalsın.
-2. Process-kill/network-failure E2E veya eşdeğer retry/resume harness ekle.
-3. Backup/restore runbook rehearsal kanıtını ekle.
-4. Full `npm run check` checkpoint'i al; production apply activation checklist'inde açık kalan maddeleri ayrı ayrı kapat.
-5. Bu kanıtlar tamamlanmadan `migrate --apply` açma; frontend migration ve live provider adapter tracks bu kapıdan bağımsız fakat aynı CI/tag disiplininde ilerler.
+1. Yayımlanmış `v0.1.155` P4 evidence checkpoint'ini taban kabul et. Apply kapalı kalsın.
+2. Customer address ve external identity target'larını descriptive durumdan çıkaracak executable fan-out write tasarımını yap.
+3. Public-id-to-FK resolution, account snapshot enforcement, multi-record customer writer ve per-target `legacy_id_map.mapping_role` semantiğini customer apply prerequisite olarak birlikte ele al.
+4. Önce fail-closed catalog/test kapsamını genişlet, sonra gerçek PostgreSQL E2E ile duplicate üretmeyen retry/resume davranışını kanıtla.
+5. Production `migrate --apply` yalnız checklist'in kalan mapping, FK, reconciliation ve final full-check maddeleri geçince açılabilir; frontend migration ve live provider adapter tracks bu kapıdan bağımsız fakat aynı CI/tag disiplininde ilerler.
 
-P4 apply aktivasyonu, kalan checklist maddeleri kanıtlanmadan başlatılmamalıdır. Dry-run kapsamı genişlemiş olsa da production yazım kapısı fail-closed kalır.
+P4 evidence tamamlanmıştır. Production yazım kapısı, kalan apply prerequisites bitmeden fail-closed kalır.
