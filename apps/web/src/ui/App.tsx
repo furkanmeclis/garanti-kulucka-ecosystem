@@ -32,6 +32,8 @@ import {
   type AdminSetting,
   type IntegrationAccount,
   type IntegrationAccountSnapshot,
+  type ProviderAttemptViewModel,
+  toProviderAttemptViewModel,
 } from "../api/admin-client.js";
 import { createAuthClient, type LoginResponse } from "../api/auth-client.js";
 import {
@@ -60,6 +62,7 @@ interface DashboardData {
   shipments: ShipmentSummary[];
   settings: AdminSetting[];
   integrationAccounts: IntegrationAccount[];
+  providerAttempts: ProviderAttemptViewModel[];
   webphone: WebphoneConfig | null;
 }
 
@@ -170,6 +173,31 @@ function formatMoney(value: number, currency: string) {
 
 function formatPercent(numerator: number, denominator: number) {
   return denominator > 0 ? `%${Math.round((numerator / denominator) * 100)}` : "%0";
+}
+
+const sensitivePreviewKeyPattern = /authorization|token|secret|password|credential|api[_-]?key/i;
+
+function redactedPreviewValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(redactedPreviewValue);
+  }
+  if (!isRecord(value)) {
+    return value;
+  }
+
+  return Object.fromEntries(
+    Object.entries(value).map(([key, entry]) => [
+      key,
+      sensitivePreviewKeyPattern.test(key) ? "[redacted]" : redactedPreviewValue(entry),
+    ]),
+  );
+}
+
+function compactJson(value: unknown) {
+  if (value === null || value === undefined) return "-";
+  if (typeof value === "string") return value;
+  const serialized = JSON.stringify(redactedPreviewValue(value));
+  return serialized.length > 140 ? `${serialized.slice(0, 137)}...` : serialized;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -291,6 +319,7 @@ export function App() {
     shipments: [],
     settings: [],
     integrationAccounts: [],
+    providerAttempts: [],
     webphone: null,
   });
   const [status, setStatus] = useState("Hazır");
@@ -427,9 +456,12 @@ export function App() {
       user?.role === "admin" ? admin.listSettings("global") : Promise.resolve({ data: [] }),
       webphone.getConfig(),
     ]);
-    const integrationAccounts = user?.role === "admin"
-      ? await admin.listIntegrationAccounts()
-      : { data: [] };
+    const [integrationAccounts, providerAttempts] = user?.role === "admin"
+      ? await Promise.all([
+          admin.listIntegrationAccounts(),
+          admin.listProviderAttempts({ limit: 10 }),
+        ])
+      : [{ data: [] }, { data: [] }];
     const firstConversation = conversations.data[0]?.public_id;
     const messages = firstConversation
       ? await domain.listMessages(firstConversation, 50)
@@ -444,6 +476,7 @@ export function App() {
       shipments: shipments.data,
       settings: settings.data,
       integrationAccounts: integrationAccounts.data,
+      providerAttempts: providerAttempts.data.map(toProviderAttemptViewModel),
       webphone: webphoneConfig,
     });
     setSelectedConversationId((current) => current ?? firstConversation ?? null);
@@ -482,6 +515,7 @@ export function App() {
         shipments: [],
         settings: [],
         integrationAccounts: [],
+        providerAttempts: [],
         webphone: null,
       });
       setIntegrationSnapshot(null);
@@ -744,6 +778,8 @@ export function App() {
   const balanceSummary = balanceSummaryFromOrders(data.orders);
   const commentSummary = commentModerationSummaryFrom(data.conversations);
   const instagramAnalytics = instagramAnalyticsFrom(integrationSnapshot?.account.metadata);
+  const selectedProviderAttempt = data.providerAttempts[0] ?? null;
+  const selectedProviderPreview = selectedProviderAttempt?.provider_request_preview ?? null;
   const activeOrderCount = data.orders.filter((order) => !["cancelled", "returned", "delivered"].includes(order.status)).length;
   const deliveredOrderCount = data.orders.filter((order) => order.status === "delivered").length;
   const deliveredShipmentCount = data.shipments.filter((shipment) => shipment.status === "delivered").length;
@@ -1035,6 +1071,54 @@ export function App() {
                   ["Erişim", String(instagramAnalytics.reach), "legacy analitik"],
                   ["Gösterim", String(instagramAnalytics.impressions), "legacy analitik"],
                   ["Profil Görüntüleme", String(instagramAnalytics.profileViews), `${instagramAnalytics.engagementRate}% etkileşim`],
+                ]}
+              />
+            </DetailPanel>
+            <DetailPanel title="Provider Deneme Kayıtları" testId="provider-attempts-detail">
+              <DataRows
+                rows={[
+                  ["Kayıt", String(data.providerAttempts.length), "provider attempts API"],
+                  [
+                    "Son deneme",
+                    selectedProviderAttempt
+                      ? `${selectedProviderAttempt.provider_key} / ${selectedProviderAttempt.operation}`
+                      : "deneme yok",
+                    selectedProviderAttempt?.status ?? "-",
+                  ],
+                  [
+                    "HTTP",
+                    selectedProviderAttempt?.status_code === null || selectedProviderAttempt?.status_code === undefined
+                      ? "-"
+                      : String(selectedProviderAttempt.status_code),
+                    selectedProviderAttempt ? `${selectedProviderAttempt.duration_ms} ms` : "-",
+                  ],
+                  [
+                    "Retry",
+                    selectedProviderAttempt?.retry_decision ?? "-",
+                    selectedProviderAttempt?.next_retry_at ?? "yeniden deneme yok",
+                  ],
+                  [
+                    "İstek",
+                    selectedProviderAttempt?.request_id ?? "-",
+                    selectedProviderAttempt?.idempotency_key ?? "idempotency yok",
+                  ],
+                  [
+                    "Önizleme",
+                    selectedProviderPreview
+                      ? `${selectedProviderPreview.method} ${selectedProviderPreview.path}`
+                      : "dry-run preview yok",
+                    selectedProviderPreview?.live_call_performed === false ? "canlı çağrı yok" : "-",
+                  ],
+                  [
+                    "Header",
+                    compactJson(selectedProviderPreview?.headers),
+                    "redacted",
+                  ],
+                  [
+                    "Body",
+                    compactJson(selectedProviderPreview?.body),
+                    "redacted",
+                  ],
                 ]}
               />
             </DetailPanel>

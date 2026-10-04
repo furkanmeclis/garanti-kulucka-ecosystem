@@ -603,6 +603,57 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       return;
     }
 
+    if (url.pathname === "/admin/integrations/provider-attempts") {
+      expect(currentUser.role).toBe("admin");
+      expect(url.searchParams.get("limit")).toBe("10");
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          data: [
+            {
+              public_id: "pat_instagram_preview",
+              provider_key: "instagram",
+              account_public_id: "iac_instagram",
+              request_id: "req_provider_preview",
+              operation: "message.send",
+              direction: "outbound",
+              status: "failed",
+              status_code: 429,
+              duration_ms: 312,
+              retry_decision: "retry",
+              next_retry_at: "2026-01-01T00:10:00.000Z",
+              idempotency_key: "msg_preview_1",
+              request_metadata: {
+                authorization: "[redacted]",
+              },
+              provider_request_preview: {
+                method: "POST",
+                path: "/v18.0/ig_main/media",
+                headers: {
+                  authorization: "Bearer raw-provider-secret",
+                  "content-type": "application/json",
+                },
+                body: {
+                  image_url: "https://example.com/garanti-kulucka.jpg",
+                  access_token: "raw-provider-secret",
+                  raw_secret: "raw-provider-secret",
+                },
+                live_call_performed: false,
+              },
+              response_metadata: {
+                provider_token: "[redacted]",
+              },
+              error_code: "rate_limited",
+              error_message: "fixture retry",
+              started_at: "2026-01-01T00:00:00.000Z",
+              updated_at: "2026-01-01T00:00:01.000Z",
+            },
+          ],
+        }),
+      });
+      return;
+    }
+
     if (url.pathname === "/admin/integrations/accounts/iac_instagram") {
       await route.fulfill({
         contentType: "application/json",
@@ -922,6 +973,16 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("instagram-publish-preview")).toContainText("https://example.com/garanti-kulucka.jpg");
     await expect(page.getByTestId("instagram-publish-preview")).toContainText("2200 karakter");
     await expect(page.getByTestId("instagram-publish-preview")).toContainText("taslak");
+    await expect(page.getByTestId("provider-attempts-detail")).toContainText("Provider Deneme Kayıtları");
+    await expect(page.getByTestId("provider-attempts-detail")).toContainText("instagram / message.send");
+    await expect(page.getByTestId("provider-attempts-detail")).toContainText("failed");
+    await expect(page.getByTestId("provider-attempts-detail")).toContainText("429");
+    await expect(page.getByTestId("provider-attempts-detail")).toContainText("312 ms");
+    await expect(page.getByTestId("provider-attempts-detail")).toContainText("retry");
+    await expect(page.getByTestId("provider-attempts-detail")).toContainText("POST /v18.0/ig_main/media");
+    await expect(page.getByTestId("provider-attempts-detail")).toContainText("[redacted]");
+    await expect(page.getByTestId("provider-attempts-detail")).not.toContainText("frontend-playwright-token");
+    await expect(page.getByTestId("provider-attempts-detail")).not.toContainText("raw-provider-secret");
     await page.getByRole("button", { name: /instagram main detay/i }).click();
     await expect(page.getByTestId("instagram-analytics-summary")).toContainText("Instagram Analitik Özeti");
     await expect(page.getByTestId("instagram-analytics-summary")).toContainText("1240");
@@ -1056,6 +1117,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       "/api/customers",
       "/api/conversations/cnv_playwright/messages",
       "/admin/integrations/accounts",
+      "/admin/integrations/provider-attempts",
       "/admin/integrations/accounts/iac_instagram",
       "/admin/integrations/accounts/iac_instagram/settings/webhook.enabled",
       "/admin/integrations/accounts/iac_instagram/tokens/access_token",
