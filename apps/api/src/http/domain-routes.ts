@@ -69,10 +69,13 @@ export function createDomainRoutes() {
     const assigned = context.req.query("assigned");
     const channel = context.req.query("channel");
     const status = context.req.query("status");
+    const channels = channel?.includes(",")
+      ? channel.split(",").map((item) => item.trim()).filter(Boolean)
+      : undefined;
     const conversations = await new DomainRepository(db).listConversations({
       limit: limitSchema.parse(context.req.query("limit")),
       ...(assigned === "unassigned" ? { assignedUserId: null } : {}),
-      ...(channel ? { channel } : {}),
+      ...(channels ? { channels } : channel ? { channel } : {}),
       ...(status ? { status } : {}),
     });
 

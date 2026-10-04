@@ -29,6 +29,7 @@ export type ShipmentRecord = Selectable<ShipmentsTable> & {
 
 export interface ListConversationsFilter {
   channel?: string;
+  channels?: string[];
   status?: string;
   assignedUserId?: number | null;
   limit: number;
@@ -102,6 +103,9 @@ export class DomainRepository {
         "customers.phone as customer_phone",
         "users.email as assigned_user_email",
       ])
+      .$if(Boolean(filter.channels?.length), (builder) =>
+        builder.where("conversations.channel", "in", filter.channels as string[]),
+      )
       .$if(Boolean(filter.channel), (builder) => builder.where("conversations.channel", "=", filter.channel as string))
       .$if(Boolean(filter.status), (builder) => builder.where("conversations.status", "=", filter.status as string));
 

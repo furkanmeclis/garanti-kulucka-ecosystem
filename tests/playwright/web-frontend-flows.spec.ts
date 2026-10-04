@@ -54,6 +54,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
   const app = await startWebApp();
   const requestedUrls: string[] = [];
   const allRequestUrls: string[] = [];
+  const conversationQueryUrls: string[] = [];
   let currentUser = loginUser();
   let savedIntegrationToken = false;
   let savedIntegrationSetting = false;
@@ -162,39 +163,48 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     }
 
     if (url.pathname === "/api/conversations") {
+      conversationQueryUrls.push(`${url.pathname}${url.search}`);
+      const conversations = [
+        {
+          public_id: "cnv_playwright",
+          channel: "instagram",
+          status: "open",
+          is_in_pool: conversationInPool,
+          human_agent_enabled: conversationHumanAgent,
+          unread_count: realtimeMessageDelivered ? conversationUnreadCount + 1 : conversationUnreadCount,
+          last_message_text: realtimeMessageDelivered ? "Socket.IO canlı mesaj" : "Merhaba",
+          last_message_sender_type: "customer",
+          last_message_at: realtimeMessageDelivered ? "2026-01-01T00:01:30.000Z" : "2026-01-01T00:00:00.000Z",
+          customer: { full_name: "Playwright Customer", phone: "5550000000" },
+          assigned_user_email: conversationAssignedUserEmail,
+          updated_at: realtimeMessageDelivered ? "2026-01-01T00:01:30.000Z" : "2026-01-01T00:00:00.000Z",
+        },
+        {
+          public_id: "cnv_facebook_playwright",
+          channel: "facebook",
+          status: "closed",
+          is_in_pool: false,
+          human_agent_enabled: false,
+          unread_count: facebookRealtimeDelivered ? 1 : 0,
+          last_message_text: facebookRealtimeDelivered ? "Facebook broadcast mesajı" : "Cevaplandı",
+          last_message_sender_type: "user",
+          last_message_at: facebookRealtimeDelivered ? "2026-01-01T00:01:10.000Z" : "2026-01-01T00:00:30.000Z",
+          customer: { full_name: "Facebook Customer", phone: "5552222222" },
+          assigned_user_email: "admin@example.com",
+          updated_at: facebookRealtimeDelivered ? "2026-01-01T00:01:10.000Z" : "2026-01-01T00:00:30.000Z",
+        },
+      ];
+      const requestedChannels = url.searchParams.get("channel")?.split(",").filter(Boolean);
+      const requestedStatus = url.searchParams.get("status");
+      const filteredConversations = conversations.filter((conversation) => {
+        const channelMatches = !requestedChannels?.length || requestedChannels.includes(conversation.channel);
+        const statusMatches = !requestedStatus || conversation.status === requestedStatus;
+        return channelMatches && statusMatches;
+      });
       await route.fulfill({
         contentType: "application/json",
         body: JSON.stringify({
-          data: [
-            {
-              public_id: "cnv_playwright",
-              channel: "instagram",
-              status: "open",
-              is_in_pool: conversationInPool,
-              human_agent_enabled: conversationHumanAgent,
-              unread_count: realtimeMessageDelivered ? conversationUnreadCount + 1 : conversationUnreadCount,
-              last_message_text: realtimeMessageDelivered ? "Socket.IO canlı mesaj" : "Merhaba",
-              last_message_sender_type: "customer",
-              last_message_at: realtimeMessageDelivered ? "2026-01-01T00:01:30.000Z" : "2026-01-01T00:00:00.000Z",
-              customer: { full_name: "Playwright Customer", phone: "5550000000" },
-              assigned_user_email: conversationAssignedUserEmail,
-              updated_at: realtimeMessageDelivered ? "2026-01-01T00:01:30.000Z" : "2026-01-01T00:00:00.000Z",
-            },
-            {
-              public_id: "cnv_facebook_playwright",
-              channel: "facebook",
-              status: "closed",
-              is_in_pool: false,
-              human_agent_enabled: false,
-              unread_count: facebookRealtimeDelivered ? 1 : 0,
-              last_message_text: facebookRealtimeDelivered ? "Facebook broadcast mesajı" : "Cevaplandı",
-              last_message_sender_type: "user",
-              last_message_at: facebookRealtimeDelivered ? "2026-01-01T00:01:10.000Z" : "2026-01-01T00:00:30.000Z",
-              customer: { full_name: "Facebook Customer", phone: "5552222222" },
-              assigned_user_email: "admin@example.com",
-              updated_at: facebookRealtimeDelivered ? "2026-01-01T00:01:10.000Z" : "2026-01-01T00:00:30.000Z",
-            },
-          ],
+          data: filteredConversations,
         }),
       });
       return;
@@ -1264,6 +1274,14 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await page.getByTestId("conversation-channel-filter-all").click();
     await expect(page.getByTestId("conversation-detail")).toContainText("Playwright Customer");
     await expect(page.getByTestId("conversation-detail")).toContainText("instagram");
+    expect(conversationQueryUrls).toEqual(
+      expect.arrayContaining([
+        "/api/conversations?limit=20",
+        "/api/conversations?channel=facebook%2Cmessenger&limit=20",
+        "/api/conversations?channel=facebook%2Cmessenger&status=open&limit=20",
+        "/api/conversations?channel=instagram&limit=20",
+      ]),
+    );
     await Promise.all([
       page.waitForResponse(`${backendBaseUrl}/api/conversations/cnv_playwright/state`),
       page.getByRole("button", { name: /okundu yap/i }).click(),

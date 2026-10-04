@@ -412,6 +412,7 @@ export function App() {
   const [conversationStatusFilter, setConversationStatusFilter] = useState("all");
   const [realtimeClient, setRealtimeClient] = useState<RealtimeClient | null>(null);
   const selectedConversationIdRef = useRef<string | null>(null);
+  const conversationFilterRequestSeqRef = useRef(0);
 
   const http = useMemo(
     () =>
@@ -694,6 +695,36 @@ export function App() {
     setSelectedConversationId(conversation.public_id);
     selectedConversationIdRef.current = conversation.public_id;
     setStatus("Konuşma durumu backend API üzerinden güncellendi");
+  }
+
+  async function handleApplyConversationFilters(nextChannel: string, nextStatus: string) {
+    const requestSeq = conversationFilterRequestSeqRef.current + 1;
+    conversationFilterRequestSeqRef.current = requestSeq;
+    setConversationChannelFilter(nextChannel);
+    setConversationStatusFilter(nextStatus);
+    setStatus("Konuşma filtreleri backend API üzerinden uygulanıyor");
+    const filterParams: { channel?: string; status?: string; limit: number } = { limit: 20 };
+    if (nextChannel !== "all") {
+      filterParams.channel = nextChannel === "facebook" ? "facebook,messenger" : nextChannel;
+    }
+    if (nextStatus !== "all") {
+      filterParams.status = nextStatus;
+    }
+    const conversations = await domain.listConversations(filterParams);
+    if (conversationFilterRequestSeqRef.current !== requestSeq) return;
+    setData((current) => ({
+      ...current,
+      conversations: conversations.data,
+    }));
+    setSelectedConversationId(conversations.data[0]?.public_id ?? null);
+    selectedConversationIdRef.current = conversations.data[0]?.public_id ?? null;
+    if (conversations.data[0]) {
+      await refreshMessages(conversations.data[0].public_id);
+      if (conversationFilterRequestSeqRef.current !== requestSeq) return;
+    } else {
+      setData((current) => ({ ...current, messages: [] }));
+    }
+    setStatus("Konuşma filtreleri backend API üzerinden uygulandı");
   }
 
   async function handleSelectConversation(conversationPublicId: string) {
@@ -1093,7 +1124,7 @@ export function App() {
                   data-testid={`conversation-channel-filter-${value}`}
                   key={value}
                   type="button"
-                  onClick={() => setConversationChannelFilter(value)}
+                  onClick={() => void handleApplyConversationFilters(value, conversationStatusFilter)}
                 >
                   {label}
                 </button>
@@ -1104,7 +1135,7 @@ export function App() {
                   data-testid={`conversation-status-filter-${value}`}
                   key={value}
                   type="button"
-                  onClick={() => setConversationStatusFilter(value)}
+                  onClick={() => void handleApplyConversationFilters(conversationChannelFilter, value)}
                 >
                   {label}
                 </button>
