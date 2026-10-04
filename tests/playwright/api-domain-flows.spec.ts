@@ -461,7 +461,11 @@ class FixtureQuery {
         return providerAttempts.filter((attempt) =>
           (this.whereValues.get("provider_id") === undefined || attempt.provider_id === this.whereValues.get("provider_id")) &&
           (this.whereValues.get("idempotency_key") === undefined || attempt.idempotency_key === this.whereValues.get("idempotency_key")),
-        );
+        ).map((attempt) => ({
+          ...attempt,
+          provider_key: integrationProviders.find((provider) => provider.id === attempt.provider_id)?.key,
+          account_public_id: integrationAccounts.find((account) => account.id === attempt.account_id)?.public_id ?? null,
+        }));
       default:
         return [];
     }
@@ -809,6 +813,7 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
       shipmentPipelineResponse,
       fileOrphansResponse,
       providerCatalogResponse,
+      providerDebugSummaryResponse,
       settingsResponse,
       webphoneResponse,
     ] =
@@ -826,6 +831,7 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
         api.client.get("/api/shipments/pipeline-summary"),
         api.client.get("/api/files/orphans?limit=10"),
         api.client.get("/admin/integrations/provider-catalog"),
+        api.client.get("/admin/integrations/provider-debug-summary"),
         api.client.get("/admin/settings?scope=global"),
         api.client.get("/api/webphone/config"),
       ]);
@@ -1138,6 +1144,35 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
       },
     });
     expect(providerAttempts.filter((attempt) => attempt.idempotency_key === "cron_debug_ptt_playwright")).toHaveLength(1);
+    const providerDebugSummaryAfterCronResponse = await api.client.get("/admin/integrations/provider-debug-summary");
+    expect(providerDebugSummaryAfterCronResponse.status()).toBe(200);
+    await expect(providerDebugSummaryAfterCronResponse.json()).resolves.toMatchObject({
+      providers: expect.arrayContaining([
+        expect.objectContaining({
+          provider_key: "ptt",
+          total_attempts: 1,
+          success_count: 1,
+          failure_count: 0,
+          retry_count: 0,
+          average_duration_ms: 0,
+        }),
+      ]),
+      cron: {
+        provider_keys: ["ptt", "surat"],
+        operation: "shipment.track",
+        total_attempts: 1,
+        success_count: 1,
+        failure_count: 0,
+        retry_count: 0,
+        total_duration_ms: 0,
+        latest_attempt: expect.objectContaining({
+          provider_key: "ptt",
+          provider_request_preview: expect.objectContaining({
+            path: "/api/ptt/cron-debug",
+          }),
+        }),
+      },
+    });
 
     const instagramPublishResponse = await api.client.post("/admin/integrations/instagram-publish-previews", {
       data: {
@@ -1446,6 +1481,17 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
         }),
       ]),
     );
+    expect(providerDebugSummaryResponse.status()).toBe(200);
+    await expect(providerDebugSummaryResponse.json()).resolves.toMatchObject({
+      providers: expect.arrayContaining([
+        expect.objectContaining({ provider_key: "ptt" }),
+        expect.objectContaining({ provider_key: "surat" }),
+      ]),
+      cron: expect.objectContaining({
+        provider_keys: ["ptt", "surat"],
+        operation: "shipment.track",
+      }),
+    });
     const instagramAnalyticsSummaryResponse = await api.client.get(
       "/admin/integrations/accounts/iac_instagram/analytics-summary",
     );
@@ -1462,6 +1508,8 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
     expect(await forbiddenProviderCatalogResponse.json()).toMatchObject({
       error: { code: "forbidden" },
     });
+    const forbiddenProviderDebugSummaryResponse = await api.cargoClient.get("/admin/integrations/provider-debug-summary");
+    expect(forbiddenProviderDebugSummaryResponse.status()).toBe(403);
     const forbiddenInstagramAnalyticsSummaryResponse = await api.cargoClient.get(
       "/admin/integrations/accounts/iac_instagram/analytics-summary",
     );

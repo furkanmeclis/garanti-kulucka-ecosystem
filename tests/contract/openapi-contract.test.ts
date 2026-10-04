@@ -50,6 +50,7 @@ const expectedOperations = new Map<string, string[]>([
   ["/admin/integrations/accounts/{account_public_id}/settings/{key}", ["put"]],
   ["/admin/integrations/accounts/{account_public_id}/tokens/{token_type}", ["put"]],
   ["/admin/integrations/provider-attempts", ["get"]],
+  ["/admin/integrations/provider-debug-summary", ["get"]],
   ["/admin/integrations/provider-cron-triggers/{provider_key}", ["post"]],
   ["/admin/integrations/instagram-publish-previews", ["post"]],
 ]);
@@ -96,6 +97,7 @@ describe("backend OpenAPI contract", () => {
         "InstagramAnalyticsSummary",
         "InstagramPublishPreviewRequest",
         "ProviderAttempt",
+        "ProviderDebugSummary",
         "ProviderCronTriggerRequest",
       ]),
     );

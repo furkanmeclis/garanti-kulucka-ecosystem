@@ -113,6 +113,32 @@ export interface ProviderAttemptViewModel extends Omit<ProviderAttempt, "provide
   provider_request_preview: ProviderRequestPreview | null;
 }
 
+export interface ProviderDebugProviderSummary {
+  provider_key: string;
+  total_attempts: number;
+  success_count: number;
+  failure_count: number;
+  retry_count: number;
+  average_duration_ms: number;
+  latest_attempt: ProviderAttempt | null;
+}
+
+export interface ProviderDebugCronSummary {
+  provider_keys: Array<"ptt" | "surat">;
+  operation: "shipment.track";
+  total_attempts: number;
+  success_count: number;
+  failure_count: number;
+  retry_count: number;
+  total_duration_ms: number;
+  latest_attempt: ProviderAttempt | null;
+}
+
+export interface ProviderDebugSummary {
+  providers: ProviderDebugProviderSummary[];
+  cron: ProviderDebugCronSummary;
+}
+
 export interface AuditListOptions {
   entity_id?: string;
   limit?: number;
@@ -223,6 +249,8 @@ export function createAdminClient(http: BackendHttpClient) {
       http.request<{ data: ProviderAttempt[] }>(
         `/admin/integrations/provider-attempts${providerAttemptQuery(options)}`,
       ),
+    getProviderDebugSummary: () =>
+      http.request<ProviderDebugSummary>("/admin/integrations/provider-debug-summary"),
     triggerProviderCronDebug: (providerKey: "ptt" | "surat", input: { idempotency_key: string }) =>
       http.request<ProviderAttempt>(
         `/admin/integrations/provider-cron-triggers/${encodeURIComponent(providerKey)}`,

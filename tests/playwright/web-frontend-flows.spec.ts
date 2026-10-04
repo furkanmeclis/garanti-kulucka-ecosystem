@@ -1327,6 +1327,46 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       return;
     }
 
+    if (url.pathname === "/admin/integrations/provider-debug-summary") {
+      expect(currentUser.role).toBe("admin");
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          providers: [
+            {
+              provider_key: "ptt",
+              total_attempts: 7,
+              success_count: 6,
+              failure_count: 1,
+              retry_count: 1,
+              average_duration_ms: 410,
+              latest_attempt: null,
+            },
+            {
+              provider_key: "surat",
+              total_attempts: 6,
+              success_count: 4,
+              failure_count: 2,
+              retry_count: 3,
+              average_duration_ms: 912,
+              latest_attempt: null,
+            },
+          ],
+          cron: {
+            provider_keys: ["ptt", "surat"],
+            operation: "shipment.track",
+            total_attempts: 8,
+            success_count: 5,
+            failure_count: 3,
+            retry_count: 4,
+            total_duration_ms: 3210,
+            latest_attempt: null,
+          },
+        }),
+      });
+      return;
+    }
+
     if (url.pathname === "/admin/integrations/provider-cron-triggers/ptt") {
       expect(currentUser.role).toBe("admin");
       expect(route.request().method()).toBe("POST");
@@ -2250,6 +2290,12 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("shipment-pipeline-flow")).toContainText("SMS Step Customer");
     await page.getByRole("link", { name: /sürat debug/i }).click();
     await expect(page.getByTestId("surat-debug-flow")).toContainText("Sürat Kargo Debug");
+    await expect(page.getByTestId("surat-debug-flow")).toContainText("Toplam");
+    await expect(page.getByTestId("surat-debug-flow")).toContainText("6");
+    await expect(page.getByTestId("surat-debug-flow")).toContainText("4");
+    await expect(page.getByTestId("surat-debug-flow")).toContainText("2");
+    await expect(page.getByTestId("surat-debug-flow")).toContainText("3");
+    await expect(page.getByTestId("surat-debug-flow")).toContainText("912ms");
     await expect(page.getByTestId("surat-debug-detail")).toContainText("legacy /api/surat-kargo/debug");
     await expect(page.getByTestId("surat-debug-detail")).toContainText("providers.surat.live_mode");
     await expect(page.getByTestId("surat-debug-detail")).toContainText("fixture_replay_contract_required");
@@ -2261,6 +2307,13 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("surat-debug-flow")).toContainText("failed / retry");
     await page.getByRole("link", { name: /cron debug/i }).click();
     await expect(page.getByTestId("cron-debug-flow")).toContainText("Kargo Takip Cron Debug");
+    await expect(page.getByTestId("cron-debug-flow")).toContainText("PTT Log");
+    await expect(page.getByTestId("cron-debug-flow")).toContainText("7");
+    await expect(page.getByTestId("cron-debug-flow")).toContainText("Sürat Log");
+    await expect(page.getByTestId("cron-debug-flow")).toContainText("6");
+    await expect(page.getByTestId("cron-debug-flow")).toContainText("5");
+    await expect(page.getByTestId("cron-debug-flow")).toContainText("3");
+    await expect(page.getByTestId("cron-debug-flow")).toContainText("3210ms");
     await expect(page.getByTestId("cron-debug-detail")).toContainText("legacy /api/ptt/cron-debug + /api/surat/cron-debug");
     await expect(page.getByTestId("cron-debug-detail")).toContainText("providers.ptt.live_mode");
     await expect(page.getByTestId("cron-debug-detail")).toContainText("providers.surat.live_mode");
@@ -2273,7 +2326,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       idempotency_key: "cron_debug_ptt_manual",
     });
     await expect(page.getByTestId("cron-debug-flow")).toContainText("PTT / cron_ptt_cron_debug_ptt_manual");
-    await expect(page.getByTestId("cron-debug-detail")).toContainText("2 güncellendi");
+    await expect(page.getByTestId("cron-debug-detail")).toContainText("5 güncellendi");
     await expect(page.getByTestId("cron-debug-flow")).toContainText("PTT / req_ptt_cron_debug");
     await expect(page.getByTestId("cron-debug-flow")).toContainText("SURAT / req_surat_debug");
     await page.getByRole("link", { name: /^sms$/i }).click();
@@ -2406,6 +2459,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       "/admin/integrations/audit",
       "/admin/integrations/provider-catalog",
       "/admin/integrations/provider-attempts",
+      "/admin/integrations/provider-debug-summary",
       "/admin/integrations/accounts/iac_instagram",
       "/admin/integrations/accounts/iac_instagram/analytics-summary",
       "/admin/integrations/accounts/iac_instagram/settings/webhook.enabled",

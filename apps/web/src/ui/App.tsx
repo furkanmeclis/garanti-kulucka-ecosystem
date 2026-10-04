@@ -37,6 +37,7 @@ import {
   type IntegrationAccountSnapshot,
   type InstagramAnalyticsSummary as BackendInstagramAnalyticsSummary,
   type ProviderCatalogItem,
+  type ProviderDebugSummary,
   type ProviderAttemptViewModel,
   toProviderAttemptViewModel,
 } from "../api/admin-client.js";
@@ -77,6 +78,7 @@ interface DashboardData {
   integrationAudit: AdminAuditLog[];
   providerCatalog: ProviderCatalogItem[];
   providerAttempts: ProviderAttemptViewModel[];
+  providerDebugSummary: ProviderDebugSummary;
   fileOrphans: FileMetadata[];
   instagramAnalytics: BackendInstagramAnalyticsSummary;
   orderSummary: OrderSummaryStats;
@@ -303,6 +305,51 @@ const defaultOrderSummary: OrderSummaryStats = {
   currency: "TRY",
 };
 
+const defaultProviderDebugSummary: ProviderDebugSummary = {
+  providers: [
+    {
+      provider_key: "ptt",
+      total_attempts: 0,
+      success_count: 0,
+      failure_count: 0,
+      retry_count: 0,
+      average_duration_ms: 0,
+      latest_attempt: null,
+    },
+    {
+      provider_key: "surat",
+      total_attempts: 0,
+      success_count: 0,
+      failure_count: 0,
+      retry_count: 0,
+      average_duration_ms: 0,
+      latest_attempt: null,
+    },
+  ],
+  cron: {
+    provider_keys: ["ptt", "surat"],
+    operation: "shipment.track",
+    total_attempts: 0,
+    success_count: 0,
+    failure_count: 0,
+    retry_count: 0,
+    total_duration_ms: 0,
+    latest_attempt: null,
+  },
+};
+
+function emptyProviderDebug(providerKey: string) {
+  return {
+    provider_key: providerKey,
+    total_attempts: 0,
+    success_count: 0,
+    failure_count: 0,
+    retry_count: 0,
+    average_duration_ms: 0,
+    latest_attempt: null,
+  };
+}
+
 const defaultShipmentPipelineSummary: ShipmentPipelineSummary = {
   counts: {
     all: 0,
@@ -461,6 +508,7 @@ export function App() {
     integrationAudit: [],
     providerCatalog: [],
     providerAttempts: [],
+    providerDebugSummary: defaultProviderDebugSummary,
     fileOrphans: [],
     instagramAnalytics: defaultInstagramAnalyticsSummary,
     orderSummary: defaultOrderSummary,
@@ -634,16 +682,17 @@ export function App() {
       user?.role === "admin" ? admin.listSettings("global") : Promise.resolve({ data: [] }),
       webphone.getConfig(),
     ]);
-    const [integrationAccounts, providerCatalog, providerAttempts, settingsAudit, integrationAudit, fileOrphans] = user?.role === "admin"
+    const [integrationAccounts, providerCatalog, providerAttempts, providerDebugSummary, settingsAudit, integrationAudit, fileOrphans] = user?.role === "admin"
       ? await Promise.all([
           admin.listIntegrationAccounts(),
           admin.listProviderCatalog(),
           admin.listProviderAttempts({ limit: 10 }),
+          admin.getProviderDebugSummary(),
           admin.listSettingsAudit({ limit: 10 }),
           admin.listIntegrationAudit({ limit: 10 }),
           files.listOrphanCandidates({ limit: 10 }),
         ])
-      : [{ data: [] }, { data: [] }, { data: [] }, { data: [] }, { data: [] }, { data: [] }];
+      : [{ data: [] }, { data: [] }, { data: [] }, defaultProviderDebugSummary, { data: [] }, { data: [] }, { data: [] }];
     const firstConversation = conversations.data[0]?.public_id;
     const messages = firstConversation
       ? await domain.listMessages(firstConversation, 50)
@@ -666,6 +715,7 @@ export function App() {
       integrationAudit: integrationAudit.data,
       providerCatalog: providerCatalog.data,
       providerAttempts: providerAttempts.data.map(toProviderAttemptViewModel),
+      providerDebugSummary,
       fileOrphans: fileOrphans.data,
       instagramAnalytics,
       orderSummary,
@@ -715,6 +765,7 @@ export function App() {
         integrationAudit: [],
         providerCatalog: [],
         providerAttempts: [],
+        providerDebugSummary: defaultProviderDebugSummary,
         fileOrphans: [],
         instagramAnalytics: defaultInstagramAnalyticsSummary,
         orderSummary: defaultOrderSummary,
@@ -1331,6 +1382,9 @@ export function App() {
   const selectedProviderCatalogItem = data.providerCatalog[0] ?? null;
   const suratProviderCatalogItem = data.providerCatalog.find((item) => item.provider === "surat") ?? null;
   const pttProviderCatalogItem = data.providerCatalog.find((item) => item.provider === "ptt") ?? null;
+  const providerDebugSummaries = new Map(data.providerDebugSummary.providers.map((summary) => [summary.provider_key, summary]));
+  const pttProviderDebug = providerDebugSummaries.get("ptt") ?? emptyProviderDebug("ptt");
+  const suratProviderDebug = providerDebugSummaries.get("surat") ?? emptyProviderDebug("surat");
   const pttProviderAttempts = data.providerAttempts.filter((attempt) => attempt.provider_key === "ptt");
   const suratProviderAttempts = data.providerAttempts.filter((attempt) => attempt.provider_key === "surat");
   const latestSuratAttempt = suratProviderAttempts[0] ?? null;
@@ -1340,20 +1394,18 @@ export function App() {
       (attempt.provider_key === "ptt" || attempt.provider_key === "surat") &&
       attempt.operation === "shipment.track",
   );
-  const cronUpdatedCount = trackingCronAttempts.filter((attempt) => attempt.status === "success" || attempt.status === "succeeded").length;
-  const cronErrorCount = trackingCronAttempts.filter((attempt) => attempt.status === "failed").length;
-  const cronTotalDuration = trackingCronAttempts.reduce((sum, attempt) => sum + attempt.duration_ms, 0);
-  const suratRetryCount = suratProviderAttempts.filter((attempt) => attempt.retry_decision === "retry").length;
-  const suratFailureCount = suratProviderAttempts.filter((attempt) => attempt.status === "failed").length;
-  const suratSuccessCount = suratProviderAttempts.filter((attempt) => attempt.status === "success" || attempt.status === "succeeded").length;
-  const suratAverageDuration = suratProviderAttempts.length > 0
-    ? Math.round(suratProviderAttempts.reduce((sum, attempt) => sum + attempt.duration_ms, 0) / suratProviderAttempts.length)
-    : 0;
+  const cronUpdatedCount = data.providerDebugSummary.cron.success_count;
+  const cronErrorCount = data.providerDebugSummary.cron.failure_count;
+  const cronTotalDuration = data.providerDebugSummary.cron.total_duration_ms;
+  const suratRetryCount = suratProviderDebug.retry_count;
+  const suratFailureCount = suratProviderDebug.failure_count;
+  const suratSuccessCount = suratProviderDebug.success_count;
+  const suratAverageDuration = suratProviderDebug.average_duration_ms;
   const latestSettingsAudit = data.settingsAudit[0] ?? null;
   const latestIntegrationAudit = data.integrationAudit[0] ?? null;
   const deliveredShipmentCount = data.shipments.filter((shipment) => shipment.status === "delivered").length;
   const activeShipmentCount = data.shipments.filter((shipment) => shipment.status !== "delivered").length;
-  const cronSkippedCount = Math.max(activeShipmentCount - trackingCronAttempts.length, 0);
+  const cronSkippedCount = Math.max(activeShipmentCount - data.providerDebugSummary.cron.total_attempts, 0);
   const pttShipmentCount = data.shipments.filter((shipment) => shipment.provider.toLowerCase().includes("ptt")).length;
   const suratShipmentCount = data.shipments.filter((shipment) => {
     const provider = shipment.provider.toLocaleLowerCase("tr-TR");
@@ -1818,7 +1870,7 @@ export function App() {
         {activeFlow === "suratDebug" && (
           <FlowPanel title="Sürat Kargo Debug" icon={<Bug size={18} />} testId="surat-debug-flow">
             <div className="metrics-grid">
-              <Metric title="Toplam" value={String(suratProviderAttempts.length)} />
+              <Metric title="Toplam" value={String(suratProviderDebug.total_attempts)} />
               <Metric title="Başarılı" value={String(suratSuccessCount)} />
               <Metric title="Hata" value={String(suratFailureCount)} />
               <Metric title="Retry" value={String(suratRetryCount)} />
@@ -1866,8 +1918,8 @@ export function App() {
         {activeFlow === "cronDebug" && (
           <FlowPanel title="Kargo Takip Cron Debug" icon={<Bug size={18} />} testId="cron-debug-flow">
             <div className="metrics-grid">
-              <Metric title="PTT Log" value={String(pttProviderAttempts.length)} />
-              <Metric title="Sürat Log" value={String(suratProviderAttempts.length)} />
+              <Metric title="PTT Log" value={String(pttProviderDebug.total_attempts)} />
+              <Metric title="Sürat Log" value={String(suratProviderDebug.total_attempts)} />
               <Metric title="Güncellenen" value={String(cronUpdatedCount)} />
               <Metric title="Hata" value={String(cronErrorCount)} />
               <Metric title="Atlanan" value={String(cronSkippedCount)} />

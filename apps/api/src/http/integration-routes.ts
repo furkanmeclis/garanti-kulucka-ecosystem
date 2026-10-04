@@ -11,6 +11,7 @@ import {
   serializeAccountSnapshot,
   serializeIntegrationSetting,
   serializeIntegrationToken,
+  serializeProviderDebugSummary,
   serializeProviderAttempt,
   serializeProvider,
 } from "../integrations/repository.js";
@@ -108,6 +109,16 @@ export function createIntegrationRoutes() {
     });
 
     return context.json({ data: attempts.map(serializeProviderAttempt) });
+  });
+
+  routes.get("/provider-debug-summary", async (context) => {
+    const db = context.get("db");
+    if (!db) {
+      return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
+    }
+
+    const summary = await new IntegrationsRepository(db, context.get("encryptor")).getProviderDebugSummary();
+    return context.json(serializeProviderDebugSummary(summary));
   });
 
   routes.post("/provider-cron-triggers/:provider_key", async (context) => {

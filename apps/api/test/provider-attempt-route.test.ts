@@ -78,6 +78,50 @@ const routeMocks = vi.hoisted(() => {
     },
     integrationRepository: {
       listProviderAttempts: vi.fn(async () => [providerAttempt]),
+      getProviderDebugSummary: vi.fn(async () => ({
+        providers: [
+          {
+            provider_key: "surat",
+            total_attempts: 1,
+            success_count: 0,
+            failure_count: 1,
+            retry_count: 1,
+            average_duration_ms: 1450,
+            latest_attempt: {
+              ...providerAttempt,
+              provider_key: "surat",
+              account_public_id: null,
+              status: "failed",
+              duration_ms: 1450,
+              retry_decision: "retry",
+              request_metadata: {
+                dry_run_request: {
+                  method: "POST",
+                  path: "/kargo-takip",
+                  headers: {
+                    authorization: "Bearer plain-surat-token",
+                  },
+                  body: {
+                    takip_no: "TRK-SURAT-TEST",
+                    api_key: "plain-surat-key",
+                  },
+                  live_call_performed: false,
+                },
+              },
+            },
+          },
+        ],
+        cron: {
+          provider_keys: ["ptt", "surat"],
+          operation: "shipment.track",
+          total_attempts: 1,
+          success_count: 0,
+          failure_count: 1,
+          retry_count: 1,
+          total_duration_ms: 1450,
+          latest_attempt: providerAttempt,
+        },
+      })),
     },
   };
 });
@@ -165,5 +209,49 @@ describe("provider attempt admin route", () => {
       },
     });
     expect(JSON.stringify(payload)).not.toContain("plain-token");
+  });
+
+  it("exposes backend-owned provider debug summary metrics with redacted latest attempts", async () => {
+    const token = await adminAccessToken();
+    const app = createApp({ config, db: {} as AppDatabase });
+    const response = await app.request("/admin/integrations/provider-debug-summary", {
+      headers: {
+        authorization: `Bearer ${token}`,
+      },
+    });
+
+    expect(response.status).toBe(200);
+    const payload = await response.json();
+
+    expect(routeMocks.integrationRepository.getProviderDebugSummary).toHaveBeenCalledOnce();
+    expect(payload.providers[0]).toMatchObject({
+      provider_key: "surat",
+      total_attempts: 1,
+      success_count: 0,
+      failure_count: 1,
+      retry_count: 1,
+      average_duration_ms: 1450,
+      latest_attempt: {
+        provider_key: "surat",
+        provider_request_preview: {
+          headers: {
+            authorization: "[redacted]",
+          },
+          body: {
+            takip_no: "TRK-SURAT-TEST",
+            api_key: "[redacted]",
+          },
+        },
+      },
+    });
+    expect(payload.cron).toMatchObject({
+      provider_keys: ["ptt", "surat"],
+      operation: "shipment.track",
+      total_attempts: 1,
+      failure_count: 1,
+      total_duration_ms: 1450,
+    });
+    expect(JSON.stringify(payload)).not.toContain("plain-surat-token");
+    expect(JSON.stringify(payload)).not.toContain("plain-surat-key");
   });
 });

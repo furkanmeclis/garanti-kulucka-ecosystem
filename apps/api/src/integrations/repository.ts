@@ -22,6 +22,32 @@ export type ProviderAttemptRecord = Selectable<ProviderAttemptsTable> & {
   account_public_id: string | null;
 };
 
+export interface ProviderDebugProviderSummary {
+  provider_key: string;
+  total_attempts: number;
+  success_count: number;
+  failure_count: number;
+  retry_count: number;
+  average_duration_ms: number;
+  latest_attempt: ProviderAttemptRecord | null;
+}
+
+export interface ProviderDebugCronSummary {
+  provider_keys: Array<"ptt" | "surat">;
+  operation: "shipment.track";
+  total_attempts: number;
+  success_count: number;
+  failure_count: number;
+  retry_count: number;
+  total_duration_ms: number;
+  latest_attempt: ProviderAttemptRecord | null;
+}
+
+export interface ProviderDebugSummary {
+  providers: ProviderDebugProviderSummary[];
+  cron: ProviderDebugCronSummary;
+}
+
 export interface IntegrationAccountSnapshot {
   account: IntegrationAccountRecord;
   settings: IntegrationSettingRecord[];
@@ -186,6 +212,44 @@ export class IntegrationsRepository {
     }
 
     return query.execute();
+  }
+
+  async getProviderDebugSummary(): Promise<ProviderDebugSummary> {
+    const attempts = await this.db
+      .selectFrom("provider_attempts")
+      .innerJoin("integration_providers", "integration_providers.id", "provider_attempts.provider_id")
+      .leftJoin("integration_accounts", "integration_accounts.id", "provider_attempts.account_id")
+      .selectAll("provider_attempts")
+      .select([
+        "integration_providers.key as provider_key",
+        "integration_accounts.public_id as account_public_id",
+      ])
+      .where("integration_providers.key", "in", ["ptt", "surat"])
+      .orderBy("provider_attempts.started_at", "desc")
+      .orderBy("provider_attempts.id", "desc")
+      .execute();
+
+    const providerSummaries = ["ptt", "surat"].map((providerKey) =>
+      providerDebugProviderSummary(providerKey, attempts.filter((attempt) => attempt.provider_key === providerKey)),
+    );
+    const cronAttempts = attempts.filter((attempt) =>
+      (attempt.provider_key === "ptt" || attempt.provider_key === "surat") &&
+      attempt.operation === "shipment.track"
+    );
+
+    return {
+      providers: providerSummaries,
+      cron: {
+        provider_keys: ["ptt", "surat"],
+        operation: "shipment.track",
+        total_attempts: cronAttempts.length,
+        success_count: countSuccessfulAttempts(cronAttempts),
+        failure_count: countFailedAttempts(cronAttempts),
+        retry_count: countRetryAttempts(cronAttempts),
+        total_duration_ms: cronAttempts.reduce((sum, attempt) => sum + attempt.duration_ms, 0),
+        latest_attempt: cronAttempts[0] ?? null,
+      },
+    };
   }
 
   async createProviderCronTriggerAttempt(input: CreateProviderCronTriggerInput): Promise<ProviderAttemptRecord> {
@@ -683,6 +747,30 @@ export function serializeProviderAttempt(attempt: ProviderAttemptRecord) {
   };
 }
 
+export function serializeProviderDebugSummary(summary: ProviderDebugSummary) {
+  return {
+    providers: summary.providers.map((provider) => ({
+      provider_key: provider.provider_key,
+      total_attempts: provider.total_attempts,
+      success_count: provider.success_count,
+      failure_count: provider.failure_count,
+      retry_count: provider.retry_count,
+      average_duration_ms: provider.average_duration_ms,
+      latest_attempt: provider.latest_attempt ? serializeProviderAttempt(provider.latest_attempt) : null,
+    })),
+    cron: {
+      provider_keys: summary.cron.provider_keys,
+      operation: summary.cron.operation,
+      total_attempts: summary.cron.total_attempts,
+      success_count: summary.cron.success_count,
+      failure_count: summary.cron.failure_count,
+      retry_count: summary.cron.retry_count,
+      total_duration_ms: summary.cron.total_duration_ms,
+      latest_attempt: summary.cron.latest_attempt ? serializeProviderAttempt(summary.cron.latest_attempt) : null,
+    },
+  };
+}
+
 export function providerRequestPreviewFromMetadata(metadata: unknown): unknown | null {
   if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
     return null;
@@ -738,6 +826,35 @@ export function parseProviderAttemptLimit(value: string | undefined, fallback = 
   }
 
   return Math.max(1, Math.min(parsed, 100));
+}
+
+function providerDebugProviderSummary(
+  providerKey: string,
+  attempts: ProviderAttemptRecord[],
+): ProviderDebugProviderSummary {
+  return {
+    provider_key: providerKey,
+    total_attempts: attempts.length,
+    success_count: countSuccessfulAttempts(attempts),
+    failure_count: countFailedAttempts(attempts),
+    retry_count: countRetryAttempts(attempts),
+    average_duration_ms: attempts.length > 0
+      ? Math.round(attempts.reduce((sum, attempt) => sum + attempt.duration_ms, 0) / attempts.length)
+      : 0,
+    latest_attempt: attempts[0] ?? null,
+  };
+}
+
+function countSuccessfulAttempts(attempts: ProviderAttemptRecord[]) {
+  return attempts.filter((attempt) => attempt.status === "success" || attempt.status === "succeeded").length;
+}
+
+function countFailedAttempts(attempts: ProviderAttemptRecord[]) {
+  return attempts.filter((attempt) => attempt.status === "failed").length;
+}
+
+function countRetryAttempts(attempts: ProviderAttemptRecord[]) {
+  return attempts.filter((attempt) => attempt.retry_decision === "retry").length;
 }
 
 export function redactProviderAttemptMetadata(value: unknown): unknown {

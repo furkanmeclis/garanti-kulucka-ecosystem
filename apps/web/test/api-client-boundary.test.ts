@@ -252,6 +252,44 @@ describe("web API client boundary", () => {
     expect(JSON.stringify(response)).not.toContain("plain-token");
   });
 
+  it("maps provider debug summary reads to the backend route", async () => {
+    const requests: Request[] = [];
+    const client = createApiClient("http://localhost:3000", {
+      fetchImpl: async (input, init) => {
+        requests.push(new Request(input, init));
+        return Response.json({
+          providers: [
+            {
+              provider_key: "surat",
+              total_attempts: 2,
+              success_count: 1,
+              failure_count: 1,
+              retry_count: 1,
+              average_duration_ms: 725,
+              latest_attempt: null,
+            },
+          ],
+          cron: {
+            provider_keys: ["ptt", "surat"],
+            operation: "shipment.track",
+            total_attempts: 3,
+            success_count: 2,
+            failure_count: 1,
+            retry_count: 1,
+            total_duration_ms: 2320,
+            latest_attempt: null,
+          },
+        });
+      },
+    });
+
+    const response = await client.admin.getProviderDebugSummary();
+
+    expect(requests[0]?.url).toBe("http://localhost:3000/admin/integrations/provider-debug-summary");
+    expect(response.cron.total_duration_ms).toBe(2320);
+    expect(response.providers[0]?.provider_key).toBe("surat");
+  });
+
   it("maps report summary reads to the backend route", async () => {
     const requests: Request[] = [];
     const client = createApiClient("http://localhost:3000", {

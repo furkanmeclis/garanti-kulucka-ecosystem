@@ -1069,6 +1069,23 @@
         }
       }
     },
+    "/admin/integrations/provider-debug-summary": {
+      "get": {
+        "operationId": "getProviderDebugSummary",
+        "responses": {
+          "200": {
+            "description": "Backend-owned provider debug aggregate metrics",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderDebugSummary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/admin/integrations/provider-cron-triggers/{provider_key}": {
       "post": {
         "operationId": "triggerProviderCronDebug",
@@ -1406,6 +1423,108 @@
             "$ref": "#/components/schemas/DataEnvelope"
           }
         ]
+      },
+      "ProviderDebugSummary": {
+        "type": "object",
+        "required": ["providers", "cron"],
+        "properties": {
+          "providers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "provider_key",
+                "total_attempts",
+                "success_count",
+                "failure_count",
+                "retry_count",
+                "average_duration_ms",
+                "latest_attempt"
+              ],
+              "properties": {
+                "provider_key": {
+                  "type": "string"
+                },
+                "total_attempts": {
+                  "type": "integer"
+                },
+                "success_count": {
+                  "type": "integer"
+                },
+                "failure_count": {
+                  "type": "integer"
+                },
+                "retry_count": {
+                  "type": "integer"
+                },
+                "average_duration_ms": {
+                  "type": "integer"
+                },
+                "latest_attempt": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/ProviderAttempt"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "cron": {
+            "type": "object",
+            "required": [
+              "provider_keys",
+              "operation",
+              "total_attempts",
+              "success_count",
+              "failure_count",
+              "retry_count",
+              "total_duration_ms",
+              "latest_attempt"
+            ],
+            "properties": {
+              "provider_keys": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": ["ptt", "surat"]
+                }
+              },
+              "operation": {
+                "type": "string",
+                "const": "shipment.track"
+              },
+              "total_attempts": {
+                "type": "integer"
+              },
+              "success_count": {
+                "type": "integer"
+              },
+              "failure_count": {
+                "type": "integer"
+              },
+              "retry_count": {
+                "type": "integer"
+              },
+              "total_duration_ms": {
+                "type": "integer"
+              },
+              "latest_attempt": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/ProviderAttempt"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          }
+        }
       },
       "ProviderCronTriggerRequest": {
         "type": "object",
