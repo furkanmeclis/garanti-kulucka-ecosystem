@@ -790,6 +790,7 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
     const [
       conversationResponse,
       commentModerationResponse,
+      balanceSummaryResponse,
       customerResponse,
       messageResponse,
       orderResponse,
@@ -803,6 +804,7 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
       await Promise.all([
         api.client.get("/api/conversations?limit=10"),
         api.client.get("/api/comments/moderation-summary"),
+        api.client.get("/api/balances/summary"),
         api.client.get("/api/customers?limit=10"),
         api.client.get(`/api/conversations/${conversation.public_id}/messages?limit=10`),
         api.client.get("/api/orders?limit=10"),
@@ -841,6 +843,21 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
     ]);
     expect(ownerCommentModerationResponse.status()).toBe(200);
     expect(staffCommentModerationResponse.status()).toBe(200);
+
+    expect(balanceSummaryResponse.status()).toBe(200);
+    expect(await balanceSummaryResponse.json()).toMatchObject({
+      total_commission: 20.05,
+      total_deduction: 0,
+      pending_payment: 12.55,
+      available_balance: 7.5,
+      pending_request_count: 1,
+    });
+    const [ownerBalanceSummaryResponse, staffBalanceSummaryResponse] = await Promise.all([
+      api.ownerClient.get("/api/balances/summary"),
+      api.staffClient.get("/api/balances/summary"),
+    ]);
+    expect(ownerBalanceSummaryResponse.status()).toBe(200);
+    expect(staffBalanceSummaryResponse.status()).toBe(200);
 
     expect(customerResponse.status()).toBe(200);
     expect(await customerResponse.json()).toMatchObject({
@@ -1323,6 +1340,11 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
     const forbiddenCommentModerationResponse = await api.cargoClient.get("/api/comments/moderation-summary");
     expect(forbiddenCommentModerationResponse.status()).toBe(403);
     expect(await forbiddenCommentModerationResponse.json()).toMatchObject({
+      error: { code: "forbidden" },
+    });
+    const forbiddenBalanceSummaryResponse = await api.cargoClient.get("/api/balances/summary");
+    expect(forbiddenBalanceSummaryResponse.status()).toBe(403);
+    expect(await forbiddenBalanceSummaryResponse.json()).toMatchObject({
       error: { code: "forbidden" },
     });
     const forbiddenOrphanCleanupDryRunResponse = await api.cargoClient.post("/api/files/fil_orphan/orphan-cleanup-dry-run", {

@@ -42,6 +42,7 @@ import {
 import { createAuthClient, type LoginResponse } from "../api/auth-client.js";
 import {
   createDomainClient,
+  type BalanceSummary as BackendBalanceSummary,
   type CommentModerationSummary as BackendCommentModerationSummary,
   type ConversationSummary,
   type CustomerSummary,
@@ -72,6 +73,7 @@ interface DashboardData {
   providerCatalog: ProviderCatalogItem[];
   providerAttempts: ProviderAttemptViewModel[];
   fileOrphans: FileMetadata[];
+  balanceSummary: BackendBalanceSummary;
   commentModeration: BackendCommentModerationSummary;
   webphone: WebphoneConfig | null;
 }
@@ -311,21 +313,13 @@ function inventoryCategoryLabel(category: string | null) {
   }
 }
 
-function balanceSummaryFromOrders(orders: OrderSummary[]): BalanceSummary {
-  const payableOrders = orders.filter((order) => !["cancelled", "returned"].includes(order.status));
-  const pendingOrders = payableOrders.filter((order) => order.confirmation_status === null);
-  const cancelledOrders = orders.filter((order) => ["cancelled", "returned"].includes(order.status));
-  const totalCommission = payableOrders.reduce((sum, order) => sum + moneyValue(order.total_amount) * 0.1, 0);
-  const totalDeduction = cancelledOrders.reduce((sum, order) => sum + moneyValue(order.total_amount) * 0.1, 0);
-  const pendingPayment = pendingOrders.reduce((sum, order) => sum + moneyValue(order.total_amount) * 0.1, 0);
-  return {
-    totalCommission,
-    totalDeduction,
-    pendingPayment,
-    availableBalance: Math.max(totalCommission - totalDeduction - pendingPayment, 0),
-    pendingRequestCount: pendingOrders.length,
-  };
-}
+const defaultBalanceSummary: BackendBalanceSummary = {
+  total_commission: 0,
+  total_deduction: 0,
+  pending_payment: 0,
+  available_balance: 0,
+  pending_request_count: 0,
+};
 
 const defaultCommentModerationSummary: BackendCommentModerationSummary = {
   manual_queue: 0,
@@ -342,6 +336,16 @@ function toCommentModerationView(summary: BackendCommentModerationSummary): Comm
     answered: summary.answered,
     instagram: summary.instagram,
     facebook: summary.facebook,
+  };
+}
+
+function toBalanceView(summary: BackendBalanceSummary): BalanceSummary {
+  return {
+    totalCommission: summary.total_commission,
+    totalDeduction: summary.total_deduction,
+    pendingPayment: summary.pending_payment,
+    availableBalance: summary.available_balance,
+    pendingRequestCount: summary.pending_request_count,
   };
 }
 
@@ -429,6 +433,7 @@ export function App() {
     providerCatalog: [],
     providerAttempts: [],
     fileOrphans: [],
+    balanceSummary: defaultBalanceSummary,
     commentModeration: defaultCommentModerationSummary,
     webphone: null,
   });
@@ -580,10 +585,12 @@ export function App() {
     setStatus("Backend API akışları yükleniyor");
     const canReadCustomers = user?.role === "admin" || user?.role === "owner" || user?.role === "calisan";
     const canReadComments = user?.role === "admin" || user?.role === "owner" || user?.role === "calisan";
-    const [conversations, customers, commentModeration, orders, products, shipments, settings, webphoneConfig] = await Promise.all([
+    const canReadBalances = user?.role === "admin" || user?.role === "owner" || user?.role === "calisan";
+    const [conversations, customers, commentModeration, balanceSummary, orders, products, shipments, settings, webphoneConfig] = await Promise.all([
       domain.listConversations({ limit: 20 }),
       canReadCustomers ? domain.listCustomers(50) : Promise.resolve({ data: [] }),
       canReadComments ? domain.getCommentModerationSummary() : Promise.resolve(defaultCommentModerationSummary),
+      canReadBalances ? domain.getBalanceSummary() : Promise.resolve(defaultBalanceSummary),
       domain.listOrders(20),
       domain.listProducts(50),
       domain.listShipments(20),
@@ -619,6 +626,7 @@ export function App() {
       providerCatalog: providerCatalog.data,
       providerAttempts: providerAttempts.data.map(toProviderAttemptViewModel),
       fileOrphans: fileOrphans.data,
+      balanceSummary,
       commentModeration,
       webphone: webphoneConfig,
     });
@@ -663,6 +671,7 @@ export function App() {
         providerCatalog: [],
         providerAttempts: [],
         fileOrphans: [],
+        balanceSummary: defaultBalanceSummary,
         commentModeration: defaultCommentModerationSummary,
         webphone: null,
       });
@@ -1217,7 +1226,7 @@ export function App() {
   const smsRecipientCount = data.shipments.filter((shipment) => Boolean(shipment.recipient_phone)).length;
   const orderCurrency = data.orders[0]?.currency ?? "TRY";
   const reportTotalAmount = data.orders.reduce((sum, order) => sum + moneyValue(order.total_amount), 0);
-  const balanceSummary = balanceSummaryFromOrders(data.orders);
+  const balanceSummary = toBalanceView(data.balanceSummary);
   const commentSummary = toCommentModerationView(data.commentModeration);
   const unreadConversationCount = data.conversations.reduce((sum, conversation) => sum + conversation.unread_count, 0);
   const poolConversationCount = data.conversations.filter((conversation) => conversation.is_in_pool).length;

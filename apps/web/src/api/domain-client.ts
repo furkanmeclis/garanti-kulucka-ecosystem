@@ -112,6 +112,14 @@ export interface CommentModerationSummary {
   facebook: number;
 }
 
+export interface BalanceSummary {
+  total_commission: number;
+  total_deduction: number;
+  pending_payment: number;
+  available_balance: number;
+  pending_request_count: number;
+}
+
 export function createDomainClient(http: BackendHttpClient) {
   return {
     listConversations: (params: { channel?: string; status?: string; limit?: number } = {}) => {
@@ -173,6 +181,8 @@ export function createDomainClient(http: BackendHttpClient) {
       const query = search.toString();
       return http.request<{ data: OrderSummary[] }>(`/api/orders${query ? `?${query}` : ""}`);
     },
+    getBalanceSummary: () =>
+      http.request<BalanceSummary>("/api/balances/summary"),
     listProducts: (limit = 50) =>
       http.request<{ data: ProductSummary[] }>(`/api/products?limit=${limit}`),
     createOrder: (input: {

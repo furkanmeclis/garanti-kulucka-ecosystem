@@ -220,6 +220,21 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       return;
     }
 
+    if (url.pathname === "/api/balances/summary") {
+      expect(["admin", "calisan"].includes(currentUser.role)).toBe(true);
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          total_commission: 99.99,
+          total_deduction: 10.25,
+          pending_payment: 12.55,
+          available_balance: 77.19,
+          pending_request_count: 1,
+        }),
+      });
+      return;
+    }
+
     if (url.pathname === "/api/conversations") {
       conversationQueryUrls.push(`${url.pathname}${url.search}`);
       const conversations = [
@@ -1844,7 +1859,10 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("balances-detail")).toContainText("125.50 TRY");
     await expect(page.getByTestId("balances-detail")).toContainText("ORD-PLAYWRIGHT");
     await expect(page.getByTestId("balance-payment-detail")).toContainText("Ödeme İsteği Kuyruğu");
+    await expect(page.getByTestId("balance-payment-detail")).toContainText("99.99 TRY");
+    await expect(page.getByTestId("balance-payment-detail")).toContainText("10.25 TRY");
     await expect(page.getByTestId("balance-payment-detail")).toContainText("12.55 TRY");
+    await expect(page.getByTestId("balance-payment-detail")).toContainText("77.19 TRY");
     await expect(page.getByTestId("balance-payment-detail")).toContainText("1 talep");
     await expect(page.getByTestId("balance-payment-detail")).toContainText("Kullanılabilir bakiye");
     await page.getByRole("button", { name: "Ödeme isteği oluştur" }).click();
@@ -2262,6 +2280,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       "/auth/presence",
       "/api/conversations",
       "/api/comments/moderation-summary",
+      "/api/balances/summary",
       "/api/customers",
       "/api/conversations/cnv_playwright/messages",
       "/api/conversations/cnv_playwright/state",

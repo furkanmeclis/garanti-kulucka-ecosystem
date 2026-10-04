@@ -424,6 +424,26 @@
         }
       }
     },
+    "/api/balances/summary": {
+      "get": {
+        "operationId": "getBalanceSummary",
+        "responses": {
+          "200": {
+            "description": "Backend-owned balance summary",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BalanceSummary"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/api/shipments": {
       "get": {
         "operationId": "listShipments",
@@ -1517,6 +1537,32 @@
             "minimum": 0
           },
           "facebook": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "BalanceSummary": {
+        "type": "object",
+        "required": ["total_commission", "total_deduction", "pending_payment", "available_balance", "pending_request_count"],
+        "properties": {
+          "total_commission": {
+            "type": "number",
+            "minimum": 0
+          },
+          "total_deduction": {
+            "type": "number",
+            "minimum": 0
+          },
+          "pending_payment": {
+            "type": "number",
+            "minimum": 0
+          },
+          "available_balance": {
+            "type": "number",
+            "minimum": 0
+          },
+          "pending_request_count": {
             "type": "integer",
             "minimum": 0
           }

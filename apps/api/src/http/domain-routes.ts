@@ -80,6 +80,10 @@ function canReadCommentModeration(role: string | undefined) {
   return role === "admin" || role === "owner" || role === "calisan";
 }
 
+function canReadBalanceSummary(role: string | undefined) {
+  return role === "admin" || role === "owner" || role === "calisan";
+}
+
 function canSendSms(role: string | undefined) {
   return role === "admin" || role === "owner" || role === "calisan" || role === "kargo_operatoru";
 }
@@ -323,6 +327,20 @@ export function createDomainRoutes() {
       ...(confirmationStatus ? { confirmationStatus } : {}),
     });
     return context.json({ data: orders.map(serializeOrder) });
+  });
+
+  routes.get("/balances/summary", async (context) => {
+    if (!canReadBalanceSummary(context.get("auth")?.role)) {
+      return context.json({ error: { code: "forbidden", message: "Balance summary access is not allowed" } }, 403);
+    }
+
+    const db = context.get("db");
+    if (!db) {
+      return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
+    }
+
+    const summary = await new DomainRepository(db).getBalanceSummary();
+    return context.json(summary);
   });
 
   routes.get("/products", async (context) => {

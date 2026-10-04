@@ -102,11 +102,28 @@ export interface PaymentRequestRecord {
   replayed: boolean;
 }
 
+export interface BalanceSummaryRecord {
+  total_commission: number;
+  total_deduction: number;
+  pending_payment: number;
+  available_balance: number;
+  pending_request_count: number;
+}
+
 export interface UpdateShipmentStatusInput {
   shipmentPublicId: string;
   status: string;
   lastEventText: string | null;
   rawPayload: unknown | null;
+}
+
+function moneyCents(value: string) {
+  const [whole = "0", fraction = ""] = value.split(".");
+  return Number(whole) * 100 + Number(fraction.padEnd(2, "0").slice(0, 2));
+}
+
+function centsToMoney(cents: number) {
+  return Math.round(cents) / 100;
 }
 
 export class DomainRepository {
@@ -311,6 +328,23 @@ export class DomainRepository {
       .orderBy("orders.created_at", "desc")
       .limit(filter.limit)
       .execute();
+  }
+
+  async getBalanceSummary(): Promise<BalanceSummaryRecord> {
+    const orders = await this.listOrders({ limit: 200 });
+    const payableOrders = orders.filter((order) => !["cancelled", "returned"].includes(order.status));
+    const pendingOrders = payableOrders.filter((order) => order.confirmation_status === null);
+    const cancelledOrders = orders.filter((order) => ["cancelled", "returned"].includes(order.status));
+    const totalCommissionCents = payableOrders.reduce((sum, order) => sum + moneyCents(order.total_amount) * 0.1, 0);
+    const totalDeductionCents = cancelledOrders.reduce((sum, order) => sum + moneyCents(order.total_amount) * 0.1, 0);
+    const pendingPaymentCents = pendingOrders.reduce((sum, order) => sum + moneyCents(order.total_amount) * 0.1, 0);
+    return {
+      total_commission: centsToMoney(totalCommissionCents),
+      total_deduction: centsToMoney(totalDeductionCents),
+      pending_payment: centsToMoney(pendingPaymentCents),
+      available_balance: centsToMoney(Math.max(totalCommissionCents - totalDeductionCents - pendingPaymentCents, 0)),
+      pending_request_count: pendingOrders.length,
+    };
   }
 
   async listProducts(limit: number): Promise<ProductRecord[]> {
