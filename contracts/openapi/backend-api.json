@@ -838,6 +838,44 @@
           }
         }
       }
+    },
+    "/admin/integrations/provider-cron-triggers/{provider_key}": {
+      "post": {
+        "operationId": "triggerProviderCronDebug",
+        "parameters": [
+          {
+            "name": "provider_key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": ["ptt", "surat"]
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProviderCronTriggerRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Fixture-safe provider cron trigger attempt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderAttempt"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1111,6 +1149,88 @@
             "$ref": "#/components/schemas/DataEnvelope"
           }
         ]
+      },
+      "ProviderCronTriggerRequest": {
+        "type": "object",
+        "required": ["idempotency_key"],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "ProviderAttempt": {
+        "type": "object",
+        "required": [
+          "public_id",
+          "provider_key",
+          "request_id",
+          "operation",
+          "direction",
+          "status",
+          "duration_ms",
+          "retry_decision",
+          "started_at",
+          "updated_at"
+        ],
+        "properties": {
+          "public_id": {
+            "type": "string"
+          },
+          "provider_key": {
+            "type": "string"
+          },
+          "account_public_id": {
+            "type": ["string", "null"]
+          },
+          "request_id": {
+            "type": "string"
+          },
+          "operation": {
+            "type": "string"
+          },
+          "direction": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "status_code": {
+            "type": ["integer", "null"]
+          },
+          "duration_ms": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "retry_decision": {
+            "type": "string"
+          },
+          "next_retry_at": {
+            "type": ["string", "null"],
+            "format": "date-time"
+          },
+          "idempotency_key": {
+            "type": ["string", "null"]
+          },
+          "request_metadata": {},
+          "provider_request_preview": {},
+          "response_metadata": {},
+          "error_code": {
+            "type": ["string", "null"]
+          },
+          "error_message": {
+            "type": ["string", "null"]
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
       },
       "Conversation": {
         "type": "object",

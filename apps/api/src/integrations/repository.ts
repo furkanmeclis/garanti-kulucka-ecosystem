@@ -64,6 +64,35 @@ export interface ListProviderAttemptsInput {
   limit: number;
 }
 
+export interface CreateProviderCronTriggerInput {
+  providerKey: "ptt" | "surat";
+  idempotencyKey: string;
+  requestId: string;
+}
+
+function assertProviderCronTriggerAttemptMatches(
+  attempt: Selectable<ProviderAttemptsTable>,
+  input: CreateProviderCronTriggerInput,
+) {
+  const metadata = attempt.request_metadata as {
+    source?: unknown;
+    dry_run_request?: {
+      body?: {
+        provider_key?: unknown;
+      };
+    };
+  };
+  if (
+    attempt.operation !== "shipment.track" ||
+    attempt.direction !== "outbound" ||
+    attempt.request_id !== input.requestId ||
+    metadata.source !== "admin.cron_debug" ||
+    metadata.dry_run_request?.body?.provider_key !== input.providerKey
+  ) {
+    throw new Error(`Provider cron trigger idempotency key reuse mismatch: ${input.idempotencyKey}`);
+  }
+}
+
 export class IntegrationsRepository {
   constructor(
     private readonly db: AppDatabase,
@@ -114,6 +143,99 @@ export class IntegrationsRepository {
     }
 
     return query.execute();
+  }
+
+  async createProviderCronTriggerAttempt(input: CreateProviderCronTriggerInput): Promise<ProviderAttemptRecord> {
+    return this.db.transaction().execute(async (transaction) => {
+      const provider = await transaction
+        .selectFrom("integration_providers")
+        .selectAll()
+        .where("key", "=", input.providerKey)
+        .where("is_active", "=", true)
+        .executeTakeFirst();
+
+      if (!provider) {
+        throw new Error(`Unknown integration provider: ${input.providerKey}`);
+      }
+
+      const existingAttempt = await transaction
+        .selectFrom("provider_attempts")
+        .selectAll()
+        .where("provider_id", "=", provider.id)
+        .where("idempotency_key", "=", input.idempotencyKey)
+        .executeTakeFirst();
+
+      if (existingAttempt) {
+        assertProviderCronTriggerAttemptMatches(existingAttempt, input);
+        return { ...existingAttempt, provider_key: provider.key, account_public_id: null };
+      }
+
+      const startedAt = new Date();
+      const attempt = await transaction
+        .insertInto("provider_attempts")
+        .values({
+          public_id: newPublicId("pat"),
+          provider_id: provider.id,
+          account_id: null,
+          request_id: input.requestId,
+          operation: "shipment.track",
+          direction: "outbound",
+          status: "success",
+          status_code: 202,
+          duration_ms: 0,
+          retry_decision: "none",
+          next_retry_at: null,
+          idempotency_key: input.idempotencyKey,
+          request_metadata: {
+            source: "admin.cron_debug",
+            live_call_permitted: false,
+            dry_run_request: {
+              method: "POST",
+              path: input.providerKey === "ptt" ? "/api/ptt/cron-debug" : "/api/surat/cron-debug",
+              headers: {
+                authorization: "[redacted]",
+                "content-type": "application/json",
+              },
+              body: {
+                action: "cron-takip-guncelle",
+                provider_key: input.providerKey,
+              },
+              live_call_performed: false,
+            },
+          },
+          response_metadata: {
+            mode: "dry_run",
+            queued: false,
+            live_call_permitted: false,
+          },
+          error_code: null,
+          error_message: null,
+          started_at: startedAt,
+        })
+        .onConflict((oc) =>
+          oc.columns(["provider_id", "idempotency_key"]).where("idempotency_key", "is not", null).doNothing(),
+        )
+        .returningAll()
+        .executeTakeFirst();
+
+      if (attempt) {
+        return { ...attempt, provider_key: provider.key, account_public_id: null };
+      }
+
+      const replayedAttempt = await transaction
+        .selectFrom("provider_attempts")
+        .selectAll()
+        .where("provider_id", "=", provider.id)
+        .where("idempotency_key", "=", input.idempotencyKey)
+        .executeTakeFirst();
+
+      if (!replayedAttempt) {
+        throw new Error(`Provider cron trigger idempotency conflict could not be replayed: ${input.idempotencyKey}`);
+      }
+
+      assertProviderCronTriggerAttemptMatches(replayedAttempt, input);
+      return { ...replayedAttempt, provider_key: provider.key, account_public_id: null };
+    });
   }
 
   async getAccountSnapshot(accountPublicId: string): Promise<IntegrationAccountSnapshot | null> {

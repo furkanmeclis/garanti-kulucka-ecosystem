@@ -41,6 +41,7 @@ const expectedOperations = new Map<string, string[]>([
   ["/admin/integrations/accounts/{account_public_id}/settings/{key}", ["put"]],
   ["/admin/integrations/accounts/{account_public_id}/tokens/{token_type}", ["put"]],
   ["/admin/integrations/provider-attempts", ["get"]],
+  ["/admin/integrations/provider-cron-triggers/{provider_key}", ["post"]],
 ]);
 
 describe("backend OpenAPI contract", () => {
@@ -73,6 +74,8 @@ describe("backend OpenAPI contract", () => {
         "WebphoneConfig",
         "Setting",
         "IntegrationAccountSnapshot",
+        "ProviderAttempt",
+        "ProviderCronTriggerRequest",
       ]),
     );
   });

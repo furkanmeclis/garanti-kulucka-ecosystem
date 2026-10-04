@@ -215,6 +215,14 @@ export function createAdminClient(http: BackendHttpClient) {
       http.request<{ data: ProviderAttempt[] }>(
         `/admin/integrations/provider-attempts${providerAttemptQuery(options)}`,
       ),
+    triggerProviderCronDebug: (providerKey: "ptt" | "surat", input: { idempotency_key: string }) =>
+      http.request<ProviderAttempt>(
+        `/admin/integrations/provider-cron-triggers/${encodeURIComponent(providerKey)}`,
+        {
+          method: "POST",
+          body: input,
+        },
+      ),
     getIntegrationAccount: (accountPublicId: string) =>
       http.request<IntegrationAccountSnapshot>(
         `/admin/integrations/accounts/${encodeURIComponent(accountPublicId)}`,

@@ -257,6 +257,56 @@ describe("web API client boundary", () => {
     });
   });
 
+  it("maps provider cron debug triggers to fixture-safe backend routes", async () => {
+    const requests: Request[] = [];
+    const client = createApiClient("http://localhost:3000", {
+      fetchImpl: async (input, init) => {
+        requests.push(new Request(input, init));
+        return Response.json({
+          public_id: "pat_ptt_cron",
+          provider_key: "ptt",
+          account_public_id: null,
+          request_id: "cron_ptt_cron_debug_ptt_manual",
+          operation: "shipment.track",
+          direction: "outbound",
+          status: "success",
+          status_code: 202,
+          duration_ms: 0,
+          retry_decision: "none",
+          next_retry_at: null,
+          idempotency_key: "cron_debug_ptt_manual",
+          request_metadata: {},
+          provider_request_preview: {
+            method: "POST",
+            path: "/api/ptt/cron-debug",
+            headers: { authorization: "[redacted]" },
+            body: { action: "cron-takip-guncelle" },
+            live_call_performed: false,
+          },
+          response_metadata: { live_call_permitted: false },
+          error_code: null,
+          error_message: null,
+          started_at: "2026-01-01T00:00:00.000Z",
+          updated_at: "2026-01-01T00:00:00.000Z",
+        });
+      },
+    });
+
+    await expect(
+      client.admin.triggerProviderCronDebug("ptt", { idempotency_key: "cron_debug_ptt_manual" }),
+    ).resolves.toMatchObject({
+      provider_key: "ptt",
+      provider_request_preview: {
+        live_call_performed: false,
+      },
+    });
+    expect(requests[0]?.method).toBe("POST");
+    expect(requests[0]?.url).toBe("http://localhost:3000/admin/integrations/provider-cron-triggers/ptt");
+    await expect(requests[0]?.json()).resolves.toEqual({
+      idempotency_key: "cron_debug_ptt_manual",
+    });
+  });
+
   it("normalizes provider request previews for admin view models", () => {
     const attempt = {
       public_id: "pat_ptt",

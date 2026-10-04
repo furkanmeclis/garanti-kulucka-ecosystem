@@ -34,6 +34,14 @@ const upsertTokenSchema = z.object({
   expires_at: z.string().datetime().nullable().default(null),
 });
 
+const providerCronTriggerSchema = z.object({
+  idempotency_key: z.string().min(1),
+});
+
+function cronTriggerRequestId(providerKey: string, idempotencyKey: string) {
+  return `cron_${providerKey}_${idempotencyKey.replace(/[^a-zA-Z0-9_-]+/g, "_").toLowerCase()}`;
+}
+
 export function createIntegrationRoutes() {
   const routes = new Hono<AppBindings>();
 
@@ -88,6 +96,39 @@ export function createIntegrationRoutes() {
     });
 
     return context.json({ data: attempts.map(serializeProviderAttempt) });
+  });
+
+  routes.post("/provider-cron-triggers/:provider_key", async (context) => {
+    const providerKey = context.req.param("provider_key");
+    if (providerKey !== "ptt" && providerKey !== "surat") {
+      return context.json({ error: { code: "unsupported_provider", message: "Cron debug trigger supports ptt and surat only" } }, 400);
+    }
+
+    const payload = providerCronTriggerSchema.safeParse(await context.req.json());
+    if (!payload.success) {
+      return context.json({ error: { code: "invalid_request", message: "Invalid provider cron trigger payload" } }, 400);
+    }
+
+    const db = context.get("db");
+    if (!db) {
+      return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
+    }
+
+    let attempt;
+    try {
+      attempt = await new IntegrationsRepository(db, context.get("encryptor")).createProviderCronTriggerAttempt({
+        providerKey,
+        idempotencyKey: payload.data.idempotency_key,
+        requestId: cronTriggerRequestId(providerKey, payload.data.idempotency_key),
+      });
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("idempotency key reuse mismatch")) {
+        return context.json({ error: { code: "idempotency_conflict", message: "Provider cron trigger key was reused with different payload" } }, 409);
+      }
+      throw error;
+    }
+
+    return context.json(serializeProviderAttempt(attempt), 202);
   });
 
   routes.get("/accounts/:account_public_id", async (context) => {

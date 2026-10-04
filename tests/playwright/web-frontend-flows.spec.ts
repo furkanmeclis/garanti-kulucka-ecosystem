@@ -84,6 +84,10 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     currency?: string;
     idempotency_key?: string;
   } | null = null;
+  let cronTriggerPayload: {
+    provider?: string;
+    idempotency_key?: string;
+  } | null = null;
   let suratShipmentStatus = "in_transit";
   let suratShipmentLastEvent = "Selected shipment at branch";
 
@@ -1145,7 +1149,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
               request_id: "req_ptt_cron_debug",
               operation: "shipment.track",
               direction: "outbound",
-              status: "succeeded",
+              status: "success",
               status_code: 200,
               duration_ms: 870,
               retry_decision: "none",
@@ -1176,6 +1180,62 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
               updated_at: "2026-01-01T00:00:05.000Z",
             },
           ],
+        }),
+      });
+      return;
+    }
+
+    if (url.pathname === "/admin/integrations/provider-cron-triggers/ptt") {
+      expect(currentUser.role).toBe("admin");
+      expect(route.request().method()).toBe("POST");
+      const payload = JSON.parse(route.request().postData() ?? "{}") as {
+        idempotency_key?: string;
+      };
+      cronTriggerPayload = {
+        provider: "ptt",
+        idempotency_key: payload.idempotency_key,
+      };
+      await route.fulfill({
+        status: 202,
+        contentType: "application/json",
+        body: JSON.stringify({
+          public_id: "pat_ptt_cron_manual",
+          provider_key: "ptt",
+          account_public_id: null,
+          request_id: "cron_ptt_cron_debug_ptt_manual",
+          operation: "shipment.track",
+          direction: "outbound",
+          status: "success",
+          status_code: 202,
+          duration_ms: 0,
+          retry_decision: "none",
+          next_retry_at: null,
+          idempotency_key: payload.idempotency_key,
+          request_metadata: {
+            live_call_permitted: false,
+          },
+          provider_request_preview: {
+            method: "POST",
+            path: "/api/ptt/cron-debug",
+            headers: {
+              authorization: "[redacted]",
+              "content-type": "application/json",
+            },
+            body: {
+              action: "cron-takip-guncelle",
+              provider_key: "ptt",
+            },
+            live_call_performed: false,
+          },
+          response_metadata: {
+            mode: "dry_run",
+            queued: false,
+            live_call_permitted: false,
+          },
+          error_code: null,
+          error_message: null,
+          started_at: "2026-01-01T00:00:06.000Z",
+          updated_at: "2026-01-01T00:00:06.000Z",
         }),
       });
       return;
@@ -1867,7 +1927,14 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("cron-debug-detail")).toContainText("providers.surat.live_mode");
     await expect(page.getByTestId("cron-debug-detail")).toContainText("cron-takip-guncelle canlı çağrı yok");
     await expect(page.getByTestId("cron-debug-detail")).toContainText("fixture_replay_contract_required");
-    await expect(page.getByTestId("cron-debug-actions")).toContainText("Cron tetikleme canlı gate kapalı");
+    await expect(page.getByTestId("cron-debug-actions")).toContainText("PTT cron dry-run tetikle");
+    await page.getByRole("button", { name: "PTT cron dry-run tetikle" }).click();
+    expect(cronTriggerPayload).toEqual({
+      provider: "ptt",
+      idempotency_key: "cron_debug_ptt_manual",
+    });
+    await expect(page.getByTestId("cron-debug-flow")).toContainText("PTT / cron_ptt_cron_debug_ptt_manual");
+    await expect(page.getByTestId("cron-debug-detail")).toContainText("2 güncellendi");
     await expect(page.getByTestId("cron-debug-flow")).toContainText("PTT / req_ptt_cron_debug");
     await expect(page.getByTestId("cron-debug-flow")).toContainText("SURAT / req_surat_debug");
     await page.getByRole("link", { name: /^sms$/i }).click();

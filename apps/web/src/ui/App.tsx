@@ -436,6 +436,7 @@ export function App() {
   const [lastSmsSend, setLastSmsSend] = useState<string | null>(null);
   const [lastPaymentRequest, setLastPaymentRequest] = useState<string | null>(null);
   const [paymentRequesting, setPaymentRequesting] = useState(false);
+  const [cronTriggeringProvider, setCronTriggeringProvider] = useState<"ptt" | "surat" | null>(null);
   const [activeSmsTemplateVariable, setActiveSmsTemplateVariable] = useState<SmsTemplateVariable>("{musteri_adi}");
   const [presenceUpdating, setPresenceUpdating] = useState(false);
   const [integrationSnapshot, setIntegrationSnapshot] = useState<IntegrationAccountSnapshot | null>(null);
@@ -880,6 +881,28 @@ export function App() {
     }
   }
 
+  async function handleTriggerProviderCron(providerKey: "ptt" | "surat") {
+    if (cronTriggeringProvider) return;
+
+    setStatus(`${providerKey.toUpperCase()} cron debug backend API üzerinden hazırlanıyor`);
+    setCronTriggeringProvider(providerKey);
+    try {
+      const attempt = await admin.triggerProviderCronDebug(providerKey, {
+        idempotency_key: `cron_debug_${providerKey}_manual`,
+      });
+      setData((current) => ({
+        ...current,
+        providerAttempts: [
+          toProviderAttemptViewModel(attempt),
+          ...current.providerAttempts.filter((item) => item.public_id !== attempt.public_id),
+        ],
+      }));
+      setStatus(`${providerKey.toUpperCase()} cron debug canlı provider kapalıyken kaydedildi`);
+    } finally {
+      setCronTriggeringProvider(null);
+    }
+  }
+
   async function handleSendSms() {
     const shipment = selectedShipment;
     if (!shipment?.recipient_phone) return;
@@ -1162,12 +1185,12 @@ export function App() {
       (attempt.provider_key === "ptt" || attempt.provider_key === "surat") &&
       attempt.operation === "shipment.track",
   );
-  const cronUpdatedCount = trackingCronAttempts.filter((attempt) => attempt.status === "succeeded").length;
+  const cronUpdatedCount = trackingCronAttempts.filter((attempt) => attempt.status === "success" || attempt.status === "succeeded").length;
   const cronErrorCount = trackingCronAttempts.filter((attempt) => attempt.status === "failed").length;
   const cronTotalDuration = trackingCronAttempts.reduce((sum, attempt) => sum + attempt.duration_ms, 0);
   const suratRetryCount = suratProviderAttempts.filter((attempt) => attempt.retry_decision === "retry").length;
   const suratFailureCount = suratProviderAttempts.filter((attempt) => attempt.status === "failed").length;
-  const suratSuccessCount = suratProviderAttempts.filter((attempt) => attempt.status === "succeeded").length;
+  const suratSuccessCount = suratProviderAttempts.filter((attempt) => attempt.status === "success" || attempt.status === "succeeded").length;
   const suratAverageDuration = suratProviderAttempts.length > 0
     ? Math.round(suratProviderAttempts.reduce((sum, attempt) => sum + attempt.duration_ms, 0) / suratProviderAttempts.length)
     : 0;
@@ -1705,11 +1728,21 @@ export function App() {
               <Metric title="Toplam Süre" value={`${cronTotalDuration}ms`} />
             </div>
             <div className="detail-actions" data-testid="cron-debug-actions">
-              <button className="secondary-action" type="button">
-                Cron tetikleme canlı gate kapalı
+              <button
+                className="secondary-action"
+                type="button"
+                disabled={cronTriggeringProvider !== null}
+                onClick={() => void handleTriggerProviderCron("ptt")}
+              >
+                {cronTriggeringProvider === "ptt" ? "PTT dry-run hazırlanıyor" : "PTT cron dry-run tetikle"}
               </button>
-              <button className="secondary-action" type="button">
-                Otomatik yenileme Socket.IO sonrası
+              <button
+                className="secondary-action"
+                type="button"
+                disabled={cronTriggeringProvider !== null}
+                onClick={() => void handleTriggerProviderCron("surat")}
+              >
+                {cronTriggeringProvider === "surat" ? "Sürat dry-run hazırlanıyor" : "Sürat cron dry-run tetikle"}
               </button>
             </div>
             <DetailPanel title="PTT + Sürat Cron Akışı" testId="cron-debug-detail">

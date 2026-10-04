@@ -199,6 +199,24 @@ const shipments = [
 
 const integrationProviders = [
   {
+    id: 398,
+    public_id: "prv_ptt",
+    key: "ptt",
+    name: "PTT Kargo",
+    is_active: true,
+    created_at: date,
+    updated_at: date,
+  },
+  {
+    id: 399,
+    public_id: "prv_surat",
+    key: "surat",
+    name: "Sürat Kargo",
+    is_active: true,
+    created_at: date,
+    updated_at: date,
+  },
+  {
     id: 400,
     public_id: "prv_kolaybi",
     key: "kolaybi",
@@ -916,6 +934,33 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
       error: { code: "idempotency_conflict" },
     });
 
+    const cronTriggerResponse = await api.client.post("/admin/integrations/provider-cron-triggers/ptt", {
+      data: {
+        idempotency_key: "cron_debug_ptt_playwright",
+      },
+    });
+    expect(cronTriggerResponse.status()).toBe(202);
+    await expect(cronTriggerResponse.json()).resolves.toMatchObject({
+      provider_key: "ptt",
+      request_id: "cron_ptt_cron_debug_ptt_playwright",
+      operation: "shipment.track",
+      direction: "outbound",
+      status: "success",
+      retry_decision: "none",
+      idempotency_key: "cron_debug_ptt_playwright",
+      provider_request_preview: {
+        method: "POST",
+        path: "/api/ptt/cron-debug",
+        live_call_performed: false,
+      },
+      response_metadata: {
+        mode: "dry_run",
+        queued: false,
+        live_call_permitted: false,
+      },
+    });
+    expect(providerAttempts.filter((attempt) => attempt.idempotency_key === "cron_debug_ptt_playwright")).toHaveLength(1);
+
     const smsResponse = await api.client.post("/api/sms/send", {
       data: {
         recipient_phone: "5550000000",
@@ -1050,6 +1095,12 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
       },
     });
     expect(forbiddenPaymentRequestResponse.status()).toBe(403);
+    const forbiddenCronTriggerResponse = await api.cargoClient.post("/admin/integrations/provider-cron-triggers/ptt", {
+      data: {
+        idempotency_key: "cron_debug_ptt_forbidden",
+      },
+    });
+    expect(forbiddenCronTriggerResponse.status()).toBe(403);
 
     expect(settingsResponse.status()).toBe(200);
     const settingsBody = await settingsResponse.json();
