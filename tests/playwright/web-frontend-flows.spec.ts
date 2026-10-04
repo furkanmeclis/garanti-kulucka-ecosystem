@@ -66,6 +66,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
   let conversationInPool = true;
   let conversationHumanAgent = false;
   let conversationAssignedUserEmail: string | null = null;
+  let conversationOrderCreated = false;
 
   await page.addInitScript(`
     (() => {
@@ -333,17 +334,27 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
 
     if (url.pathname === "/api/orders") {
       if (route.request().method() === "POST") {
+        const payload = JSON.parse(route.request().postData() ?? "{}") as {
+          conversation_public_id?: string | null;
+          order_number?: string;
+          notes?: string | null;
+        };
+        if (payload.order_number === "ORD-WEB-CHAT") {
+          expect(payload.conversation_public_id).toBe("cnv_playwright");
+          expect(payload.notes).toBe("Frontend conversation order smoke");
+          conversationOrderCreated = true;
+        }
         await route.fulfill({
           contentType: "application/json",
           body: JSON.stringify({
-            public_id: "ord_web_new",
-            order_number: "ORD-WEB-NEW",
+            public_id: payload.order_number === "ORD-WEB-CHAT" ? "ord_web_chat" : "ord_web_new",
+            order_number: payload.order_number ?? "ORD-WEB-NEW",
             status: "draft",
             source: "manual",
             total_amount: "250.00",
             currency: "TRY",
             confirmation_status: null,
-            notes: "Frontend backend create smoke",
+            notes: payload.notes ?? "Frontend backend create smoke",
             customer_full_name: "Playwright Customer",
             created_at: "2026-01-01T00:02:00.000Z",
             updated_at: "2026-01-01T00:02:00.000Z",
@@ -1268,6 +1279,11 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       page.getByRole("button", { name: /havuzdan al/i }).click(),
     ]);
     await expect(page.getByTestId("conversation-detail")).toContainText("admin@example.com");
+    await Promise.all([
+      page.waitForResponse(`${backendBaseUrl}/api/orders`),
+      page.getByRole("button", { name: /konuşmadan sipariş aç/i }).click(),
+    ]);
+    expect(conversationOrderCreated).toBe(true);
     await expect.poll(async () =>
       page.evaluate(() => window.__GARANTI_REALTIME_TEST__?.emitted ?? []),
     ).toEqual(

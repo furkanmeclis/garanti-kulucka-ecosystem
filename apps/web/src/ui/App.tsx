@@ -704,17 +704,17 @@ export function App() {
     setStatus("Konuşma detayı backend API üzerinden yüklendi");
   }
 
-  async function handleCreateOrder() {
+  async function handleCreateOrder(source: "orders" | "conversation" = "orders") {
     setStatus("Sipariş backend API üzerinden oluşturuluyor");
     const order = await domain.createOrder({
       customer_public_id: null,
       conversation_public_id: selectedConversation?.public_id ?? data.conversations[0]?.public_id ?? null,
-      order_number: "ORD-WEB-NEW",
+      order_number: source === "conversation" ? "ORD-WEB-CHAT" : "ORD-WEB-NEW",
       status: "draft",
       source: "manual",
       total_amount: "250.00",
       currency: "TRY",
-      notes: "Frontend backend create smoke",
+      notes: source === "conversation" ? "Frontend conversation order smoke" : "Frontend backend create smoke",
     });
     setData((current) => ({
       ...current,
@@ -1183,6 +1183,13 @@ export function App() {
                         {selectedConversation.is_in_pool ? "Havuzdan al" : "Havuza bırak"}
                       </button>
                     </div>
+                    <button
+                      className="primary-action"
+                      type="button"
+                      onClick={() => void handleCreateOrder("conversation")}
+                    >
+                      Konuşmadan sipariş aç
+                    </button>
                   </DetailPanel>
                 )}
                 {data.messages.map((message) => (
@@ -1222,7 +1229,7 @@ export function App() {
                 Teslim {deliveredOrderCount}
               </button>
             </div>
-            <button className="primary-action" type="button" onClick={handleCreateOrder}>
+            <button className="primary-action" type="button" onClick={() => void handleCreateOrder("orders")}>
               Sipariş oluştur
             </button>
             <DataRows rows={data.orders.map((order) => [order.order_number, order.status, `${order.total_amount} ${order.currency}`])} />
