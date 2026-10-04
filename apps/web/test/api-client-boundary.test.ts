@@ -608,4 +608,60 @@ describe("web API client boundary", () => {
 
     expect(requests[0]?.url).toBe("http://localhost:3000/api/webphone/config");
   });
+
+  it("maps VAPI test calls to fixture-safe webphone backend routes", async () => {
+    const requests: Request[] = [];
+    const client = createApiClient("http://localhost:3000", {
+      fetchImpl: async (input, init) => {
+        requests.push(new Request(input, init));
+        return Response.json({
+          public_id: "pat_vapi_test",
+          provider_key: "vapi",
+          account_public_id: null,
+          request_id: "vapitest_vapi_test_05051234567",
+          operation: "call.test",
+          direction: "outbound",
+          status: "success",
+          status_code: 202,
+          duration_ms: 0,
+          retry_decision: "none",
+          next_retry_at: null,
+          idempotency_key: "vapi_test_05051234567",
+          request_metadata: {},
+          provider_request_preview: {
+            method: "POST",
+            path: "/vapi/calls",
+            headers: { authorization: "[redacted]" },
+            body: { customer_phone: "05051234567" },
+            live_call_performed: false,
+          },
+          response_metadata: { mode: "dry_run", queued: false, live_call_permitted: false },
+          error_code: null,
+          error_message: null,
+          started_at: "2026-01-01T00:00:00.000Z",
+          updated_at: "2026-01-01T00:00:00.000Z",
+        });
+      },
+    });
+
+    await client.webphone.createTestCall({
+      customer_name: "Test Müşteri",
+      customer_phone: "05051234567",
+      cargo_provider: "PTT",
+      tracking_number: "TRK-PLAYWRIGHT",
+      last_event_text: "Accepted at branch",
+      idempotency_key: "vapi_test_05051234567",
+    });
+
+    expect(requests[0]?.method).toBe("POST");
+    expect(requests[0]?.url).toBe("http://localhost:3000/api/webphone/test-call");
+    await expect(requests[0]?.json()).resolves.toEqual({
+      customer_name: "Test Müşteri",
+      customer_phone: "05051234567",
+      cargo_provider: "PTT",
+      tracking_number: "TRK-PLAYWRIGHT",
+      last_event_text: "Accepted at branch",
+      idempotency_key: "vapi_test_05051234567",
+    });
+  });
 });

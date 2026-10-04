@@ -575,6 +575,36 @@
         }
       }
     },
+    "/api/webphone/test-call": {
+      "post": {
+        "operationId": "createWebphoneTestCall",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WebphoneTestCallRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Fixture-safe VAPI test call dry-run provider attempt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderAttempt"
+                }
+              }
+            }
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/admin/settings": {
       "get": {
         "operationId": "listSettings",
@@ -1202,6 +1232,40 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 2200
+          },
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "WebphoneTestCallRequest": {
+        "type": "object",
+        "required": ["customer_phone", "idempotency_key"],
+        "properties": {
+          "customer_name": {
+            "type": "string",
+            "minLength": 1,
+            "default": "Test Müşteri"
+          },
+          "customer_phone": {
+            "type": "string",
+            "minLength": 1
+          },
+          "cargo_provider": {
+            "type": "string",
+            "minLength": 1,
+            "default": "PTT"
+          },
+          "tracking_number": {
+            "type": "string",
+            "minLength": 1,
+            "default": "279172790012"
+          },
+          "last_event_text": {
+            "type": "string",
+            "minLength": 1,
+            "default": "şubede bekliyor"
           },
           "idempotency_key": {
             "type": "string",

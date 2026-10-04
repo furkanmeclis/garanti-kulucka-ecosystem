@@ -94,6 +94,14 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     caption?: string;
     idempotency_key?: string;
   } | null = null;
+  let vapiTestCallPayload: {
+    customer_name?: string;
+    customer_phone?: string;
+    cargo_provider?: string;
+    tracking_number?: string;
+    last_event_text?: string;
+    idempotency_key?: string;
+  } | null = null;
   let suratShipmentStatus = "in_transit";
   let suratShipmentLastEvent = "Selected shipment at branch";
 
@@ -1398,6 +1406,56 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       return;
     }
 
+    if (url.pathname === "/api/webphone/test-call") {
+      expect(currentUser.role).toBe("admin");
+      vapiTestCallPayload = JSON.parse(route.request().postData() ?? "{}") as {
+        customer_name?: string;
+        customer_phone?: string;
+        cargo_provider?: string;
+        tracking_number?: string;
+        last_event_text?: string;
+        idempotency_key?: string;
+      };
+      await route.fulfill({
+        status: 202,
+        contentType: "application/json",
+        body: JSON.stringify({
+          public_id: "pat_vapi_test_manual",
+          provider_key: "vapi",
+          account_public_id: null,
+          request_id: "vapitest_vapi_test_05051234567",
+          operation: "call.test",
+          direction: "outbound",
+          status: "success",
+          status_code: 202,
+          duration_ms: 0,
+          retry_decision: "none",
+          next_retry_at: null,
+          idempotency_key: vapiTestCallPayload.idempotency_key,
+          request_metadata: {},
+          provider_request_preview: {
+            method: "POST",
+            path: "/vapi/calls",
+            headers: { authorization: "[redacted]", "content-type": "application/json" },
+            body: {
+              customer_name: vapiTestCallPayload.customer_name,
+              customer_phone: vapiTestCallPayload.customer_phone,
+              cargo_provider: vapiTestCallPayload.cargo_provider,
+              tracking_number: vapiTestCallPayload.tracking_number,
+              last_event_text: vapiTestCallPayload.last_event_text,
+            },
+            live_call_performed: false,
+          },
+          response_metadata: { mode: "dry_run", queued: false, live_call_permitted: false },
+          error_code: null,
+          error_message: null,
+          started_at: "2026-01-01T00:00:00.000Z",
+          updated_at: "2026-01-01T00:00:00.000Z",
+        }),
+      });
+      return;
+    }
+
     if (url.pathname === "/api/sms/send") {
       smsSendPayload = JSON.parse(route.request().postData() ?? "{}") as {
         recipient_phone?: string;
@@ -1784,6 +1842,17 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("vapi-detail")).toContainText("sip.example.com");
     await expect(page.getByTestId("vapi-detail")).toContainText("1001");
     await expect(page.getByTestId("vapi-detail")).toContainText("AI model ayarı tanımlı değil");
+    await expect(page.getByTestId("vapi-test-call-detail")).toContainText("Hızlı Test Araması");
+    await page.getByRole("button", { name: "VAPI test araması hazırla" }).click();
+    expect(vapiTestCallPayload).toMatchObject({
+      customer_name: "Test Müşteri",
+      customer_phone: "05051234567",
+      cargo_provider: "PTT",
+      tracking_number: "TRK-PLAYWRIGHT",
+      last_event_text: "Accepted at branch",
+      idempotency_key: "vapi_test_05051234567",
+    });
+    await expect(page.getByTestId("vapi-test-call-detail")).toContainText("call.test vapitest_vapi_test_05051234567");
     await page.goto(`${app.url}/raporlar`);
     await expect(page.getByTestId("reports-flow")).toContainText("200.50 TRY");
     await expect(page.getByTestId("reports-detail")).toContainText("Açık konuşma");
@@ -2155,6 +2224,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       "/presigned/uploads/kanit.txt",
       "/presigned/downloads/kanit.txt",
       "/api/webphone/config",
+      "/api/webphone/test-call",
     ]),
   );
   expect(allRequestUrls.some((url) => /supabase|storage\/v1/i.test(url))).toBe(false);

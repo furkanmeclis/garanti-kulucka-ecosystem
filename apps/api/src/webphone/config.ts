@@ -1,5 +1,6 @@
-import type { AppDatabase, UsersTable } from "@garanti-kulucka/database";
+import type { AppDatabase, ProviderAttemptsTable, UsersTable } from "@garanti-kulucka/database";
 import type { Selectable } from "kysely";
+import { newPublicId } from "../auth/crypto.js";
 import type { SecretEncryptor } from "../security/encryption.js";
 
 export interface WebphoneConfigRecord {
@@ -17,6 +18,21 @@ export interface SerializedWebphoneConfig {
   media_proxy_enabled: false;
   transport: "direct_sip_over_webrtc";
 }
+
+export interface CreateWebphoneTestCallInput {
+  customerName: string;
+  customerPhone: string;
+  cargoProvider: string;
+  trackingNumber: string;
+  lastEventText: string;
+  idempotencyKey: string;
+  requestId: string;
+}
+
+export type WebphoneProviderAttemptRecord = Selectable<ProviderAttemptsTable> & {
+  provider_key: string;
+  account_public_id: string | null;
+};
 
 const webphoneSettingKeys = [
   "webphone.enabled",
@@ -65,6 +81,101 @@ export class WebphoneConfigRepository {
     const decrypted = this.encryptor.decryptJson(JSON.parse(encryptedValue));
     return typeof decrypted === "string" ? decrypted : null;
   }
+
+  async createTestCallAttempt(input: CreateWebphoneTestCallInput): Promise<WebphoneProviderAttemptRecord> {
+    return this.db.transaction().execute(async (transaction) => {
+      const provider = await transaction
+        .selectFrom("integration_providers")
+        .selectAll()
+        .where("key", "=", "vapi")
+        .where("is_active", "=", true)
+        .executeTakeFirst();
+
+      if (!provider) {
+        throw new Error("Unknown integration provider: vapi");
+      }
+
+      const existingAttempt = await transaction
+        .selectFrom("provider_attempts")
+        .selectAll()
+        .where("provider_id", "=", provider.id)
+        .where("idempotency_key", "=", input.idempotencyKey)
+        .executeTakeFirst();
+
+      if (existingAttempt) {
+        assertWebphoneTestCallAttemptMatches(existingAttempt, input);
+        return { ...existingAttempt, provider_key: provider.key, account_public_id: null };
+      }
+
+      const attempt = await transaction
+        .insertInto("provider_attempts")
+        .values({
+          public_id: newPublicId("pat"),
+          provider_id: provider.id,
+          account_id: null,
+          request_id: input.requestId,
+          operation: "call.test",
+          direction: "outbound",
+          status: "success",
+          status_code: 202,
+          duration_ms: 0,
+          retry_decision: "none",
+          next_retry_at: null,
+          idempotency_key: input.idempotencyKey,
+          request_metadata: {
+            source: "webphone.vapi_test_call",
+            live_call_permitted: false,
+            dry_run_request: {
+              method: "POST",
+              path: "/vapi/calls",
+              headers: {
+                authorization: "[redacted]",
+                "content-type": "application/json",
+              },
+              body: {
+                customer_name: input.customerName,
+                customer_phone: input.customerPhone,
+                cargo_provider: input.cargoProvider,
+                tracking_number: input.trackingNumber,
+                last_event_text: input.lastEventText,
+              },
+              live_call_performed: false,
+            },
+          },
+          response_metadata: {
+            mode: "dry_run",
+            queued: false,
+            live_call_permitted: false,
+          },
+          error_code: null,
+          error_message: null,
+          started_at: new Date(),
+        })
+        .onConflict((oc) =>
+          oc.columns(["provider_id", "idempotency_key"]).where("idempotency_key", "is not", null).doNothing(),
+        )
+        .returningAll()
+        .executeTakeFirst();
+
+      if (attempt) {
+        return { ...attempt, provider_key: provider.key, account_public_id: null };
+      }
+
+      const replayedAttempt = await transaction
+        .selectFrom("provider_attempts")
+        .selectAll()
+        .where("provider_id", "=", provider.id)
+        .where("idempotency_key", "=", input.idempotencyKey)
+        .executeTakeFirst();
+
+      if (!replayedAttempt) {
+        throw new Error(`Webphone test call idempotency conflict could not be replayed: ${input.idempotencyKey}`);
+      }
+
+      assertWebphoneTestCallAttemptMatches(replayedAttempt, input);
+      return { ...replayedAttempt, provider_key: provider.key, account_public_id: null };
+    });
+  }
 }
 
 export function serializeWebphoneConfig(
@@ -88,4 +199,35 @@ export function serializeWebphoneConfig(
 
 function stringOrNull(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function assertWebphoneTestCallAttemptMatches(
+  attempt: Selectable<ProviderAttemptsTable>,
+  input: CreateWebphoneTestCallInput,
+) {
+  const metadata = attempt.request_metadata as {
+    source?: unknown;
+    dry_run_request?: {
+      body?: {
+        customer_name?: unknown;
+        customer_phone?: unknown;
+        cargo_provider?: unknown;
+        tracking_number?: unknown;
+        last_event_text?: unknown;
+      };
+    };
+  };
+  if (
+    attempt.operation !== "call.test" ||
+    attempt.direction !== "outbound" ||
+    attempt.request_id !== input.requestId ||
+    metadata.source !== "webphone.vapi_test_call" ||
+    metadata.dry_run_request?.body?.customer_name !== input.customerName ||
+    metadata.dry_run_request?.body?.customer_phone !== input.customerPhone ||
+    metadata.dry_run_request?.body?.cargo_provider !== input.cargoProvider ||
+    metadata.dry_run_request?.body?.tracking_number !== input.trackingNumber ||
+    metadata.dry_run_request?.body?.last_event_text !== input.lastEventText
+  ) {
+    throw new Error(`Webphone test call idempotency key reuse mismatch: ${input.idempotencyKey}`);
+  }
 }

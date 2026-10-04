@@ -436,8 +436,12 @@ export function App() {
   const [lastSmsSend, setLastSmsSend] = useState<string | null>(null);
   const [lastPaymentRequest, setLastPaymentRequest] = useState<string | null>(null);
   const [lastInstagramPublishPreview, setLastInstagramPublishPreview] = useState<string | null>(null);
+  const [lastVapiTestCall, setLastVapiTestCall] = useState<string | null>(null);
   const [paymentRequesting, setPaymentRequesting] = useState(false);
   const [instagramPublishPreviewing, setInstagramPublishPreviewing] = useState(false);
+  const [vapiTestCalling, setVapiTestCalling] = useState(false);
+  const [vapiTestCustomerName, setVapiTestCustomerName] = useState("Test Müşteri");
+  const [vapiTestPhone, setVapiTestPhone] = useState("05051234567");
   const [cronTriggeringProvider, setCronTriggeringProvider] = useState<"ptt" | "surat" | null>(null);
   const [activeSmsTemplateVariable, setActiveSmsTemplateVariable] = useState<SmsTemplateVariable>("{musteri_adi}");
   const [presenceUpdating, setPresenceUpdating] = useState(false);
@@ -1069,6 +1073,34 @@ export function App() {
       setStatus("Instagram yayın önizlemesi canlı provider kapalıyken kaydedildi");
     } finally {
       setInstagramPublishPreviewing(false);
+    }
+  }
+
+  async function handleCreateVapiTestCall() {
+    if (vapiTestCalling || !vapiTestPhone.trim()) return;
+
+    setStatus("VAPI test araması backend dry-run üzerinden hazırlanıyor");
+    setVapiTestCalling(true);
+    try {
+      const attempt = await webphone.createTestCall({
+        customer_name: vapiTestCustomerName.trim() || "Test Müşteri",
+        customer_phone: vapiTestPhone.trim(),
+        cargo_provider: "PTT",
+        tracking_number: selectedShipment?.tracking_number ?? "279172790012",
+        last_event_text: selectedShipment?.last_event_text ?? "şubede bekliyor",
+        idempotency_key: `vapi_test_${vapiTestPhone.trim().replace(/[^0-9a-zA-Z_-]+/g, "_")}`,
+      });
+      setData((current) => ({
+        ...current,
+        providerAttempts: [
+          toProviderAttemptViewModel(attempt),
+          ...current.providerAttempts.filter((item) => item.public_id !== attempt.public_id),
+        ],
+      }));
+      setLastVapiTestCall(`${attempt.operation} ${attempt.request_id}`);
+      setStatus("VAPI test araması canlı çağrı kapalıyken kaydedildi");
+    } finally {
+      setVapiTestCalling(false);
     }
   }
 
@@ -2349,6 +2381,37 @@ export function App() {
                   ["SIP domain", data.webphone?.sip_domain ?? "-", data.webphone?.transport ?? "-"],
                   ["Kullanıcı", data.webphone?.sip_username ?? user?.sip_username ?? "-", "webphone API"],
                   ["Model ayarı", activeSettings.find((setting) => setting.key.includes("ai"))?.key ?? "AI model ayarı tanımlı değil", "settings API"],
+                ]}
+              />
+            </DetailPanel>
+            <DetailPanel title="Hızlı Test Araması" testId="vapi-test-call-detail">
+              <div className="detail-actions">
+                <input
+                  aria-label="VAPI test müşteri adı"
+                  className="inline-input"
+                  value={vapiTestCustomerName}
+                  onChange={(event) => setVapiTestCustomerName(event.currentTarget.value)}
+                />
+                <input
+                  aria-label="VAPI test telefon"
+                  className="inline-input"
+                  value={vapiTestPhone}
+                  onChange={(event) => setVapiTestPhone(event.currentTarget.value)}
+                />
+                <button
+                  className="primary-action"
+                  type="button"
+                  disabled={vapiTestCalling || !vapiTestPhone.trim()}
+                  onClick={() => void handleCreateVapiTestCall()}
+                >
+                  {vapiTestCalling ? "Test araması hazırlanıyor" : "VAPI test araması hazırla"}
+                </button>
+              </div>
+              <DataRows
+                rows={[
+                  ["Senaryo", "PTT / şubede bekliyor", selectedShipment?.tracking_number ?? "279172790012"],
+                  ["Son backend isteği", lastVapiTestCall ?? "-", "provider attempt dry-run"],
+                  ["Canlı çağrı", "kapalı", "fixture replay gerekli"],
                 ]}
               />
             </DetailPanel>

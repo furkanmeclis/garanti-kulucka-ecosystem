@@ -234,6 +234,15 @@ const integrationProviders = [
     created_at: date,
     updated_at: date,
   },
+  {
+    id: 402,
+    public_id: "prv_vapi",
+    key: "vapi",
+    name: "Vapi",
+    is_active: true,
+    created_at: date,
+    updated_at: date,
+  },
 ];
 
 const providerAttempts: Array<Record<string, unknown>> = [];
@@ -1055,6 +1064,71 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
       error: { code: "idempotency_conflict" },
     });
 
+    const vapiTestCallResponse = await api.client.post("/api/webphone/test-call", {
+      data: {
+        customer_name: "Playwright Customer",
+        customer_phone: "05051234567",
+        cargo_provider: "PTT",
+        tracking_number: "TRK-PLAYWRIGHT",
+        last_event_text: "Accepted at branch",
+        idempotency_key: "vapi_test_playwright",
+      },
+    });
+    expect(vapiTestCallResponse.status()).toBe(202);
+    const vapiTestCallPayload = await vapiTestCallResponse.json();
+    expect(vapiTestCallPayload).toMatchObject({
+      provider_key: "vapi",
+      account_public_id: null,
+      request_id: "vapitest_vapi_test_playwright",
+      operation: "call.test",
+      direction: "outbound",
+      status: "success",
+      retry_decision: "none",
+      idempotency_key: "vapi_test_playwright",
+      provider_request_preview: {
+        method: "POST",
+        path: "/vapi/calls",
+        live_call_performed: false,
+      },
+      response_metadata: {
+        mode: "dry_run",
+        queued: false,
+        live_call_permitted: false,
+      },
+    });
+    expect(JSON.stringify(vapiTestCallPayload)).toContain("[redacted]");
+    expect(providerAttempts.filter((attempt) => attempt.idempotency_key === "vapi_test_playwright")).toHaveLength(1);
+    const repeatedVapiTestCallResponse = await api.client.post("/api/webphone/test-call", {
+      data: {
+        customer_name: "Playwright Customer",
+        customer_phone: "05051234567",
+        cargo_provider: "PTT",
+        tracking_number: "TRK-PLAYWRIGHT",
+        last_event_text: "Accepted at branch",
+        idempotency_key: "vapi_test_playwright",
+      },
+    });
+    expect(repeatedVapiTestCallResponse.status()).toBe(202);
+    await expect(repeatedVapiTestCallResponse.json()).resolves.toMatchObject({
+      public_id: vapiTestCallPayload.public_id,
+      request_id: "vapitest_vapi_test_playwright",
+    });
+    expect(providerAttempts.filter((attempt) => attempt.idempotency_key === "vapi_test_playwright")).toHaveLength(1);
+    const mismatchedVapiTestCallResponse = await api.client.post("/api/webphone/test-call", {
+      data: {
+        customer_name: "Changed Customer",
+        customer_phone: "05051234567",
+        cargo_provider: "PTT",
+        tracking_number: "TRK-PLAYWRIGHT",
+        last_event_text: "Accepted at branch",
+        idempotency_key: "vapi_test_playwright",
+      },
+    });
+    expect(mismatchedVapiTestCallResponse.status()).toBe(409);
+    await expect(mismatchedVapiTestCallResponse.json()).resolves.toMatchObject({
+      error: { code: "idempotency_conflict" },
+    });
+
     const smsResponse = await api.client.post("/api/sms/send", {
       data: {
         recipient_phone: "5550000000",
@@ -1170,6 +1244,11 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
           live_block_reason: "fixture_replay_contract_required",
         }),
         expect.objectContaining({
+          provider: "vapi",
+          supported_operations: ["call.webhook"],
+          live_call_permitted: false,
+        }),
+        expect.objectContaining({
           provider: "sip",
           supported_operations: ["sip.config.sync"],
           live_call_permitted: false,
@@ -1204,6 +1283,14 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
       },
     });
     expect(forbiddenInstagramPublishResponse.status()).toBe(403);
+    const forbiddenVapiTestCallResponse = await api.cargoClient.post("/api/webphone/test-call", {
+      data: {
+        customer_name: "Cargo User",
+        customer_phone: "05051234567",
+        idempotency_key: "vapi_test_forbidden",
+      },
+    });
+    expect(forbiddenVapiTestCallResponse.status()).toBe(403);
 
     expect(settingsResponse.status()).toBe(200);
     const settingsBody = await settingsResponse.json();
