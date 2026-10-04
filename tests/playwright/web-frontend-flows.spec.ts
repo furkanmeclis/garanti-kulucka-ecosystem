@@ -2350,6 +2350,8 @@ async function assertLegacyVisualFrame(
       return { ok: true, reason: "ok" };
     }, route.testId);
 
-    expect(frame, `${viewport} ${route.path} visual frame`).toMatchObject({ ok: true });
+    if (!frame.ok) {
+      throw new Error(`${viewport} ${route.path} visual frame: ${JSON.stringify(frame)}`);
+    }
   }
 }

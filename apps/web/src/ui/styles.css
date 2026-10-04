@@ -151,6 +151,7 @@ nav {
 .workspace {
   display: grid;
   gap: 18px;
+  min-width: 0;
   padding: 22px;
 }
 
@@ -171,7 +172,14 @@ nav {
 .flow-panel {
   display: grid;
   gap: 18px;
+  min-width: 0;
+  min-height: 120px;
+  max-width: 100%;
   padding: 22px;
+}
+
+.flow-panel > * {
+  min-width: 0;
 }
 
 .flow-panel h1 {
@@ -334,6 +342,8 @@ nav {
 .integration-detail {
   display: grid;
   gap: 14px;
+  min-width: 0;
+  max-width: 100%;
   border: 1px solid #334155;
   border-radius: 8px;
   padding: 16px;
@@ -475,6 +485,28 @@ nav {
   .topbar {
     grid-template-columns: 1fr;
     padding: 12px;
+  }
+
+  .workspace {
+    gap: 14px;
+    padding: 14px;
+  }
+
+  .flow-panel {
+    gap: 14px;
+    padding: 14px;
+  }
+
+  .detail-panel,
+  .integration-detail {
+    padding: 12px;
+  }
+
+  .inline-input,
+  .primary-action,
+  .secondary-action {
+    width: 100%;
+    min-width: 0;
   }
 
   .split-grid,
