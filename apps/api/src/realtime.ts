@@ -19,6 +19,13 @@ export interface RealtimePublisher {
   broadcast: (envelope: RealtimeEnvelope) => void;
 }
 
+export const noopRealtimePublisher: RealtimePublisher = {
+  publish: () => undefined,
+  publishToUser: () => undefined,
+  publishToConversation: () => undefined,
+  broadcast: () => undefined,
+};
+
 export interface RealtimeHandle {
   io: Server;
   publisher: RealtimePublisher;

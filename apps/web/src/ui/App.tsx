@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import {
   ArrowLeft,
@@ -300,6 +300,8 @@ export function App() {
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [selectedShipmentId, setSelectedShipmentId] = useState<string | null>(null);
+  const [realtimeClient, setRealtimeClient] = useState<RealtimeClient | null>(null);
+  const selectedConversationIdRef = useRef<string | null>(null);
 
   const http = useMemo(
     () =>
@@ -315,16 +317,67 @@ export function App() {
   const files = useMemo(() => createFileClient(http), [http]);
   const webphone = useMemo(() => createWebphoneClient(http), [http]);
 
+  const refreshConversations = useCallback(async () => {
+    const conversations = await domain.listConversations({ limit: 20 });
+    setData((current) => ({
+      ...current,
+      conversations: conversations.data,
+    }));
+  }, [domain]);
+
+  const refreshMessages = useCallback(async (conversationPublicId: string) => {
+    const messages = await domain.listMessages(conversationPublicId, 50);
+    setData((current) => ({
+      ...current,
+      messages: selectedConversationIdRef.current === conversationPublicId ? messages.data : current.messages,
+    }));
+  }, [domain]);
+
   useEffect(() => {
-    let realtime: RealtimeClient | null = null;
-    if (token) {
-      realtime = createRealtimeClient({
-        baseUrl: backendBaseUrl,
-        getAccessToken: () => token,
-      });
+    selectedConversationIdRef.current = selectedConversationId;
+  }, [selectedConversationId]);
+
+  useEffect(() => {
+    if (!token || !authChecked || !user) {
+      setRealtimeClient(null);
+      return;
     }
-    return () => realtime?.disconnect();
-  }, [token]);
+
+    const realtime = createRealtimeClient({
+      baseUrl: backendBaseUrl,
+      getAccessToken: () => readStoredToken(),
+    });
+    const offMessageCreated = realtime.on("message.created", (envelope) => {
+      const conversationPublicId = String(envelope.payload.conversation_public_id ?? "");
+      if (!conversationPublicId) return;
+
+      void (async () => {
+        await refreshConversations();
+        if (selectedConversationIdRef.current === conversationPublicId) {
+          await refreshMessages(conversationPublicId);
+          setStatus("Yeni mesaj Socket.IO üzerinden alındı");
+        } else {
+          setStatus("Yeni konuşma bildirimi Socket.IO üzerinden alındı");
+        }
+      })();
+    });
+
+    realtime.connect();
+    setRealtimeClient(realtime);
+
+    return () => {
+      offMessageCreated();
+      realtime.disconnect();
+      setRealtimeClient((current) => (current === realtime ? null : current));
+    };
+  }, [authChecked, refreshConversations, refreshMessages, token, user]);
+
+  useEffect(() => {
+    if (!realtimeClient || !selectedConversationId) return;
+
+    realtimeClient.joinConversation(selectedConversationId);
+    return () => realtimeClient.leaveConversation(selectedConversationId);
+  }, [realtimeClient, selectedConversationId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -476,19 +529,20 @@ export function App() {
     });
     setData((current) => ({
       ...current,
-      messages: [...current.messages, message],
+      messages: [
+        ...current.messages.filter((item) => item.public_id !== message.public_id),
+        message,
+      ],
     }));
+    await refreshConversations();
     setStatus("Mesaj backend API üzerinden gönderildi");
   }
 
   async function handleSelectConversation(conversationPublicId: string) {
+    selectedConversationIdRef.current = conversationPublicId;
     setSelectedConversationId(conversationPublicId);
     setStatus("Konuşma mesajları backend API üzerinden yükleniyor");
-    const messages = await domain.listMessages(conversationPublicId, 50);
-    setData((current) => ({
-      ...current,
-      messages: messages.data,
-    }));
+    await refreshMessages(conversationPublicId);
     setStatus("Konuşma detayı backend API üzerinden yüklendi");
   }
 

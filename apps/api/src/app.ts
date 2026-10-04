@@ -14,6 +14,7 @@ import { createSettingsRoutes } from "./http/settings-routes.js";
 import { createWebhookRoutes } from "./http/webhook-routes.js";
 import { createWebphoneRoutes } from "./http/webphone-routes.js";
 import type { AppBindings } from "./http/types.js";
+import { noopRealtimePublisher, type RealtimePublisher } from "./realtime.js";
 import { createSecretEncryptor, type SecretEncryptor } from "./security/encryption.js";
 import type { WebhookQueuePublisher } from "./webhooks/queue-publisher.js";
 
@@ -24,6 +25,7 @@ export interface CreateAppOptions {
   db?: AppDatabase | null;
   encryptor?: SecretEncryptor;
   webhookQueuePublisher?: WebhookQueuePublisher;
+  realtimePublisher?: RealtimePublisher;
 }
 
 export function createApp(options: CreateAppOptions = {}) {
@@ -50,6 +52,7 @@ export function createApp(options: CreateAppOptions = {}) {
     context.set("encryptor", encryptor);
     context.set("auth", null);
     context.set("actorUserId", null);
+    context.set("realtimePublisher", options.realtimePublisher ?? noopRealtimePublisher);
     await next();
   });
 

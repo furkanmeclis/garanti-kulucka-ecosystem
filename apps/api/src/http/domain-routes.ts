@@ -114,6 +114,19 @@ export function createDomainRoutes() {
       externalMessageId: payload.data.external_message_id,
       rawPayload: payload.data.raw_payload,
     });
+    const messageCreatedEnvelope = {
+      event: "message.created",
+      id: `evt_${message.public_id}`,
+      occurred_at: new Date().toISOString(),
+      payload: {
+        message_public_id: message.public_id,
+        conversation_public_id: context.req.param("conversation_public_id"),
+        sender_type: message.sender_type,
+      },
+    } as const;
+    const realtimePublisher = context.get("realtimePublisher");
+    realtimePublisher.publishToConversation(context.req.param("conversation_public_id"), messageCreatedEnvelope);
+    realtimePublisher.broadcast(messageCreatedEnvelope);
 
     return context.json(serializeMessage(message), 201);
   });

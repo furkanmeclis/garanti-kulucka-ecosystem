@@ -13,6 +13,12 @@ export interface RealtimeClientOptions {
   socketFactory?: typeof io;
 }
 
+declare global {
+  interface Window {
+    __GARANTI_REALTIME_SOCKET_FACTORY__?: typeof io;
+  }
+}
+
 export interface RealtimeClient {
   socket: Socket;
   connect: () => void;
@@ -24,7 +30,10 @@ export interface RealtimeClient {
 
 export function createRealtimeClient(options: RealtimeClientOptions): RealtimeClient {
   assertBackendBaseUrl(options.baseUrl);
-  const socketFactory = options.socketFactory ?? io;
+  const socketFactory =
+    options.socketFactory ??
+    (typeof window !== "undefined" ? window.__GARANTI_REALTIME_SOCKET_FACTORY__ : undefined) ??
+    io;
   const socket = socketFactory(options.baseUrl, {
     autoConnect: false,
     auth: () => ({

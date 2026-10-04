@@ -6,6 +6,7 @@ import { createApp } from "../../apps/api/src/app.js";
 import type { ApiConfig } from "../../apps/api/src/config.js";
 import { signAccessToken } from "../../apps/api/src/auth/tokens.js";
 import type { SecretEncryptor } from "../../apps/api/src/security/encryption.js";
+import type { RealtimeEnvelope, RealtimeRoom } from "../../packages/shared/src/index.js";
 
 const date = new Date("2026-01-01T00:00:00.000Z");
 
@@ -308,12 +309,81 @@ class FixtureQuery {
   }
 }
 
+class FixtureInsert {
+  private row: Record<string, unknown> = {};
+
+  constructor(private readonly table: string) {}
+
+  values(row: Record<string, unknown>) {
+    this.row = row;
+    return this;
+  }
+
+  returningAll() {
+    return this;
+  }
+
+  async executeTakeFirstOrThrow() {
+    if (this.table !== "messages") {
+      throw new Error(`Unsupported fixture insert: ${this.table}`);
+    }
+
+    const message = {
+      id: messages.length + 301,
+      public_id: String(this.row.public_id),
+      conversation_id: Number(this.row.conversation_id),
+      sender_type: String(this.row.sender_type),
+      sender_name: this.row.sender_name as string | null,
+      body: this.row.body as string | null,
+      external_message_id: this.row.external_message_id as string | null,
+      is_read: Boolean(this.row.is_read),
+      sent_at: this.row.sent_at as Date,
+      raw_payload: this.row.raw_payload,
+      created_at: date,
+    };
+    messages.push(message);
+    return message;
+  }
+}
+
+class FixtureUpdate {
+  constructor(private readonly table: string) {}
+
+  set() {
+    return this;
+  }
+
+  where() {
+    return this;
+  }
+
+  async execute() {
+    if (this.table !== "conversations") {
+      throw new Error(`Unsupported fixture update: ${this.table}`);
+    }
+    return [];
+  }
+}
+
 function createFixtureDatabase(): AppDatabase {
-  return {
+  const fixtureDatabase = {
     selectFrom(table: string) {
       return new FixtureQuery(table);
     },
-  } as unknown as AppDatabase;
+    insertInto(table: string) {
+      return new FixtureInsert(table);
+    },
+    updateTable(table: string) {
+      return new FixtureUpdate(table);
+    },
+    transaction() {
+      return {
+        execute: async <T>(callback: (transaction: typeof fixtureDatabase) => Promise<T>) =>
+          callback(fixtureDatabase),
+      };
+    },
+  };
+  return fixtureDatabase as unknown as AppDatabase;
 }
 
 const encryptor: SecretEncryptor = {
@@ -342,8 +412,21 @@ async function startFixtureApi() {
     },
     config,
   );
+  const publishedRealtime: Array<{ room: RealtimeRoom; envelope: RealtimeEnvelope }> = [];
   const server = serve({
-    fetch: createApp({ config, db: createFixtureDatabase(), encryptor }).fetch,
+    fetch: createApp({
+      config,
+      db: createFixtureDatabase(),
+      encryptor,
+      realtimePublisher: {
+        publish: (room, envelope) => publishedRealtime.push({ room, envelope }),
+        publishToUser: (userPublicId, envelope) =>
+          publishedRealtime.push({ room: `user:${userPublicId}` as RealtimeRoom, envelope }),
+        publishToConversation: (conversationPublicId, envelope) =>
+          publishedRealtime.push({ room: `conversation:${conversationPublicId}` as RealtimeRoom, envelope }),
+        broadcast: (envelope) => publishedRealtime.push({ room: "broadcast", envelope }),
+      },
+    }).fetch,
     port: 0,
   });
   const address = server.address() as AddressInfo;
@@ -366,6 +449,7 @@ async function startFixtureApi() {
   return {
     client,
     cargoClient,
+    publishedRealtime,
     async close() {
       await client.dispose();
       await cargoClient.dispose();
@@ -446,6 +530,39 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
         },
       ],
     });
+
+    const createdMessageResponse = await api.client.post(
+      `/api/conversations/${conversation.public_id}/messages`,
+      {
+        data: {
+          sender_type: "user",
+          sender_name: "admin@example.com",
+          body: "Realtime kaniti",
+          external_message_id: null,
+          raw_payload: null,
+        },
+      },
+    );
+    expect(createdMessageResponse.status()).toBe(201);
+    const createdMessage = await createdMessageResponse.json();
+    const expectedMessageEnvelope = expect.objectContaining({
+      event: "message.created",
+      payload: {
+        message_public_id: createdMessage.public_id,
+        conversation_public_id: conversation.public_id,
+        sender_type: "user",
+      },
+    });
+    expect(api.publishedRealtime).toEqual([
+      {
+        room: `conversation:${conversation.public_id}`,
+        envelope: expectedMessageEnvelope,
+      },
+      {
+        room: "broadcast",
+        envelope: expectedMessageEnvelope,
+      },
+    ]);
 
     expect(orderResponse.status()).toBe(200);
     expect(await orderResponse.json()).toMatchObject({

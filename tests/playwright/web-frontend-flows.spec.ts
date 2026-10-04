@@ -14,6 +14,15 @@ interface PlaywrightUser {
   sip_username: string;
 }
 
+declare global {
+  interface Window {
+    __GARANTI_REALTIME_TEST__?: {
+      emitted: Array<{ event: string; payload: unknown }>;
+      emitServer: (event: string, payload: unknown) => void;
+    };
+  }
+}
+
 async function startWebApp() {
   const server = await createServer({
     root: "apps/web",
@@ -49,6 +58,58 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
   let savedIntegrationSetting = false;
   let savedNetgsmSetting = false;
   let savedSipConfig = false;
+  let realtimeMessageDelivered = false;
+  let facebookRealtimeDelivered = false;
+
+  await page.addInitScript(`
+    (() => {
+      const emitted = [];
+      const sockets = [];
+      window.__GARANTI_REALTIME_TEST__ = {
+        emitted,
+        emitServer(event, payload) {
+          for (const socket of sockets) {
+            const listeners = socket.listeners.get(event) ?? [];
+            for (const listener of listeners) listener(payload);
+          }
+        },
+      };
+      window.__GARANTI_REALTIME_SOCKET_FACTORY__ = (_url, _options) => {
+        const socket = {
+          listeners: new Map(),
+          connect() {
+            emitted.push({ event: "connect", payload: null });
+            return socket;
+          },
+          disconnect() {
+            emitted.push({ event: "disconnect", payload: null });
+            return socket;
+          },
+          on(event, listener) {
+            const listeners = socket.listeners.get(event) ?? [];
+            listeners.push(listener);
+            socket.listeners.set(event, listeners);
+            return socket;
+          },
+          off(event, listener) {
+            if (!listener) {
+              socket.listeners.delete(event);
+              return socket;
+            }
+            const listeners = socket.listeners.get(event) ?? [];
+            socket.listeners.set(event, listeners.filter((item) => item !== listener));
+            return socket;
+          },
+          emit(event, payload) {
+            emitted.push({ event, payload });
+            return socket;
+          },
+        };
+        sockets.push(socket);
+        return socket;
+      };
+    })();
+  `);
 
   await page.route(`${backendBaseUrl}/**`, async (route) => {
     const url = new URL(route.request().url());
@@ -100,13 +161,13 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
               status: "open",
               is_in_pool: true,
               human_agent_enabled: false,
-              unread_count: 2,
-              last_message_text: "Merhaba",
+              unread_count: realtimeMessageDelivered ? 3 : 2,
+              last_message_text: realtimeMessageDelivered ? "Socket.IO canlı mesaj" : "Merhaba",
               last_message_sender_type: "customer",
-              last_message_at: "2026-01-01T00:00:00.000Z",
+              last_message_at: realtimeMessageDelivered ? "2026-01-01T00:01:30.000Z" : "2026-01-01T00:00:00.000Z",
               customer: { full_name: "Playwright Customer", phone: "5550000000" },
               assigned_user_email: null,
-              updated_at: "2026-01-01T00:00:00.000Z",
+              updated_at: realtimeMessageDelivered ? "2026-01-01T00:01:30.000Z" : "2026-01-01T00:00:00.000Z",
             },
             {
               public_id: "cnv_facebook_playwright",
@@ -114,13 +175,13 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
               status: "closed",
               is_in_pool: false,
               human_agent_enabled: false,
-              unread_count: 0,
-              last_message_text: "Cevaplandı",
+              unread_count: facebookRealtimeDelivered ? 1 : 0,
+              last_message_text: facebookRealtimeDelivered ? "Facebook broadcast mesajı" : "Cevaplandı",
               last_message_sender_type: "user",
-              last_message_at: "2026-01-01T00:00:30.000Z",
+              last_message_at: facebookRealtimeDelivered ? "2026-01-01T00:01:10.000Z" : "2026-01-01T00:00:30.000Z",
               customer: { full_name: "Facebook Customer", phone: "5552222222" },
               assigned_user_email: "admin@example.com",
-              updated_at: "2026-01-01T00:00:30.000Z",
+              updated_at: facebookRealtimeDelivered ? "2026-01-01T00:01:10.000Z" : "2026-01-01T00:00:30.000Z",
             },
           ],
         }),
@@ -187,6 +248,39 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
               external_message_id: "external_msg_1",
               is_read: false,
               sent_at: "2026-01-01T00:00:00.000Z",
+            },
+            ...(realtimeMessageDelivered
+              ? [
+                  {
+                    public_id: "msg_socketio_live",
+                    sender_type: "customer",
+                    sender_name: "Playwright Customer",
+                    body: "Socket.IO canlı mesaj",
+                    external_message_id: "external_msg_socketio",
+                    is_read: false,
+                    sent_at: "2026-01-01T00:01:30.000Z",
+                  },
+                ]
+              : []),
+          ],
+        }),
+      });
+      return;
+    }
+
+    if (url.pathname === "/api/conversations/cnv_facebook_playwright/messages") {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          data: [
+            {
+              public_id: "msg_facebook_1",
+              sender_type: "user",
+              sender_name: "admin@example.com",
+              body: "Cevaplandı",
+              external_message_id: "external_msg_facebook",
+              is_read: true,
+              sent_at: "2026-01-01T00:00:30.000Z",
             },
           ],
         }),
@@ -686,6 +780,57 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("inbox-flow")).toContainText("Merhaba");
     await expect(page.getByTestId("conversation-detail")).toContainText("Playwright Customer");
     await expect(page.getByTestId("conversation-detail")).toContainText("instagram");
+    await expect.poll(async () =>
+      page.evaluate(() => window.__GARANTI_REALTIME_TEST__?.emitted ?? []),
+    ).toEqual(
+      expect.arrayContaining([
+        { event: "connect", payload: null },
+        { event: "conversation.join", payload: "cnv_playwright" },
+      ]),
+    );
+    await page.getByRole("button", { name: /facebook customer/i }).click();
+    await expect(page.getByTestId("conversation-detail")).toContainText("facebook");
+    await page.getByRole("button", { name: /playwright customer/i }).click();
+    await expect.poll(async () =>
+      page.evaluate(() => window.__GARANTI_REALTIME_TEST__?.emitted ?? []),
+    ).toEqual(
+      expect.arrayContaining([
+        { event: "conversation.leave", payload: "cnv_playwright" },
+        { event: "conversation.join", payload: "cnv_facebook_playwright" },
+        { event: "conversation.join", payload: "cnv_playwright" },
+      ]),
+    );
+    facebookRealtimeDelivered = true;
+    await page.evaluate(() =>
+      window.__GARANTI_REALTIME_TEST__?.emitServer("message.created", {
+        event: "message.created",
+        id: "evt_socketio_facebook",
+        occurred_at: "2026-01-01T00:01:10.000Z",
+        payload: {
+          message_public_id: "msg_socketio_facebook",
+          conversation_public_id: "cnv_facebook_playwright",
+          sender_type: "customer",
+        },
+      }),
+    );
+    await expect(page.getByTestId("inbox-flow")).toContainText("Facebook broadcast mesajı");
+    await expect(page.getByTestId("inbox-flow")).not.toContainText("msg_socketio_facebook");
+    await expect(page.getByText("Yeni konuşma bildirimi Socket.IO üzerinden alındı")).toBeVisible();
+    realtimeMessageDelivered = true;
+    await page.evaluate(() =>
+      window.__GARANTI_REALTIME_TEST__?.emitServer("message.created", {
+        event: "message.created",
+        id: "evt_socketio_live",
+        occurred_at: "2026-01-01T00:01:30.000Z",
+        payload: {
+          message_public_id: "msg_socketio_live",
+          conversation_public_id: "cnv_playwright",
+          sender_type: "customer",
+        },
+      }),
+    );
+    await expect(page.getByTestId("inbox-flow")).toContainText("Socket.IO canlı mesaj");
+    await expect(page.getByText("Yeni mesaj Socket.IO üzerinden alındı")).toBeVisible();
     await page.getByRole("button", { name: /playwright customer/i }).click();
     await expect(page.getByTestId("conversation-detail")).toContainText("open");
     await page.getByRole("button", { name: /cevap gönder/i }).click();
