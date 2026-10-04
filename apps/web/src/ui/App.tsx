@@ -47,6 +47,7 @@ import {
   type BalanceSummary as BackendBalanceSummary,
   type CommentModerationSummary as BackendCommentModerationSummary,
   type ConversationSummary,
+  type ConversationSummaryStats,
   type CustomerSummary,
   type MessageSummary,
   type OrderSummaryStats,
@@ -82,6 +83,7 @@ interface DashboardData {
   providerDebugSummary: ProviderDebugSummary;
   fileOrphans: FileMetadata[];
   instagramAnalytics: BackendInstagramAnalyticsSummary;
+  conversationSummary: ConversationSummaryStats;
   orderSummary: OrderSummaryStats;
   productSummary: ProductSummaryStats;
   reportSummary: BackendReportSummary;
@@ -296,6 +298,21 @@ const defaultBalanceSummary: BackendBalanceSummary = {
   pending_payment: 0,
   available_balance: 0,
   pending_request_count: 0,
+};
+
+const defaultConversationSummary: ConversationSummaryStats = {
+  total_count: 0,
+  unread_count: 0,
+  pool_count: 0,
+  human_agent_count: 0,
+  channel_counts: {
+    instagram: 0,
+    facebook: 0,
+  },
+  status_counts: {
+    open: 0,
+    closed: 0,
+  },
 };
 
 const defaultOrderSummary: OrderSummaryStats = {
@@ -525,6 +542,7 @@ export function App() {
     providerDebugSummary: defaultProviderDebugSummary,
     fileOrphans: [],
     instagramAnalytics: defaultInstagramAnalyticsSummary,
+    conversationSummary: defaultConversationSummary,
     orderSummary: defaultOrderSummary,
     productSummary: defaultProductSummary,
     reportSummary: defaultReportSummary,
@@ -683,8 +701,9 @@ export function App() {
     const canReadComments = user?.role === "admin" || user?.role === "owner" || user?.role === "calisan";
     const canReadBalances = user?.role === "admin" || user?.role === "owner" || user?.role === "calisan";
     const canReadShipmentPipeline = ["admin", "owner", "calisan", "kargo_operatoru"].includes(user?.role ?? "");
-    const [conversations, customers, commentModeration, balanceSummary, orderSummary, productSummary, shipmentPipeline, reportSummary, orders, products, shipments, settings, webphoneConfig] = await Promise.all([
+    const [conversations, conversationSummary, customers, commentModeration, balanceSummary, orderSummary, productSummary, shipmentPipeline, reportSummary, orders, products, shipments, settings, webphoneConfig] = await Promise.all([
       domain.listConversations({ limit: 20 }),
+      domain.getConversationSummary(),
       canReadCustomers ? domain.listCustomers(50) : Promise.resolve({ data: [] }),
       canReadComments ? domain.getCommentModerationSummary() : Promise.resolve(defaultCommentModerationSummary),
       canReadBalances ? domain.getBalanceSummary() : Promise.resolve(defaultBalanceSummary),
@@ -734,6 +753,7 @@ export function App() {
       providerDebugSummary,
       fileOrphans: fileOrphans.data,
       instagramAnalytics,
+      conversationSummary,
       orderSummary,
       productSummary,
       reportSummary,
@@ -785,6 +805,7 @@ export function App() {
         providerDebugSummary: defaultProviderDebugSummary,
         fileOrphans: [],
         instagramAnalytics: defaultInstagramAnalyticsSummary,
+        conversationSummary: defaultConversationSummary,
         orderSummary: defaultOrderSummary,
         productSummary: defaultProductSummary,
         reportSummary: defaultReportSummary,
@@ -1359,15 +1380,13 @@ export function App() {
   const smsRecipientCount = data.shipments.filter((shipment) => Boolean(shipment.recipient_phone)).length;
   const balanceSummary = toBalanceView(data.balanceSummary);
   const commentSummary = toCommentModerationView(data.commentModeration);
-  const unreadConversationCount = data.conversations.reduce((sum, conversation) => sum + conversation.unread_count, 0);
-  const poolConversationCount = data.conversations.filter((conversation) => conversation.is_in_pool).length;
-  const humanAgentConversationCount = data.conversations.filter((conversation) => conversation.human_agent_enabled).length;
-  const instagramConversationCount = data.conversations.filter((conversation) => conversation.channel === "instagram").length;
-  const facebookConversationCount = data.conversations.filter((conversation) =>
-    conversation.channel === "facebook" || conversation.channel === "messenger"
-  ).length;
-  const openConversationCount = data.conversations.filter((conversation) => conversation.status === "open").length;
-  const closedConversationCount = data.conversations.filter((conversation) => conversation.status === "closed").length;
+  const unreadConversationCount = data.conversationSummary.unread_count;
+  const poolConversationCount = data.conversationSummary.pool_count;
+  const humanAgentConversationCount = data.conversationSummary.human_agent_count;
+  const instagramConversationCount = data.conversationSummary.channel_counts.instagram;
+  const facebookConversationCount = data.conversationSummary.channel_counts.facebook;
+  const openConversationCount = data.conversationSummary.status_counts.open;
+  const closedConversationCount = data.conversationSummary.status_counts.closed;
   const conversationMatchesChannelFilter = (conversation: ConversationSummary, filter: string) => {
     if (filter === "all") {
       return true;
@@ -1385,7 +1404,7 @@ export function App() {
   const selectedConversation =
     visibleConversations.find((conversation) => conversation.public_id === selectedConversationId) ?? visibleConversations[0] ?? null;
   const conversationChannelFilters = [
-    { value: "all", label: `Tüm kanallar ${data.conversations.length}` },
+    { value: "all", label: `Tüm kanallar ${data.conversationSummary.total_count}` },
     { value: "instagram", label: `Instagram ${instagramConversationCount}` },
     { value: "facebook", label: `Facebook ${facebookConversationCount}` },
   ];
@@ -1642,7 +1661,7 @@ export function App() {
                 </button>
               </div>
             </div>
-            <Metric title="Okunmamış" value={String(data.conversations.reduce((sum, item) => sum + item.unread_count, 0))} />
+            <Metric title="Okunmamış" value={String(unreadConversationCount)} />
           </FlowPanel>
         )}
 
@@ -2260,8 +2279,8 @@ export function App() {
               <DetailPanel title="Yorum Moderasyonu" testId="comments-detail">
                 <DataRows
                   rows={[
-                    ["Açık konuşma", String(openConversationCount), "backend conversations"],
-                    ["Okunmamış mesaj", String(data.conversations.reduce((sum, item) => sum + item.unread_count, 0)), "domain API"],
+                    ["Açık konuşma", String(openConversationCount), "conversation summary API"],
+                    ["Okunmamış mesaj", String(unreadConversationCount), "conversation summary API"],
                     [
                       "Müşteri",
                       selectedConversation?.customer?.full_name ?? selectedConversation?.public_id ?? "-",

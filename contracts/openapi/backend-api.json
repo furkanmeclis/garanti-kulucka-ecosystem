@@ -192,6 +192,23 @@
         }
       }
     },
+    "/api/conversations/summary": {
+      "get": {
+        "operationId": "getConversationSummary",
+        "responses": {
+          "200": {
+            "description": "Backend-owned inbox conversation summary",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationSummaryStats"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/conversations/{conversation_public_id}/messages": {
       "get": {
         "operationId": "listMessages",
@@ -1413,6 +1430,63 @@
             "$ref": "#/components/schemas/DataEnvelope"
           }
         ]
+      },
+      "ConversationSummaryStats": {
+        "type": "object",
+        "required": [
+          "total_count",
+          "unread_count",
+          "pool_count",
+          "human_agent_count",
+          "channel_counts",
+          "status_counts"
+        ],
+        "properties": {
+          "total_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "unread_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "pool_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "human_agent_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "channel_counts": {
+            "type": "object",
+            "required": ["instagram", "facebook"],
+            "properties": {
+              "instagram": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "facebook": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          },
+          "status_counts": {
+            "type": "object",
+            "required": ["open", "closed"],
+            "properties": {
+              "open": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "closed": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          }
+        }
       },
       "MessageList": {
         "allOf": [

@@ -352,6 +352,43 @@ describe("web API client boundary", () => {
     expect(requests[0]?.url).toBe("http://localhost:3000/api/products/summary");
   });
 
+  it("maps conversation summary reads to the backend route", async () => {
+    const requests: Request[] = [];
+    const client = createApiClient("http://localhost:3000", {
+      fetchImpl: async (input, init) => {
+        requests.push(new Request(input, init));
+        return Response.json({
+          total_count: 8,
+          unread_count: 12,
+          pool_count: 3,
+          human_agent_count: 2,
+          channel_counts: {
+            instagram: 5,
+            facebook: 3,
+          },
+          status_counts: {
+            open: 6,
+            closed: 2,
+          },
+        });
+      },
+    });
+
+    await expect(client.domain.getConversationSummary()).resolves.toMatchObject({
+      total_count: 8,
+      unread_count: 12,
+      channel_counts: {
+        instagram: 5,
+        facebook: 3,
+      },
+      status_counts: {
+        open: 6,
+        closed: 2,
+      },
+    });
+    expect(requests[0]?.url).toBe("http://localhost:3000/api/conversations/summary");
+  });
+
   it("maps provider catalog reads to backend routes without live-call enablement", async () => {
     const requests: Request[] = [];
     const client = createApiClient("http://localhost:3000", {
@@ -556,16 +593,18 @@ describe("web API client boundary", () => {
     });
 
     await client.domain.listConversations({ channel: "instagram", limit: 25 });
+    await client.domain.getConversationSummary();
     await client.domain.getCommentModerationSummary();
     await client.domain.getBalanceSummary();
     await client.domain.getOrderSummary();
     await client.domain.listMessages("cnv_test");
 
     expect(requests[0]?.url).toBe("http://localhost:3000/api/conversations?channel=instagram&limit=25");
-    expect(requests[1]?.url).toBe("http://localhost:3000/api/comments/moderation-summary");
-    expect(requests[2]?.url).toBe("http://localhost:3000/api/balances/summary");
-    expect(requests[3]?.url).toBe("http://localhost:3000/api/orders/summary");
-    expect(requests[4]?.url).toBe("http://localhost:3000/api/conversations/cnv_test/messages?limit=100");
+    expect(requests[1]?.url).toBe("http://localhost:3000/api/conversations/summary");
+    expect(requests[2]?.url).toBe("http://localhost:3000/api/comments/moderation-summary");
+    expect(requests[3]?.url).toBe("http://localhost:3000/api/balances/summary");
+    expect(requests[4]?.url).toBe("http://localhost:3000/api/orders/summary");
+    expect(requests[5]?.url).toBe("http://localhost:3000/api/conversations/cnv_test/messages?limit=100");
   });
 
   it("maps domain order filters to backend routes", async () => {

@@ -8,6 +8,7 @@ import {
   DomainRepository,
   type ListShipmentsFilter,
   serializeConversation,
+  serializeConversationSummary,
   serializeCustomer,
   serializeMessage,
   serializeOrder,
@@ -134,6 +135,16 @@ export function createDomainRoutes() {
     });
 
     return context.json({ data: conversations.map(serializeConversation) });
+  });
+
+  routes.get("/conversations/summary", async (context) => {
+    const db = context.get("db");
+    if (!db) {
+      return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
+    }
+
+    const summary = await new DomainRepository(db).getConversationSummary();
+    return context.json(serializeConversationSummary(summary));
   });
 
   routes.get("/comments/moderation-summary", async (context) => {

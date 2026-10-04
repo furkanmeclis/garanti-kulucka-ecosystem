@@ -57,6 +57,21 @@ export interface UpdateConversationStateInput {
   assignedUserId?: number | null;
 }
 
+export interface ConversationSummaryRecord {
+  total_count: number;
+  unread_count: number;
+  pool_count: number;
+  human_agent_count: number;
+  channel_counts: {
+    instagram: number;
+    facebook: number;
+  };
+  status_counts: {
+    open: number;
+    closed: number;
+  };
+}
+
 export interface ListOrdersFilter {
   status?: string;
   confirmationStatus?: string;
@@ -268,6 +283,38 @@ export class DomainRepository {
       .orderBy("conversations.created_at", "desc")
       .limit(filter.limit)
       .execute();
+  }
+
+  async getConversationSummary(): Promise<ConversationSummaryRecord> {
+    const conversations = await this.listConversations({ limit: 200 });
+    return conversations.reduce<ConversationSummaryRecord>(
+      (summary, conversation) => {
+        const channel = conversation.channel.toLocaleLowerCase("tr-TR");
+        summary.total_count += 1;
+        summary.unread_count += Number(conversation.unread_count);
+        if (conversation.is_in_pool) summary.pool_count += 1;
+        if (conversation.human_agent_enabled) summary.human_agent_count += 1;
+        if (channel === "instagram") summary.channel_counts.instagram += 1;
+        if (channel === "facebook" || channel === "messenger") summary.channel_counts.facebook += 1;
+        if (conversation.status === "open") summary.status_counts.open += 1;
+        if (conversation.status === "closed") summary.status_counts.closed += 1;
+        return summary;
+      },
+      {
+        total_count: 0,
+        unread_count: 0,
+        pool_count: 0,
+        human_agent_count: 0,
+        channel_counts: {
+          instagram: 0,
+          facebook: 0,
+        },
+        status_counts: {
+          open: 0,
+          closed: 0,
+        },
+      },
+    );
   }
 
   async listMessages(conversationPublicId: string, limit: number): Promise<MessageRecord[]> {
@@ -759,6 +806,10 @@ export function serializeConversation(conversation: ConversationRecord) {
     assigned_user_email: conversation.assigned_user_email,
     updated_at: conversation.updated_at,
   };
+}
+
+export function serializeConversationSummary(summary: ConversationSummaryRecord) {
+  return summary;
 }
 
 export function serializeCustomer(customer: CustomerRecord) {

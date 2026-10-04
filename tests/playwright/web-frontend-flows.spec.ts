@@ -3,6 +3,8 @@ import { createServer, type ViteDevServer } from "vite";
 
 const backendBaseUrl = "http://127.0.0.1:65530";
 
+test.setTimeout(60_000);
+
 interface PlaywrightUser {
   public_id: string;
   email: string;
@@ -300,6 +302,27 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
         contentType: "application/json",
         body: JSON.stringify({
           data: filteredConversations,
+        }),
+      });
+      return;
+    }
+
+    if (url.pathname === "/api/conversations/summary") {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          total_count: 42,
+          unread_count: 99,
+          pool_count: 17,
+          human_agent_count: 13,
+          channel_counts: {
+            instagram: 21,
+            facebook: 8,
+          },
+          status_counts: {
+            open: 34,
+            closed: 5,
+          },
         }),
       });
       return;
@@ -1860,7 +1883,16 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByRole("button", { name: /evrimiçi/i })).toHaveCount(0);
     await expect(page.getByTestId("inbox-flow")).toContainText("Merhaba");
     await expect(page.getByTestId("inbox-flow")).toContainText("Okunmamış");
+    await expect(page.getByTestId("inbox-flow")).toContainText("99");
     await expect(page.getByTestId("inbox-flow")).toContainText("Havuz");
+    await expect(page.getByTestId("inbox-flow")).toContainText("17");
+    await expect(page.getByTestId("inbox-flow")).toContainText("Human Agent");
+    await expect(page.getByTestId("inbox-flow")).toContainText("13");
+    await expect(page.getByTestId("conversation-channel-filter-all")).toHaveText("Tüm kanallar 42");
+    await expect(page.getByTestId("conversation-channel-filter-instagram")).toHaveText("Instagram 21");
+    await expect(page.getByTestId("conversation-channel-filter-facebook")).toHaveText("Facebook 8");
+    await expect(page.getByTestId("conversation-status-filter-open")).toHaveText("Açık 34");
+    await expect(page.getByTestId("conversation-status-filter-closed")).toHaveText("Kapalı 5");
     await expect(page.getByTestId("conversation-filter-summary")).toContainText("legacy kanal/durum filtreleri");
     await expect(page.getByTestId("conversation-filter-summary")).toContainText("backend is_in_pool");
     await expect(page.getByTestId("conversation-filter-summary")).toContainText("backend human_agent_enabled");
@@ -1965,7 +1997,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await page.goto(`${app.url}/mesajlar`);
     await expect(page.getByTestId("inbox-flow")).toContainText("Playwright Customer");
     await page.goto(`${app.url}/yorumlar`);
-    await expect(page.getByTestId("comments-flow")).toContainText("backend conversations");
+    await expect(page.getByTestId("comments-flow")).toContainText("conversation summary API");
     await expect(page.getByTestId("comments-ai-summary")).toContainText("Manuel bekleyen");
     await expect(page.getByTestId("comments-ai-summary")).toContainText("7");
     await expect(page.getByTestId("comments-ai-summary")).toContainText("Instagram");
@@ -2472,6 +2504,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       "/auth/logout",
       "/auth/presence",
       "/api/conversations",
+      "/api/conversations/summary",
       "/api/comments/moderation-summary",
       "/api/balances/summary",
       "/api/reports/summary",

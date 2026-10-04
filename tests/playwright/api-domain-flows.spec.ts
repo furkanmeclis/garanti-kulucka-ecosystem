@@ -801,6 +801,7 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
   try {
     const [
       conversationResponse,
+      conversationSummaryResponse,
       commentModerationResponse,
       balanceSummaryResponse,
       reportSummaryResponse,
@@ -820,6 +821,7 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
     ] =
       await Promise.all([
         api.client.get("/api/conversations?limit=10"),
+        api.client.get("/api/conversations/summary"),
         api.client.get("/api/comments/moderation-summary"),
         api.client.get("/api/balances/summary"),
         api.client.get("/api/reports/summary"),
@@ -849,6 +851,22 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
           },
         },
       ],
+    });
+
+    expect(conversationSummaryResponse.status()).toBe(200);
+    await expect(conversationSummaryResponse.json()).resolves.toMatchObject({
+      total_count: 1,
+      unread_count: 2,
+      pool_count: 1,
+      human_agent_count: 0,
+      channel_counts: {
+        instagram: 1,
+        facebook: 0,
+      },
+      status_counts: {
+        open: 1,
+        closed: 0,
+      },
     });
 
     expect(commentModerationResponse.status()).toBe(200);

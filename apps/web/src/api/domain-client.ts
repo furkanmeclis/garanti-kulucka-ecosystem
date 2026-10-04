@@ -112,6 +112,21 @@ export interface CommentModerationSummary {
   facebook: number;
 }
 
+export interface ConversationSummaryStats {
+  total_count: number;
+  unread_count: number;
+  pool_count: number;
+  human_agent_count: number;
+  channel_counts: {
+    instagram: number;
+    facebook: number;
+  };
+  status_counts: {
+    open: number;
+    closed: number;
+  };
+}
+
 export interface BalanceSummary {
   total_commission: number;
   total_deduction: number;
@@ -193,6 +208,8 @@ export function createDomainClient(http: BackendHttpClient) {
       const query = search.toString();
       return http.request<{ data: ConversationSummary[] }>(`/api/conversations${query ? `?${query}` : ""}`);
     },
+    getConversationSummary: () =>
+      http.request<ConversationSummaryStats>("/api/conversations/summary"),
     listCustomers: (limit = 50) =>
       http.request<{ data: CustomerSummary[] }>(`/api/customers?limit=${limit}`),
     getCommentModerationSummary: () =>
