@@ -25,6 +25,7 @@ import {
   Wifi,
   WifiOff,
   XCircle,
+  Zap,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -135,6 +136,7 @@ const navigationItems: NavigationItem[] = [
   { key: "customers", label: "Müşteriler", icon: Users, roles: ["admin", "calisan"], path: "/musteriler" },
   { key: "orders", label: "Siparişler", icon: ShoppingCart, roles: ["admin", "calisan", "kargo_operatoru"], path: "/siparisler" },
   { key: "shipments", label: "Kargo", icon: Truck, roles: ["admin", "calisan", "kargo_operatoru"], path: "/kargo" },
+  { key: "shipmentPipeline", label: "Pipeline", icon: Zap, roles: ["admin", "calisan", "kargo_operatoru"], path: "/kargo/pipeline" },
   { key: "cancellations", label: "İptaller", icon: XCircle, roles: ["admin", "calisan"], path: "/iptaller" },
   { key: "inventory", label: "Stoklar", icon: Package, roles: ["admin", "calisan"], path: "/stok" },
   { key: "balances", label: "Bakiyeler", icon: Wallet, roles: ["admin", "calisan"], path: "/bakiye" },
@@ -203,6 +205,20 @@ function formatMoney(value: number, currency: string) {
 
 function formatPercent(numerator: number, denominator: number) {
   return denominator > 0 ? `%${Math.round((numerator / denominator) * 100)}` : "%0";
+}
+
+function pipelineStepFromShipment(shipment: ShipmentSummary) {
+  if (shipment.status === "delivered") return "teslim";
+  if (!shipment.recipient_phone) return "mesaj";
+  if (shipment.provider.toLocaleLowerCase("tr-TR").includes("sürat")) return "sms";
+  return "vapi";
+}
+
+function pipelineStatusFromShipment(shipment: ShipmentSummary) {
+  if (shipment.status === "delivered") return "teslim";
+  if (!shipment.tracking_number && !shipment.barcode_number) return "hata";
+  if (shipment.status === "in_transit") return "isleniyor";
+  return "bekliyor";
 }
 
 const sensitivePreviewKeyPattern = /authorization|token|secret|password|credential|api[_-]?key/i;
@@ -911,6 +927,15 @@ export function App() {
     (shipment) => !shipment.tracking_number && !shipment.barcode_number,
   ).length;
   const otherShipmentCount = Math.max(data.shipments.length - pttShipmentCount - suratShipmentCount, 0);
+  const shipmentPipelineRows = data.shipments.map((shipment) => ({
+    shipment,
+    step: pipelineStepFromShipment(shipment),
+    pipelineStatus: pipelineStatusFromShipment(shipment),
+  }));
+  const pipelineWaitingCount = shipmentPipelineRows.filter((row) => row.pipelineStatus === "bekliyor").length;
+  const pipelineProcessingCount = shipmentPipelineRows.filter((row) => row.pipelineStatus === "isleniyor").length;
+  const pipelineErrorCount = shipmentPipelineRows.filter((row) => row.pipelineStatus === "hata").length;
+  const pipelineDeliveredCount = shipmentPipelineRows.filter((row) => row.pipelineStatus === "teslim").length;
   const openConversationCount = data.conversations.filter((conversation) => conversation.status === "open").length;
   const customerWithPhoneCount = data.customers.filter((customer) => Boolean(customer.phone)).length;
   const customerWithEmailCount = data.customers.filter((customer) => Boolean(customer.email)).length;
@@ -1145,6 +1170,48 @@ export function App() {
                 />
               </DetailPanel>
             )}
+          </FlowPanel>
+        )}
+
+        {activeFlow === "shipmentPipeline" && (
+          <FlowPanel title="Teslim Alınmayan Kargo Pipeline" icon={<Zap size={18} />} testId="shipment-pipeline-flow">
+            <div className="report-grid">
+              <Metric title="Bekliyor" value={String(pipelineWaitingCount)} />
+              <Metric title="İşleniyor" value={String(pipelineProcessingCount)} />
+              <Metric title="Hata" value={String(pipelineErrorCount)} />
+              <Metric title="Teslim" value={String(pipelineDeliveredCount)} />
+            </div>
+            <div className="detail-actions" data-testid="shipment-pipeline-tabs">
+              <button className="secondary-action selected" type="button">
+                Tümü {shipmentPipelineRows.length}
+              </button>
+              <button className="secondary-action" type="button">
+                Bekliyor {pipelineWaitingCount}
+              </button>
+              <button className="secondary-action" type="button">
+                İşleniyor {pipelineProcessingCount}
+              </button>
+              <button className="secondary-action" type="button">
+                Teslim {pipelineDeliveredCount}
+              </button>
+            </div>
+            <DetailPanel title="Mesaj SMS VAPI Akışı" testId="shipment-pipeline-detail">
+              <DataRows
+                rows={[
+                  ["Kaynak", "shipments API", "legacy /kargo/pipeline"],
+                  ["Akış", "Mesaj -> SMS -> VAPI", "backend verisi"],
+                  ["Otomatik yenileme", "Socket.IO sonrası domain refresh", "Supabase channel yok"],
+                  ["Canlı provider", "kapalı", "fixture/live gate kontrollü"],
+                ]}
+              />
+            </DetailPanel>
+            <DataRows
+              rows={shipmentPipelineRows.map(({ shipment, step, pipelineStatus }) => [
+                shipment.recipient_name,
+                `${step} / ${pipelineStatus}`,
+                shipment.tracking_number ?? shipment.barcode_number ?? shipment.recipient_phone ?? "-",
+              ])}
+            />
           </FlowPanel>
         )}
 

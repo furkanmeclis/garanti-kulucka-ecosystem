@@ -1336,6 +1336,15 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("shipments-flow")).toContainText("delivered");
     await expect(page.getByTestId("shipment-detail")).toContainText("Selected shipment delivered");
     await expect(page.getByTestId("shipment-detail")).toContainText("delivered");
+    await page.getByRole("link", { name: /pipeline/i }).click();
+    await expect(page.getByTestId("shipment-pipeline-flow")).toContainText("Teslim Alınmayan Kargo Pipeline");
+    await expect(page.getByTestId("shipment-pipeline-tabs")).toContainText("Tümü 2");
+    await expect(page.getByTestId("shipment-pipeline-detail")).toContainText("Mesaj SMS VAPI Akışı");
+    await expect(page.getByTestId("shipment-pipeline-detail")).toContainText("legacy /kargo/pipeline");
+    await expect(page.getByTestId("shipment-pipeline-detail")).toContainText("Supabase channel yok");
+    await expect(page.getByTestId("shipment-pipeline-flow")).toContainText("Playwright Customer");
+    await expect(page.getByTestId("shipment-pipeline-flow")).toContainText("vapi / isleniyor");
+    await expect(page.getByTestId("shipment-pipeline-flow")).toContainText("teslim / teslim");
     await page.getByRole("link", { name: /^sms$/i }).click();
     await expect(page.getByTestId("sms-template-detail")).toContainText("Surat Playwright Customer");
     await expect(page.getByTestId("sms-template-detail")).toContainText("TRK-SURAT-PLAYWRIGHT");
@@ -1385,6 +1394,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       { path: "/musteriler", testId: "customers-flow" },
       { path: "/siparisler", testId: "orders-flow" },
       { path: "/kargo", testId: "shipments-flow" },
+      { path: "/kargo/pipeline", testId: "shipment-pipeline-flow" },
       { path: "/iptaller", testId: "cancellations-flow" },
       { path: "/stok", testId: "inventory-flow" },
       { path: "/bakiye", testId: "balances-flow" },
@@ -1427,6 +1437,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       { path: "/mesajlar", testId: "inbox-flow" },
       { path: "/siparisler", testId: "orders-flow" },
       { path: "/kargo", testId: "shipments-flow" },
+      { path: "/kargo/pipeline", testId: "shipment-pipeline-flow" },
       { path: "/sms", testId: "sms-flow" },
     ];
     await assertLegacyVisualFrame(page, app.url, "desktop", cargoVisualRoutes);
