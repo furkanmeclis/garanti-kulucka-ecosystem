@@ -631,12 +631,18 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     }
 
     if (url.pathname === "/admin/settings/providers.ptt.live_mode") {
+      expect(route.request().method()).toBe("PUT");
+      expect(route.request().postDataJSON()).toMatchObject({
+        value: false,
+        scope: "global",
+        is_secret: false,
+      });
       await route.fulfill({
         contentType: "application/json",
         body: JSON.stringify({
           key: "providers.ptt.live_mode",
           scope: "global",
-          value: true,
+          value: false,
           is_secret: false,
           updated_at: "2026-01-01T00:03:00.000Z",
         }),
@@ -1353,8 +1359,9 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("settings-audit-detail")).toContainText("providers.ptt.live_mode");
     await expect(page.getByTestId("settings-audit-detail")).toContainText("[redacted]");
     await expect(page.getByTestId("settings-audit-detail")).not.toContainText("raw-settings-audit-secret");
-    await page.getByRole("button", { name: /ptt canlı modu aç/i }).click();
+    await page.getByRole("button", { name: /ptt live gate kapalı kaydet/i }).click();
     await expect(page.getByTestId("admin-flow")).toContainText("providers.ptt.live_mode");
+    await expect(page.getByTestId("admin-flow")).toContainText("false");
     await page.getByRole("link", { name: /dosya/i }).click();
     await expect(page.getByTestId("file-orphans-detail")).toContainText("Orphan Dosya Adayları");
     await expect(page.getByTestId("file-orphans-detail")).toContainText("orphan-proof.txt");

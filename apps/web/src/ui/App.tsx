@@ -698,14 +698,14 @@ export function App() {
     setStatus("Kargo durumu backend API üzerinden güncellendi");
   }
 
-  async function handleEnableProviderLiveMode() {
-    setStatus("Provider live flag backend API üzerinden güncelleniyor");
-    const setting = await admin.upsertSetting("providers.ptt.live_mode", true, false, "global");
+  async function handleSaveProviderLiveGate() {
+    setStatus("Provider live gate backend API üzerinden kapalı kaydediliyor");
+    const setting = await admin.upsertSetting("providers.ptt.live_mode", false, false, "global");
     setData((current) => ({
       ...current,
       settings: [setting, ...current.settings.filter((item) => item.key !== setting.key)],
     }));
-    setStatus("Provider live flag backend API üzerinden güncellendi");
+    setStatus("Provider live gate kapalı olarak kaydedildi");
   }
 
   async function handleSaveNetgsmSettings() {
@@ -1150,8 +1150,8 @@ export function App() {
 
         {activeFlow === "admin" && (
           <FlowPanel title="Admin Ayarları" icon={<Settings size={18} />} testId="admin-flow">
-            <button className="primary-action" type="button" onClick={handleEnableProviderLiveMode}>
-              PTT canlı modu aç
+            <button className="primary-action" type="button" onClick={handleSaveProviderLiveGate}>
+              PTT live gate kapalı kaydet
             </button>
             <button className="secondary-action" type="button" onClick={handleSaveOperationalPolicy}>
               Operasyon politikasını kaydet
