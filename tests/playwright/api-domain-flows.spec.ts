@@ -225,9 +225,32 @@ const integrationProviders = [
     created_at: date,
     updated_at: date,
   },
+  {
+    id: 401,
+    public_id: "prv_instagram",
+    key: "instagram",
+    name: "Instagram",
+    is_active: true,
+    created_at: date,
+    updated_at: date,
+  },
 ];
 
 const providerAttempts: Array<Record<string, unknown>> = [];
+
+const integrationAccounts = [
+  {
+    id: 450,
+    public_id: "iac_instagram",
+    provider_id: 401,
+    display_name: "Instagram Main",
+    external_account_id: "ig_main",
+    status: "active",
+    metadata: {},
+    created_at: date,
+    updated_at: date,
+  },
+];
 
 const files = [
   {
@@ -412,6 +435,11 @@ class FixtureQuery {
           (this.whereValues.get("key") === undefined || provider.key === this.whereValues.get("key")) &&
           (this.whereValues.get("is_active") === undefined || provider.is_active === this.whereValues.get("is_active")),
         );
+      case "integration_accounts":
+        return integrationAccounts.filter((account) =>
+          (this.whereValues.get("provider_id") === undefined || account.provider_id === this.whereValues.get("provider_id")) &&
+          (this.whereValues.get("public_id") === undefined || account.public_id === this.whereValues.get("public_id")),
+        );
       case "provider_attempts":
         return providerAttempts.filter((attempt) =>
           (this.whereValues.get("provider_id") === undefined || attempt.provider_id === this.whereValues.get("provider_id")) &&
@@ -439,6 +467,7 @@ class FixtureQuery {
           this.whereValues.get("orders.public_id") === order.public_id,
         ) ?? null;
       case "integration_providers":
+      case "integration_accounts":
       case "provider_attempts":
         return (await this.execute())[0] ?? null;
       default:
@@ -961,6 +990,71 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
     });
     expect(providerAttempts.filter((attempt) => attempt.idempotency_key === "cron_debug_ptt_playwright")).toHaveLength(1);
 
+    const instagramPublishResponse = await api.client.post("/admin/integrations/instagram-publish-previews", {
+      data: {
+        account_public_id: "iac_instagram",
+        image_url: "https://example.com/garanti-kulucka.jpg",
+        caption: "Playwright Instagram yayin",
+        idempotency_key: "instagram_publish_playwright",
+      },
+    });
+    expect(instagramPublishResponse.status()).toBe(202);
+    const instagramPublishPayload = await instagramPublishResponse.json();
+    expect(instagramPublishPayload).toMatchObject({
+      provider_key: "instagram",
+      account_public_id: "iac_instagram",
+      request_id: "igpub_instagram_publish_playwright",
+      operation: "message.send",
+      direction: "outbound",
+      status: "success",
+      retry_decision: "none",
+      idempotency_key: "instagram_publish_playwright",
+      provider_request_preview: {
+        method: "POST",
+        path: "/v18.0/ig_main/media",
+        live_call_performed: false,
+      },
+      response_metadata: {
+        mode: "dry_run",
+        queued: false,
+        live_call_permitted: false,
+      },
+    });
+    expect(providerAttempts.filter((attempt) => attempt.idempotency_key === "instagram_publish_playwright")).toHaveLength(1);
+    const repeatedInstagramPublishResponse = await api.client.post("/admin/integrations/instagram-publish-previews", {
+      data: {
+        account_public_id: "iac_instagram",
+        image_url: "https://example.com/garanti-kulucka.jpg",
+        caption: "Playwright Instagram yayin",
+        idempotency_key: "instagram_publish_playwright",
+      },
+    });
+    expect(repeatedInstagramPublishResponse.status()).toBe(202);
+    await expect(repeatedInstagramPublishResponse.json()).resolves.toMatchObject({
+      public_id: instagramPublishPayload.public_id,
+      provider_key: "instagram",
+      account_public_id: "iac_instagram",
+      request_id: "igpub_instagram_publish_playwright",
+      provider_request_preview: {
+        method: "POST",
+        path: "/v18.0/ig_main/media",
+        live_call_performed: false,
+      },
+    });
+    expect(providerAttempts.filter((attempt) => attempt.idempotency_key === "instagram_publish_playwright")).toHaveLength(1);
+    const mismatchedInstagramPublishResponse = await api.client.post("/admin/integrations/instagram-publish-previews", {
+      data: {
+        account_public_id: "iac_instagram",
+        image_url: "https://example.com/garanti-kulucka.jpg",
+        caption: "Changed Instagram caption",
+        idempotency_key: "instagram_publish_playwright",
+      },
+    });
+    expect(mismatchedInstagramPublishResponse.status()).toBe(409);
+    await expect(mismatchedInstagramPublishResponse.json()).resolves.toMatchObject({
+      error: { code: "idempotency_conflict" },
+    });
+
     const smsResponse = await api.client.post("/api/sms/send", {
       data: {
         recipient_phone: "5550000000",
@@ -1101,6 +1195,15 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
       },
     });
     expect(forbiddenCronTriggerResponse.status()).toBe(403);
+    const forbiddenInstagramPublishResponse = await api.cargoClient.post("/admin/integrations/instagram-publish-previews", {
+      data: {
+        account_public_id: null,
+        image_url: "https://example.com/garanti-kulucka.jpg",
+        caption: "forbidden",
+        idempotency_key: "instagram_publish_forbidden",
+      },
+    });
+    expect(forbiddenInstagramPublishResponse.status()).toBe(403);
 
     expect(settingsResponse.status()).toBe(200);
     const settingsBody = await settingsResponse.json();

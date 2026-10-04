@@ -70,6 +70,14 @@ export interface CreateProviderCronTriggerInput {
   requestId: string;
 }
 
+export interface CreateInstagramPublishPreviewInput {
+  accountPublicId: string | null;
+  imageUrl: string;
+  caption: string;
+  idempotencyKey: string;
+  requestId: string;
+}
+
 function assertProviderCronTriggerAttemptMatches(
   attempt: Selectable<ProviderAttemptsTable>,
   input: CreateProviderCronTriggerInput,
@@ -90,6 +98,33 @@ function assertProviderCronTriggerAttemptMatches(
     metadata.dry_run_request?.body?.provider_key !== input.providerKey
   ) {
     throw new Error(`Provider cron trigger idempotency key reuse mismatch: ${input.idempotencyKey}`);
+  }
+}
+
+function assertInstagramPublishAttemptMatches(
+  attempt: Selectable<ProviderAttemptsTable>,
+  input: CreateInstagramPublishPreviewInput,
+) {
+  const metadata = attempt.request_metadata as {
+    source?: unknown;
+    account_public_id?: unknown;
+    dry_run_request?: {
+      body?: {
+        image_url?: unknown;
+        caption?: unknown;
+      };
+    };
+  };
+  if (
+    attempt.operation !== "message.send" ||
+    attempt.direction !== "outbound" ||
+    attempt.request_id !== input.requestId ||
+    metadata.source !== "admin.instagram_publish_preview" ||
+    metadata.account_public_id !== input.accountPublicId ||
+    metadata.dry_run_request?.body?.image_url !== input.imageUrl ||
+    metadata.dry_run_request?.body?.caption !== input.caption
+  ) {
+    throw new Error(`Instagram publish idempotency key reuse mismatch: ${input.idempotencyKey}`);
   }
 }
 
@@ -235,6 +270,113 @@ export class IntegrationsRepository {
 
       assertProviderCronTriggerAttemptMatches(replayedAttempt, input);
       return { ...replayedAttempt, provider_key: provider.key, account_public_id: null };
+    });
+  }
+
+  async createInstagramPublishPreviewAttempt(input: CreateInstagramPublishPreviewInput): Promise<ProviderAttemptRecord> {
+    return this.db.transaction().execute(async (transaction) => {
+      const provider = await transaction
+        .selectFrom("integration_providers")
+        .selectAll()
+        .where("key", "=", "instagram")
+        .where("is_active", "=", true)
+        .executeTakeFirst();
+
+      if (!provider) {
+        throw new Error("Unknown integration provider: instagram");
+      }
+
+      const account = input.accountPublicId
+        ? await transaction
+            .selectFrom("integration_accounts")
+            .selectAll()
+            .where("provider_id", "=", provider.id)
+            .where("public_id", "=", input.accountPublicId)
+            .executeTakeFirst()
+        : null;
+
+      if (input.accountPublicId && !account) {
+        throw new Error(`Unknown Instagram account for publish preview: ${input.accountPublicId}`);
+      }
+
+      const existingAttempt = await transaction
+        .selectFrom("provider_attempts")
+        .selectAll()
+        .where("provider_id", "=", provider.id)
+        .where("idempotency_key", "=", input.idempotencyKey)
+        .executeTakeFirst();
+
+      if (existingAttempt) {
+        assertInstagramPublishAttemptMatches(existingAttempt, input);
+        return { ...existingAttempt, provider_key: provider.key, account_public_id: input.accountPublicId };
+      }
+
+      const graphAccountId = account?.external_account_id ?? "ig_preview";
+      const attempt = await transaction
+        .insertInto("provider_attempts")
+        .values({
+          public_id: newPublicId("pat"),
+          provider_id: provider.id,
+          account_id: account?.id ?? null,
+          request_id: input.requestId,
+          operation: "message.send",
+          direction: "outbound",
+          status: "success",
+          status_code: 202,
+          duration_ms: 0,
+          retry_decision: "none",
+          next_retry_at: null,
+          idempotency_key: input.idempotencyKey,
+          request_metadata: {
+            source: "admin.instagram_publish_preview",
+            account_public_id: input.accountPublicId,
+            live_call_permitted: false,
+            dry_run_request: {
+              method: "POST",
+              path: `/v18.0/${graphAccountId}/media`,
+              headers: {
+                authorization: "[redacted]",
+                "content-type": "application/json",
+              },
+              body: {
+                image_url: input.imageUrl,
+                caption: input.caption,
+              },
+              live_call_performed: false,
+            },
+          },
+          response_metadata: {
+            mode: "dry_run",
+            queued: false,
+            live_call_permitted: false,
+          },
+          error_code: null,
+          error_message: null,
+          started_at: new Date(),
+        })
+        .onConflict((oc) =>
+          oc.columns(["provider_id", "idempotency_key"]).where("idempotency_key", "is not", null).doNothing(),
+        )
+        .returningAll()
+        .executeTakeFirst();
+
+      if (attempt) {
+        return { ...attempt, provider_key: provider.key, account_public_id: input.accountPublicId };
+      }
+
+      const replayedAttempt = await transaction
+        .selectFrom("provider_attempts")
+        .selectAll()
+        .where("provider_id", "=", provider.id)
+        .where("idempotency_key", "=", input.idempotencyKey)
+        .executeTakeFirst();
+
+      if (!replayedAttempt) {
+        throw new Error(`Instagram publish idempotency conflict could not be replayed: ${input.idempotencyKey}`);
+      }
+
+      assertInstagramPublishAttemptMatches(replayedAttempt, input);
+      return { ...replayedAttempt, provider_key: provider.key, account_public_id: input.accountPublicId };
     });
   }
 

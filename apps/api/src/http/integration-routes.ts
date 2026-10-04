@@ -38,8 +38,19 @@ const providerCronTriggerSchema = z.object({
   idempotency_key: z.string().min(1),
 });
 
+const instagramPublishPreviewSchema = z.object({
+  account_public_id: z.string().min(1).nullable().default(null),
+  image_url: z.string().url(),
+  caption: z.string().min(1).max(2200),
+  idempotency_key: z.string().min(1),
+});
+
 function cronTriggerRequestId(providerKey: string, idempotencyKey: string) {
   return `cron_${providerKey}_${idempotencyKey.replace(/[^a-zA-Z0-9_-]+/g, "_").toLowerCase()}`;
+}
+
+function instagramPublishRequestId(idempotencyKey: string) {
+  return `igpub_${idempotencyKey.replace(/[^a-zA-Z0-9_-]+/g, "_").toLowerCase()}`;
 }
 
 export function createIntegrationRoutes() {
@@ -124,6 +135,36 @@ export function createIntegrationRoutes() {
     } catch (error) {
       if (error instanceof Error && error.message.includes("idempotency key reuse mismatch")) {
         return context.json({ error: { code: "idempotency_conflict", message: "Provider cron trigger key was reused with different payload" } }, 409);
+      }
+      throw error;
+    }
+
+    return context.json(serializeProviderAttempt(attempt), 202);
+  });
+
+  routes.post("/instagram-publish-previews", async (context) => {
+    const payload = instagramPublishPreviewSchema.safeParse(await context.req.json());
+    if (!payload.success) {
+      return context.json({ error: { code: "invalid_request", message: "Invalid Instagram publish preview payload" } }, 400);
+    }
+
+    const db = context.get("db");
+    if (!db) {
+      return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
+    }
+
+    let attempt;
+    try {
+      attempt = await new IntegrationsRepository(db, context.get("encryptor")).createInstagramPublishPreviewAttempt({
+        accountPublicId: payload.data.account_public_id,
+        imageUrl: payload.data.image_url,
+        caption: payload.data.caption,
+        idempotencyKey: payload.data.idempotency_key,
+        requestId: instagramPublishRequestId(payload.data.idempotency_key),
+      });
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("idempotency key reuse mismatch")) {
+        return context.json({ error: { code: "idempotency_conflict", message: "Instagram publish key was reused with different payload" } }, 409);
       }
       throw error;
     }

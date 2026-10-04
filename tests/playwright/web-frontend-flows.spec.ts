@@ -88,6 +88,12 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     provider?: string;
     idempotency_key?: string;
   } | null = null;
+  let instagramPublishPayload: {
+    account_public_id?: string | null;
+    image_url?: string;
+    caption?: string;
+    idempotency_key?: string;
+  } | null = null;
   let suratShipmentStatus = "in_transit";
   let suratShipmentLastEvent = "Selected shipment at branch";
 
@@ -1241,6 +1247,62 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       return;
     }
 
+    if (url.pathname === "/admin/integrations/instagram-publish-previews") {
+      expect(currentUser.role).toBe("admin");
+      expect(route.request().method()).toBe("POST");
+      const payload = JSON.parse(route.request().postData() ?? "{}") as {
+        account_public_id?: string | null;
+        image_url?: string;
+        caption?: string;
+        idempotency_key?: string;
+      };
+      instagramPublishPayload = payload;
+      await route.fulfill({
+        status: 202,
+        contentType: "application/json",
+        body: JSON.stringify({
+          public_id: "pat_instagram_publish_manual",
+          provider_key: "instagram",
+          account_public_id: payload.account_public_id ?? null,
+          request_id: "igpub_instagram_publish_iac_instagram",
+          operation: "message.send",
+          direction: "outbound",
+          status: "success",
+          status_code: 202,
+          duration_ms: 0,
+          retry_decision: "none",
+          next_retry_at: null,
+          idempotency_key: payload.idempotency_key,
+          request_metadata: {
+            live_call_permitted: false,
+          },
+          provider_request_preview: {
+            method: "POST",
+            path: "/v18.0/ig_main/media",
+            headers: {
+              authorization: "[redacted]",
+              "content-type": "application/json",
+            },
+            body: {
+              image_url: payload.image_url,
+              caption: payload.caption,
+            },
+            live_call_performed: false,
+          },
+          response_metadata: {
+            mode: "dry_run",
+            queued: false,
+            live_call_permitted: false,
+          },
+          error_code: null,
+          error_message: null,
+          started_at: "2026-01-01T00:00:07.000Z",
+          updated_at: "2026-01-01T00:00:07.000Z",
+        }),
+      });
+      return;
+    }
+
     if (url.pathname === "/admin/integrations/accounts/iac_instagram") {
       await route.fulfill({
         contentType: "application/json",
@@ -1735,6 +1797,33 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("instagram-publish-preview")).toContainText("https://example.com/garanti-kulucka.jpg");
     await expect(page.getByTestId("instagram-publish-preview")).toContainText("2200 karakter");
     await expect(page.getByTestId("instagram-publish-preview")).toContainText("taslak");
+    await expect(page.getByTestId("provider-attempts-detail")).toContainText("Provider Deneme Kayıtları");
+    await expect(page.getByTestId("provider-attempts-detail")).toContainText("instagram / message.send");
+    await expect(page.getByTestId("provider-attempts-detail")).toContainText("failed");
+    await expect(page.getByTestId("provider-attempts-detail")).toContainText("429");
+    await expect(page.getByTestId("provider-attempts-detail")).toContainText("312 ms");
+    await expect(page.getByTestId("provider-attempts-detail")).toContainText("retry");
+    await expect(page.getByTestId("provider-attempts-detail")).toContainText("POST /v18.0/ig_main/media");
+    await expect(page.getByTestId("provider-attempts-detail")).toContainText("[redacted]");
+    await expect(page.getByTestId("provider-attempts-detail")).not.toContainText("frontend-playwright-token");
+    await expect(page.getByTestId("provider-attempts-detail")).not.toContainText("raw-provider-secret");
+    await page.getByRole("button", { name: "Instagram yayın dry-run hazırla" }).click();
+    expect(instagramPublishPayload).toMatchObject({
+      account_public_id: "iac_instagram",
+      image_url: "https://example.com/garanti-kulucka.jpg",
+      idempotency_key: "instagram_publish_iac_instagram",
+    });
+    expect(instagramPublishPayload?.caption).toContain("Kuluçka makineleri");
+    await expect(page.getByTestId("instagram-publish-preview")).toContainText("message.send igpub_instagram_publish_iac_instagram");
+    await expect(page.getByTestId("provider-attempts-detail")).toContainText("POST /v18.0/ig_main/media");
+    await expect(page.getByTestId("provider-attempts-detail")).toContainText("success");
+    await expect(page.getByTestId("provider-attempts-detail")).toContainText("HTTP202");
+    await expect(page.getByTestId("provider-attempts-detail")).toContainText("0 ms");
+    await expect(page.getByTestId("provider-attempts-detail")).toContainText("none");
+    await expect(page.getByTestId("provider-attempts-detail")).toContainText("igpub_instagram_publish_iac_instagram");
+    await expect(page.getByTestId("provider-attempts-detail")).toContainText("[redacted]");
+    await expect(page.getByTestId("provider-attempts-detail")).not.toContainText("frontend-playwright-token");
+    await expect(page.getByTestId("provider-attempts-detail")).not.toContainText("raw-provider-secret");
     await expect(page.getByTestId("provider-catalog-detail")).toContainText("Provider Canlı Mod Sınırları");
     await expect(page.getByTestId("provider-catalog-detail")).toContainText("10");
     await expect(page.getByTestId("provider-catalog-detail")).toContainText("ptt");
@@ -1747,16 +1836,6 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("provider-catalog-detail")).toContainText("whatsapp");
     await expect(page.getByTestId("provider-catalog-detail")).toContainText("netgsm");
     await expect(page.getByTestId("provider-catalog-detail")).toContainText("sip");
-    await expect(page.getByTestId("provider-attempts-detail")).toContainText("Provider Deneme Kayıtları");
-    await expect(page.getByTestId("provider-attempts-detail")).toContainText("instagram / message.send");
-    await expect(page.getByTestId("provider-attempts-detail")).toContainText("failed");
-    await expect(page.getByTestId("provider-attempts-detail")).toContainText("429");
-    await expect(page.getByTestId("provider-attempts-detail")).toContainText("312 ms");
-    await expect(page.getByTestId("provider-attempts-detail")).toContainText("retry");
-    await expect(page.getByTestId("provider-attempts-detail")).toContainText("POST /v18.0/ig_main/media");
-    await expect(page.getByTestId("provider-attempts-detail")).toContainText("[redacted]");
-    await expect(page.getByTestId("provider-attempts-detail")).not.toContainText("frontend-playwright-token");
-    await expect(page.getByTestId("provider-attempts-detail")).not.toContainText("raw-provider-secret");
     await expect(page.getByTestId("integration-audit-detail")).toContainText("Entegrasyon Denetim Kayıtları");
     await expect(page.getByTestId("integration-audit-detail")).toContainText("integration_token_update / integration_tokens");
     await expect(page.getByTestId("integration-audit-detail")).toContainText("iac_instagram/access_token");

@@ -876,6 +876,33 @@
           }
         }
       }
+    },
+    "/admin/integrations/instagram-publish-previews": {
+      "post": {
+        "operationId": "createInstagramPublishPreview",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InstagramPublishPreviewRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Fixture-safe Instagram publish preview attempt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderAttempt"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1154,6 +1181,28 @@
         "type": "object",
         "required": ["idempotency_key"],
         "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "InstagramPublishPreviewRequest": {
+        "type": "object",
+        "required": ["image_url", "caption", "idempotency_key"],
+        "properties": {
+          "account_public_id": {
+            "type": ["string", "null"]
+          },
+          "image_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "caption": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2200
+          },
           "idempotency_key": {
             "type": "string",
             "minLength": 1

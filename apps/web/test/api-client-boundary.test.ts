@@ -307,6 +307,64 @@ describe("web API client boundary", () => {
     });
   });
 
+  it("maps Instagram publish previews to fixture-safe backend routes", async () => {
+    const requests: Request[] = [];
+    const client = createApiClient("http://localhost:3000", {
+      fetchImpl: async (input, init) => {
+        requests.push(new Request(input, init));
+        return Response.json({
+          public_id: "pat_instagram_publish",
+          provider_key: "instagram",
+          account_public_id: "iac_instagram",
+          request_id: "igpub_instagram_publish_iac_instagram",
+          operation: "message.send",
+          direction: "outbound",
+          status: "success",
+          status_code: 202,
+          duration_ms: 0,
+          retry_decision: "none",
+          next_retry_at: null,
+          idempotency_key: "instagram_publish_iac_instagram",
+          request_metadata: {},
+          provider_request_preview: {
+            method: "POST",
+            path: "/v18.0/ig_main/media",
+            headers: { authorization: "[redacted]" },
+            body: { image_url: "https://example.com/garanti-kulucka.jpg", caption: "caption" },
+            live_call_performed: false,
+          },
+          response_metadata: { live_call_permitted: false },
+          error_code: null,
+          error_message: null,
+          started_at: "2026-01-01T00:00:00.000Z",
+          updated_at: "2026-01-01T00:00:00.000Z",
+        });
+      },
+    });
+
+    await expect(
+      client.admin.createInstagramPublishPreview({
+        account_public_id: "iac_instagram",
+        image_url: "https://example.com/garanti-kulucka.jpg",
+        caption: "caption",
+        idempotency_key: "instagram_publish_iac_instagram",
+      }),
+    ).resolves.toMatchObject({
+      provider_key: "instagram",
+      provider_request_preview: {
+        live_call_performed: false,
+      },
+    });
+    expect(requests[0]?.method).toBe("POST");
+    expect(requests[0]?.url).toBe("http://localhost:3000/admin/integrations/instagram-publish-previews");
+    await expect(requests[0]?.json()).resolves.toMatchObject({
+      account_public_id: "iac_instagram",
+      image_url: "https://example.com/garanti-kulucka.jpg",
+      caption: "caption",
+      idempotency_key: "instagram_publish_iac_instagram",
+    });
+  });
+
   it("normalizes provider request previews for admin view models", () => {
     const attempt = {
       public_id: "pat_ptt",

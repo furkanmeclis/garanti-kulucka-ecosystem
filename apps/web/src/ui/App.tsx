@@ -435,7 +435,9 @@ export function App() {
   const [downloadInstruction, setDownloadInstruction] = useState<DownloadInstruction | null>(null);
   const [lastSmsSend, setLastSmsSend] = useState<string | null>(null);
   const [lastPaymentRequest, setLastPaymentRequest] = useState<string | null>(null);
+  const [lastInstagramPublishPreview, setLastInstagramPublishPreview] = useState<string | null>(null);
   const [paymentRequesting, setPaymentRequesting] = useState(false);
+  const [instagramPublishPreviewing, setInstagramPublishPreviewing] = useState(false);
   const [cronTriggeringProvider, setCronTriggeringProvider] = useState<"ptt" | "surat" | null>(null);
   const [activeSmsTemplateVariable, setActiveSmsTemplateVariable] = useState<SmsTemplateVariable>("{musteri_adi}");
   const [presenceUpdating, setPresenceUpdating] = useState(false);
@@ -1041,6 +1043,33 @@ export function App() {
     const snapshot = await admin.getIntegrationAccount(accountPublicId);
     setIntegrationSnapshot(snapshot);
     setStatus("Entegrasyon hesabı detayları backend API üzerinden yüklendi");
+  }
+
+  async function handleCreateInstagramPublishPreview() {
+    if (instagramPublishPreviewing) return;
+
+    const accountPublicId = integrationSnapshot?.account.public_id ?? data.integrationAccounts[0]?.public_id ?? null;
+    setStatus("Instagram yayın önizlemesi backend API üzerinden hazırlanıyor");
+    setInstagramPublishPreviewing(true);
+    try {
+      const attempt = await admin.createInstagramPublishPreview({
+        account_public_id: accountPublicId,
+        image_url: instagramDraftImageUrl,
+        caption: instagramDraftCaption,
+        idempotency_key: `instagram_publish_${accountPublicId ?? "preview"}`,
+      });
+      setData((current) => ({
+        ...current,
+        providerAttempts: [
+          toProviderAttemptViewModel(attempt),
+          ...current.providerAttempts.filter((item) => item.public_id !== attempt.public_id),
+        ],
+      }));
+      setLastInstagramPublishPreview(`${attempt.operation} ${attempt.request_id}`);
+      setStatus("Instagram yayın önizlemesi canlı provider kapalıyken kaydedildi");
+    } finally {
+      setInstagramPublishPreviewing(false);
+    }
   }
 
   async function handleSaveIntegrationToken() {
@@ -1869,8 +1898,17 @@ export function App() {
                   ["Caption", instagramDraftCaption, `${instagramDraftCaption.length} / ${instagramCaptionLimit} karakter`],
                   ["Önizleme hesabı", integrationSnapshot?.account.display_name ?? "garantikulucka", "Instagram"],
                   ["Yayın modu", "taslak", "canlı provider kapalı"],
+                  ["Son backend isteği", lastInstagramPublishPreview ?? "-", "provider attempt dry-run"],
                 ]}
               />
+              <button
+                className="primary-action"
+                type="button"
+                disabled={instagramPublishPreviewing}
+                onClick={() => void handleCreateInstagramPublishPreview()}
+              >
+                {instagramPublishPreviewing ? "Yayın dry-run hazırlanıyor" : "Instagram yayın dry-run hazırla"}
+              </button>
             </DetailPanel>
             <DetailPanel title="Instagram Analitik Özeti" testId="instagram-analytics-summary">
               <DataRows

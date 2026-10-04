@@ -223,6 +223,21 @@ export function createAdminClient(http: BackendHttpClient) {
           body: input,
         },
       ),
+    createInstagramPublishPreview: (input: {
+      account_public_id?: string | null;
+      image_url: string;
+      caption: string;
+      idempotency_key: string;
+    }) =>
+      http.request<ProviderAttempt>("/admin/integrations/instagram-publish-previews", {
+        method: "POST",
+        body: {
+          account_public_id: input.account_public_id ?? null,
+          image_url: input.image_url,
+          caption: input.caption,
+          idempotency_key: input.idempotency_key,
+        },
+      }),
     getIntegrationAccount: (accountPublicId: string) =>
       http.request<IntegrationAccountSnapshot>(
         `/admin/integrations/accounts/${encodeURIComponent(accountPublicId)}`,
