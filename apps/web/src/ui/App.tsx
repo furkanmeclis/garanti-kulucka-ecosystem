@@ -66,6 +66,7 @@ interface DashboardData {
   settingsAudit: AdminAuditLog[];
   integrationAudit: AdminAuditLog[];
   providerAttempts: ProviderAttemptViewModel[];
+  fileOrphans: FileMetadata[];
   webphone: WebphoneConfig | null;
 }
 
@@ -374,6 +375,7 @@ export function App() {
     settingsAudit: [],
     integrationAudit: [],
     providerAttempts: [],
+    fileOrphans: [],
     webphone: null,
   });
   const [status, setStatus] = useState("Hazır");
@@ -511,14 +513,15 @@ export function App() {
       user?.role === "admin" ? admin.listSettings("global") : Promise.resolve({ data: [] }),
       webphone.getConfig(),
     ]);
-    const [integrationAccounts, providerAttempts, settingsAudit, integrationAudit] = user?.role === "admin"
+    const [integrationAccounts, providerAttempts, settingsAudit, integrationAudit, fileOrphans] = user?.role === "admin"
       ? await Promise.all([
           admin.listIntegrationAccounts(),
           admin.listProviderAttempts({ limit: 10 }),
           admin.listSettingsAudit({ limit: 10 }),
           admin.listIntegrationAudit({ limit: 10 }),
+          files.listOrphanCandidates({ limit: 10 }),
         ])
-      : [{ data: [] }, { data: [] }, { data: [] }, { data: [] }];
+      : [{ data: [] }, { data: [] }, { data: [] }, { data: [] }, { data: [] }];
     const firstConversation = conversations.data[0]?.public_id;
     const messages = firstConversation
       ? await domain.listMessages(firstConversation, 50)
@@ -536,6 +539,7 @@ export function App() {
       settingsAudit: settingsAudit.data,
       integrationAudit: integrationAudit.data,
       providerAttempts: providerAttempts.data.map(toProviderAttemptViewModel),
+      fileOrphans: fileOrphans.data,
       webphone: webphoneConfig,
     });
     setSelectedConversationId((current) => current ?? firstConversation ?? null);
@@ -577,6 +581,7 @@ export function App() {
         settingsAudit: [],
         integrationAudit: [],
         providerAttempts: [],
+        fileOrphans: [],
         webphone: null,
       });
       setIntegrationSnapshot(null);
@@ -1687,6 +1692,20 @@ export function App() {
                     ["Method", downloadInstruction.method, "presigned download"],
                     ["Bucket", downloadInstruction.bucket, downloadInstruction.object_key],
                     ["URL", downloadInstruction.presigned_url ? "hazır" : "kapalı", downloadInstruction.expires_at ?? "-"],
+                  ]}
+                />
+              </DetailPanel>
+            )}
+            {user?.role === "admin" && (
+              <DetailPanel title="Orphan Dosya Adayları" testId="file-orphans-detail">
+                <DataRows
+                  rows={[
+                    ["Aday", String(data.fileOrphans.length), "files orphan report"],
+                    ...data.fileOrphans.map((file) => [
+                      file.original_name ?? file.public_id,
+                      file.object_key,
+                      file.byte_size === null ? "boyut yok" : `${file.byte_size} byte`,
+                    ]),
                   ]}
                 />
               </DetailPanel>

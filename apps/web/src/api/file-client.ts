@@ -37,6 +37,20 @@ export interface CreateFileUploadInput {
   checksum?: string | null;
 }
 
+export interface FileOrphanListOptions {
+  limit?: number;
+}
+
+function orphanQuery(options: FileOrphanListOptions = {}) {
+  const params = new URLSearchParams();
+  if (typeof options.limit === "number") {
+    params.set("limit", String(options.limit));
+  }
+
+  const query = params.toString();
+  return query ? `?${query}` : "";
+}
+
 export function createFileClient(http: BackendHttpClient) {
   return {
     createUpload: (input: CreateFileUploadInput) =>
@@ -50,5 +64,7 @@ export function createFileClient(http: BackendHttpClient) {
       http.request<{ file: FileMetadata; download: DownloadInstruction }>(
         `/api/files/${encodeURIComponent(filePublicId)}/download`,
       ),
+    listOrphanCandidates: (options?: FileOrphanListOptions) =>
+      http.request<{ data: FileMetadata[] }>(`/api/files/orphans${orphanQuery(options)}`),
   };
 }

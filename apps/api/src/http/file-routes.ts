@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import type { AppBindings } from "./types.js";
-import { authenticate, requireDatabase } from "./middleware.js";
+import { authenticate, requireAdmin, requireDatabase } from "./middleware.js";
 import { FilesRepository, serializeFile } from "../files/repository.js";
 import { createMediaStorageFromEnv } from "../files/storage.js";
 
@@ -50,6 +50,18 @@ export function createFileRoutes() {
       },
       201,
     );
+  });
+
+  routes.get("/orphans", requireAdmin, async (context) => {
+    const db = context.get("db");
+    if (!db) {
+      return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
+    }
+
+    const parsedLimit = Number(context.req.query("limit") ?? 20);
+    const limit = Number.isFinite(parsedLimit) ? parsedLimit : 20;
+    const files = await new FilesRepository(db).listOrphanCandidates(limit);
+    return context.json({ data: files.map(serializeFile) });
   });
 
   routes.get("/:file_public_id/download", async (context) => {

@@ -894,6 +894,30 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       return;
     }
 
+    if (url.pathname === "/api/files/orphans") {
+      expect(currentUser.role).toBe("admin");
+      expect(url.searchParams.get("limit")).toBe("10");
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          data: [
+            {
+              public_id: "fil_orphan",
+              bucket: "media",
+              object_key: "uploads/orphan-proof.txt",
+              original_name: "orphan-proof.txt",
+              mime_type: "text/plain",
+              byte_size: 42,
+              checksum: "sha256:orphan-proof",
+              created_at: "2026-01-01T00:00:00.000Z",
+              updated_at: "2026-01-01T00:01:00.000Z",
+            },
+          ],
+        }),
+      });
+      return;
+    }
+
     if (url.pathname === "/api/files/fil_playwright") {
       await route.fulfill({
         contentType: "application/json",
@@ -1218,6 +1242,10 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await page.getByRole("button", { name: /ptt canlı modu aç/i }).click();
     await expect(page.getByTestId("admin-flow")).toContainText("providers.ptt.live_mode");
     await page.getByRole("link", { name: /dosya/i }).click();
+    await expect(page.getByTestId("file-orphans-detail")).toContainText("Orphan Dosya Adayları");
+    await expect(page.getByTestId("file-orphans-detail")).toContainText("orphan-proof.txt");
+    await expect(page.getByTestId("file-orphans-detail")).toContainText("uploads/orphan-proof.txt");
+    await expect(page.getByTestId("file-orphans-detail")).toContainText("42 byte");
     await page.getByRole("button", { name: /presigned upload testi/i }).click();
     await expect(page.getByTestId("file-upload-flow")).toContainText("kanit.txt kaydedildi");
     await expect(page.getByTestId("file-metadata-detail")).toContainText("media");
@@ -1312,6 +1340,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       "/admin/settings/netgsm_teyit_ayarlar",
       "/admin/settings/providers.ptt.live_mode",
       "/api/files/uploads",
+      "/api/files/orphans",
       "/api/files/fil_playwright",
       "/api/files/fil_playwright/download",
       "/presigned/uploads/kanit.txt",

@@ -49,6 +49,18 @@ export class FilesRepository {
         .executeTakeFirst()) ?? null
     );
   }
+
+  async listOrphanCandidates(limit = 20): Promise<FileRecord[]> {
+    const safeLimit = Math.max(1, Math.min(100, limit));
+    return this.db
+      .selectFrom("files")
+      .leftJoin("message_attachments", "message_attachments.file_id", "files.id")
+      .selectAll("files")
+      .where("message_attachments.id", "is", null)
+      .orderBy("files.created_at", "asc")
+      .limit(safeLimit)
+      .execute();
+  }
 }
 
 export function serializeFile(file: FileRecord) {

@@ -179,6 +179,35 @@ const shipments = [
   },
 ];
 
+const files = [
+  {
+    id: 350,
+    public_id: "fil_orphan",
+    bucket: "media",
+    object_key: "uploads/orphan-proof.txt",
+    original_name: "orphan-proof.txt",
+    mime_type: "text/plain",
+    byte_size: 42,
+    checksum: "sha256:orphan-proof",
+    created_by_user_id: user.id,
+    created_at: date,
+    updated_at: date,
+  },
+  {
+    id: 351,
+    public_id: "fil_attached",
+    bucket: "media",
+    object_key: "uploads/attached-proof.txt",
+    original_name: "attached-proof.txt",
+    mime_type: "text/plain",
+    byte_size: 24,
+    checksum: "sha256:attached-proof",
+    created_by_user_id: user.id,
+    created_at: date,
+    updated_at: date,
+  },
+];
+
 const settings = [
   {
     id: 400,
@@ -286,6 +315,8 @@ class FixtureQuery {
         return products;
       case "shipments":
         return shipments;
+      case "files":
+        return files.filter((file) => file.public_id === "fil_orphan");
       case "settings":
         return settings.filter((setting) => this.whereValues.get("scope") === undefined || setting.scope === this.whereValues.get("scope"));
       case "roles":
@@ -474,6 +505,7 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
       orderResponse,
       productResponse,
       shipmentResponse,
+      fileOrphansResponse,
       settingsResponse,
       webphoneResponse,
     ] =
@@ -484,6 +516,7 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
         api.client.get("/api/orders?limit=10"),
         api.client.get("/api/products?limit=10"),
         api.client.get("/api/shipments?limit=10"),
+        api.client.get("/api/files/orphans?limit=10"),
         api.client.get("/admin/settings?scope=global"),
         api.client.get("/api/webphone/config"),
       ]);
@@ -600,6 +633,22 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
           order_number: "ORD-PLAYWRIGHT",
         },
       ],
+    });
+
+    expect(fileOrphansResponse.status()).toBe(200);
+    expect(await fileOrphansResponse.json()).toMatchObject({
+      data: [
+        {
+          public_id: "fil_orphan",
+          object_key: "uploads/orphan-proof.txt",
+          byte_size: 42,
+        },
+      ],
+    });
+    const forbiddenFileOrphansResponse = await api.cargoClient.get("/api/files/orphans?limit=10");
+    expect(forbiddenFileOrphansResponse.status()).toBe(403);
+    expect(await forbiddenFileOrphansResponse.json()).toMatchObject({
+      error: { code: "forbidden" },
     });
 
     expect(settingsResponse.status()).toBe(200);

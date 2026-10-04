@@ -86,4 +86,19 @@ describe("file API client", () => {
 
     expect(requests[0]?.url).toBe("http://localhost:3000/api/files/fil_test/download");
   });
+
+  it("maps orphan candidate reports to the backend route", async () => {
+    const requests: Request[] = [];
+    const http = createBackendHttpClient({
+      baseUrl: "http://localhost:3000",
+      fetchImpl: async (input, init) => {
+        requests.push(new Request(input, init));
+        return Response.json({ data: [] });
+      },
+    });
+
+    await createFileClient(http).listOrphanCandidates({ limit: 10 });
+
+    expect(requests[0]?.url).toBe("http://localhost:3000/api/files/orphans?limit=10");
+  });
 });
