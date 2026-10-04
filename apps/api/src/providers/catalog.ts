@@ -5,69 +5,38 @@ export interface ApiProviderCatalogItem {
   channels: ProviderChannel[];
   supported_operations: ProviderOperation[];
   contract_mode: "fixture_only";
+  live_feature_flag_key: string;
+  live_call_permitted: false;
+  live_block_reason: "fixture_replay_contract_required";
+}
+
+function catalogItem(
+  provider: ProviderName,
+  channels: ProviderChannel[],
+  supportedOperations: ProviderOperation[],
+): ApiProviderCatalogItem {
+  return {
+    provider,
+    channels,
+    supported_operations: supportedOperations,
+    contract_mode: "fixture_only",
+    live_feature_flag_key: `providers.${provider}.live_mode`,
+    live_call_permitted: false,
+    live_block_reason: "fixture_replay_contract_required",
+  };
 }
 
 export const apiProviderCatalog: ApiProviderCatalogItem[] = [
-  {
-    provider: "ptt",
-    channels: ["cargo"],
-    supported_operations: ["shipment.create", "shipment.track"],
-    contract_mode: "fixture_only",
-  },
-  {
-    provider: "surat",
-    channels: ["cargo"],
-    supported_operations: ["shipment.create", "shipment.track"],
-    contract_mode: "fixture_only",
-  },
-  {
-    provider: "kolaybi",
-    channels: ["accounting"],
-    supported_operations: ["invoice.create"],
-    contract_mode: "fixture_only",
-  },
-  {
-    provider: "meta",
-    channels: ["whatsapp", "instagram", "messenger"],
-    supported_operations: ["message.webhook"],
-    contract_mode: "fixture_only",
-  },
-  {
-    provider: "whatsapp",
-    channels: ["whatsapp"],
-    supported_operations: ["message.webhook", "message.send"],
-    contract_mode: "fixture_only",
-  },
-  {
-    provider: "instagram",
-    channels: ["instagram"],
-    supported_operations: ["message.webhook", "message.send"],
-    contract_mode: "fixture_only",
-  },
-  {
-    provider: "messenger",
-    channels: ["messenger"],
-    supported_operations: ["message.webhook", "message.send"],
-    contract_mode: "fixture_only",
-  },
-  {
-    provider: "netgsm",
-    channels: ["sms"],
-    supported_operations: ["sms.send"],
-    contract_mode: "fixture_only",
-  },
-  {
-    provider: "vapi",
-    channels: ["voice"],
-    supported_operations: ["call.webhook"],
-    contract_mode: "fixture_only",
-  },
-  {
-    provider: "sip",
-    channels: ["sip"],
-    supported_operations: ["sip.config.sync"],
-    contract_mode: "fixture_only",
-  },
+  catalogItem("ptt", ["cargo"], ["shipment.create", "shipment.track"]),
+  catalogItem("surat", ["cargo"], ["shipment.create", "shipment.track"]),
+  catalogItem("kolaybi", ["accounting"], ["invoice.create"]),
+  catalogItem("meta", ["whatsapp", "instagram", "messenger"], ["message.webhook"]),
+  catalogItem("whatsapp", ["whatsapp"], ["message.webhook", "message.send"]),
+  catalogItem("instagram", ["instagram"], ["message.webhook", "message.send"]),
+  catalogItem("messenger", ["messenger"], ["message.webhook", "message.send"]),
+  catalogItem("netgsm", ["sms"], ["sms.send"]),
+  catalogItem("vapi", ["voice"], ["call.webhook"]),
+  catalogItem("sip", ["sip"], ["sip.config.sync"]),
 ];
 
 export function getApiProviderCatalogItem(provider: ProviderName): ApiProviderCatalogItem {

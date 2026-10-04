@@ -33,6 +33,7 @@ import {
   type AdminSetting,
   type IntegrationAccount,
   type IntegrationAccountSnapshot,
+  type ProviderCatalogItem,
   type ProviderAttemptViewModel,
   toProviderAttemptViewModel,
 } from "../api/admin-client.js";
@@ -65,6 +66,7 @@ interface DashboardData {
   integrationAccounts: IntegrationAccount[];
   settingsAudit: AdminAuditLog[];
   integrationAudit: AdminAuditLog[];
+  providerCatalog: ProviderCatalogItem[];
   providerAttempts: ProviderAttemptViewModel[];
   fileOrphans: FileMetadata[];
   webphone: WebphoneConfig | null;
@@ -374,6 +376,7 @@ export function App() {
     integrationAccounts: [],
     settingsAudit: [],
     integrationAudit: [],
+    providerCatalog: [],
     providerAttempts: [],
     fileOrphans: [],
     webphone: null,
@@ -513,15 +516,16 @@ export function App() {
       user?.role === "admin" ? admin.listSettings("global") : Promise.resolve({ data: [] }),
       webphone.getConfig(),
     ]);
-    const [integrationAccounts, providerAttempts, settingsAudit, integrationAudit, fileOrphans] = user?.role === "admin"
+    const [integrationAccounts, providerCatalog, providerAttempts, settingsAudit, integrationAudit, fileOrphans] = user?.role === "admin"
       ? await Promise.all([
           admin.listIntegrationAccounts(),
+          admin.listProviderCatalog(),
           admin.listProviderAttempts({ limit: 10 }),
           admin.listSettingsAudit({ limit: 10 }),
           admin.listIntegrationAudit({ limit: 10 }),
           files.listOrphanCandidates({ limit: 10 }),
         ])
-      : [{ data: [] }, { data: [] }, { data: [] }, { data: [] }, { data: [] }];
+      : [{ data: [] }, { data: [] }, { data: [] }, { data: [] }, { data: [] }, { data: [] }];
     const firstConversation = conversations.data[0]?.public_id;
     const messages = firstConversation
       ? await domain.listMessages(firstConversation, 50)
@@ -538,6 +542,7 @@ export function App() {
       integrationAccounts: integrationAccounts.data,
       settingsAudit: settingsAudit.data,
       integrationAudit: integrationAudit.data,
+      providerCatalog: providerCatalog.data,
       providerAttempts: providerAttempts.data.map(toProviderAttemptViewModel),
       fileOrphans: fileOrphans.data,
       webphone: webphoneConfig,
@@ -580,6 +585,7 @@ export function App() {
         integrationAccounts: [],
         settingsAudit: [],
         integrationAudit: [],
+        providerCatalog: [],
         providerAttempts: [],
         fileOrphans: [],
         webphone: null,
@@ -880,6 +886,7 @@ export function App() {
   const instagramAnalytics = instagramAnalyticsFrom(integrationSnapshot?.account.metadata);
   const selectedProviderAttempt = data.providerAttempts[0] ?? null;
   const selectedProviderPreview = selectedProviderAttempt?.provider_request_preview ?? null;
+  const selectedProviderCatalogItem = data.providerCatalog[0] ?? null;
   const latestSettingsAudit = data.settingsAudit[0] ?? null;
   const latestIntegrationAudit = data.integrationAudit[0] ?? null;
   const activeOrderCount = data.orders.filter((order) => !["cancelled", "returned", "delivered"].includes(order.status)).length;
@@ -1204,6 +1211,30 @@ export function App() {
               Instagram hesabı kaydet
             </button>
             <DataRows rows={data.integrationAccounts.map((account) => [account.provider_name, account.display_name, account.status])} />
+            <DetailPanel title="Provider Canlı Mod Sınırları" testId="provider-catalog-detail">
+              <DataRows
+                rows={[
+                  ["Katalog", String(data.providerCatalog.length), "backend provider catalog"],
+                  [
+                    "İlk provider",
+                    selectedProviderCatalogItem?.provider ?? "-",
+                    selectedProviderCatalogItem?.contract_mode ?? "-",
+                  ],
+                  [
+                    "Canlı çağrı",
+                    selectedProviderCatalogItem?.live_call_permitted === false ? "kapalı" : "-",
+                    selectedProviderCatalogItem?.live_feature_flag_key ?? "-",
+                  ],
+                  [
+                    "Blok nedeni",
+                    selectedProviderCatalogItem?.live_block_reason ?? "-",
+                    selectedProviderCatalogItem?.supported_operations.join(", ") ?? "-",
+                  ],
+                  ["Kanallar", data.providerCatalog.map((item) => item.channels.join("+")).join(" / "), "adapter sınırları"],
+                  ["Providerlar", data.providerCatalog.map((item) => item.provider).join(", "), "canlı HTTP kapalı"],
+                ]}
+              />
+            </DetailPanel>
             <DetailPanel title="Instagram Yayın Önizleme" testId="instagram-publish-preview">
               <DataRows
                 rows={[

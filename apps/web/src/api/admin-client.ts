@@ -27,6 +27,16 @@ export interface IntegrationProvider {
   is_active: boolean;
 }
 
+export interface ProviderCatalogItem {
+  provider: string;
+  channels: string[];
+  supported_operations: string[];
+  contract_mode: "fixture_only";
+  live_feature_flag_key: string;
+  live_call_permitted: false;
+  live_block_reason: "fixture_replay_contract_required";
+}
+
 export interface IntegrationAccount {
   public_id: string;
   provider_key: string;
@@ -195,6 +205,8 @@ export function createAdminClient(http: BackendHttpClient) {
       }),
     listIntegrationProviders: () =>
       http.request<{ data: IntegrationProvider[] }>("/admin/integrations/providers"),
+    listProviderCatalog: () =>
+      http.request<{ data: ProviderCatalogItem[] }>("/admin/integrations/provider-catalog"),
     listIntegrationAccounts: () =>
       http.request<{ data: IntegrationAccount[] }>("/admin/integrations/accounts"),
     listIntegrationAudit: (options?: AuditListOptions) =>

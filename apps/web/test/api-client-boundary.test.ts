@@ -226,6 +226,37 @@ describe("web API client boundary", () => {
     expect(JSON.stringify(response)).not.toContain("plain-token");
   });
 
+  it("maps provider catalog reads to backend routes without live-call enablement", async () => {
+    const requests: Request[] = [];
+    const client = createApiClient("http://localhost:3000", {
+      fetchImpl: async (input, init) => {
+        requests.push(new Request(input, init));
+        return Response.json({
+          data: [
+            {
+              provider: "ptt",
+              channels: ["cargo"],
+              supported_operations: ["shipment.create", "shipment.track"],
+              contract_mode: "fixture_only",
+              live_feature_flag_key: "providers.ptt.live_mode",
+              live_call_permitted: false,
+              live_block_reason: "fixture_replay_contract_required",
+            },
+          ],
+        });
+      },
+    });
+
+    const response = await client.admin.listProviderCatalog();
+
+    expect(requests[0]?.url).toBe("http://localhost:3000/admin/integrations/provider-catalog");
+    expect(response.data[0]).toMatchObject({
+      provider: "ptt",
+      contract_mode: "fixture_only",
+      live_call_permitted: false,
+    });
+  });
+
   it("normalizes provider request previews for admin view models", () => {
     const attempt = {
       public_id: "pat_ptt",

@@ -13,6 +13,7 @@ import {
   serializeProviderAttempt,
   serializeProvider,
 } from "../integrations/repository.js";
+import { apiProviderCatalog } from "../providers/catalog.js";
 
 const metadataSchema = z.record(z.string(), z.unknown()).default({});
 
@@ -47,6 +48,8 @@ export function createIntegrationRoutes() {
     const providers = await new IntegrationsRepository(db, context.get("encryptor")).listProviders();
     return context.json({ data: providers.map(serializeProvider) });
   });
+
+  routes.get("/provider-catalog", (context) => context.json({ data: apiProviderCatalog }));
 
   routes.get("/accounts", async (context) => {
     const db = context.get("db");

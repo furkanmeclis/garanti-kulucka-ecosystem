@@ -506,6 +506,7 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
       productResponse,
       shipmentResponse,
       fileOrphansResponse,
+      providerCatalogResponse,
       settingsResponse,
       webphoneResponse,
     ] =
@@ -517,6 +518,7 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
         api.client.get("/api/products?limit=10"),
         api.client.get("/api/shipments?limit=10"),
         api.client.get("/api/files/orphans?limit=10"),
+        api.client.get("/admin/integrations/provider-catalog"),
         api.client.get("/admin/settings?scope=global"),
         api.client.get("/api/webphone/config"),
       ]);
@@ -648,6 +650,30 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
     const forbiddenFileOrphansResponse = await api.cargoClient.get("/api/files/orphans?limit=10");
     expect(forbiddenFileOrphansResponse.status()).toBe(403);
     expect(await forbiddenFileOrphansResponse.json()).toMatchObject({
+      error: { code: "forbidden" },
+    });
+
+    expect(providerCatalogResponse.status()).toBe(200);
+    const providerCatalogBody = await providerCatalogResponse.json();
+    expect(providerCatalogBody.data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          provider: "ptt",
+          contract_mode: "fixture_only",
+          live_feature_flag_key: "providers.ptt.live_mode",
+          live_call_permitted: false,
+          live_block_reason: "fixture_replay_contract_required",
+        }),
+        expect.objectContaining({
+          provider: "sip",
+          supported_operations: ["sip.config.sync"],
+          live_call_permitted: false,
+        }),
+      ]),
+    );
+    const forbiddenProviderCatalogResponse = await api.cargoClient.get("/admin/integrations/provider-catalog");
+    expect(forbiddenProviderCatalogResponse.status()).toBe(403);
+    expect(await forbiddenProviderCatalogResponse.json()).toMatchObject({
       error: { code: "forbidden" },
     });
 

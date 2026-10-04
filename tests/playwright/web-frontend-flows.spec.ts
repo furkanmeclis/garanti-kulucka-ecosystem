@@ -720,6 +720,108 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       return;
     }
 
+    if (url.pathname === "/admin/integrations/provider-catalog") {
+      expect(currentUser.role).toBe("admin");
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          data: [
+            {
+              provider: "ptt",
+              channels: ["cargo"],
+              supported_operations: ["shipment.create", "shipment.track"],
+              contract_mode: "fixture_only",
+              live_feature_flag_key: "providers.ptt.live_mode",
+              live_call_permitted: false,
+              live_block_reason: "fixture_replay_contract_required",
+            },
+            {
+              provider: "surat",
+              channels: ["cargo"],
+              supported_operations: ["shipment.create", "shipment.track"],
+              contract_mode: "fixture_only",
+              live_feature_flag_key: "providers.surat.live_mode",
+              live_call_permitted: false,
+              live_block_reason: "fixture_replay_contract_required",
+            },
+            {
+              provider: "kolaybi",
+              channels: ["accounting"],
+              supported_operations: ["invoice.create"],
+              contract_mode: "fixture_only",
+              live_feature_flag_key: "providers.kolaybi.live_mode",
+              live_call_permitted: false,
+              live_block_reason: "fixture_replay_contract_required",
+            },
+            {
+              provider: "meta",
+              channels: ["whatsapp", "instagram", "messenger"],
+              supported_operations: ["message.webhook"],
+              contract_mode: "fixture_only",
+              live_feature_flag_key: "providers.meta.live_mode",
+              live_call_permitted: false,
+              live_block_reason: "fixture_replay_contract_required",
+            },
+            {
+              provider: "whatsapp",
+              channels: ["whatsapp"],
+              supported_operations: ["message.webhook", "message.send"],
+              contract_mode: "fixture_only",
+              live_feature_flag_key: "providers.whatsapp.live_mode",
+              live_call_permitted: false,
+              live_block_reason: "fixture_replay_contract_required",
+            },
+            {
+              provider: "instagram",
+              channels: ["instagram"],
+              supported_operations: ["message.webhook", "message.send"],
+              contract_mode: "fixture_only",
+              live_feature_flag_key: "providers.instagram.live_mode",
+              live_call_permitted: false,
+              live_block_reason: "fixture_replay_contract_required",
+            },
+            {
+              provider: "messenger",
+              channels: ["messenger"],
+              supported_operations: ["message.webhook", "message.send"],
+              contract_mode: "fixture_only",
+              live_feature_flag_key: "providers.messenger.live_mode",
+              live_call_permitted: false,
+              live_block_reason: "fixture_replay_contract_required",
+            },
+            {
+              provider: "netgsm",
+              channels: ["sms"],
+              supported_operations: ["sms.send"],
+              contract_mode: "fixture_only",
+              live_feature_flag_key: "providers.netgsm.live_mode",
+              live_call_permitted: false,
+              live_block_reason: "fixture_replay_contract_required",
+            },
+            {
+              provider: "vapi",
+              channels: ["voice"],
+              supported_operations: ["call.webhook"],
+              contract_mode: "fixture_only",
+              live_feature_flag_key: "providers.vapi.live_mode",
+              live_call_permitted: false,
+              live_block_reason: "fixture_replay_contract_required",
+            },
+            {
+              provider: "sip",
+              channels: ["sip"],
+              supported_operations: ["sip.config.sync"],
+              contract_mode: "fixture_only",
+              live_feature_flag_key: "providers.sip.live_mode",
+              live_call_permitted: false,
+              live_block_reason: "fixture_replay_contract_required",
+            },
+          ],
+        }),
+      });
+      return;
+    }
+
     if (url.pathname === "/admin/integrations/provider-attempts") {
       expect(currentUser.role).toBe("admin");
       expect(url.searchParams.get("limit")).toBe("10");
@@ -1151,6 +1253,18 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("instagram-publish-preview")).toContainText("https://example.com/garanti-kulucka.jpg");
     await expect(page.getByTestId("instagram-publish-preview")).toContainText("2200 karakter");
     await expect(page.getByTestId("instagram-publish-preview")).toContainText("taslak");
+    await expect(page.getByTestId("provider-catalog-detail")).toContainText("Provider Canlı Mod Sınırları");
+    await expect(page.getByTestId("provider-catalog-detail")).toContainText("10");
+    await expect(page.getByTestId("provider-catalog-detail")).toContainText("ptt");
+    await expect(page.getByTestId("provider-catalog-detail")).toContainText("fixture_only");
+    await expect(page.getByTestId("provider-catalog-detail")).toContainText("kapalı");
+    await expect(page.getByTestId("provider-catalog-detail")).toContainText("providers.ptt.live_mode");
+    await expect(page.getByTestId("provider-catalog-detail")).toContainText("fixture_replay_contract_required");
+    await expect(page.getByTestId("provider-catalog-detail")).toContainText("surat");
+    await expect(page.getByTestId("provider-catalog-detail")).toContainText("kolaybi");
+    await expect(page.getByTestId("provider-catalog-detail")).toContainText("whatsapp");
+    await expect(page.getByTestId("provider-catalog-detail")).toContainText("netgsm");
+    await expect(page.getByTestId("provider-catalog-detail")).toContainText("sip");
     await expect(page.getByTestId("provider-attempts-detail")).toContainText("Provider Deneme Kayıtları");
     await expect(page.getByTestId("provider-attempts-detail")).toContainText("instagram / message.send");
     await expect(page.getByTestId("provider-attempts-detail")).toContainText("failed");
@@ -1325,6 +1439,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       "/api/conversations/cnv_playwright/messages",
       "/admin/integrations/accounts",
       "/admin/integrations/audit",
+      "/admin/integrations/provider-catalog",
       "/admin/integrations/provider-attempts",
       "/admin/integrations/accounts/iac_instagram",
       "/admin/integrations/accounts/iac_instagram/settings/webhook.enabled",
