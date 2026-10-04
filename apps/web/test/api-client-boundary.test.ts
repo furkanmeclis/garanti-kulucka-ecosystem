@@ -344,6 +344,40 @@ describe("web API client boundary", () => {
     expect(requests[1]?.url).toBe("http://localhost:3000/api/orders?confirmation_status=pending&limit=20");
   });
 
+  it("maps domain order status updates to backend routes", async () => {
+    const requests: Request[] = [];
+    const client = createApiClient("http://localhost:3000", {
+      fetchImpl: async (input, init) => {
+        requests.push(new Request(input, init));
+        return Response.json({
+          public_id: "ord_test",
+          order_number: "ORD-TEST",
+          status: "cancelled",
+          source: "manual",
+          total_amount: "125.50",
+          currency: "TRY",
+          confirmation_status: null,
+          notes: "cancel proof",
+          customer_full_name: "Test Customer",
+          created_at: "2026-01-01T00:00:00.000Z",
+          updated_at: "2026-01-01T00:00:00.000Z",
+        });
+      },
+    });
+
+    await client.domain.updateOrderStatus("ord_test", {
+      status: "cancelled",
+      notes: "cancel proof",
+    });
+
+    expect(requests[0]?.method).toBe("PATCH");
+    expect(requests[0]?.url).toBe("http://localhost:3000/api/orders/ord_test/status");
+    await expect(requests[0]?.json()).resolves.toEqual({
+      status: "cancelled",
+      notes: "cancel proof",
+    });
+  });
+
   it("maps domain shipment filters to backend routes", async () => {
     const requests: Request[] = [];
     const client = createApiClient("http://localhost:3000", {

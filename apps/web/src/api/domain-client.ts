@@ -155,6 +155,20 @@ export function createDomainClient(http: BackendHttpClient) {
         method: "POST",
         body: input,
       }),
+    updateOrderStatus: (
+      orderPublicId: string,
+      input: {
+        status: string;
+        notes?: string | null;
+      },
+    ) =>
+      http.request<OrderSummary>(
+        `/api/orders/${encodeURIComponent(orderPublicId)}/status`,
+        {
+          method: "PATCH",
+          body: input,
+        },
+      ),
     listShipments: (params: { provider?: string; status?: string; tracking_missing?: boolean; limit?: number } | number = {}) => {
       const normalized = typeof params === "number" ? { limit: params } : params;
       const search = new URLSearchParams();

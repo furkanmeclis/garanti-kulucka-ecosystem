@@ -391,6 +391,11 @@ class FixtureQuery {
           this.whereValues.get("conversations.public_id") === conversation.public_id
           ? conversation
           : null;
+      case "orders":
+        return orders.find((order) =>
+          this.whereValues.get("public_id") === order.public_id ||
+          this.whereValues.get("orders.public_id") === order.public_id,
+        ) ?? null;
       default:
         return null;
     }
@@ -455,6 +460,12 @@ class FixtureUpdate {
   }
 
   async executeTakeFirst() {
+    if (this.table === "orders") {
+      const order = orders.find((item) => item.public_id === this.whereValues.get("public_id"));
+      if (!order) return null;
+      Object.assign(order, this.valuesToSet);
+      return order;
+    }
     if (this.table !== "shipments") {
       throw new Error(`Unsupported fixture returning update: ${this.table}`);
     }
@@ -739,6 +750,27 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
       is_in_pool: false,
       assigned_user_email: "admin@example.com",
     });
+
+    const cancelledOrderResponse = await api.client.patch(
+      "/api/orders/ord_playwright/status",
+      {
+        data: {
+          status: "cancelled",
+          notes: "API iptal kaniti",
+        },
+      },
+    );
+    expect(cancelledOrderResponse.status()).toBe(200);
+    const cancelledOrder = await cancelledOrderResponse.json() as {
+      updated_at: string;
+    };
+    expect(cancelledOrder).toMatchObject({
+      public_id: "ord_playwright",
+      status: "cancelled",
+      notes: "API iptal kaniti",
+      customer_full_name: "Playwright Customer",
+    });
+    expect(Date.parse(cancelledOrder.updated_at)).toBeGreaterThan(date.getTime());
 
     expect(orderResponse.status()).toBe(200);
     expect((await orderResponse.json()).data).toEqual(

@@ -80,6 +80,12 @@ export interface CreateOrderInput {
   notes: string | null;
 }
 
+export interface UpdateOrderStatusInput {
+  orderPublicId: string;
+  status: string;
+  notes?: string | null;
+}
+
 export interface UpdateShipmentStatusInput {
   shipmentPublicId: string;
   status: string;
@@ -105,6 +111,18 @@ export class DomainRepository {
       .executeTakeFirst();
 
     return conversation ?? null;
+  }
+
+  private async getOrderByPublicId(db: AppDatabase, orderPublicId: string): Promise<OrderRecord | null> {
+    const order = await db
+      .selectFrom("orders")
+      .leftJoin("customers", "customers.id", "orders.customer_id")
+      .selectAll("orders")
+      .select("customers.full_name as customer_full_name")
+      .where("orders.public_id", "=", orderPublicId)
+      .executeTakeFirst();
+
+    return order ?? null;
   }
 
   async listConversations(filter: ListConversationsFilter): Promise<ConversationRecord[]> {
@@ -332,6 +350,26 @@ export class DomainRepository {
         customer_full_name: customer?.full_name ?? null,
       };
     });
+  }
+
+  async updateOrderStatus(input: UpdateOrderStatusInput): Promise<OrderRecord> {
+    const values: { status: string; notes?: string | null } = { status: input.status };
+    if (input.notes !== undefined) {
+      values.notes = input.notes;
+    }
+    const order = await this.db
+      .updateTable("orders")
+      .set({
+        ...values,
+        updated_at: new Date(),
+      })
+      .where("public_id", "=", input.orderPublicId)
+      .returningAll()
+      .executeTakeFirst();
+    if (!order) {
+      throw new Error(`Unknown order: ${input.orderPublicId}`);
+    }
+    return (await this.getOrderByPublicId(this.db, order.public_id)) ?? { ...order, customer_full_name: null };
   }
 
   async listShipments(filter: ListShipmentsFilter): Promise<ShipmentRecord[]> {

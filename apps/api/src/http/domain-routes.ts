@@ -46,6 +46,11 @@ const createOrderSchema = z.object({
   notes: z.string().nullable().default(null),
 });
 
+const updateOrderStatusSchema = z.object({
+  status: z.string().min(1),
+  notes: z.string().nullable().optional(),
+});
+
 const updateShipmentStatusSchema = z.object({
   status: z.string().min(1),
   last_event_text: z.string().nullable().default(null),
@@ -226,6 +231,26 @@ export function createDomainRoutes() {
     });
 
     return context.json(serializeOrder(order), 201);
+  });
+
+  routes.patch("/orders/:order_public_id/status", async (context) => {
+    const payload = updateOrderStatusSchema.safeParse(await context.req.json());
+    if (!payload.success) {
+      return context.json({ error: { code: "invalid_request", message: "Invalid order status payload" } }, 400);
+    }
+
+    const db = context.get("db");
+    if (!db) {
+      return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
+    }
+
+    const order = await new DomainRepository(db).updateOrderStatus({
+      orderPublicId: context.req.param("order_public_id"),
+      status: payload.data.status,
+      ...(payload.data.notes !== undefined ? { notes: payload.data.notes } : {}),
+    });
+
+    return context.json(serializeOrder(order));
   });
 
   routes.get("/shipments", async (context) => {

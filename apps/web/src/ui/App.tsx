@@ -822,6 +822,23 @@ export function App() {
     setStatus("Sipariş backend API üzerinden oluşturuldu");
   }
 
+  async function handleCancelSelectedOrder() {
+    const order = selectedOrder;
+    if (!order) return;
+
+    setStatus("İptal durumu backend API üzerinden güncelleniyor");
+    const updated = await domain.updateOrderStatus(order.public_id, {
+      status: "cancelled",
+      notes: "Frontend iptal inceleme onayi",
+    });
+    setData((current) => ({
+      ...current,
+      orders: current.orders.map((item) => (item.public_id === updated.public_id ? updated : item)),
+    }));
+    setSelectedOrderId(updated.public_id);
+    setStatus("İptal durumu backend API üzerinden güncellendi");
+  }
+
   async function handleUpdateShipment() {
     const shipment = selectedShipment;
     if (!shipment) return;
@@ -1985,6 +2002,9 @@ export function App() {
                 ]}
               />
             </DetailPanel>
+            <button className="primary-action" type="button" onClick={() => void handleCancelSelectedOrder()}>
+              İptali onayla
+            </button>
           </FlowPanel>
         )}
 

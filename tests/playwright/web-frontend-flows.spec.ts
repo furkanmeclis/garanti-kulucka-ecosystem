@@ -54,6 +54,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
   const app = await startWebApp();
   const requestedUrls: string[] = [];
   const allRequestUrls: string[] = [];
+  const frontendErrors: string[] = [];
   const conversationQueryUrls: string[] = [];
   const orderQueryUrls: string[] = [];
   const shipmentQueryUrls: string[] = [];
@@ -70,8 +71,14 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
   let conversationHumanAgent = false;
   let conversationAssignedUserEmail: string | null = null;
   let conversationOrderCreated = false;
+  let cancellationApproved = false;
+  let cancellationPayload: { status?: string; notes?: string | null } | null = null;
   let suratShipmentStatus = "in_transit";
   let suratShipmentLastEvent = "Selected shipment at branch";
+
+  page.on("pageerror", (error) => {
+    frontendErrors.push(error.message);
+  });
 
   await page.addInitScript(`
     (() => {
@@ -425,6 +432,32 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
         contentType: "application/json",
         body: JSON.stringify({
           data: filteredOrders,
+        }),
+      });
+      return;
+    }
+
+    if (url.pathname === "/api/orders/ord_playwright/status") {
+      const payload = JSON.parse(route.request().postData() ?? "{}") as {
+        status?: string;
+        notes?: string | null;
+      };
+      cancellationPayload = payload;
+      cancellationApproved = true;
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          public_id: "ord_playwright",
+          order_number: "ORD-PLAYWRIGHT",
+          status: "cancelled",
+          source: "manual",
+          total_amount: "125.50",
+          currency: "TRY",
+          confirmation_status: null,
+          notes: payload.notes,
+          customer_full_name: "Playwright Customer",
+          created_at: "2026-01-01T00:00:00.000Z",
+          updated_at: "2026-01-01T00:04:00.000Z",
         }),
       });
       return;
@@ -1435,6 +1468,20 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("cancellation-detail")).toContainText("ORD-PLAYWRIGHT");
     await expect(page.getByTestId("cancellation-detail")).toContainText("Playwright Customer");
     await expect(page.getByTestId("cancellation-detail")).toContainText("fixture order");
+    await page.getByRole("button", { name: "İptali onayla" }).click();
+    await expect
+      .poll(() => cancellationApproved, {
+        message: `Expected cancellation status request; requests=${allRequestUrls
+          .filter((requestUrl) => requestUrl.includes("/api/orders"))
+          .join(",")} errors=${frontendErrors.join(",")}`,
+      })
+      .toBe(true);
+    expect(cancellationPayload).toEqual({
+      status: "cancelled",
+      notes: "Frontend iptal inceleme onayi",
+    });
+    await expect(page.getByTestId("cancellation-detail")).toContainText("cancelled");
+    await expect(page.getByTestId("cancellation-detail")).toContainText("Frontend iptal inceleme onayi");
     await page.goto(`${app.url}/stok`);
     await expect(page.getByTestId("inventory-flow")).toContainText("Ürün");
     await expect(page.getByTestId("inventory-flow")).toContainText("Kritik Stok");

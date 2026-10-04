@@ -340,6 +340,38 @@
         }
       }
     },
+    "/api/orders/{order_public_id}/status": {
+      "patch": {
+        "operationId": "updateOrderStatus",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OrderPublicId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateOrderStatusRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated order",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Order"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/shipments": {
       "get": {
         "operationId": "listShipments",
@@ -776,6 +808,14 @@
           "type": "string"
         }
       },
+      "OrderPublicId": {
+        "name": "order_public_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
       "ShipmentPublicId": {
         "name": "shipment_public_id",
         "in": "path",
@@ -1172,6 +1212,19 @@
             "minLength": 3,
             "maxLength": 3,
             "default": "TRY"
+          },
+          "notes": {
+            "type": ["string", "null"],
+            "default": null
+          }
+        }
+      },
+      "UpdateOrderStatusRequest": {
+        "type": "object",
+        "required": ["status"],
+        "properties": {
+          "status": {
+            "type": "string"
           },
           "notes": {
             "type": ["string", "null"],
