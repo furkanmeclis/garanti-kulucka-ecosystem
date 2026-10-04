@@ -632,6 +632,24 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       return;
     }
 
+    if (url.pathname === "/api/files/fil_playwright") {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          public_id: "fil_playwright",
+          bucket: "media",
+          object_key: "uploads/kanit.txt",
+          original_name: "kanit.txt",
+          mime_type: "text/plain",
+          byte_size: 12,
+          checksum: "sha256:frontend-smoke",
+          created_at: "2026-01-01T00:00:00.000Z",
+          updated_at: "2026-01-01T00:00:30.000Z",
+        }),
+      });
+      return;
+    }
+
     if (url.pathname === "/presigned/uploads/kanit.txt") {
       await route.fulfill({ status: 200, body: "ok" });
       return;
@@ -821,6 +839,10 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await page.getByRole("link", { name: /dosya/i }).click();
     await page.getByRole("button", { name: /presigned upload testi/i }).click();
     await expect(page.getByTestId("file-upload-flow")).toContainText("kanit.txt kaydedildi");
+    await expect(page.getByTestId("file-metadata-detail")).toContainText("media");
+    await expect(page.getByTestId("file-metadata-detail")).toContainText("uploads/kanit.txt");
+    await expect(page.getByTestId("file-metadata-detail")).toContainText("12 byte");
+    await expect(page.getByTestId("file-metadata-detail")).toContainText("sha256:frontend-smoke");
     await page.getByRole("link", { name: /santral/i }).click();
     await expect(page.getByTestId("webphone-flow")).toContainText("sip.example.com");
     const adminVisualRoutes = [
@@ -901,6 +923,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       "/admin/settings/netgsm_teyit_ayarlar",
       "/admin/settings/providers.ptt.live_mode",
       "/api/files/uploads",
+      "/api/files/fil_playwright",
       "/presigned/uploads/kanit.txt",
       "/api/webphone/config",
     ]),

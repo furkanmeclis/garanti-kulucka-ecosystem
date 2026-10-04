@@ -457,7 +457,8 @@ export function App() {
       });
     }
 
-    setUploadedFile(response.file);
+    const verifiedFile = await files.getFile(response.file.public_id);
+    setUploadedFile(verifiedFile);
     setStatus("Dosya akışı presigned S3 sınırından geçti");
   }
 
@@ -1361,6 +1362,18 @@ export function App() {
               Presigned Upload Testi
             </button>
             {uploadedFile && <p className="result-line">{uploadedFile.original_name} kaydedildi</p>}
+            {uploadedFile && (
+              <DetailPanel title="Dosya Doğrulama" testId="file-metadata-detail">
+                <DataRows
+                  rows={[
+                    ["Bucket", uploadedFile.bucket, "files API"],
+                    ["Object key", uploadedFile.object_key, uploadedFile.mime_type ?? "-"],
+                    ["Boyut", uploadedFile.byte_size === null ? "-" : `${uploadedFile.byte_size} byte`, uploadedFile.checksum ?? "-"],
+                    ["Kayıt", uploadedFile.public_id, uploadedFile.updated_at],
+                  ]}
+                />
+              </DetailPanel>
+            )}
           </FlowPanel>
         )}
 
