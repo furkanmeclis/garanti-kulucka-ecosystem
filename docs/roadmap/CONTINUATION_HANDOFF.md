@@ -2,6 +2,122 @@
 
 Bu belge, projeye yeni bir sohbetten veya bağlamsız bir çalışma oturumundan devam etmek için tek devam kaynağıdır. Önce bu dosya, ardından `MASTER_ROADMAP.md` ve yalnız çalışılacak fazın ilgili teknik belgeleri okunmalıdır. Buradaki yayımlanmış durum ile çalışma ağacındaki yayımlanmamış durum birbirine karıştırılmamalıdır.
 
+## 0. 2026-10-04 16:24 TRT Aktif Devam Notu
+
+Bu bölüm en güncel devam noktasıdır. Alttaki eski tarihsel release listesi değerli arka plan taşır, fakat yeni sohbet önce bu bölümü esas almalıdır.
+
+### Yayımlanmış Temiz Taban
+
+- Branch: `main`
+- Remote durumu: `main...origin/main`
+- Son temiz yayımlanmış tag: `v0.1.299`
+- Son yayımlanmış commit: `ba722dd18214f3cd6388a77c8f8d67e79a6a4919`
+- Commit mesajı: `docs: sync order signal summary checkpoint`
+- GitHub Actions run: `37204504260`
+- Artifact: `container-images-v0.1.299`
+- Artifact id: `11304491573`
+- Artifact size: `411150378`
+- Bu taban repo için en son yeşil CI/tag/artifact noktasıdır.
+
+### Son Kapatılan P5 Dilimi
+
+`v0.1.298` ile `feat(web): use backend summaries for order signals` yayımlandı.
+
+Kapsam:
+
+- `/siparisler` Hepsi filtresi artık `data.orders.length` yerine `data.orderSummary.total_count` kullanır.
+- `/iptaller` içindeki `Sipariş kaydı` toplamı artık order listesinden değil `orders summary API` değerinden gelir.
+- `/stok` içindeki `Sipariş kaynaklı stok sinyali` artık `data.orderSummary.total_count` kullanır.
+- `/stok` içindeki `Depo entegrasyonu` artık `data.shipments.length` yerine `data.shipmentSummary.total_count` kullanır.
+- Browser E2E sentinel kanıtı eklendi: `/api/orders` listesi 2 kayıt dönerken `/api/orders/summary.total_count = 5`; UI `Hepsi 5` ve ilgili summary kaynak etiketlerini render eder.
+
+Kanıt:
+
+- Local targeted web typecheck geçti.
+- Local targeted Playwright `tests/playwright/web-frontend-flows.spec.ts` geçti.
+- Local full `npm run check` geçti.
+- Docker build tamamlandı.
+- Docker generated build artıkları temizlendi.
+- GitHub Actions run `37204136604` geçti.
+- Tag `v0.1.298` oluştu.
+- Artifact `container-images-v0.1.298`, id `11304156775`, size `411162645`, expired değil.
+- Roadmap sync commit'i `ba722dd` ile yayımlandı ve `v0.1.299` tag'i oluştu.
+
+### Çalışma Ağacında Bırakılan Yayımlanmamış Değişiklik
+
+Kullanıcı handoff istediği için son P5 dilimi tamamlanmadan durduruldu. Aşağıdaki iki dosyada bilerek commitlenmemiş değişiklik vardır:
+
+- `apps/web/src/ui/App.tsx`
+- `tests/playwright/web-frontend-flows.spec.ts`
+
+Yayımlanmamış değişikliğin amacı:
+
+- Admin `Provider Deneme Kayıtları` panelindeki `Kayıt` sayısını `data.providerAttempts.length` listesinden ayırıp backend `providerDebugSummary.providers[*].total_attempts` toplamına taşımak.
+- UI kaynak etiketi `provider attempts API` yerine `provider debug summary API` olur.
+- Browser fixture'da provider debug summary PTT `7` + Sürat `6` döndürür; E2E `13` sentinel değeriyle panelin listeden değil backend summary'den beslendiğini kanıtlar.
+
+Bu değişiklik için alınan kısmi kanıt:
+
+- `npx tsc --noEmit --project apps/web/tsconfig.json` geçti.
+- `npx playwright test tests/playwright/web-frontend-flows.spec.ts --reporter=list` geçti.
+
+Tam doğrulama durumu:
+
+- `npm run check` başlatıldı ve şu aşamalardan geçti: structure, compose config, lint, typecheck, unit, contract, integration, migrator, worker, websocket, Playwright E2E, workspace build.
+- Komut Docker build aşamasında kullanıcı handoff isteği nedeniyle durduruldu.
+- Durdurma sırasında API image ve worker image güncellenmişti; migrator/web build süreci tamamlanmadan kontrol kesildi.
+- Arka planda kalan `npm run check` ve Docker build process'leri sonradan durduruldu.
+- `test-results/` generated çıktıları temizlendi.
+- `docker builder prune -f` ve `docker image prune -f` çalıştırıldı; son temizlikte yaklaşık `797.2MB` image artığı temizlendi.
+- Yeni sohbet bu yayımlanmamış değişikliği sahiplenirse full `npm run check` baştan temiz koşulmalı, sonra commit/push/CI/tag/artifact döngüsü tamamlanmalıdır.
+
+Önerilen ilk komutlar:
+
+```sh
+cd /Users/furkanmeclis/Documents/Projects/garanti-kulucka-ecosystem
+git status --short --branch
+git diff -- apps/web/src/ui/App.tsx tests/playwright/web-frontend-flows.spec.ts
+npx tsc --noEmit --project apps/web/tsconfig.json
+npx playwright test tests/playwright/web-frontend-flows.spec.ts --reporter=list
+npm run check
+```
+
+Eğer `npm run check` geçerse önerilen commit:
+
+```sh
+git add apps/web/src/ui/App.tsx tests/playwright/web-frontend-flows.spec.ts
+git commit -m "feat(web): use provider debug summary attempt total"
+git push origin main
+gh run list --branch main --limit 5 --json databaseId,headSha,status,conclusion,displayTitle,createdAt
+gh run watch <new_run_id> --exit-status
+git fetch --tags origin
+git tag --sort=-v:refname | head -6
+```
+
+Beklenen bir sonraki tag `v0.1.300` olabilir; kesin değer CI tag hesabından sonra doğrulanmalıdır.
+
+### Devam Önceliği
+
+1. Yayımlanmamış provider attempt total değişikliğini full check ile bitir, commit/push yap, CI/tag/artifact doğrula.
+2. `MASTER_ROADMAP.md` içinde P5 release listesini yeni tag ile senkronla ve docs sync release'i al.
+3. Kalan P5 audit'e devam et:
+   - `settingsAudit.length`, `integrationAudit.length`, `providerCatalog.length`, `fileOrphans.length` gibi admin detay sayıları KPI mı, yoksa yalnız görünür liste detayı mı ayır.
+   - KPI/summary anlamı taşıyanlar için backend summary endpoint veya mevcut summary kaynağına taşı.
+   - Her taşıma için sentinel E2E kullan: liste sayısı ile summary sayısı farklı olsun.
+4. Full P5 completion iddiası verilmeden önce objektif audit yapılmalı:
+   - `apps/web` içinde doğrudan Supabase auth/table/storage/channel kullanımı yok.
+   - Upload/download presigned S3-compatible API ile kanıtlı.
+   - Socket.IO message refresh, login, inbox, orders, shipments, admin, file upload, webphone akışları browser E2E ile kanıtlı.
+   - Kalan legacy page visual parity açıkları ayrı ayrı taranmış ve ya taşınmış ya da roadmap'te açıkça bırakılmış olmalı.
+
+### Sakın Karıştırma
+
+- `v0.1.299` temiz yayımlanmış tabandır.
+- Provider attempt total değişikliği henüz yayımlanmadı.
+- Production `migrate --apply` kapısı hâlâ kapalıdır.
+- Canlı provider HTTP adapterları hâlâ fixture/mock güvenlik sınırındadır.
+- Garage/object storage production lifecycle/delete/restore operasyonları ve observability/runbook işleri P5 frontend hedefinden ayrı kalan production bloklarıdır.
+
 ## 1. Proje Kimliği ve Güncel Durum
 
 - Repo: `/Users/furkanmeclis/Documents/Projects/garanti-kulucka-ecosystem`
