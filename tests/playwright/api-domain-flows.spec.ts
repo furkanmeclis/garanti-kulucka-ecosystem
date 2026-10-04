@@ -197,6 +197,20 @@ const shipments = [
   },
 ];
 
+const integrationProviders = [
+  {
+    id: 400,
+    public_id: "prv_kolaybi",
+    key: "kolaybi",
+    name: "KolayBi",
+    is_active: true,
+    created_at: date,
+    updated_at: date,
+  },
+];
+
+const providerAttempts: Array<Record<string, unknown>> = [];
+
 const files = [
   {
     id: 350,
@@ -375,6 +389,16 @@ class FixtureQuery {
         return settings.filter((setting) => this.whereValues.get("scope") === undefined || setting.scope === this.whereValues.get("scope"));
       case "roles":
         return [{ id: 1 }];
+      case "integration_providers":
+        return integrationProviders.filter((provider) =>
+          (this.whereValues.get("key") === undefined || provider.key === this.whereValues.get("key")) &&
+          (this.whereValues.get("is_active") === undefined || provider.is_active === this.whereValues.get("is_active")),
+        );
+      case "provider_attempts":
+        return providerAttempts.filter((attempt) =>
+          (this.whereValues.get("provider_id") === undefined || attempt.provider_id === this.whereValues.get("provider_id")) &&
+          (this.whereValues.get("idempotency_key") === undefined || attempt.idempotency_key === this.whereValues.get("idempotency_key")),
+        );
       default:
         return [];
     }
@@ -396,6 +420,9 @@ class FixtureQuery {
           this.whereValues.get("public_id") === order.public_id ||
           this.whereValues.get("orders.public_id") === order.public_id,
         ) ?? null;
+      case "integration_providers":
+      case "provider_attempts":
+        return (await this.execute())[0] ?? null;
       default:
         return null;
     }
@@ -416,7 +443,49 @@ class FixtureInsert {
     return this;
   }
 
+  onConflict() {
+    return this;
+  }
+
+  columns() {
+    return this;
+  }
+
+  where() {
+    return this;
+  }
+
+  doNothing() {
+    return this;
+  }
+
+  async executeTakeFirst() {
+    if (this.table === "provider_attempts") {
+      const duplicate = providerAttempts.find((attempt) =>
+        attempt.provider_id === this.row.provider_id &&
+        attempt.idempotency_key === this.row.idempotency_key &&
+        this.row.idempotency_key !== null,
+      );
+      if (duplicate) {
+        return null;
+      }
+    }
+
+    return this.executeTakeFirstOrThrow();
+  }
+
   async executeTakeFirstOrThrow() {
+    if (this.table === "provider_attempts") {
+      const attempt = {
+        id: providerAttempts.length + 500,
+        ...this.row,
+        created_at: date,
+        updated_at: date,
+      };
+      providerAttempts.push(attempt);
+      return attempt;
+    }
+
     if (this.table !== "messages") {
       throw new Error(`Unsupported fixture insert: ${this.table}`);
     }
@@ -797,6 +866,56 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
     });
     expect(Date.parse(cancelledOrder.updated_at)).toBeGreaterThan(date.getTime());
 
+    const paymentRequestResponse = await api.client.post("/api/orders/ord_playwright/payment-request", {
+      data: {
+        amount: "12.55",
+        currency: "TRY",
+        idempotency_key: "payment_ord_playwright_12.55_TRY",
+      },
+    });
+    expect(paymentRequestResponse.status()).toBe(202);
+    const paymentRequest = await paymentRequestResponse.json();
+    expect(paymentRequest).toMatchObject({
+      provider: "kolaybi",
+      operation: "balance.payment_request",
+      request_id: "payreq_payment_ord_playwright_12_55_try",
+      queued: false,
+      live_call_permitted: false,
+      replayed: false,
+      order_public_id: "ord_playwright",
+      amount: "12.55",
+      currency: "TRY",
+      order: {
+        public_id: "ord_playwright",
+        notes: "API iptal kaniti",
+      },
+    });
+    const repeatedPaymentRequestResponse = await api.client.post("/api/orders/ord_playwright/payment-request", {
+      data: {
+        amount: "12.55",
+        currency: "TRY",
+        idempotency_key: "payment_ord_playwright_12.55_TRY",
+      },
+    });
+    expect(repeatedPaymentRequestResponse.status()).toBe(202);
+    await expect(repeatedPaymentRequestResponse.json()).resolves.toMatchObject({
+      provider: "kolaybi",
+      request_id: "payreq_payment_ord_playwright_12_55_try",
+      replayed: true,
+    });
+    expect(providerAttempts.filter((attempt) => attempt.idempotency_key === "payment_ord_playwright_12.55_TRY")).toHaveLength(1);
+    const mismatchedPaymentRequestResponse = await api.client.post("/api/orders/ord_playwright/payment-request", {
+      data: {
+        amount: "13.00",
+        currency: "TRY",
+        idempotency_key: "payment_ord_playwright_12.55_TRY",
+      },
+    });
+    expect(mismatchedPaymentRequestResponse.status()).toBe(409);
+    await expect(mismatchedPaymentRequestResponse.json()).resolves.toMatchObject({
+      error: { code: "idempotency_conflict" },
+    });
+
     const smsResponse = await api.client.post("/api/sms/send", {
       data: {
         recipient_phone: "5550000000",
@@ -923,6 +1042,14 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
     expect(await forbiddenProviderCatalogResponse.json()).toMatchObject({
       error: { code: "forbidden" },
     });
+    const forbiddenPaymentRequestResponse = await api.viewerClient.post("/api/orders/ord_playwright/payment-request", {
+      data: {
+        amount: "12.55",
+        currency: "TRY",
+        idempotency_key: "payment_ord_playwright_forbidden",
+      },
+    });
+    expect(forbiddenPaymentRequestResponse.status()).toBe(403);
 
     expect(settingsResponse.status()).toBe(200);
     const settingsBody = await settingsResponse.json();

@@ -6,6 +6,7 @@ import type {
   MessagesTable,
   OrdersTable,
   ProductsTable,
+  ProviderAttemptsTable,
   ShipmentsTable,
 } from "@garanti-kulucka/database";
 import { newPublicId } from "../auth/crypto.js";
@@ -22,6 +23,7 @@ export type OrderRecord = Selectable<OrdersTable> & {
   customer_full_name: string | null;
 };
 export type ProductRecord = Selectable<ProductsTable>;
+export type ProviderAttemptRecord = Selectable<ProviderAttemptsTable>;
 export type ShipmentRecord = Selectable<ShipmentsTable> & {
   order_number: string | null;
   customer_full_name: string | null;
@@ -84,6 +86,20 @@ export interface UpdateOrderStatusInput {
   orderPublicId: string;
   status: string;
   notes?: string | null;
+}
+
+export interface RequestOrderPaymentInput {
+  orderPublicId: string;
+  amount: string;
+  currency: string;
+  idempotencyKey: string;
+  requestId: string;
+}
+
+export interface PaymentRequestRecord {
+  order: OrderRecord;
+  attempt: ProviderAttemptRecord;
+  replayed: boolean;
 }
 
 export interface UpdateShipmentStatusInput {
@@ -372,6 +388,91 @@ export class DomainRepository {
     return (await this.getOrderByPublicId(this.db, order.public_id)) ?? { ...order, customer_full_name: null };
   }
 
+  async requestOrderPayment(input: RequestOrderPaymentInput): Promise<PaymentRequestRecord> {
+    return this.db.transaction().execute(async (transaction) => {
+      const order = await this.getOrderByPublicId(transaction as AppDatabase, input.orderPublicId);
+      if (!order) {
+        throw new Error(`Unknown order: ${input.orderPublicId}`);
+      }
+
+      const provider = await transaction
+        .selectFrom("integration_providers")
+        .select("id")
+        .where("key", "=", "kolaybi")
+        .where("is_active", "=", true)
+        .executeTakeFirst();
+
+      if (!provider) {
+        throw new Error("Unknown provider for payment request persistence: kolaybi");
+      }
+
+      const existingAttempt = await transaction
+        .selectFrom("provider_attempts")
+        .selectAll()
+        .where("provider_id", "=", provider.id)
+        .where("idempotency_key", "=", input.idempotencyKey)
+        .executeTakeFirst();
+
+      if (existingAttempt) {
+        assertPaymentRequestAttemptMatches(existingAttempt, input);
+        return { order, attempt: existingAttempt, replayed: true };
+      }
+
+      const attempt = await transaction
+        .insertInto("provider_attempts")
+        .values({
+          public_id: newPublicId("pat"),
+          provider_id: provider.id,
+          account_id: null,
+          request_id: input.requestId,
+          operation: "balance.payment_request",
+          direction: "outbound",
+          status: "success",
+          status_code: null,
+          duration_ms: 0,
+          retry_decision: "none",
+          next_retry_at: null,
+          idempotency_key: input.idempotencyKey,
+          request_metadata: {
+            order_public_id: input.orderPublicId,
+            amount: input.amount,
+            currency: input.currency,
+            live_call_permitted: false,
+          },
+          response_metadata: {
+            mode: "dry_run",
+            persisted: true,
+          },
+          error_code: null,
+          error_message: null,
+          started_at: new Date(),
+        })
+        .onConflict((oc) =>
+          oc.columns(["provider_id", "idempotency_key"]).where("idempotency_key", "is not", null).doNothing(),
+        )
+        .returningAll()
+        .executeTakeFirst();
+
+      if (attempt) {
+        return { order, attempt, replayed: false };
+      }
+
+      const replayedAttempt = await transaction
+        .selectFrom("provider_attempts")
+        .selectAll()
+        .where("provider_id", "=", provider.id)
+        .where("idempotency_key", "=", input.idempotencyKey)
+        .executeTakeFirst();
+
+      if (!replayedAttempt) {
+        throw new Error(`Payment request idempotency conflict could not be replayed: ${input.idempotencyKey}`);
+      }
+
+      assertPaymentRequestAttemptMatches(replayedAttempt, input);
+      return { order, attempt: replayedAttempt, replayed: true };
+    });
+  }
+
   async listShipments(filter: ListShipmentsFilter): Promise<ShipmentRecord[]> {
     return this.db
       .selectFrom("shipments")
@@ -419,6 +520,21 @@ export class DomainRepository {
       order_number: null,
       customer_full_name: null,
     };
+  }
+}
+
+function assertPaymentRequestAttemptMatches(attempt: ProviderAttemptRecord, input: RequestOrderPaymentInput) {
+  const metadata = attempt.request_metadata as {
+    order_public_id?: unknown;
+    amount?: unknown;
+    currency?: unknown;
+  };
+  if (
+    metadata.order_public_id !== input.orderPublicId ||
+    metadata.amount !== input.amount ||
+    metadata.currency !== input.currency
+  ) {
+    throw new Error(`Payment request idempotency key reuse mismatch: ${input.idempotencyKey}`);
   }
 }
 

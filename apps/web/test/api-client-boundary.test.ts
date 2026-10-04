@@ -431,6 +431,53 @@ describe("web API client boundary", () => {
     });
   });
 
+  it("maps balance payment requests to backend order routes", async () => {
+    const requests: Request[] = [];
+    const client = createApiClient("http://localhost:3000", {
+      fetchImpl: async (input, init) => {
+        requests.push(new Request(input, init));
+        return Response.json({
+          provider: "kolaybi",
+          operation: "balance.payment_request",
+          request_id: "payreq_payment_ord_test",
+          queued: false,
+          live_call_permitted: false,
+          replayed: false,
+          order_public_id: "ord_test",
+          amount: "12.55",
+          currency: "TRY",
+          order: {
+            public_id: "ord_test",
+            order_number: "ORD-TEST",
+            status: "draft",
+            source: "manual",
+            total_amount: "125.50",
+            currency: "TRY",
+            confirmation_status: null,
+            notes: null,
+            customer_full_name: "Test Customer",
+            created_at: "2026-01-01T00:00:00.000Z",
+            updated_at: "2026-01-01T00:01:00.000Z",
+          },
+        });
+      },
+    });
+
+    await client.domain.requestPayment("ord_test", {
+      amount: "12.55",
+      currency: "TRY",
+      idempotency_key: "payment_ord_test",
+    });
+
+    expect(requests[0]?.method).toBe("POST");
+    expect(requests[0]?.url).toBe("http://localhost:3000/api/orders/ord_test/payment-request");
+    await expect(requests[0]?.json()).resolves.toEqual({
+      amount: "12.55",
+      currency: "TRY",
+      idempotency_key: "payment_ord_test",
+    });
+  });
+
   it("maps webphone config reads to backend routes", async () => {
     const requests: Request[] = [];
     const client = createApiClient("http://localhost:3000", {

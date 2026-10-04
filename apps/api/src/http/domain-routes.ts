@@ -53,6 +53,12 @@ const updateOrderStatusSchema = z.object({
   notes: z.string().nullable().optional(),
 });
 
+const createPaymentRequestSchema = z.object({
+  amount: z.string().regex(/^\d+(\.\d{1,2})?$/),
+  currency: z.string().min(3).max(3).default("TRY"),
+  idempotency_key: z.string().min(1),
+});
+
 const updateShipmentStatusSchema = z.object({
   status: z.string().min(1),
   last_event_text: z.string().nullable().default(null),
@@ -74,8 +80,16 @@ function canSendSms(role: string | undefined) {
   return role === "admin" || role === "owner" || role === "calisan" || role === "kargo_operatoru";
 }
 
+function canRequestPayment(role: string | undefined) {
+  return role === "admin" || role === "owner" || role === "calisan";
+}
+
 function jobIdFromIdempotencyKey(key: string) {
   return `job_${key.toLowerCase().replace(/[^a-z0-9_]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 96)}`;
+}
+
+function requestIdFromIdempotencyKey(prefix: string, key: string) {
+  return `${prefix}_${key.toLowerCase().replace(/[^a-z0-9_]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 96)}`;
 }
 
 export function createDomainRoutes() {
@@ -324,6 +338,61 @@ export function createDomainRoutes() {
     });
 
     return context.json(serializeOrder(order));
+  });
+
+  routes.post("/orders/:order_public_id/payment-request", async (context) => {
+    if (!canRequestPayment(context.get("auth")?.role)) {
+      return context.json({ error: { code: "forbidden", message: "Payment requests require order management permissions" } }, 403);
+    }
+
+    const payload = createPaymentRequestSchema.safeParse(await context.req.json());
+    if (!payload.success) {
+      return context.json({ error: { code: "invalid_request", message: "Invalid payment request payload" } }, 400);
+    }
+
+    const db = context.get("db");
+    if (!db) {
+      return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
+    }
+
+    const orderPublicId = context.req.param("order_public_id");
+    const requestId = requestIdFromIdempotencyKey("payreq", payload.data.idempotency_key);
+    let paymentRequest;
+    try {
+      paymentRequest = await new DomainRepository(db).requestOrderPayment({
+        orderPublicId,
+        amount: payload.data.amount,
+        currency: payload.data.currency,
+        idempotencyKey: payload.data.idempotency_key,
+        requestId,
+      });
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("idempotency key reuse mismatch")) {
+        return context.json({ error: { code: "idempotency_conflict", message: "Payment request idempotency key was reused with different payload" } }, 409);
+      }
+      throw error;
+    }
+    const attemptRequestMetadata = paymentRequest.attempt.request_metadata as {
+      order_public_id?: string;
+      amount?: string;
+      currency?: string;
+    };
+
+    return context.json(
+      {
+        provider: "kolaybi",
+        operation: "balance.payment_request",
+        request_id: paymentRequest.attempt.request_id,
+        queued: false,
+        live_call_permitted: false,
+        order_public_id: attemptRequestMetadata.order_public_id ?? orderPublicId,
+        amount: attemptRequestMetadata.amount ?? payload.data.amount,
+        currency: attemptRequestMetadata.currency ?? payload.data.currency,
+        replayed: paymentRequest.replayed,
+        order: serializeOrder(paymentRequest.order),
+      },
+      202,
+    );
   });
 
   routes.get("/shipments", async (context) => {

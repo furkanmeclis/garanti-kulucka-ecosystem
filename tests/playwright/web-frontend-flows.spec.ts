@@ -79,6 +79,11 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     shipment_public_id?: string;
     idempotency_key?: string;
   } | null = null;
+  let paymentRequestPayload: {
+    amount?: string;
+    currency?: string;
+    idempotency_key?: string;
+  } | null = null;
   let suratShipmentStatus = "in_transit";
   let suratShipmentLastEvent = "Selected shipment at branch";
 
@@ -438,6 +443,43 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
         contentType: "application/json",
         body: JSON.stringify({
           data: filteredOrders,
+        }),
+      });
+      return;
+    }
+
+    if (url.pathname === "/api/orders/ord_playwright/payment-request") {
+      paymentRequestPayload = JSON.parse(route.request().postData() ?? "{}") as {
+        amount?: string;
+        currency?: string;
+        idempotency_key?: string;
+      };
+      await route.fulfill({
+        contentType: "application/json",
+        status: 202,
+        body: JSON.stringify({
+          provider: "kolaybi",
+          operation: "balance.payment_request",
+          request_id: "payreq_payment_ord_playwright_12_55_try",
+          queued: false,
+          live_call_permitted: false,
+          replayed: false,
+          order_public_id: "ord_playwright",
+          amount: paymentRequestPayload.amount,
+          currency: paymentRequestPayload.currency,
+          order: {
+            public_id: "ord_playwright",
+            order_number: "ORD-PLAYWRIGHT",
+            status: "draft",
+            source: "manual",
+            total_amount: "125.50",
+            currency: "TRY",
+            confirmation_status: null,
+            notes: null,
+            customer_full_name: "Playwright Customer",
+            created_at: "2026-01-01T00:00:00.000Z",
+            updated_at: "2026-01-01T00:05:00.000Z",
+          },
         }),
       });
       return;
@@ -1568,6 +1610,16 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("balance-payment-detail")).toContainText("12.55 TRY");
     await expect(page.getByTestId("balance-payment-detail")).toContainText("1 talep");
     await expect(page.getByTestId("balance-payment-detail")).toContainText("Kullanılabilir bakiye");
+    await page.getByRole("button", { name: "Ödeme isteği oluştur" }).click();
+    await expect
+      .poll(() => paymentRequestPayload)
+      .toMatchObject({
+        amount: "12.55",
+        currency: "TRY",
+        idempotency_key: "payment_ord_playwright_12.55_TRY",
+      });
+    await expect(page.getByTestId("balance-payment-detail")).toContainText("balance.payment_request payreq_payment_ord_playwright_12_55_try");
+    await expect(page.getByTestId("balance-payment-detail")).toContainText("canlı ödeme provider kapalı");
     await page.getByRole("link", { name: /^sms$/i }).click();
     await expect(page.getByTestId("sms-template-detail")).toContainText("Manuel SMS Şablonu");
     await expect(page.getByTestId("sms-template-detail")).toContainText("{musteri_adi}");

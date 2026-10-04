@@ -372,6 +372,38 @@
         }
       }
     },
+    "/api/orders/{order_public_id}/payment-request": {
+      "post": {
+        "operationId": "createPaymentRequest",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OrderPublicId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePaymentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Prepared backend payment request without live provider call",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentRequestResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/shipments": {
       "get": {
         "operationId": "listShipments",
@@ -1256,6 +1288,76 @@
           "notes": {
             "type": ["string", "null"],
             "default": null
+          }
+        }
+      },
+      "CreatePaymentRequest": {
+        "type": "object",
+        "required": ["amount", "idempotency_key"],
+        "properties": {
+          "amount": {
+            "type": "string",
+            "pattern": "^\\d+(\\.\\d{1,2})?$"
+          },
+          "currency": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 3,
+            "default": "TRY"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "PaymentRequestResponse": {
+        "type": "object",
+        "required": [
+          "provider",
+          "operation",
+          "request_id",
+          "queued",
+          "live_call_permitted",
+          "replayed",
+          "order_public_id",
+          "amount",
+          "currency",
+          "order"
+        ],
+        "properties": {
+          "provider": {
+            "type": "string",
+            "const": "kolaybi"
+          },
+          "operation": {
+            "type": "string",
+            "const": "balance.payment_request"
+          },
+          "request_id": {
+            "type": "string"
+          },
+          "queued": {
+            "type": "boolean"
+          },
+          "live_call_permitted": {
+            "type": "boolean",
+            "const": false
+          },
+          "replayed": {
+            "type": "boolean"
+          },
+          "order_public_id": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "order": {
+            "$ref": "#/components/schemas/Order"
           }
         }
       },

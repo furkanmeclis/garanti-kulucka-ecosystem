@@ -91,6 +91,19 @@ export interface SmsSendResult {
   live_call_permitted: boolean;
 }
 
+export interface PaymentRequestResult {
+  provider: "kolaybi";
+  operation: "balance.payment_request";
+  request_id: string;
+  queued: boolean;
+  live_call_permitted: boolean;
+  replayed: boolean;
+  order_public_id: string;
+  amount: string;
+  currency: string;
+  order: OrderSummary;
+}
+
 export function createDomainClient(http: BackendHttpClient) {
   return {
     listConversations: (params: { channel?: string; status?: string; limit?: number } = {}) => {
@@ -177,6 +190,21 @@ export function createDomainClient(http: BackendHttpClient) {
         `/api/orders/${encodeURIComponent(orderPublicId)}/status`,
         {
           method: "PATCH",
+          body: input,
+        },
+      ),
+    requestPayment: (
+      orderPublicId: string,
+      input: {
+        amount: string;
+        currency: string;
+        idempotency_key: string;
+      },
+    ) =>
+      http.request<PaymentRequestResult>(
+        `/api/orders/${encodeURIComponent(orderPublicId)}/payment-request`,
+        {
+          method: "POST",
           body: input,
         },
       ),

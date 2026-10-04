@@ -434,6 +434,8 @@ export function App() {
   const [uploadedFile, setUploadedFile] = useState<FileMetadata | null>(null);
   const [downloadInstruction, setDownloadInstruction] = useState<DownloadInstruction | null>(null);
   const [lastSmsSend, setLastSmsSend] = useState<string | null>(null);
+  const [lastPaymentRequest, setLastPaymentRequest] = useState<string | null>(null);
+  const [paymentRequesting, setPaymentRequesting] = useState(false);
   const [activeSmsTemplateVariable, setActiveSmsTemplateVariable] = useState<SmsTemplateVariable>("{musteri_adi}");
   const [presenceUpdating, setPresenceUpdating] = useState(false);
   const [integrationSnapshot, setIntegrationSnapshot] = useState<IntegrationAccountSnapshot | null>(null);
@@ -852,6 +854,30 @@ export function App() {
     }));
     setSelectedOrderId(updated.public_id);
     setStatus("İptal durumu backend API üzerinden güncellendi");
+  }
+
+  async function handleRequestPayment() {
+    const order = selectedOrder;
+    if (!order || paymentRequesting) return;
+
+    setStatus("Ödeme isteği backend API üzerinden hazırlanıyor");
+    setPaymentRequesting(true);
+    try {
+      const result = await domain.requestPayment(order.public_id, {
+        amount: balanceSummary.pendingPayment.toFixed(2),
+        currency: orderCurrency,
+        idempotency_key: `payment_${order.public_id}_${balanceSummary.pendingPayment.toFixed(2)}_${orderCurrency}`,
+      });
+      setData((current) => ({
+        ...current,
+        orders: current.orders.map((item) => (item.public_id === result.order.public_id ? result.order : item)),
+      }));
+      setSelectedOrderId(result.order.public_id);
+      setLastPaymentRequest(`${result.operation} ${result.request_id}${result.replayed ? " replay" : ""}`);
+      setStatus("Ödeme isteği backend API sınırında hazırlandı");
+    } finally {
+      setPaymentRequesting(false);
+    }
   }
 
   async function handleSendSms() {
@@ -2149,8 +2175,12 @@ export function App() {
                   ["Bekleyen ödeme", formatMoney(balanceSummary.pendingPayment, orderCurrency), `${balanceSummary.pendingRequestCount} talep`],
                   ["Kullanılabilir bakiye", formatMoney(balanceSummary.availableBalance, orderCurrency), "ödeme isteği sonrası"],
                   ["Son ödeme isteği", selectedOrder?.order_number ?? "-", selectedOrder?.customer_full_name ?? "-"],
+                  ["Son backend isteği", lastPaymentRequest ?? "-", "canlı ödeme provider kapalı"],
                 ]}
               />
+              <button className="primary-action" type="button" disabled={paymentRequesting} onClick={() => void handleRequestPayment()}>
+                {paymentRequesting ? "Ödeme isteği hazırlanıyor" : "Ödeme isteği oluştur"}
+              </button>
             </DetailPanel>
           </FlowPanel>
         )}
