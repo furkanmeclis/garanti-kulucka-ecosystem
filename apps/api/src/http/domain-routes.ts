@@ -88,6 +88,10 @@ function canReadShipmentPipeline(role: string | undefined) {
   return role === "admin" || role === "owner" || role === "calisan" || role === "kargo_operatoru";
 }
 
+function canReadReports(role: string | undefined) {
+  return role === "admin";
+}
+
 function canSendSms(role: string | undefined) {
   return role === "admin" || role === "owner" || role === "calisan" || role === "kargo_operatoru";
 }
@@ -165,6 +169,20 @@ export function createDomainRoutes() {
       },
     );
 
+    return context.json(summary);
+  });
+
+  routes.get("/reports/summary", async (context) => {
+    if (!canReadReports(context.get("auth")?.role)) {
+      return context.json({ error: { code: "forbidden", message: "Reports summary access is not allowed" } }, 403);
+    }
+
+    const db = context.get("db");
+    if (!db) {
+      return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
+    }
+
+    const summary = await new DomainRepository(db).getReportSummary();
     return context.json(summary);
   });
 

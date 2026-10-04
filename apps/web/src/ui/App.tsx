@@ -50,6 +50,7 @@ import {
   type MessageSummary,
   type OrderSummary,
   type ProductSummary,
+  type ReportSummary as BackendReportSummary,
   type ShipmentPipelineSummary,
   type ShipmentPipelineStep,
   type ShipmentSummary,
@@ -77,6 +78,7 @@ interface DashboardData {
   providerAttempts: ProviderAttemptViewModel[];
   fileOrphans: FileMetadata[];
   instagramAnalytics: BackendInstagramAnalyticsSummary;
+  reportSummary: BackendReportSummary;
   balanceSummary: BackendBalanceSummary;
   shipmentPipeline: ShipmentPipelineSummary;
   commentModeration: BackendCommentModerationSummary;
@@ -325,6 +327,21 @@ const defaultInstagramAnalyticsSummary: BackendInstagramAnalyticsSummary = {
   engagement_rate: 0,
 };
 
+const defaultReportSummary: BackendReportSummary = {
+  conversation_count: 0,
+  order_count: 0,
+  shipment_count: 0,
+  total_revenue: 0,
+  currency: "TRY",
+  open_conversation_count: 0,
+  pending_confirmation_count: 0,
+  active_shipment_count: 0,
+  delivered_shipment_count: 0,
+  delivered_shipment_rate: 0,
+  confirmation_rate: 0,
+  active_shipment_rate: 0,
+};
+
 function toInstagramAnalyticsView(summary: BackendInstagramAnalyticsSummary): InstagramAnalyticsSummary {
   return {
     followers: summary.followers,
@@ -440,6 +457,7 @@ export function App() {
     providerAttempts: [],
     fileOrphans: [],
     instagramAnalytics: defaultInstagramAnalyticsSummary,
+    reportSummary: defaultReportSummary,
     balanceSummary: defaultBalanceSummary,
     shipmentPipeline: defaultShipmentPipelineSummary,
     commentModeration: defaultCommentModerationSummary,
@@ -595,12 +613,13 @@ export function App() {
     const canReadComments = user?.role === "admin" || user?.role === "owner" || user?.role === "calisan";
     const canReadBalances = user?.role === "admin" || user?.role === "owner" || user?.role === "calisan";
     const canReadShipmentPipeline = ["admin", "owner", "calisan", "kargo_operatoru"].includes(user?.role ?? "");
-    const [conversations, customers, commentModeration, balanceSummary, shipmentPipeline, orders, products, shipments, settings, webphoneConfig] = await Promise.all([
+    const [conversations, customers, commentModeration, balanceSummary, shipmentPipeline, reportSummary, orders, products, shipments, settings, webphoneConfig] = await Promise.all([
       domain.listConversations({ limit: 20 }),
       canReadCustomers ? domain.listCustomers(50) : Promise.resolve({ data: [] }),
       canReadComments ? domain.getCommentModerationSummary() : Promise.resolve(defaultCommentModerationSummary),
       canReadBalances ? domain.getBalanceSummary() : Promise.resolve(defaultBalanceSummary),
       canReadShipmentPipeline ? domain.getShipmentPipelineSummary() : Promise.resolve(defaultShipmentPipelineSummary),
+      user?.role === "admin" ? domain.getReportSummary() : Promise.resolve(defaultReportSummary),
       domain.listOrders(20),
       domain.listProducts(50),
       domain.listShipments(20),
@@ -641,6 +660,7 @@ export function App() {
       providerAttempts: providerAttempts.data.map(toProviderAttemptViewModel),
       fileOrphans: fileOrphans.data,
       instagramAnalytics,
+      reportSummary,
       balanceSummary,
       shipmentPipeline,
       commentModeration,
@@ -688,6 +708,7 @@ export function App() {
         providerAttempts: [],
         fileOrphans: [],
         instagramAnalytics: defaultInstagramAnalyticsSummary,
+        reportSummary: defaultReportSummary,
         balanceSummary: defaultBalanceSummary,
         shipmentPipeline: defaultShipmentPipelineSummary,
         commentModeration: defaultCommentModerationSummary,
@@ -1328,7 +1349,6 @@ export function App() {
   const activeShipmentCount = data.shipments.filter((shipment) => shipment.status !== "delivered").length;
   const cronSkippedCount = Math.max(activeShipmentCount - trackingCronAttempts.length, 0);
   const pendingConfirmationCount = data.orders.filter((order) => order.confirmation_status === null).length;
-  const confirmedOrderCount = data.orders.length - pendingConfirmationCount;
   const pttShipmentCount = data.shipments.filter((shipment) => shipment.provider.toLowerCase().includes("ptt")).length;
   const suratShipmentCount = data.shipments.filter((shipment) => {
     const provider = shipment.provider.toLocaleLowerCase("tr-TR");
@@ -2481,27 +2501,27 @@ export function App() {
         {activeFlow === "reports" && (
           <FlowPanel title="İş Analizi" icon={<BarChart3 size={18} />} testId="reports-flow">
             <div className="report-grid">
-              <Metric title="Konuşma" value={String(data.conversations.length)} />
-              <Metric title="Sipariş" value={String(data.orders.length)} />
-              <Metric title="Kargo" value={String(data.shipments.length)} />
-              <Metric title="Ciro" value={formatMoney(reportTotalAmount, orderCurrency)} />
+              <Metric title="Konuşma" value={String(data.reportSummary.conversation_count)} />
+              <Metric title="Sipariş" value={String(data.reportSummary.order_count)} />
+              <Metric title="Kargo" value={String(data.reportSummary.shipment_count)} />
+              <Metric title="Ciro" value={formatMoney(data.reportSummary.total_revenue, data.reportSummary.currency)} />
             </div>
             <DetailPanel title="Operasyon Dağılımı" testId="reports-detail">
               <DataRows
                 rows={[
-                  ["Açık konuşma", String(openConversationCount), "domain API"],
-                  ["Teyit bekleyen", String(pendingConfirmationCount), "orders API"],
-                  ["Aktif kargo", String(activeShipmentCount), "shipments API"],
-                  ["Teslim edilen", String(deliveredShipmentCount), "shipments API"],
+                  ["Açık konuşma", String(data.reportSummary.open_conversation_count), "reports API"],
+                  ["Teyit bekleyen", String(data.reportSummary.pending_confirmation_count), "reports API"],
+                  ["Aktif kargo", String(data.reportSummary.active_shipment_count), "reports API"],
+                  ["Teslim edilen", String(data.reportSummary.delivered_shipment_count), "reports API"],
                 ]}
               />
             </DetailPanel>
             <DetailPanel title="Oran Özeti" testId="reports-ratio-summary">
               <DataRows
                 rows={[
-                  ["Teslim Oranı", formatPercent(deliveredShipmentCount, data.shipments.length), "teslim / toplam kargo"],
-                  ["Teyit Oranı", formatPercent(confirmedOrderCount, data.orders.length), `${pendingConfirmationCount} teyit bekliyor`],
-                  ["Kargo Hareketi", formatPercent(activeShipmentCount, data.shipments.length), "aktif / toplam kargo"],
+                  ["Teslim Oranı", `%${data.reportSummary.delivered_shipment_rate}`, "teslim / toplam kargo"],
+                  ["Teyit Oranı", `%${data.reportSummary.confirmation_rate}`, `${data.reportSummary.pending_confirmation_count} teyit bekliyor`],
+                  ["Kargo Hareketi", `%${data.reportSummary.active_shipment_rate}`, "aktif / toplam kargo"],
                 ]}
               />
             </DetailPanel>

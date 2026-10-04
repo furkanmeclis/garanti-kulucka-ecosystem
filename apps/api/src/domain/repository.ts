@@ -136,6 +136,21 @@ export interface ShipmentPipelineSummaryRecord {
   rows: ShipmentPipelineRowRecord[];
 }
 
+export interface ReportSummaryRecord {
+  conversation_count: number;
+  order_count: number;
+  shipment_count: number;
+  total_revenue: number;
+  currency: string;
+  open_conversation_count: number;
+  pending_confirmation_count: number;
+  active_shipment_count: number;
+  delivered_shipment_count: number;
+  delivered_shipment_rate: number;
+  confirmation_rate: number;
+  active_shipment_rate: number;
+}
+
 export interface UpdateShipmentStatusInput {
   shipmentPublicId: string;
   status: string;
@@ -150,6 +165,10 @@ function moneyCents(value: string) {
 
 function centsToMoney(cents: number) {
   return Math.round(cents) / 100;
+}
+
+function percentage(numerator: number, denominator: number) {
+  return denominator > 0 ? Math.round((numerator / denominator) * 100) : 0;
 }
 
 function pipelineStepFromShipment(shipment: ShipmentRecord): ShipmentPipelineStep {
@@ -385,6 +404,35 @@ export class DomainRepository {
       pending_payment: centsToMoney(pendingPaymentCents),
       available_balance: centsToMoney(Math.max(totalCommissionCents - totalDeductionCents - pendingPaymentCents, 0)),
       pending_request_count: pendingOrders.length,
+    };
+  }
+
+  async getReportSummary(): Promise<ReportSummaryRecord> {
+    const [conversations, orders, shipments] = await Promise.all([
+      this.listConversations({ limit: 200 }),
+      this.listOrders({ limit: 200 }),
+      this.listShipments({ limit: 200 }),
+    ]);
+    const pendingConfirmationCount = orders.filter((order) => order.confirmation_status === null).length;
+    const confirmedOrderCount = orders.length - pendingConfirmationCount;
+    const activeShipmentCount = shipments.filter((shipment) => shipment.status !== "delivered").length;
+    const deliveredShipmentCount = shipments.filter((shipment) => shipment.status === "delivered").length;
+    const totalRevenueCents = orders.reduce((sum, order) => sum + moneyCents(order.total_amount), 0);
+    const currency = orders[0]?.currency ?? "TRY";
+
+    return {
+      conversation_count: conversations.length,
+      order_count: orders.length,
+      shipment_count: shipments.length,
+      total_revenue: centsToMoney(totalRevenueCents),
+      currency,
+      open_conversation_count: conversations.filter((conversation) => conversation.status === "open").length,
+      pending_confirmation_count: pendingConfirmationCount,
+      active_shipment_count: activeShipmentCount,
+      delivered_shipment_count: deliveredShipmentCount,
+      delivered_shipment_rate: percentage(deliveredShipmentCount, shipments.length),
+      confirmation_rate: percentage(confirmedOrderCount, orders.length),
+      active_shipment_rate: percentage(activeShipmentCount, shipments.length),
     };
   }
 

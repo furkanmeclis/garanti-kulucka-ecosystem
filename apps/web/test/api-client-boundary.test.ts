@@ -252,6 +252,37 @@ describe("web API client boundary", () => {
     expect(JSON.stringify(response)).not.toContain("plain-token");
   });
 
+  it("maps report summary reads to the backend route", async () => {
+    const requests: Request[] = [];
+    const client = createApiClient("http://localhost:3000", {
+      fetchImpl: async (input, init) => {
+        requests.push(new Request(input, init));
+        return Response.json({
+          conversation_count: 7,
+          order_count: 4,
+          shipment_count: 5,
+          total_revenue: 345.67,
+          currency: "TRY",
+          open_conversation_count: 3,
+          pending_confirmation_count: 2,
+          active_shipment_count: 4,
+          delivered_shipment_count: 1,
+          delivered_shipment_rate: 20,
+          confirmation_rate: 50,
+          active_shipment_rate: 80,
+        });
+      },
+    });
+
+    await expect(client.domain.getReportSummary()).resolves.toMatchObject({
+      total_revenue: 345.67,
+      currency: "TRY",
+      delivered_shipment_rate: 20,
+      confirmation_rate: 50,
+    });
+    expect(requests[0]?.url).toBe("http://localhost:3000/api/reports/summary");
+  });
+
   it("maps provider catalog reads to backend routes without live-call enablement", async () => {
     const requests: Request[] = [];
     const client = createApiClient("http://localhost:3000", {

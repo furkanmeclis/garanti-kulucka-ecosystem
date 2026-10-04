@@ -147,6 +147,21 @@ export interface ShipmentPipelineSummary {
   rows: ShipmentPipelineRow[];
 }
 
+export interface ReportSummary {
+  conversation_count: number;
+  order_count: number;
+  shipment_count: number;
+  total_revenue: number;
+  currency: string;
+  open_conversation_count: number;
+  pending_confirmation_count: number;
+  active_shipment_count: number;
+  delivered_shipment_count: number;
+  delivered_shipment_rate: number;
+  confirmation_rate: number;
+  active_shipment_rate: number;
+}
+
 export function createDomainClient(http: BackendHttpClient) {
   return {
     listConversations: (params: { channel?: string; status?: string; limit?: number } = {}) => {
@@ -267,6 +282,8 @@ export function createDomainClient(http: BackendHttpClient) {
     },
     getShipmentPipelineSummary: () =>
       http.request<ShipmentPipelineSummary>("/api/shipments/pipeline-summary"),
+    getReportSummary: () =>
+      http.request<ReportSummary>("/api/reports/summary"),
     updateShipmentStatus: (
       shipmentPublicId: string,
       input: {

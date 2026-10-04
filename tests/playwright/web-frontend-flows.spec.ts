@@ -235,6 +235,28 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       return;
     }
 
+    if (url.pathname === "/api/reports/summary") {
+      expect(currentUser.role).toBe("admin");
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          conversation_count: 9,
+          order_count: 4,
+          shipment_count: 8,
+          total_revenue: 777.77,
+          currency: "TRY",
+          open_conversation_count: 3,
+          pending_confirmation_count: 2,
+          active_shipment_count: 6,
+          delivered_shipment_count: 2,
+          delivered_shipment_rate: 25,
+          confirmation_rate: 50,
+          active_shipment_rate: 75,
+        }),
+      });
+      return;
+    }
+
     if (url.pathname === "/api/conversations") {
       conversationQueryUrls.push(`${url.pathname}${url.search}`);
       const conversations = [
@@ -2001,12 +2023,18 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     });
     await expect(page.getByTestId("vapi-test-call-detail")).toContainText("call.test vapitest_vapi_test_05051234567");
     await page.goto(`${app.url}/raporlar`);
-    await expect(page.getByTestId("reports-flow")).toContainText("200.50 TRY");
+    await expect(page.getByTestId("reports-flow")).toContainText("777.77 TRY");
+    await expect(page.getByTestId("reports-flow")).toContainText("9");
+    await expect(page.getByTestId("reports-flow")).toContainText("8");
     await expect(page.getByTestId("reports-detail")).toContainText("Açık konuşma");
+    await expect(page.getByTestId("reports-detail")).toContainText("3");
     await expect(page.getByTestId("reports-detail")).toContainText("Aktif kargo");
+    await expect(page.getByTestId("reports-detail")).toContainText("6");
     await expect(page.getByTestId("reports-ratio-summary")).toContainText("Teslim Oranı");
     await expect(page.getByTestId("reports-ratio-summary")).toContainText("Teyit Oranı");
-    await expect(page.getByTestId("reports-ratio-summary")).toContainText("%0");
+    await expect(page.getByTestId("reports-ratio-summary")).toContainText("%25");
+    await expect(page.getByTestId("reports-ratio-summary")).toContainText("%50");
+    await expect(page.getByTestId("reports-ratio-summary")).toContainText("%75");
     await page.goto(`${app.url}/ayarlar/entegrasyonlar`);
     await expect(page.getByTestId("integrations-flow")).toContainText("Instagram Main");
     await expect(page.getByTestId("instagram-publish-preview")).toContainText("Instagram Yayın Önizleme");
@@ -2353,6 +2381,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       "/api/conversations",
       "/api/comments/moderation-summary",
       "/api/balances/summary",
+      "/api/reports/summary",
       "/api/customers",
       "/api/conversations/cnv_playwright/messages",
       "/api/conversations/cnv_playwright/state",

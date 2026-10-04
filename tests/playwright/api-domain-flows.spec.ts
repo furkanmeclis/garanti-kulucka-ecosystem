@@ -799,6 +799,7 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
       conversationResponse,
       commentModerationResponse,
       balanceSummaryResponse,
+      reportSummaryResponse,
       customerResponse,
       messageResponse,
       orderResponse,
@@ -814,6 +815,7 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
         api.client.get("/api/conversations?limit=10"),
         api.client.get("/api/comments/moderation-summary"),
         api.client.get("/api/balances/summary"),
+        api.client.get("/api/reports/summary"),
         api.client.get("/api/customers?limit=10"),
         api.client.get(`/api/conversations/${conversation.public_id}/messages?limit=10`),
         api.client.get("/api/orders?limit=10"),
@@ -868,6 +870,22 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
     ]);
     expect(ownerBalanceSummaryResponse.status()).toBe(200);
     expect(staffBalanceSummaryResponse.status()).toBe(200);
+
+    expect(reportSummaryResponse.status()).toBe(200);
+    await expect(reportSummaryResponse.json()).resolves.toMatchObject({
+      conversation_count: 1,
+      order_count: 2,
+      shipment_count: 1,
+      total_revenue: 200.5,
+      currency: "TRY",
+      open_conversation_count: 1,
+      pending_confirmation_count: 1,
+      active_shipment_count: 1,
+      delivered_shipment_count: 0,
+      delivered_shipment_rate: 0,
+      confirmation_rate: 50,
+      active_shipment_rate: 100,
+    });
 
     expect(customerResponse.status()).toBe(200);
     expect(await customerResponse.json()).toMatchObject({
@@ -1385,6 +1403,8 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
     expect(await forbiddenBalanceSummaryResponse.json()).toMatchObject({
       error: { code: "forbidden" },
     });
+    const forbiddenReportSummaryResponse = await api.cargoClient.get("/api/reports/summary");
+    expect(forbiddenReportSummaryResponse.status()).toBe(403);
     const forbiddenOrphanCleanupDryRunResponse = await api.cargoClient.post("/api/files/fil_orphan/orphan-cleanup-dry-run", {
       data: {
         reason: "forbidden",

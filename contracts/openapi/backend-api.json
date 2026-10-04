@@ -507,6 +507,26 @@
         }
       }
     },
+    "/api/reports/summary": {
+      "get": {
+        "operationId": "getReportSummary",
+        "responses": {
+          "200": {
+            "description": "Backend-owned report KPI and ratio summary",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportSummary"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/api/shipments/{shipment_public_id}/status": {
       "patch": {
         "operationId": "updateShipmentStatus",
@@ -2044,6 +2064,37 @@
             "minLength": 16,
             "maxLength": 128
           }
+        }
+      },
+      "ReportSummary": {
+        "type": "object",
+        "required": [
+          "conversation_count",
+          "order_count",
+          "shipment_count",
+          "total_revenue",
+          "currency",
+          "open_conversation_count",
+          "pending_confirmation_count",
+          "active_shipment_count",
+          "delivered_shipment_count",
+          "delivered_shipment_rate",
+          "confirmation_rate",
+          "active_shipment_rate"
+        ],
+        "properties": {
+          "conversation_count": { "type": "integer", "minimum": 0 },
+          "order_count": { "type": "integer", "minimum": 0 },
+          "shipment_count": { "type": "integer", "minimum": 0 },
+          "total_revenue": { "type": "number", "minimum": 0 },
+          "currency": { "type": "string" },
+          "open_conversation_count": { "type": "integer", "minimum": 0 },
+          "pending_confirmation_count": { "type": "integer", "minimum": 0 },
+          "active_shipment_count": { "type": "integer", "minimum": 0 },
+          "delivered_shipment_count": { "type": "integer", "minimum": 0 },
+          "delivered_shipment_rate": { "type": "integer", "minimum": 0, "maximum": 100 },
+          "confirmation_rate": { "type": "integer", "minimum": 0, "maximum": 100 },
+          "active_shipment_rate": { "type": "integer", "minimum": 0, "maximum": 100 }
         }
       },
       "FileUpload": {
