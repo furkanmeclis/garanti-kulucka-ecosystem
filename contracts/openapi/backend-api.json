@@ -533,6 +533,84 @@
         }
       }
     },
+    "/api/files/orphans": {
+      "get": {
+        "operationId": "listFileOrphans",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Admin-only orphan file candidates",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileOrphanList"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/files/{file_public_id}/orphan-cleanup-dry-run": {
+      "post": {
+        "operationId": "createFileOrphanCleanupDryRun",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/FilePublicId"
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": ["string", "null"],
+                    "minLength": 1,
+                    "maxLength": 255,
+                    "default": "admin_orphan_lifecycle_review"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Admin-only dry-run cleanup plan without storage deletion",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileOrphanCleanupDryRun"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/api/files/{file_public_id}": {
       "get": {
         "operationId": "getFile",
@@ -1785,21 +1863,87 @@
           },
           "upload": {
             "type": "object",
-            "required": ["method", "url", "headers", "expires_at"],
+            "required": ["method", "bucket", "object_key", "headers", "presigned_url", "expires_at"],
             "properties": {
               "method": {
                 "type": "string",
                 "const": "PUT"
               },
-              "url": {
+              "bucket": {
+                "type": "string"
+              },
+              "object_key": {
                 "type": "string"
               },
               "headers": {
                 "type": "object"
               },
+              "presigned_url": {
+                "type": ["string", "null"]
+              },
               "expires_at": {
-                "type": "string",
+                "type": ["string", "null"],
                 "format": "date-time"
+              }
+            }
+          }
+        }
+      },
+      "FileOrphanList": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/DataEnvelope"
+          }
+        ]
+      },
+      "FileOrphanCleanupDryRun": {
+        "type": "object",
+        "required": [
+          "mode",
+          "request_id",
+          "deletion_performed",
+          "eligible_for_cleanup",
+          "reason",
+          "file",
+          "storage_action"
+        ],
+        "properties": {
+          "mode": {
+            "type": "string",
+            "const": "dry_run"
+          },
+          "request_id": {
+            "type": "string"
+          },
+          "deletion_performed": {
+            "type": "boolean",
+            "const": false
+          },
+          "eligible_for_cleanup": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": ["string", "null"]
+          },
+          "file": {
+            "$ref": "#/components/schemas/File"
+          },
+          "storage_action": {
+            "type": "object",
+            "required": ["provider", "bucket", "object_key", "operation"],
+            "properties": {
+              "provider": {
+                "type": "string"
+              },
+              "bucket": {
+                "type": "string"
+              },
+              "object_key": {
+                "type": "string"
+              },
+              "operation": {
+                "type": "string",
+                "const": "delete_object"
               }
             }
           }

@@ -586,6 +586,47 @@ describe("web API client boundary", () => {
     });
   });
 
+  it("maps file orphan cleanup dry-runs to backend file routes", async () => {
+    const requests: Request[] = [];
+    const client = createApiClient("http://localhost:3000", {
+      fetchImpl: async (input, init) => {
+        requests.push(new Request(input, init));
+        return Response.json({
+          mode: "dry_run",
+          request_id: "orphan_cleanup_fil_orphan",
+          deletion_performed: false,
+          eligible_for_cleanup: true,
+          reason: "admin_orphan_lifecycle_review",
+          file: {
+            public_id: "fil_orphan",
+            bucket: "media",
+            object_key: "uploads/orphan-proof.txt",
+            original_name: "orphan-proof.txt",
+            mime_type: "text/plain",
+            byte_size: 42,
+            checksum: "sha256:orphan-proof",
+            created_at: "2026-01-01T00:00:00.000Z",
+            updated_at: "2026-01-01T00:01:00.000Z",
+          },
+          storage_action: {
+            provider: "garage",
+            bucket: "media",
+            object_key: "uploads/orphan-proof.txt",
+            operation: "delete_object",
+          },
+        });
+      },
+    });
+
+    await client.files.createOrphanCleanupDryRun("fil_orphan");
+
+    expect(requests[0]?.method).toBe("POST");
+    expect(requests[0]?.url).toBe("http://localhost:3000/api/files/fil_orphan/orphan-cleanup-dry-run");
+    await expect(requests[0]?.json()).resolves.toEqual({
+      reason: "admin_orphan_lifecycle_review",
+    });
+  });
+
   it("maps webphone config reads to backend routes", async () => {
     const requests: Request[] = [];
     const client = createApiClient("http://localhost:3000", {

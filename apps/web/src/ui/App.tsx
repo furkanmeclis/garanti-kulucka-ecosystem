@@ -49,7 +49,7 @@ import {
   type ProductSummary,
   type ShipmentSummary,
 } from "../api/domain-client.js";
-import { createFileClient, type DownloadInstruction, type FileMetadata } from "../api/file-client.js";
+import { createFileClient, type DownloadInstruction, type FileMetadata, type FileOrphanCleanupDryRun } from "../api/file-client.js";
 import { createBackendHttpClient } from "../api/http-client.js";
 import { createRealtimeClient, type RealtimeClient } from "../api/realtime-client.js";
 import { createWebphoneClient, type WebphoneConfig } from "../api/webphone-client.js";
@@ -433,6 +433,7 @@ export function App() {
   const [status, setStatus] = useState("Hazır");
   const [uploadedFile, setUploadedFile] = useState<FileMetadata | null>(null);
   const [downloadInstruction, setDownloadInstruction] = useState<DownloadInstruction | null>(null);
+  const [orphanCleanupPreview, setOrphanCleanupPreview] = useState<FileOrphanCleanupDryRun | null>(null);
   const [lastSmsSend, setLastSmsSend] = useState<string | null>(null);
   const [lastPaymentRequest, setLastPaymentRequest] = useState<string | null>(null);
   const [lastInstagramPublishPreview, setLastInstagramPublishPreview] = useState<string | null>(null);
@@ -440,6 +441,7 @@ export function App() {
   const [paymentRequesting, setPaymentRequesting] = useState(false);
   const [instagramPublishPreviewing, setInstagramPublishPreviewing] = useState(false);
   const [vapiTestCalling, setVapiTestCalling] = useState(false);
+  const [orphanCleanupPreviewing, setOrphanCleanupPreviewing] = useState(false);
   const [vapiTestCustomerName, setVapiTestCustomerName] = useState("Test Müşteri");
   const [vapiTestPhone, setVapiTestPhone] = useState("05051234567");
   const [cronTriggeringProvider, setCronTriggeringProvider] = useState<"ptt" | "surat" | null>(null);
@@ -695,6 +697,21 @@ export function App() {
     }
     setDownloadInstruction(download.download);
     setStatus("Dosya akışı presigned S3 sınırından geçti");
+  }
+
+  async function handlePrepareOrphanCleanupDryRun() {
+    const orphan = data.fileOrphans[0];
+    if (!orphan || orphanCleanupPreviewing) return;
+
+    setStatus("Orphan dosya lifecycle dry-run backend API üzerinden hazırlanıyor");
+    setOrphanCleanupPreviewing(true);
+    try {
+      const preview = await files.createOrphanCleanupDryRun(orphan.public_id);
+      setOrphanCleanupPreview(preview);
+      setStatus("Orphan cleanup dry-run canlı silme yapmadan hazırlandı");
+    } finally {
+      setOrphanCleanupPreviewing(false);
+    }
   }
 
   async function handleSendMessage() {
@@ -2479,6 +2496,15 @@ export function App() {
             )}
             {user?.role === "admin" && (
               <DetailPanel title="Orphan Dosya Adayları" testId="file-orphans-detail">
+                <button
+                  className="primary-action"
+                  type="button"
+                  disabled={orphanCleanupPreviewing || data.fileOrphans.length === 0}
+                  onClick={() => void handlePrepareOrphanCleanupDryRun()}
+                >
+                  <Trash2 size={16} aria-hidden="true" />
+                  {orphanCleanupPreviewing ? "Lifecycle dry-run hazırlanıyor" : "Orphan cleanup dry-run hazırla"}
+                </button>
                 <DataRows
                   rows={[
                     ["Aday", String(data.fileOrphans.length), "files orphan report"],
@@ -2489,6 +2515,19 @@ export function App() {
                     ]),
                   ]}
                 />
+                {orphanCleanupPreview && (
+                  <DataRows
+                    rows={[
+                      ["Son dry-run", orphanCleanupPreview.request_id, orphanCleanupPreview.mode],
+                      ["Silme", orphanCleanupPreview.deletion_performed ? "yapıldı" : "yapılmadı", orphanCleanupPreview.reason ?? "-"],
+                      [
+                        "Storage",
+                        orphanCleanupPreview.storage_action.bucket,
+                        `${orphanCleanupPreview.storage_action.operation} ${orphanCleanupPreview.storage_action.object_key}`,
+                      ],
+                    ]}
+                  />
+                )}
               </DetailPanel>
             )}
           </FlowPanel>

@@ -479,6 +479,11 @@ class FixtureQuery {
       case "integration_accounts":
       case "provider_attempts":
         return (await this.execute())[0] ?? null;
+      case "files":
+        return files.find((file) =>
+          this.whereValues.get("public_id") === file.public_id ||
+          this.whereValues.get("files.public_id") === file.public_id,
+        ) ?? null;
       default:
         return null;
     }
@@ -1226,11 +1231,50 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
         },
       ],
     });
+    const orphanCleanupDryRunResponse = await api.client.post("/api/files/fil_orphan/orphan-cleanup-dry-run", {
+      data: {
+        reason: "playwright-orphan-review",
+      },
+    });
+    expect(orphanCleanupDryRunResponse.status()).toBe(200);
+    expect(await orphanCleanupDryRunResponse.json()).toMatchObject({
+      mode: "dry_run",
+      request_id: "orphan_cleanup_fil_orphan",
+      deletion_performed: false,
+      eligible_for_cleanup: true,
+      reason: "playwright-orphan-review",
+      file: {
+        public_id: "fil_orphan",
+        object_key: "uploads/orphan-proof.txt",
+      },
+      storage_action: {
+        provider: "garage",
+        bucket: "media",
+        object_key: "uploads/orphan-proof.txt",
+        operation: "delete_object",
+      },
+    });
+    const malformedOrphanCleanupDryRunResponse = await api.client.post("/api/files/fil_orphan/orphan-cleanup-dry-run", {
+      data: "{",
+      headers: {
+        "content-type": "application/json",
+      },
+    });
+    expect(malformedOrphanCleanupDryRunResponse.status()).toBe(400);
+    expect(await malformedOrphanCleanupDryRunResponse.json()).toMatchObject({
+      error: { code: "invalid_request" },
+    });
     const forbiddenFileOrphansResponse = await api.cargoClient.get("/api/files/orphans?limit=10");
     expect(forbiddenFileOrphansResponse.status()).toBe(403);
     expect(await forbiddenFileOrphansResponse.json()).toMatchObject({
       error: { code: "forbidden" },
     });
+    const forbiddenOrphanCleanupDryRunResponse = await api.cargoClient.post("/api/files/fil_orphan/orphan-cleanup-dry-run", {
+      data: {
+        reason: "forbidden",
+      },
+    });
+    expect(forbiddenOrphanCleanupDryRunResponse.status()).toBe(403);
 
     expect(providerCatalogResponse.status()).toBe(200);
     const providerCatalogBody = await providerCatalogResponse.json();

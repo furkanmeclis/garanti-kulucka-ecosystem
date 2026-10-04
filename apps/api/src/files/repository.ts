@@ -50,6 +50,18 @@ export class FilesRepository {
     );
   }
 
+  async findOrphanCandidateByPublicId(publicId: string): Promise<FileRecord | null> {
+    return (
+      (await this.db
+        .selectFrom("files")
+        .leftJoin("message_attachments", "message_attachments.file_id", "files.id")
+        .selectAll("files")
+        .where("files.public_id", "=", publicId)
+        .where("message_attachments.id", "is", null)
+        .executeTakeFirst()) ?? null
+    );
+  }
+
   async listOrphanCandidates(limit = 20): Promise<FileRecord[]> {
     const safeLimit = Math.max(1, Math.min(100, limit));
     return this.db

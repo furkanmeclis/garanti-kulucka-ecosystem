@@ -41,6 +41,21 @@ export interface FileOrphanListOptions {
   limit?: number;
 }
 
+export interface FileOrphanCleanupDryRun {
+  mode: "dry_run";
+  request_id: string;
+  deletion_performed: false;
+  eligible_for_cleanup: boolean;
+  reason: string | null;
+  file: FileMetadata;
+  storage_action: {
+    provider: string;
+    bucket: string;
+    object_key: string;
+    operation: "delete_object";
+  };
+}
+
 function orphanQuery(options: FileOrphanListOptions = {}) {
   const params = new URLSearchParams();
   if (typeof options.limit === "number") {
@@ -66,5 +81,13 @@ export function createFileClient(http: BackendHttpClient) {
       ),
     listOrphanCandidates: (options?: FileOrphanListOptions) =>
       http.request<{ data: FileMetadata[] }>(`/api/files/orphans${orphanQuery(options)}`),
+    createOrphanCleanupDryRun: (filePublicId: string, reason = "admin_orphan_lifecycle_review") =>
+      http.request<FileOrphanCleanupDryRun>(
+        `/api/files/${encodeURIComponent(filePublicId)}/orphan-cleanup-dry-run`,
+        {
+          method: "POST",
+          body: { reason },
+        },
+      ),
   };
 }

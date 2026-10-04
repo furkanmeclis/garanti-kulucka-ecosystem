@@ -12,6 +12,26 @@ const createUploadSchema = z.object({
   checksum: z.string().min(16).max(128).nullable().default(null),
 });
 
+const orphanCleanupDryRunSchema = z.object({
+  reason: z.string().min(1).max(255).nullable().default("admin_orphan_lifecycle_review"),
+});
+
+async function readOptionalJsonBody(context: { req: { header: (name: string) => string | undefined; json: () => Promise<unknown> } }) {
+  const contentLength = context.req.header("content-length");
+  if (contentLength === "0") {
+    return {};
+  }
+
+  try {
+    return await context.req.json();
+  } catch {
+    if (contentLength === undefined) {
+      return {};
+    }
+    throw new Error("invalid_json");
+  }
+}
+
 export function createFileRoutes() {
   const routes = new Hono<AppBindings>();
 
@@ -62,6 +82,50 @@ export function createFileRoutes() {
     const limit = Number.isFinite(parsedLimit) ? parsedLimit : 20;
     const files = await new FilesRepository(db).listOrphanCandidates(limit);
     return context.json({ data: files.map(serializeFile) });
+  });
+
+  routes.post("/:file_public_id/orphan-cleanup-dry-run", requireAdmin, async (context) => {
+    let body: unknown;
+    try {
+      body = await readOptionalJsonBody(context);
+    } catch {
+      return context.json({ error: { code: "invalid_request", message: "Invalid orphan cleanup dry-run payload" } }, 400);
+    }
+
+    const payload = orphanCleanupDryRunSchema.safeParse(body);
+    if (!payload.success) {
+      return context.json({ error: { code: "invalid_request", message: "Invalid orphan cleanup dry-run payload" } }, 400);
+    }
+
+    const db = context.get("db");
+    if (!db) {
+      return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
+    }
+
+    const filePublicId = context.req.param("file_public_id");
+    if (!filePublicId) {
+      return context.json({ error: { code: "invalid_request", message: "File public id is required" } }, 400);
+    }
+
+    const file = await new FilesRepository(db).findOrphanCandidateByPublicId(filePublicId);
+    if (!file) {
+      return context.json({ error: { code: "not_found", message: "Orphan file candidate was not found" } }, 404);
+    }
+
+    return context.json({
+      mode: "dry_run",
+      request_id: `orphan_cleanup_${file.public_id}`,
+      deletion_performed: false,
+      eligible_for_cleanup: true,
+      reason: payload.data.reason,
+      file: serializeFile(file),
+      storage_action: {
+        provider: "garage",
+        bucket: file.bucket,
+        object_key: file.object_key,
+        operation: "delete_object",
+      },
+    });
   });
 
   routes.get("/:file_public_id/download", async (context) => {

@@ -102,6 +102,9 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     last_event_text?: string;
     idempotency_key?: string;
   } | null = null;
+  let orphanCleanupDryRunPayload: {
+    reason?: string | null;
+  } | null = null;
   let suratShipmentStatus = "in_transit";
   let suratShipmentLastEvent = "Selected shipment at branch";
 
@@ -1532,6 +1535,42 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       return;
     }
 
+    if (url.pathname === "/api/files/fil_orphan/orphan-cleanup-dry-run") {
+      expect(currentUser.role).toBe("admin");
+      expect(route.request().method()).toBe("POST");
+      orphanCleanupDryRunPayload = JSON.parse(route.request().postData() ?? "{}") as {
+        reason?: string | null;
+      };
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          mode: "dry_run",
+          request_id: "orphan_cleanup_fil_orphan",
+          deletion_performed: false,
+          eligible_for_cleanup: true,
+          reason: orphanCleanupDryRunPayload.reason ?? null,
+          file: {
+            public_id: "fil_orphan",
+            bucket: "media",
+            object_key: "uploads/orphan-proof.txt",
+            original_name: "orphan-proof.txt",
+            mime_type: "text/plain",
+            byte_size: 42,
+            checksum: "sha256:orphan-proof",
+            created_at: "2026-01-01T00:00:00.000Z",
+            updated_at: "2026-01-01T00:01:00.000Z",
+          },
+          storage_action: {
+            provider: "garage",
+            bucket: "media",
+            object_key: "uploads/orphan-proof.txt",
+            operation: "delete_object",
+          },
+        }),
+      });
+      return;
+    }
+
     if (url.pathname === "/api/files/fil_playwright") {
       await route.fulfill({
         contentType: "application/json",
@@ -2116,6 +2155,13 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("file-orphans-detail")).toContainText("orphan-proof.txt");
     await expect(page.getByTestId("file-orphans-detail")).toContainText("uploads/orphan-proof.txt");
     await expect(page.getByTestId("file-orphans-detail")).toContainText("42 byte");
+    await page.getByRole("button", { name: /orphan cleanup dry-run hazırla/i }).click();
+    expect(orphanCleanupDryRunPayload).toMatchObject({
+      reason: "admin_orphan_lifecycle_review",
+    });
+    await expect(page.getByTestId("file-orphans-detail")).toContainText("orphan_cleanup_fil_orphan");
+    await expect(page.getByTestId("file-orphans-detail")).toContainText("yapılmadı");
+    await expect(page.getByTestId("file-orphans-detail")).toContainText("delete_object uploads/orphan-proof.txt");
     await page.getByRole("button", { name: /presigned upload testi/i }).click();
     await expect(page.getByTestId("file-upload-flow")).toContainText("kanit.txt kaydedildi");
     await expect(page.getByTestId("file-metadata-detail")).toContainText("media");
@@ -2219,6 +2265,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       "/admin/settings/providers.ptt.live_mode",
       "/api/files/uploads",
       "/api/files/orphans",
+      "/api/files/fil_orphan/orphan-cleanup-dry-run",
       "/api/files/fil_playwright",
       "/api/files/fil_playwright/download",
       "/presigned/uploads/kanit.txt",
