@@ -53,6 +53,7 @@ async function closeWebApp(server: ViteDevServer) {
 test("real frontend shell uses backend auth, domain, file, and webphone APIs", async ({ page }) => {
   const app = await startWebApp();
   const requestedUrls: string[] = [];
+  const allRequestUrls: string[] = [];
   let currentUser = loginUser();
   let savedIntegrationToken = false;
   let savedIntegrationSetting = false;
@@ -111,6 +112,10 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       };
     })();
   `);
+
+  page.on("request", (request) => {
+    allRequestUrls.push(request.url());
+  });
 
   await page.route(`${backendBaseUrl}/**`, async (route) => {
     const url = new URL(route.request().url());
@@ -1191,6 +1196,24 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByRole("link", { name: /cron debug/i })).toHaveCount(1);
     await expect(page.getByRole("button", { name: /evrimiçi/i })).toHaveCount(0);
     await expect(page.getByTestId("inbox-flow")).toContainText("Merhaba");
+    await expect(page.getByTestId("inbox-flow")).toContainText("Okunmamış");
+    await expect(page.getByTestId("inbox-flow")).toContainText("Havuz");
+    await expect(page.getByTestId("conversation-filter-summary")).toContainText("legacy kanal/durum filtreleri");
+    await expect(page.getByTestId("conversation-filter-summary")).toContainText("backend is_in_pool");
+    await expect(page.getByTestId("conversation-filter-summary")).toContainText("backend human_agent_enabled");
+    await page.getByTestId("conversation-channel-filter-facebook").click();
+    await expect(page.getByTestId("conversation-list")).toContainText("Facebook Customer");
+    await expect(page.getByTestId("conversation-list")).not.toContainText("Playwright Customer");
+    await expect(page.getByTestId("conversation-detail")).toContainText("Facebook Customer");
+    await expect(page.getByTestId("conversation-filter-summary")).toContainText("facebook");
+    await page.getByTestId("conversation-status-filter-open").click();
+    await expect(page.getByTestId("conversation-list")).not.toContainText("Facebook Customer");
+    await expect(page.getByTestId("conversation-filter-summary")).toContainText("open");
+    await page.getByTestId("conversation-status-filter-all").click();
+    await page.getByTestId("conversation-channel-filter-instagram").click();
+    await expect(page.getByTestId("conversation-list")).toContainText("Playwright Customer");
+    await expect(page.getByTestId("conversation-list")).not.toContainText("Facebook Customer");
+    await page.getByTestId("conversation-channel-filter-all").click();
     await expect(page.getByTestId("conversation-detail")).toContainText("Playwright Customer");
     await expect(page.getByTestId("conversation-detail")).toContainText("instagram");
     await expect.poll(async () =>
@@ -1582,7 +1605,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       "/api/webphone/config",
     ]),
   );
-  expect(requestedUrls.some((path) => path.includes("supabase"))).toBe(false);
+  expect(allRequestUrls.some((url) => /supabase|storage\/v1/i.test(url))).toBe(false);
   expect(savedSipConfig).toBe(true);
 });
 

@@ -408,6 +408,8 @@ export function App() {
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [selectedShipmentId, setSelectedShipmentId] = useState<string | null>(null);
+  const [conversationChannelFilter, setConversationChannelFilter] = useState("all");
+  const [conversationStatusFilter, setConversationStatusFilter] = useState("all");
   const [realtimeClient, setRealtimeClient] = useState<RealtimeClient | null>(null);
   const selectedConversationIdRef = useRef<string | null>(null);
 
@@ -649,7 +651,7 @@ export function App() {
   }
 
   async function handleSendMessage() {
-    const conversationId = selectedConversationId ?? data.conversations[0]?.public_id;
+    const conversationId = selectedConversation?.public_id ?? data.conversations[0]?.public_id;
     if (!conversationId) return;
 
     setStatus("Mesaj backend API üzerinden gönderiliyor");
@@ -683,7 +685,7 @@ export function App() {
     setStatus("Sipariş backend API üzerinden oluşturuluyor");
     const order = await domain.createOrder({
       customer_public_id: null,
-      conversation_public_id: selectedConversationId ?? data.conversations[0]?.public_id ?? null,
+      conversation_public_id: selectedConversation?.public_id ?? data.conversations[0]?.public_id ?? null,
       order_number: "ORD-WEB-NEW",
       status: "draft",
       source: "manual",
@@ -887,8 +889,6 @@ export function App() {
   const netgsmSettings = netgsmSettingsFrom(activeSettings);
   const sipServerSettings = sipServerSettingsFrom(activeSettings, data.webphone);
   const operationalPolicy = operationalPolicyFrom(activeSettings);
-  const selectedConversation =
-    data.conversations.find((conversation) => conversation.public_id === selectedConversationId) ?? data.conversations[0] ?? null;
   const selectedCustomer = data.customers[0] ?? null;
   const selectedOrder = data.orders.find((order) => order.public_id === selectedOrderId) ?? data.orders[0] ?? null;
   const selectedShipment = data.shipments.find((shipment) => shipment.public_id === selectedShipmentId) ?? data.shipments[0] ?? null;
@@ -902,6 +902,41 @@ export function App() {
   const reportTotalAmount = data.orders.reduce((sum, order) => sum + moneyValue(order.total_amount), 0);
   const balanceSummary = balanceSummaryFromOrders(data.orders);
   const commentSummary = commentModerationSummaryFrom(data.conversations);
+  const unreadConversationCount = data.conversations.reduce((sum, conversation) => sum + conversation.unread_count, 0);
+  const poolConversationCount = data.conversations.filter((conversation) => conversation.is_in_pool).length;
+  const humanAgentConversationCount = data.conversations.filter((conversation) => conversation.human_agent_enabled).length;
+  const instagramConversationCount = data.conversations.filter((conversation) => conversation.channel === "instagram").length;
+  const facebookConversationCount = data.conversations.filter((conversation) =>
+    conversation.channel === "facebook" || conversation.channel === "messenger"
+  ).length;
+  const openConversationCount = data.conversations.filter((conversation) => conversation.status === "open").length;
+  const closedConversationCount = data.conversations.filter((conversation) => conversation.status === "closed").length;
+  const conversationMatchesChannelFilter = (conversation: ConversationSummary, filter: string) => {
+    if (filter === "all") {
+      return true;
+    }
+    if (filter === "facebook") {
+      return conversation.channel === "facebook" || conversation.channel === "messenger";
+    }
+    return conversation.channel === filter;
+  };
+  const visibleConversations = data.conversations.filter((conversation) => {
+    const channelMatches = conversationMatchesChannelFilter(conversation, conversationChannelFilter);
+    const statusMatches = conversationStatusFilter === "all" || conversation.status === conversationStatusFilter;
+    return channelMatches && statusMatches;
+  });
+  const selectedConversation =
+    visibleConversations.find((conversation) => conversation.public_id === selectedConversationId) ?? visibleConversations[0] ?? null;
+  const conversationChannelFilters = [
+    { value: "all", label: `Tüm kanallar ${data.conversations.length}` },
+    { value: "instagram", label: `Instagram ${instagramConversationCount}` },
+    { value: "facebook", label: `Facebook ${facebookConversationCount}` },
+  ];
+  const conversationStatusFilters = [
+    { value: "all", label: "Tüm durumlar" },
+    { value: "open", label: `Açık ${openConversationCount}` },
+    { value: "closed", label: `Kapalı ${closedConversationCount}` },
+  ];
   const instagramAnalytics = instagramAnalyticsFrom(integrationSnapshot?.account.metadata);
   const selectedProviderAttempt = data.providerAttempts[0] ?? null;
   const selectedProviderPreview = selectedProviderAttempt?.provider_request_preview ?? null;
@@ -960,7 +995,6 @@ export function App() {
   const pipelineProcessingCount = shipmentPipelineRows.filter((row) => row.pipelineStatus === "isleniyor").length;
   const pipelineErrorCount = shipmentPipelineRows.filter((row) => row.pipelineStatus === "hata").length;
   const pipelineDeliveredCount = shipmentPipelineRows.filter((row) => row.pipelineStatus === "teslim").length;
-  const openConversationCount = data.conversations.filter((conversation) => conversation.status === "open").length;
   const customerWithPhoneCount = data.customers.filter((customer) => Boolean(customer.phone)).length;
   const customerWithEmailCount = data.customers.filter((customer) => Boolean(customer.email)).length;
   const customerWithNotesCount = data.customers.filter((customer) => Boolean(customer.notes)).length;
@@ -1022,9 +1056,51 @@ export function App() {
 
         {activeFlow === "inbox" && (
           <FlowPanel title="Mesajlar" icon={<MessageCircle size={18} />} testId="inbox-flow">
+            <div className="metrics-grid">
+              <Metric title="Okunmamış" value={String(unreadConversationCount)} />
+              <Metric title="Havuz" value={String(poolConversationCount)} />
+              <Metric title="Human Agent" value={String(humanAgentConversationCount)} />
+              <Metric title="Instagram" value={String(instagramConversationCount)} />
+              <Metric title="Facebook" value={String(facebookConversationCount)} />
+            </div>
+            <div className="detail-actions" data-testid="conversation-filter-bar">
+              {conversationChannelFilters.map(({ value, label }) => (
+                <button
+                  className={cx("secondary-action", conversationChannelFilter === value && "selected")}
+                  data-testid={`conversation-channel-filter-${value}`}
+                  key={value}
+                  type="button"
+                  onClick={() => setConversationChannelFilter(value)}
+                >
+                  {label}
+                </button>
+              ))}
+              {conversationStatusFilters.map(({ value, label }) => (
+                <button
+                  className={cx("secondary-action", conversationStatusFilter === value && "selected")}
+                  data-testid={`conversation-status-filter-${value}`}
+                  key={value}
+                  type="button"
+                  onClick={() => setConversationStatusFilter(value)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <DetailPanel title="Konuşma Filtreleri" testId="conversation-filter-summary">
+              <DataRows
+                rows={[
+                  ["Kaynak", "conversations API", "legacy kanal/durum filtreleri"],
+                  ["Aktif kanal", conversationChannelFilter, `${visibleConversations.length} konuşma`],
+                  ["Aktif durum", conversationStatusFilter, "Supabase channel yok"],
+                  ["Havuz", String(poolConversationCount), "backend is_in_pool"],
+                  ["Human agent", String(humanAgentConversationCount), "backend human_agent_enabled"],
+                ]}
+              />
+            </DetailPanel>
             <div className="split-grid">
-              <List title="Konuşmalar">
-                {data.conversations.map((conversation) => (
+              <List title="Konuşmalar" testId="conversation-list">
+                {visibleConversations.map((conversation) => (
                   <li key={conversation.public_id}>
                     <button
                       className={cx("conversation-button", selectedConversation?.public_id === conversation.public_id && "selected")}
@@ -1033,6 +1109,9 @@ export function App() {
                     >
                       <strong>{conversation.customer?.full_name ?? conversation.public_id}</strong>
                       <span>{conversation.last_message_text ?? "Mesaj yok"}</span>
+                      <span>
+                        {conversation.channel} / {conversation.status} / okunmamış {conversation.unread_count}
+                      </span>
                     </button>
                   </li>
                 ))}
@@ -2101,9 +2180,9 @@ function DetailPanel(props: { title: string; testId: string; children: ReactNode
   );
 }
 
-function List(props: { title: string; children: ReactNode }) {
+function List(props: { title: string; children: ReactNode; testId?: string }) {
   return (
-    <div className="list-panel">
+    <div className="list-panel" data-testid={props.testId}>
       <h2>{props.title}</h2>
       <ul>{props.children}</ul>
     </div>
