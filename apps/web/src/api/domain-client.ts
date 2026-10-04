@@ -120,6 +120,33 @@ export interface BalanceSummary {
   pending_request_count: number;
 }
 
+export type ShipmentPipelineStep = "mesaj" | "sms" | "vapi" | "teslim";
+export type ShipmentPipelineStatus = "bekliyor" | "isleniyor" | "hata" | "teslim";
+
+export interface ShipmentPipelineRow {
+  shipment_public_id: string;
+  recipient_name: string;
+  recipient_phone: string | null;
+  tracking_number: string | null;
+  barcode_number: string | null;
+  step: ShipmentPipelineStep;
+  pipeline_status: ShipmentPipelineStatus;
+}
+
+export interface ShipmentPipelineSummary {
+  counts: {
+    all: number;
+    mesaj: number;
+    sms: number;
+    vapi: number;
+    teslim: number;
+    bekliyor: number;
+    isleniyor: number;
+    hata: number;
+  };
+  rows: ShipmentPipelineRow[];
+}
+
 export function createDomainClient(http: BackendHttpClient) {
   return {
     listConversations: (params: { channel?: string; status?: string; limit?: number } = {}) => {
@@ -238,6 +265,8 @@ export function createDomainClient(http: BackendHttpClient) {
       const query = search.toString();
       return http.request<{ data: ShipmentSummary[] }>(`/api/shipments${query ? `?${query}` : ""}`);
     },
+    getShipmentPipelineSummary: () =>
+      http.request<ShipmentPipelineSummary>("/api/shipments/pipeline-summary"),
     updateShipmentStatus: (
       shipmentPublicId: string,
       input: {

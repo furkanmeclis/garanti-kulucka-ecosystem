@@ -84,6 +84,10 @@ function canReadBalanceSummary(role: string | undefined) {
   return role === "admin" || role === "owner" || role === "calisan";
 }
 
+function canReadShipmentPipeline(role: string | undefined) {
+  return role === "admin" || role === "owner" || role === "calisan" || role === "kargo_operatoru";
+}
+
 function canSendSms(role: string | undefined) {
   return role === "admin" || role === "owner" || role === "calisan" || role === "kargo_operatoru";
 }
@@ -478,6 +482,20 @@ export function createDomainRoutes() {
     }
     const shipments = await new DomainRepository(db).listShipments(shipmentFilter);
     return context.json({ data: shipments.map(serializeShipment) });
+  });
+
+  routes.get("/shipments/pipeline-summary", async (context) => {
+    if (!canReadShipmentPipeline(context.get("auth")?.role)) {
+      return context.json({ error: { code: "forbidden", message: "Shipment pipeline access is not allowed" } }, 403);
+    }
+
+    const db = context.get("db");
+    if (!db) {
+      return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
+    }
+
+    const summary = await new DomainRepository(db).getShipmentPipelineSummary();
+    return context.json(summary);
   });
 
   routes.patch("/shipments/:shipment_public_id/status", async (context) => {

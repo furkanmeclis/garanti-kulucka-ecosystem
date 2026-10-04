@@ -28,6 +28,8 @@ export type ShipmentRecord = Selectable<ShipmentsTable> & {
   order_number: string | null;
   customer_full_name: string | null;
 };
+export type ShipmentPipelineStep = "mesaj" | "sms" | "vapi" | "teslim";
+export type ShipmentPipelineStatus = "bekliyor" | "isleniyor" | "hata" | "teslim";
 
 export interface ListConversationsFilter {
   channel?: string;
@@ -110,6 +112,30 @@ export interface BalanceSummaryRecord {
   pending_request_count: number;
 }
 
+export interface ShipmentPipelineRowRecord {
+  shipment_public_id: string;
+  recipient_name: string;
+  recipient_phone: string | null;
+  tracking_number: string | null;
+  barcode_number: string | null;
+  step: ShipmentPipelineStep;
+  pipeline_status: ShipmentPipelineStatus;
+}
+
+export interface ShipmentPipelineSummaryRecord {
+  counts: {
+    all: number;
+    mesaj: number;
+    sms: number;
+    vapi: number;
+    teslim: number;
+    bekliyor: number;
+    isleniyor: number;
+    hata: number;
+  };
+  rows: ShipmentPipelineRowRecord[];
+}
+
 export interface UpdateShipmentStatusInput {
   shipmentPublicId: string;
   status: string;
@@ -124,6 +150,21 @@ function moneyCents(value: string) {
 
 function centsToMoney(cents: number) {
   return Math.round(cents) / 100;
+}
+
+function pipelineStepFromShipment(shipment: ShipmentRecord): ShipmentPipelineStep {
+  if (shipment.status === "delivered") return "teslim";
+  if (!shipment.recipient_phone) return "mesaj";
+  const provider = shipment.provider.toLocaleLowerCase("tr-TR");
+  if (provider.includes("sürat") || provider.includes("surat")) return "sms";
+  return "vapi";
+}
+
+function pipelineStatusFromShipment(shipment: ShipmentRecord): ShipmentPipelineStatus {
+  if (shipment.status === "delivered") return "teslim";
+  if (!shipment.tracking_number && !shipment.barcode_number) return "hata";
+  if (shipment.status === "in_transit") return "isleniyor";
+  return "bekliyor";
 }
 
 export class DomainRepository {
@@ -530,6 +571,32 @@ export class DomainRepository {
       .orderBy("shipments.created_at", "desc")
       .limit(filter.limit)
       .execute();
+  }
+
+  async getShipmentPipelineSummary(): Promise<ShipmentPipelineSummaryRecord> {
+    const shipments = await this.listShipments({ limit: 200 });
+    const rows = shipments.map((shipment) => ({
+      shipment_public_id: shipment.public_id,
+      recipient_name: shipment.recipient_name,
+      recipient_phone: shipment.recipient_phone,
+      tracking_number: shipment.tracking_number,
+      barcode_number: shipment.barcode_number,
+      step: pipelineStepFromShipment(shipment),
+      pipeline_status: pipelineStatusFromShipment(shipment),
+    }));
+    return {
+      counts: {
+        all: rows.length,
+        mesaj: rows.filter((row) => row.step === "mesaj").length,
+        sms: rows.filter((row) => row.step === "sms").length,
+        vapi: rows.filter((row) => row.step === "vapi").length,
+        teslim: rows.filter((row) => row.step === "teslim").length,
+        bekliyor: rows.filter((row) => row.pipeline_status === "bekliyor").length,
+        isleniyor: rows.filter((row) => row.pipeline_status === "isleniyor").length,
+        hata: rows.filter((row) => row.pipeline_status === "hata").length,
+      },
+      rows,
+    };
   }
 
   async updateShipmentStatus(input: UpdateShipmentStatusInput): Promise<ShipmentRecord> {

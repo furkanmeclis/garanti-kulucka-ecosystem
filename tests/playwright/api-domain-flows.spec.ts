@@ -796,6 +796,7 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
       orderResponse,
       productResponse,
       shipmentResponse,
+      shipmentPipelineResponse,
       fileOrphansResponse,
       providerCatalogResponse,
       settingsResponse,
@@ -810,6 +811,7 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
         api.client.get("/api/orders?limit=10"),
         api.client.get("/api/products?limit=10"),
         api.client.get("/api/shipments?limit=10"),
+        api.client.get("/api/shipments/pipeline-summary"),
         api.client.get("/api/files/orphans?limit=10"),
         api.client.get("/admin/integrations/provider-catalog"),
         api.client.get("/admin/settings?scope=global"),
@@ -904,6 +906,34 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
     });
     expect(missingTrackingShipmentsResponse.status()).toBe(200);
     expect(await missingTrackingShipmentsResponse.json()).toMatchObject({ data: [] });
+
+    expect(shipmentPipelineResponse.status()).toBe(200);
+    expect(await shipmentPipelineResponse.json()).toMatchObject({
+      counts: {
+        all: 1,
+        mesaj: 0,
+        sms: 0,
+        vapi: 1,
+        teslim: 0,
+        bekliyor: 0,
+        isleniyor: 1,
+        hata: 0,
+      },
+      rows: [
+        {
+          shipment_public_id: "shp_playwright",
+          recipient_name: "Playwright Customer",
+          step: "vapi",
+          pipeline_status: "isleniyor",
+        },
+      ],
+    });
+    const [cargoShipmentPipelineResponse, viewerShipmentPipelineResponse] = await Promise.all([
+      api.cargoClient.get("/api/shipments/pipeline-summary"),
+      api.viewerClient.get("/api/shipments/pipeline-summary"),
+    ]);
+    expect(cargoShipmentPipelineResponse.status()).toBe(200);
+    expect(viewerShipmentPipelineResponse.status()).toBe(403);
 
     const forbiddenCustomerResponse = await api.cargoClient.get("/api/customers?limit=10");
     expect(forbiddenCustomerResponse.status()).toBe(403);

@@ -49,6 +49,8 @@ import {
   type MessageSummary,
   type OrderSummary,
   type ProductSummary,
+  type ShipmentPipelineSummary,
+  type ShipmentPipelineStep,
   type ShipmentSummary,
 } from "../api/domain-client.js";
 import { createFileClient, type DownloadInstruction, type FileMetadata, type FileOrphanCleanupDryRun } from "../api/file-client.js";
@@ -74,6 +76,7 @@ interface DashboardData {
   providerAttempts: ProviderAttemptViewModel[];
   fileOrphans: FileMetadata[];
   balanceSummary: BackendBalanceSummary;
+  shipmentPipeline: ShipmentPipelineSummary;
   commentModeration: BackendCommentModerationSummary;
   webphone: WebphoneConfig | null;
 }
@@ -127,7 +130,6 @@ interface InstagramAnalyticsSummary {
   engagementRate: number;
 }
 
-type ShipmentPipelineStep = "mesaj" | "sms" | "vapi" | "teslim";
 type ShipmentPipelineFilter = "all" | ShipmentPipelineStep;
 
 interface NavigationItem {
@@ -243,21 +245,6 @@ function formatPercent(numerator: number, denominator: number) {
   return denominator > 0 ? `%${Math.round((numerator / denominator) * 100)}` : "%0";
 }
 
-function pipelineStepFromShipment(shipment: ShipmentSummary): ShipmentPipelineStep {
-  if (shipment.status === "delivered") return "teslim";
-  if (!shipment.recipient_phone) return "mesaj";
-  const provider = shipment.provider.toLocaleLowerCase("tr-TR");
-  if (provider.includes("sürat") || provider.includes("surat")) return "sms";
-  return "vapi";
-}
-
-function pipelineStatusFromShipment(shipment: ShipmentSummary) {
-  if (shipment.status === "delivered") return "teslim";
-  if (!shipment.tracking_number && !shipment.barcode_number) return "hata";
-  if (shipment.status === "in_transit") return "isleniyor";
-  return "bekliyor";
-}
-
 const sensitivePreviewKeyPattern = /authorization|token|secret|password|credential|api[_-]?key/i;
 
 function redactedPreviewValue(value: unknown): unknown {
@@ -319,6 +306,20 @@ const defaultBalanceSummary: BackendBalanceSummary = {
   pending_payment: 0,
   available_balance: 0,
   pending_request_count: 0,
+};
+
+const defaultShipmentPipelineSummary: ShipmentPipelineSummary = {
+  counts: {
+    all: 0,
+    mesaj: 0,
+    sms: 0,
+    vapi: 0,
+    teslim: 0,
+    bekliyor: 0,
+    isleniyor: 0,
+    hata: 0,
+  },
+  rows: [],
 };
 
 const defaultCommentModerationSummary: BackendCommentModerationSummary = {
@@ -434,6 +435,7 @@ export function App() {
     providerAttempts: [],
     fileOrphans: [],
     balanceSummary: defaultBalanceSummary,
+    shipmentPipeline: defaultShipmentPipelineSummary,
     commentModeration: defaultCommentModerationSummary,
     webphone: null,
   });
@@ -586,11 +588,13 @@ export function App() {
     const canReadCustomers = user?.role === "admin" || user?.role === "owner" || user?.role === "calisan";
     const canReadComments = user?.role === "admin" || user?.role === "owner" || user?.role === "calisan";
     const canReadBalances = user?.role === "admin" || user?.role === "owner" || user?.role === "calisan";
-    const [conversations, customers, commentModeration, balanceSummary, orders, products, shipments, settings, webphoneConfig] = await Promise.all([
+    const canReadShipmentPipeline = ["admin", "owner", "calisan", "kargo_operatoru"].includes(user?.role ?? "");
+    const [conversations, customers, commentModeration, balanceSummary, shipmentPipeline, orders, products, shipments, settings, webphoneConfig] = await Promise.all([
       domain.listConversations({ limit: 20 }),
       canReadCustomers ? domain.listCustomers(50) : Promise.resolve({ data: [] }),
       canReadComments ? domain.getCommentModerationSummary() : Promise.resolve(defaultCommentModerationSummary),
       canReadBalances ? domain.getBalanceSummary() : Promise.resolve(defaultBalanceSummary),
+      canReadShipmentPipeline ? domain.getShipmentPipelineSummary() : Promise.resolve(defaultShipmentPipelineSummary),
       domain.listOrders(20),
       domain.listProducts(50),
       domain.listShipments(20),
@@ -627,6 +631,7 @@ export function App() {
       providerAttempts: providerAttempts.data.map(toProviderAttemptViewModel),
       fileOrphans: fileOrphans.data,
       balanceSummary,
+      shipmentPipeline,
       commentModeration,
       webphone: webphoneConfig,
     });
@@ -672,6 +677,7 @@ export function App() {
         providerAttempts: [],
         fileOrphans: [],
         balanceSummary: defaultBalanceSummary,
+        shipmentPipeline: defaultShipmentPipelineSummary,
         commentModeration: defaultCommentModerationSummary,
         webphone: null,
       });
@@ -966,11 +972,13 @@ export function App() {
       last_event_text: "Frontend teslim kaniti",
       raw_payload: null,
     });
+    const shipmentPipeline = await domain.getShipmentPipelineSummary();
     if (shipmentFilter !== "all") {
       const shipments = await domain.listShipments(shipmentFilterParams(shipmentFilter));
       setData((current) => ({
         ...current,
         shipments: shipments.data,
+        shipmentPipeline,
       }));
       setSelectedShipmentId(shipments.data[0]?.public_id ?? null);
       setStatus("Kargo durumu backend API üzerinden güncellendi");
@@ -979,6 +987,7 @@ export function App() {
     setData((current) => ({
       ...current,
       shipments: current.shipments.map((item) => (item.public_id === updated.public_id ? updated : item)),
+      shipmentPipeline,
     }));
     setSelectedShipmentId(updated.public_id);
     setStatus("Kargo durumu backend API üzerinden güncellendi");
@@ -1312,23 +1321,18 @@ export function App() {
     (shipment) => !shipment.tracking_number && !shipment.barcode_number,
   ).length;
   const otherShipmentCount = Math.max(data.shipments.length - pttShipmentCount - suratShipmentCount, 0);
-  const shipmentPipelineRows = data.shipments.map((shipment) => ({
-    shipment,
-    step: pipelineStepFromShipment(shipment),
-    pipelineStatus: pipelineStatusFromShipment(shipment),
-  }));
-  const visibleShipmentPipelineRows = shipmentPipelineRows.filter(
+  const visibleShipmentPipelineRows = data.shipmentPipeline.rows.filter(
     (row) => shipmentPipelineFilter === "all" || row.step === shipmentPipelineFilter,
   );
-  const pipelineMessageCount = shipmentPipelineRows.filter((row) => row.step === "mesaj").length;
-  const pipelineSmsCount = shipmentPipelineRows.filter((row) => row.step === "sms").length;
-  const pipelineVapiCount = shipmentPipelineRows.filter((row) => row.step === "vapi").length;
-  const pipelineWaitingCount = shipmentPipelineRows.filter((row) => row.pipelineStatus === "bekliyor").length;
-  const pipelineProcessingCount = shipmentPipelineRows.filter((row) => row.pipelineStatus === "isleniyor").length;
-  const pipelineErrorCount = shipmentPipelineRows.filter((row) => row.pipelineStatus === "hata").length;
-  const pipelineDeliveredCount = shipmentPipelineRows.filter((row) => row.pipelineStatus === "teslim").length;
+  const pipelineMessageCount = data.shipmentPipeline.counts.mesaj;
+  const pipelineSmsCount = data.shipmentPipeline.counts.sms;
+  const pipelineVapiCount = data.shipmentPipeline.counts.vapi;
+  const pipelineWaitingCount = data.shipmentPipeline.counts.bekliyor;
+  const pipelineProcessingCount = data.shipmentPipeline.counts.isleniyor;
+  const pipelineErrorCount = data.shipmentPipeline.counts.hata;
+  const pipelineDeliveredCount = data.shipmentPipeline.counts.teslim;
   const shipmentPipelineFilters: Array<{ value: ShipmentPipelineFilter; label: string; count: number }> = [
-    { value: "all", label: "Tümü", count: shipmentPipelineRows.length },
+    { value: "all", label: "Tümü", count: data.shipmentPipeline.counts.all },
     { value: "mesaj", label: "Mesaj", count: pipelineMessageCount },
     { value: "sms", label: "SMS", count: pipelineSmsCount },
     { value: "vapi", label: "VAPI", count: pipelineVapiCount },
@@ -1753,10 +1757,10 @@ export function App() {
               />
             </DetailPanel>
             <DataRows
-              rows={visibleShipmentPipelineRows.map(({ shipment, step, pipelineStatus }) => [
-                shipment.recipient_name,
-                `${step} / ${pipelineStatus}`,
-                shipment.tracking_number ?? shipment.barcode_number ?? shipment.recipient_phone ?? "-",
+              rows={visibleShipmentPipelineRows.map((row) => [
+                row.recipient_name,
+                `${row.step} / ${row.pipeline_status}`,
+                row.tracking_number ?? row.barcode_number ?? row.recipient_phone ?? "-",
               ])}
             />
           </FlowPanel>

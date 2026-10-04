@@ -487,6 +487,26 @@
         }
       }
     },
+    "/api/shipments/pipeline-summary": {
+      "get": {
+        "operationId": "getShipmentPipelineSummary",
+        "responses": {
+          "200": {
+            "description": "Backend-classified shipment pipeline summary",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShipmentPipelineSummary"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/api/shipments/{shipment_public_id}/status": {
       "patch": {
         "operationId": "updateShipmentStatus",
@@ -1922,6 +1942,61 @@
           "live_call_permitted": {
             "type": "boolean",
             "const": false
+          }
+        }
+      },
+      "ShipmentPipelineSummary": {
+        "type": "object",
+        "required": ["counts", "rows"],
+        "properties": {
+          "counts": {
+            "type": "object",
+            "required": ["all", "mesaj", "sms", "vapi", "teslim", "bekliyor", "isleniyor", "hata"],
+            "properties": {
+              "all": { "type": "integer", "minimum": 0 },
+              "mesaj": { "type": "integer", "minimum": 0 },
+              "sms": { "type": "integer", "minimum": 0 },
+              "vapi": { "type": "integer", "minimum": 0 },
+              "teslim": { "type": "integer", "minimum": 0 },
+              "bekliyor": { "type": "integer", "minimum": 0 },
+              "isleniyor": { "type": "integer", "minimum": 0 },
+              "hata": { "type": "integer", "minimum": 0 }
+            }
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ShipmentPipelineRow"
+            }
+          }
+        }
+      },
+      "ShipmentPipelineRow": {
+        "type": "object",
+        "required": ["shipment_public_id", "recipient_name", "step", "pipeline_status"],
+        "properties": {
+          "shipment_public_id": {
+            "type": "string"
+          },
+          "recipient_name": {
+            "type": "string"
+          },
+          "recipient_phone": {
+            "type": ["string", "null"]
+          },
+          "tracking_number": {
+            "type": ["string", "null"]
+          },
+          "barcode_number": {
+            "type": ["string", "null"]
+          },
+          "step": {
+            "type": "string",
+            "enum": ["mesaj", "sms", "vapi", "teslim"]
+          },
+          "pipeline_status": {
+            "type": "string",
+            "enum": ["bekliyor", "isleniyor", "hata", "teslim"]
           }
         }
       },

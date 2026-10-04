@@ -502,10 +502,12 @@ describe("web API client boundary", () => {
     await client.domain.listShipments({ provider: "surat", limit: 20 });
     await client.domain.listShipments({ status: "delivered", limit: 20 });
     await client.domain.listShipments({ tracking_missing: true, limit: 20 });
+    await client.domain.getShipmentPipelineSummary();
 
     expect(requests[0]?.url).toBe("http://localhost:3000/api/shipments?provider=surat&limit=20");
     expect(requests[1]?.url).toBe("http://localhost:3000/api/shipments?status=delivered&limit=20");
     expect(requests[2]?.url).toBe("http://localhost:3000/api/shipments?tracking_missing=true&limit=20");
+    expect(requests[3]?.url).toBe("http://localhost:3000/api/shipments/pipeline-summary");
   });
 
   it("maps manual SMS sends to backend provider-delivery route", async () => {

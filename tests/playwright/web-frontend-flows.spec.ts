@@ -608,6 +608,64 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       return;
     }
 
+    if (url.pathname === "/api/shipments/pipeline-summary") {
+      const rows = [
+        {
+          shipment_public_id: "shp_playwright",
+          recipient_name: "Playwright Customer",
+          recipient_phone: "5550000000",
+          tracking_number: "TRK-PLAYWRIGHT",
+          barcode_number: "BAR-PLAYWRIGHT",
+          step: "vapi",
+          pipeline_status: "isleniyor",
+        },
+        {
+          shipment_public_id: "shp_surat_playwright",
+          recipient_name: "Surat Playwright Customer",
+          recipient_phone: "5551111111",
+          tracking_number: "TRK-SURAT-PLAYWRIGHT",
+          barcode_number: "BAR-SURAT-PLAYWRIGHT",
+          step: suratShipmentStatus === "delivered" ? "teslim" : "sms",
+          pipeline_status: suratShipmentStatus === "delivered" ? "teslim" : "isleniyor",
+        },
+        {
+          shipment_public_id: "shp_message_playwright",
+          recipient_name: "Message Step Customer",
+          recipient_phone: null,
+          tracking_number: "TRK-MESSAGE-PLAYWRIGHT",
+          barcode_number: "BAR-MESSAGE-PLAYWRIGHT",
+          step: "mesaj",
+          pipeline_status: "isleniyor",
+        },
+        {
+          shipment_public_id: "shp_surat_sms_playwright",
+          recipient_name: "SMS Step Customer",
+          recipient_phone: "5552222222",
+          tracking_number: "TRK-SMS-PLAYWRIGHT",
+          barcode_number: "BAR-SMS-PLAYWRIGHT",
+          step: "sms",
+          pipeline_status: "isleniyor",
+        },
+      ];
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          counts: {
+            all: rows.length,
+            mesaj: rows.filter((row) => row.step === "mesaj").length,
+            sms: rows.filter((row) => row.step === "sms").length,
+            vapi: rows.filter((row) => row.step === "vapi").length,
+            teslim: rows.filter((row) => row.step === "teslim").length,
+            bekliyor: rows.filter((row) => row.pipeline_status === "bekliyor").length,
+            isleniyor: rows.filter((row) => row.pipeline_status === "isleniyor").length,
+            hata: rows.filter((row) => row.pipeline_status === "hata").length,
+          },
+          rows,
+        }),
+      });
+      return;
+    }
+
     if (url.pathname === "/api/shipments") {
       shipmentQueryUrls.push(`${url.pathname}${url.search}`);
       const shipments = [
@@ -2294,6 +2352,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       "/api/orders",
       "/api/products",
       "/api/shipments",
+      "/api/shipments/pipeline-summary",
       "/api/shipments/shp_surat_playwright/status",
       "/admin/settings",
       "/admin/settings/audit",
