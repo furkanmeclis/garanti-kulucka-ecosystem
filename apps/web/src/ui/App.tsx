@@ -5,6 +5,7 @@ import {
   Boxes,
   BarChart3,
   Bot,
+  Bug,
   CheckCircle,
   FileUp,
   FileText,
@@ -137,6 +138,7 @@ const navigationItems: NavigationItem[] = [
   { key: "orders", label: "Siparişler", icon: ShoppingCart, roles: ["admin", "calisan", "kargo_operatoru"], path: "/siparisler" },
   { key: "shipments", label: "Kargo", icon: Truck, roles: ["admin", "calisan", "kargo_operatoru"], path: "/kargo" },
   { key: "shipmentPipeline", label: "Pipeline", icon: Zap, roles: ["admin", "calisan", "kargo_operatoru"], path: "/kargo/pipeline" },
+  { key: "suratDebug", label: "Sürat Debug", icon: Bug, roles: ["admin"], path: "/kargo/surat-debug" },
   { key: "cancellations", label: "İptaller", icon: XCircle, roles: ["admin", "calisan"], path: "/iptaller" },
   { key: "inventory", label: "Stoklar", icon: Package, roles: ["admin", "calisan"], path: "/stok" },
   { key: "balances", label: "Bakiyeler", icon: Wallet, roles: ["admin", "calisan"], path: "/bakiye" },
@@ -903,6 +905,16 @@ export function App() {
   const selectedProviderAttempt = data.providerAttempts[0] ?? null;
   const selectedProviderPreview = selectedProviderAttempt?.provider_request_preview ?? null;
   const selectedProviderCatalogItem = data.providerCatalog[0] ?? null;
+  const suratProviderCatalogItem = data.providerCatalog.find((item) => item.provider === "surat") ?? null;
+  const suratProviderAttempts = data.providerAttempts.filter((attempt) => attempt.provider_key === "surat");
+  const latestSuratAttempt = suratProviderAttempts[0] ?? null;
+  const latestSuratPreview = latestSuratAttempt?.provider_request_preview ?? null;
+  const suratRetryCount = suratProviderAttempts.filter((attempt) => attempt.retry_decision === "retry").length;
+  const suratFailureCount = suratProviderAttempts.filter((attempt) => attempt.status === "failed").length;
+  const suratSuccessCount = suratProviderAttempts.filter((attempt) => attempt.status === "succeeded").length;
+  const suratAverageDuration = suratProviderAttempts.length > 0
+    ? Math.round(suratProviderAttempts.reduce((sum, attempt) => sum + attempt.duration_ms, 0) / suratProviderAttempts.length)
+    : 0;
   const latestSettingsAudit = data.settingsAudit[0] ?? null;
   const latestIntegrationAudit = data.integrationAudit[0] ?? null;
   const activeOrderCount = data.orders.filter((order) => !["cancelled", "returned", "delivered"].includes(order.status)).length;
@@ -1210,6 +1222,54 @@ export function App() {
                 shipment.recipient_name,
                 `${step} / ${pipelineStatus}`,
                 shipment.tracking_number ?? shipment.barcode_number ?? shipment.recipient_phone ?? "-",
+              ])}
+            />
+          </FlowPanel>
+        )}
+
+        {activeFlow === "suratDebug" && (
+          <FlowPanel title="Sürat Kargo Debug" icon={<Bug size={18} />} testId="surat-debug-flow">
+            <div className="metrics-grid">
+              <Metric title="Toplam" value={String(suratProviderAttempts.length)} />
+              <Metric title="Başarılı" value={String(suratSuccessCount)} />
+              <Metric title="Hata" value={String(suratFailureCount)} />
+              <Metric title="Retry" value={String(suratRetryCount)} />
+              <Metric title="Ort. Süre" value={`${suratAverageDuration}ms`} />
+            </div>
+            <DetailPanel title="Sürat Kargo Debug Akışı" testId="surat-debug-detail">
+              <DataRows
+                rows={[
+                  ["Kaynak", "provider attempts API", "legacy /api/surat-kargo/debug"],
+                  [
+                    "Canlı gate",
+                    suratProviderCatalogItem?.live_call_permitted === false ? "kapalı" : "-",
+                    suratProviderCatalogItem?.live_feature_flag_key ?? "-",
+                  ],
+                  [
+                    "Sözleşme modu",
+                    suratProviderCatalogItem?.contract_mode ?? "-",
+                    suratProviderCatalogItem?.live_block_reason ?? "-",
+                  ],
+                  [
+                    "Son endpoint",
+                    latestSuratPreview ? `${latestSuratPreview.method} ${latestSuratPreview.path}` : "-",
+                    latestSuratPreview?.live_call_performed === false ? "canlı çağrı yok" : "-",
+                  ],
+                  [
+                    "Son durum",
+                    latestSuratAttempt ? `${latestSuratAttempt.status} / ${latestSuratAttempt.retry_decision}` : "deneme yok",
+                    latestSuratAttempt ? `${latestSuratAttempt.duration_ms}ms` : "-",
+                  ],
+                  ["Header", compactJson(latestSuratPreview?.headers), "redacted"],
+                  ["Body", compactJson(latestSuratPreview?.body), "redacted"],
+                ]}
+              />
+            </DetailPanel>
+            <DataRows
+              rows={suratProviderAttempts.map((attempt) => [
+                `${attempt.operation} / ${attempt.direction}`,
+                `${attempt.status} / ${attempt.retry_decision}`,
+                `${attempt.provider_request_preview?.path ?? "-"} / ${attempt.duration_ms}ms`,
               ])}
             />
           </FlowPanel>

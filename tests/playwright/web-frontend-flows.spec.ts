@@ -873,6 +873,43 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
               started_at: "2026-01-01T00:00:00.000Z",
               updated_at: "2026-01-01T00:00:01.000Z",
             },
+            {
+              public_id: "pat_surat_debug",
+              provider_key: "surat",
+              account_public_id: null,
+              request_id: "req_surat_debug",
+              operation: "shipment.track",
+              direction: "outbound",
+              status: "failed",
+              status_code: 503,
+              duration_ms: 1450,
+              retry_decision: "retry",
+              next_retry_at: "2026-01-01T00:11:00.000Z",
+              idempotency_key: "trk_surat_playwright",
+              request_metadata: {
+                authorization: "[redacted]",
+              },
+              provider_request_preview: {
+                method: "POST",
+                path: "/kargo-takip",
+                headers: {
+                  authorization: "Bearer raw-surat-secret",
+                  "content-type": "application/json",
+                },
+                body: {
+                  takip_no: "TRK-SURAT-PLAYWRIGHT",
+                  api_key: "raw-surat-secret",
+                },
+                live_call_performed: false,
+              },
+              response_metadata: {
+                provider_token: "[redacted]",
+              },
+              error_code: "surat_fixture_timeout",
+              error_message: "fixture retry",
+              started_at: "2026-01-01T00:00:02.000Z",
+              updated_at: "2026-01-01T00:00:03.000Z",
+            },
           ],
         }),
       });
@@ -1113,6 +1150,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByRole("link", { name: /vapi ai/i })).toHaveCount(1);
     await expect(page.getByRole("link", { name: /analizi/i })).toHaveCount(1);
     await expect(page.getByRole("link", { name: /entegrasyonlar/i })).toHaveCount(1);
+    await expect(page.getByRole("link", { name: /sürat debug/i })).toHaveCount(1);
     await expect(page.getByRole("button", { name: /evrimiçi/i })).toHaveCount(0);
     await expect(page.getByTestId("inbox-flow")).toContainText("Merhaba");
     await expect(page.getByTestId("conversation-detail")).toContainText("Playwright Customer");
@@ -1345,6 +1383,17 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("shipment-pipeline-flow")).toContainText("Playwright Customer");
     await expect(page.getByTestId("shipment-pipeline-flow")).toContainText("vapi / isleniyor");
     await expect(page.getByTestId("shipment-pipeline-flow")).toContainText("teslim / teslim");
+    await page.getByRole("link", { name: /sürat debug/i }).click();
+    await expect(page.getByTestId("surat-debug-flow")).toContainText("Sürat Kargo Debug");
+    await expect(page.getByTestId("surat-debug-detail")).toContainText("legacy /api/surat-kargo/debug");
+    await expect(page.getByTestId("surat-debug-detail")).toContainText("providers.surat.live_mode");
+    await expect(page.getByTestId("surat-debug-detail")).toContainText("fixture_replay_contract_required");
+    await expect(page.getByTestId("surat-debug-detail")).toContainText("POST /kargo-takip");
+    await expect(page.getByTestId("surat-debug-detail")).toContainText("canlı çağrı yok");
+    await expect(page.getByTestId("surat-debug-detail")).toContainText("[redacted]");
+    await expect(page.getByTestId("surat-debug-detail")).not.toContainText("raw-surat-secret");
+    await expect(page.getByTestId("surat-debug-flow")).toContainText("shipment.track / outbound");
+    await expect(page.getByTestId("surat-debug-flow")).toContainText("failed / retry");
     await page.getByRole("link", { name: /^sms$/i }).click();
     await expect(page.getByTestId("sms-template-detail")).toContainText("Surat Playwright Customer");
     await expect(page.getByTestId("sms-template-detail")).toContainText("TRK-SURAT-PLAYWRIGHT");
@@ -1395,6 +1444,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       { path: "/siparisler", testId: "orders-flow" },
       { path: "/kargo", testId: "shipments-flow" },
       { path: "/kargo/pipeline", testId: "shipment-pipeline-flow" },
+      { path: "/kargo/surat-debug", testId: "surat-debug-flow" },
       { path: "/iptaller", testId: "cancellations-flow" },
       { path: "/stok", testId: "inventory-flow" },
       { path: "/bakiye", testId: "balances-flow" },
@@ -1427,6 +1477,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByRole("link", { name: /ayarlar/i })).toHaveCount(0);
     await expect(page.getByRole("link", { name: /dosya/i })).toHaveCount(0);
     await expect(page.getByRole("link", { name: /vapi ai/i })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: /sürat debug/i })).toHaveCount(0);
     await expect(page.getByRole("button", { name: /evrimiçi/i })).toBeVisible();
     await Promise.all([
       page.waitForResponse(`${backendBaseUrl}/auth/presence`),
