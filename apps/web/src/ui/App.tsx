@@ -410,9 +410,11 @@ export function App() {
   const [selectedShipmentId, setSelectedShipmentId] = useState<string | null>(null);
   const [conversationChannelFilter, setConversationChannelFilter] = useState("all");
   const [conversationStatusFilter, setConversationStatusFilter] = useState("all");
+  const [orderFilter, setOrderFilter] = useState("all");
   const [realtimeClient, setRealtimeClient] = useState<RealtimeClient | null>(null);
   const selectedConversationIdRef = useRef<string | null>(null);
   const conversationFilterRequestSeqRef = useRef(0);
+  const orderFilterRequestSeqRef = useRef(0);
 
   const http = useMemo(
     () =>
@@ -725,6 +727,31 @@ export function App() {
       setData((current) => ({ ...current, messages: [] }));
     }
     setStatus("Konuşma filtreleri backend API üzerinden uygulandı");
+  }
+
+  async function handleApplyOrderFilter(nextFilter: string) {
+    const requestSeq = orderFilterRequestSeqRef.current + 1;
+    orderFilterRequestSeqRef.current = requestSeq;
+    setOrderFilter(nextFilter);
+    setStatus("Sipariş filtreleri backend API üzerinden uygulanıyor");
+    const filterParams: { status?: string; confirmation_status?: string; limit: number } = { limit: 20 };
+    if (nextFilter === "active") {
+      filterParams.status = "active";
+    }
+    if (nextFilter === "pending_confirmation") {
+      filterParams.confirmation_status = "pending";
+    }
+    if (nextFilter === "delivered") {
+      filterParams.status = "delivered";
+    }
+    const orders = await domain.listOrders(filterParams);
+    if (orderFilterRequestSeqRef.current !== requestSeq) return;
+    setData((current) => ({
+      ...current,
+      orders: orders.data,
+    }));
+    setSelectedOrderId(orders.data[0]?.public_id ?? null);
+    setStatus("Sipariş filtreleri backend API üzerinden uygulandı");
   }
 
   async function handleSelectConversation(conversationPublicId: string) {
@@ -1247,17 +1274,37 @@ export function App() {
               <Metric title="Ciro" value={formatMoney(reportTotalAmount, orderCurrency)} />
             </div>
             <div className="detail-actions" data-testid="order-section-filters">
-              <button className="secondary-action selected" type="button">
-                Hepsi {data.orders.length}
+              <button
+                className={cx("secondary-action", orderFilter === "all" && "selected")}
+                data-testid="order-filter-all"
+                type="button"
+                onClick={() => void handleApplyOrderFilter("all")}
+              >
+                Hepsi {orderFilter === "all" ? data.orders.length : "sonuç"}
               </button>
-              <button className="secondary-action" type="button">
-                Aktif {activeOrderCount}
+              <button
+                className={cx("secondary-action", orderFilter === "active" && "selected")}
+                data-testid="order-filter-active"
+                type="button"
+                onClick={() => void handleApplyOrderFilter("active")}
+              >
+                Aktif {orderFilter === "all" || orderFilter === "active" ? activeOrderCount : "sonuç"}
               </button>
-              <button className="secondary-action" type="button">
-                Teyit {pendingConfirmationCount}
+              <button
+                className={cx("secondary-action", orderFilter === "pending_confirmation" && "selected")}
+                data-testid="order-filter-pending-confirmation"
+                type="button"
+                onClick={() => void handleApplyOrderFilter("pending_confirmation")}
+              >
+                Teyit {orderFilter === "all" || orderFilter === "pending_confirmation" ? pendingConfirmationCount : "sonuç"}
               </button>
-              <button className="secondary-action" type="button">
-                Teslim {deliveredOrderCount}
+              <button
+                className={cx("secondary-action", orderFilter === "delivered" && "selected")}
+                data-testid="order-filter-delivered"
+                type="button"
+                onClick={() => void handleApplyOrderFilter("delivered")}
+              >
+                Teslim {orderFilter === "all" || orderFilter === "delivered" ? deliveredOrderCount : "sonuç"}
               </button>
             </div>
             <button className="primary-action" type="button" onClick={() => void handleCreateOrder("orders")}>

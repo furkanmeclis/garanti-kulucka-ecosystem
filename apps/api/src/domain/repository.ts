@@ -53,6 +53,12 @@ export interface UpdateConversationStateInput {
   assignedUserId?: number | null;
 }
 
+export interface ListOrdersFilter {
+  status?: string;
+  confirmationStatus?: string;
+  limit: number;
+}
+
 export interface CreateOrderInput {
   customerPublicId: string | null;
   conversationPublicId: string | null;
@@ -241,14 +247,26 @@ export class DomainRepository {
     });
   }
 
-  async listOrders(limit: number): Promise<OrderRecord[]> {
+  async listOrders(filter: ListOrdersFilter): Promise<OrderRecord[]> {
     return this.db
       .selectFrom("orders")
       .leftJoin("customers", "customers.id", "orders.customer_id")
       .selectAll("orders")
       .select("customers.full_name as customer_full_name")
+      .$if(filter.status === "active", (builder) =>
+        builder.where("orders.status", "not in", ["cancelled", "returned", "delivered"]),
+      )
+      .$if(Boolean(filter.status && filter.status !== "active"), (builder) =>
+        builder.where("orders.status", "=", filter.status as string),
+      )
+      .$if(filter.confirmationStatus === "pending", (builder) =>
+        builder.where("orders.confirmation_status", "is", null),
+      )
+      .$if(Boolean(filter.confirmationStatus && filter.confirmationStatus !== "pending"), (builder) =>
+        builder.where("orders.confirmation_status", "=", filter.confirmationStatus as string),
+      )
       .orderBy("orders.created_at", "desc")
-      .limit(limit)
+      .limit(filter.limit)
       .execute();
   }
 

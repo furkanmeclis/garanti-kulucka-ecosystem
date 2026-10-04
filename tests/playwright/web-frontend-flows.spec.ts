@@ -55,6 +55,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
   const requestedUrls: string[] = [];
   const allRequestUrls: string[] = [];
   const conversationQueryUrls: string[] = [];
+  const orderQueryUrls: string[] = [];
   let currentUser = loginUser();
   let savedIntegrationToken = false;
   let savedIntegrationSetting = false;
@@ -373,24 +374,54 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
         return;
       }
 
+      orderQueryUrls.push(`${url.pathname}${url.search}`);
+      const orders = [
+        {
+          public_id: "ord_playwright",
+          order_number: "ORD-PLAYWRIGHT",
+          status: "draft",
+          source: "manual",
+          total_amount: "125.50",
+          currency: "TRY",
+          confirmation_status: null,
+          notes: "fixture order",
+          customer_full_name: "Playwright Customer",
+          created_at: "2026-01-01T00:00:00.000Z",
+          updated_at: "2026-01-01T00:00:00.000Z",
+        },
+        {
+          public_id: "ord_delivered_playwright",
+          order_number: "ORD-DELIVERED",
+          status: "delivered",
+          source: "manual",
+          total_amount: "75.00",
+          currency: "TRY",
+          confirmation_status: "confirmed",
+          notes: "delivered fixture order",
+          customer_full_name: "Delivered Customer",
+          created_at: "2026-01-01T00:03:00.000Z",
+          updated_at: "2026-01-01T00:03:00.000Z",
+        },
+      ];
+      const requestedStatus = url.searchParams.get("status");
+      const requestedConfirmationStatus = url.searchParams.get("confirmation_status");
+      const filteredOrders = orders.filter((order) => {
+        const statusMatches =
+          !requestedStatus ||
+          (requestedStatus === "active"
+            ? !["cancelled", "returned", "delivered"].includes(order.status)
+            : order.status === requestedStatus);
+        const confirmationMatches =
+          !requestedConfirmationStatus ||
+          (requestedConfirmationStatus === "pending"
+            ? order.confirmation_status === null
+            : order.confirmation_status === requestedConfirmationStatus);
+        return statusMatches && confirmationMatches;
+      });
       await route.fulfill({
         contentType: "application/json",
         body: JSON.stringify({
-          data: [
-            {
-              public_id: "ord_playwright",
-              order_number: "ORD-PLAYWRIGHT",
-              status: "draft",
-              source: "manual",
-              total_amount: "125.50",
-              currency: "TRY",
-              confirmation_status: null,
-              notes: "fixture order",
-              customer_full_name: "Playwright Customer",
-              created_at: "2026-01-01T00:00:00.000Z",
-              updated_at: "2026-01-01T00:00:00.000Z",
-            },
-          ],
+          data: filteredOrders,
         }),
       });
       return;
@@ -1432,7 +1463,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("vapi-detail")).toContainText("1001");
     await expect(page.getByTestId("vapi-detail")).toContainText("AI model ayarı tanımlı değil");
     await page.goto(`${app.url}/raporlar`);
-    await expect(page.getByTestId("reports-flow")).toContainText("125.50 TRY");
+    await expect(page.getByTestId("reports-flow")).toContainText("200.50 TRY");
     await expect(page.getByTestId("reports-detail")).toContainText("Açık konuşma");
     await expect(page.getByTestId("reports-detail")).toContainText("Aktif kargo");
     await expect(page.getByTestId("reports-ratio-summary")).toContainText("Teslim Oranı");
@@ -1491,10 +1522,35 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("orders-flow")).toContainText("ORD-PLAYWRIGHT");
     await expect(page.getByTestId("orders-flow")).toContainText("Toplam Sipariş");
     await expect(page.getByTestId("orders-flow")).toContainText("Aktif Sipariş");
-    await expect(page.getByTestId("order-section-filters")).toContainText("Hepsi 1");
+    await expect(page.getByTestId("order-section-filters")).toContainText("Hepsi 2");
+    await expect(page.getByTestId("order-section-filters")).toContainText("Aktif 1");
     await expect(page.getByTestId("order-section-filters")).toContainText("Teyit 1");
+    await expect(page.getByTestId("order-section-filters")).toContainText("Teslim 1");
     await expect(page.getByTestId("order-detail")).toContainText("Playwright Customer");
     await expect(page.getByTestId("order-detail")).toContainText("fixture order");
+    await page.getByTestId("order-filter-active").click();
+    await expect(page.getByTestId("orders-flow")).toContainText("ORD-PLAYWRIGHT");
+    await expect(page.getByTestId("orders-flow")).not.toContainText("ORD-DELIVERED");
+    await expect(page.getByTestId("order-section-filters")).toContainText("Aktif 1");
+    await expect(page.getByTestId("order-section-filters")).toContainText("Hepsi sonuç");
+    await page.getByTestId("order-filter-pending-confirmation").click();
+    await expect(page.getByTestId("order-detail")).toContainText("teyit bekliyor");
+    await expect(page.getByTestId("order-section-filters")).toContainText("Teyit 1");
+    await page.getByTestId("order-filter-delivered").click();
+    await expect(page.getByTestId("orders-flow")).toContainText("ORD-DELIVERED");
+    await expect(page.getByTestId("orders-flow")).not.toContainText("ORD-PLAYWRIGHT");
+    await expect(page.getByTestId("order-section-filters")).toContainText("Teslim 1");
+    await expect(page.getByTestId("order-section-filters")).toContainText("Aktif sonuç");
+    await page.getByTestId("order-filter-all").click();
+    await expect(page.getByTestId("order-section-filters")).toContainText("Hepsi 2");
+    expect(orderQueryUrls).toEqual(
+      expect.arrayContaining([
+        "/api/orders?limit=20",
+        "/api/orders?status=active&limit=20",
+        "/api/orders?confirmation_status=pending&limit=20",
+        "/api/orders?status=delivered&limit=20",
+      ]),
+    );
     await page.getByRole("button", { name: /sipariş oluştur/i }).click();
     await expect(page.getByTestId("orders-flow")).toContainText("ORD-WEB-NEW");
     await expect(page.getByTestId("order-detail")).toContainText("ORD-WEB-NEW");

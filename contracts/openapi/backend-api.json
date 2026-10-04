@@ -284,6 +284,20 @@
         "operationId": "listOrders",
         "parameters": [
           {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "confirmation_status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "$ref": "#/components/parameters/Limit"
           }
         ],

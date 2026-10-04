@@ -180,7 +180,14 @@ export function createDomainRoutes() {
       return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
     }
 
-    const orders = await new DomainRepository(db).listOrders(limitSchema.parse(context.req.query("limit")));
+    const orderFilter = { limit: limitSchema.parse(context.req.query("limit")) };
+    const status = context.req.query("status");
+    const confirmationStatus = context.req.query("confirmation_status");
+    const orders = await new DomainRepository(db).listOrders({
+      ...orderFilter,
+      ...(status ? { status } : {}),
+      ...(confirmationStatus ? { confirmationStatus } : {}),
+    });
     return context.json({ data: orders.map(serializeOrder) });
   });
 

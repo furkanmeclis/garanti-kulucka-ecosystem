@@ -130,8 +130,15 @@ export function createDomainClient(http: BackendHttpClient) {
           body: input,
         },
       ),
-    listOrders: (limit = 50) =>
-      http.request<{ data: OrderSummary[] }>(`/api/orders?limit=${limit}`),
+    listOrders: (params: { status?: string; confirmation_status?: string; limit?: number } | number = {}) => {
+      const normalized = typeof params === "number" ? { limit: params } : params;
+      const search = new URLSearchParams();
+      if (normalized.status) search.set("status", normalized.status);
+      if (normalized.confirmation_status) search.set("confirmation_status", normalized.confirmation_status);
+      if (normalized.limit !== undefined) search.set("limit", String(normalized.limit));
+      const query = search.toString();
+      return http.request<{ data: OrderSummary[] }>(`/api/orders${query ? `?${query}` : ""}`);
+    },
     listProducts: (limit = 50) =>
       http.request<{ data: ProductSummary[] }>(`/api/products?limit=${limit}`),
     createOrder: (input: {

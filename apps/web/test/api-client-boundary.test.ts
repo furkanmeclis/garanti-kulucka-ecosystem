@@ -328,6 +328,22 @@ describe("web API client boundary", () => {
     expect(requests[1]?.url).toBe("http://localhost:3000/api/conversations/cnv_test/messages?limit=100");
   });
 
+  it("maps domain order filters to backend routes", async () => {
+    const requests: Request[] = [];
+    const client = createApiClient("http://localhost:3000", {
+      fetchImpl: async (input, init) => {
+        requests.push(new Request(input, init));
+        return Response.json({ data: [] });
+      },
+    });
+
+    await client.domain.listOrders({ status: "active", limit: 20 });
+    await client.domain.listOrders({ confirmation_status: "pending", limit: 20 });
+
+    expect(requests[0]?.url).toBe("http://localhost:3000/api/orders?status=active&limit=20");
+    expect(requests[1]?.url).toBe("http://localhost:3000/api/orders?confirmation_status=pending&limit=20");
+  });
+
   it("maps webphone config reads to backend routes", async () => {
     const requests: Request[] = [];
     const client = createApiClient("http://localhost:3000", {

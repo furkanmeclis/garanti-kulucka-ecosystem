@@ -122,6 +122,24 @@ const orders = [
     updated_at: date,
     customer_full_name: "Playwright Customer",
   },
+  {
+    id: 201,
+    public_id: "ord_delivered_playwright",
+    customer_id: 20,
+    conversation_id: null,
+    created_by_user_id: user.id,
+    order_number: "ORD-DELIVERED",
+    status: "delivered",
+    source: "manual",
+    total_amount: "75.00",
+    currency: "TRY",
+    confirmation_status: "confirmed",
+    notes: "delivered fixture order",
+    external_order_id: null,
+    created_at: date,
+    updated_at: date,
+    customer_full_name: "Delivered Customer",
+  },
 ];
 
 const products = [
@@ -310,7 +328,21 @@ class FixtureQuery {
       case "messages":
         return messages;
       case "orders":
-        return orders;
+        return orders.filter((order) => {
+          const statusFilter = this.whereValues.get("orders.status");
+          const confirmationFilter = this.whereValues.get("orders.confirmation_status");
+          const statusMatches =
+            statusFilter === undefined ||
+            (Array.isArray(statusFilter)
+              ? !statusFilter.includes(order.status)
+              : order.status === statusFilter);
+          const confirmationMatches =
+            confirmationFilter === undefined ||
+            (confirmationFilter === null
+              ? order.confirmation_status === null
+              : order.confirmation_status === confirmationFilter);
+          return statusMatches && confirmationMatches;
+        });
       case "products":
         return products;
       case "shipments":
@@ -585,6 +617,19 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
       ],
     });
 
+    const [activeOrdersResponse, pendingConfirmationOrdersResponse] = await Promise.all([
+      api.client.get("/api/orders?status=active&limit=10"),
+      api.client.get("/api/orders?confirmation_status=pending&limit=10"),
+    ]);
+    expect(activeOrdersResponse.status()).toBe(200);
+    expect(await activeOrdersResponse.json()).toMatchObject({
+      data: [{ public_id: "ord_playwright", status: "draft" }],
+    });
+    expect(pendingConfirmationOrdersResponse.status()).toBe(200);
+    expect(await pendingConfirmationOrdersResponse.json()).toMatchObject({
+      data: [{ public_id: "ord_playwright", confirmation_status: null }],
+    });
+
     const forbiddenCustomerResponse = await api.cargoClient.get("/api/customers?limit=10");
     expect(forbiddenCustomerResponse.status()).toBe(403);
     expect(await forbiddenCustomerResponse.json()).toMatchObject({
@@ -655,14 +700,18 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
     });
 
     expect(orderResponse.status()).toBe(200);
-    expect(await orderResponse.json()).toMatchObject({
-      data: [
-        {
+    expect((await orderResponse.json()).data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
           order_number: "ORD-PLAYWRIGHT",
           total_amount: "125.50",
-        },
-      ],
-    });
+        }),
+        expect.objectContaining({
+          order_number: "ORD-DELIVERED",
+          status: "delivered",
+        }),
+      ]),
+    );
 
     expect(productResponse.status()).toBe(200);
     const productBody = await productResponse.json();
