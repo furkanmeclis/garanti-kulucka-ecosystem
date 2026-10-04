@@ -1450,6 +1450,20 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       return;
     }
 
+    if (url.pathname === "/admin/integrations/accounts/iac_instagram/analytics-summary") {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          followers: 2240,
+          reach: 1980,
+          impressions: 2450,
+          profile_views: 187,
+          engagement_rate: 8,
+        }),
+      });
+      return;
+    }
+
     if (url.pathname === "/admin/integrations/accounts/iac_instagram/tokens/access_token") {
       expect(route.request().method()).toBe("PUT");
       savedIntegrationToken = true;
@@ -2045,9 +2059,9 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("integration-audit-detail")).not.toContainText("raw-integration-audit-secret");
     await page.getByRole("button", { name: /instagram main detay/i }).click();
     await expect(page.getByTestId("instagram-analytics-summary")).toContainText("Instagram Analitik Özeti");
-    await expect(page.getByTestId("instagram-analytics-summary")).toContainText("1240");
-    await expect(page.getByTestId("instagram-analytics-summary")).toContainText("980");
-    await expect(page.getByTestId("instagram-analytics-summary")).toContainText("6% etkileşim");
+    await expect(page.getByTestId("instagram-analytics-summary")).toContainText("2240");
+    await expect(page.getByTestId("instagram-analytics-summary")).toContainText("1980");
+    await expect(page.getByTestId("instagram-analytics-summary")).toContainText("8% etkileşim");
     await expect(page.getByTestId("integration-detail")).toContainText("webhook.enabled");
     await expect(page.getByTestId("integration-detail")).toContainText("false");
     await page.getByRole("button", { name: /webhook ayarını kaydet/i }).click();
@@ -2347,6 +2361,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       "/admin/integrations/provider-catalog",
       "/admin/integrations/provider-attempts",
       "/admin/integrations/accounts/iac_instagram",
+      "/admin/integrations/accounts/iac_instagram/analytics-summary",
       "/admin/integrations/accounts/iac_instagram/settings/webhook.enabled",
       "/admin/integrations/accounts/iac_instagram/tokens/access_token",
       "/api/orders",

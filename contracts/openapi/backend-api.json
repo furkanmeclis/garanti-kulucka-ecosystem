@@ -891,6 +891,31 @@
         }
       }
     },
+    "/admin/integrations/accounts/{account_public_id}/analytics-summary": {
+      "get": {
+        "operationId": "getInstagramAnalyticsSummary",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountPublicId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Instagram analytics summary",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstagramAnalyticsSummary"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/admin/integrations/accounts/{account_public_id}/settings/{key}": {
       "put": {
         "operationId": "upsertIntegrationSetting",
@@ -2268,6 +2293,32 @@
           },
           "tokens": {
             "type": "array"
+          }
+        }
+      },
+      "InstagramAnalyticsSummary": {
+        "type": "object",
+        "required": ["followers", "reach", "impressions", "profile_views", "engagement_rate"],
+        "properties": {
+          "followers": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "reach": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "impressions": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "profile_views": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "engagement_rate": {
+            "type": "number",
+            "minimum": 0
           }
         }
       },

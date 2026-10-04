@@ -145,6 +145,32 @@ describe("web API client boundary", () => {
     expect(requests[0]?.url).toBe("http://localhost:3000/admin/integrations/accounts/iac_instagram");
   });
 
+  it("maps Instagram analytics summaries to the backend admin route", async () => {
+    const requests: Request[] = [];
+    const client = createApiClient("http://localhost:3000", {
+      fetchImpl: async (input, init) => {
+        requests.push(new Request(input, init));
+        return Response.json({
+          followers: 2240,
+          reach: 1980,
+          impressions: 2450,
+          profile_views: 187,
+          engagement_rate: 8,
+        });
+      },
+    });
+
+    await expect(client.admin.getInstagramAnalyticsSummary("iac_instagram")).resolves.toMatchObject({
+      followers: 2240,
+      reach: 1980,
+      profile_views: 187,
+      engagement_rate: 8,
+    });
+    expect(requests[0]?.url).toBe(
+      "http://localhost:3000/admin/integrations/accounts/iac_instagram/analytics-summary",
+    );
+  });
+
   it("maps admin audit trail reads to backend routes", async () => {
     const requests: Request[] = [];
     const client = createApiClient("http://localhost:3000", {

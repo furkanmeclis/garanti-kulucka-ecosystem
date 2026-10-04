@@ -28,6 +28,14 @@ export interface IntegrationAccountSnapshot {
   tokens: IntegrationTokenRecord[];
 }
 
+export interface InstagramAnalyticsSummary {
+  followers: number;
+  reach: number;
+  impressions: number;
+  profile_views: number;
+  engagement_rate: number;
+}
+
 export interface UpsertAccountInput {
   providerKey: string;
   displayName: string;
@@ -693,6 +701,26 @@ export function serializeAccountSnapshot(snapshot: IntegrationAccountSnapshot) {
     account: serializeAccount(snapshot.account),
     settings: snapshot.settings.map(serializeIntegrationSetting),
     tokens: snapshot.tokens.map(serializeIntegrationToken),
+  };
+}
+
+function numberFrom(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+export function instagramAnalyticsSummaryFromMetadata(metadata: unknown): InstagramAnalyticsSummary {
+  const record = typeof metadata === "object" && metadata !== null && !Array.isArray(metadata)
+    ? metadata as Record<string, unknown>
+    : {};
+  const analytics = typeof record.analytics === "object" && record.analytics !== null && !Array.isArray(record.analytics)
+    ? record.analytics as Record<string, unknown>
+    : {};
+  return {
+    followers: numberFrom(analytics.followers),
+    reach: numberFrom(analytics.reach),
+    impressions: numberFrom(analytics.impressions),
+    profile_views: numberFrom(analytics.profile_views),
+    engagement_rate: numberFrom(analytics.engagement_rate),
   };
 }
 

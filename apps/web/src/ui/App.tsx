@@ -35,6 +35,7 @@ import {
   type AdminSetting,
   type IntegrationAccount,
   type IntegrationAccountSnapshot,
+  type InstagramAnalyticsSummary as BackendInstagramAnalyticsSummary,
   type ProviderCatalogItem,
   type ProviderAttemptViewModel,
   toProviderAttemptViewModel,
@@ -75,6 +76,7 @@ interface DashboardData {
   providerCatalog: ProviderCatalogItem[];
   providerAttempts: ProviderAttemptViewModel[];
   fileOrphans: FileMetadata[];
+  instagramAnalytics: BackendInstagramAnalyticsSummary;
   balanceSummary: BackendBalanceSummary;
   shipmentPipeline: ShipmentPipelineSummary;
   commentModeration: BackendCommentModerationSummary;
@@ -274,21 +276,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function numberFrom(value: unknown) {
-  return typeof value === "number" && Number.isFinite(value) ? value : 0;
-}
-
-function instagramAnalyticsFrom(metadata: unknown): InstagramAnalyticsSummary {
-  const analytics = isRecord(metadata) && isRecord(metadata.analytics) ? metadata.analytics : {};
-  return {
-    followers: numberFrom(analytics.followers),
-    reach: numberFrom(analytics.reach),
-    impressions: numberFrom(analytics.impressions),
-    profileViews: numberFrom(analytics.profile_views),
-    engagementRate: numberFrom(analytics.engagement_rate),
-  };
-}
-
 function inventoryCategoryLabel(category: string | null) {
   switch (category) {
     case "incubator":
@@ -329,6 +316,24 @@ const defaultCommentModerationSummary: BackendCommentModerationSummary = {
   instagram: 0,
   facebook: 0,
 };
+
+const defaultInstagramAnalyticsSummary: BackendInstagramAnalyticsSummary = {
+  followers: 0,
+  reach: 0,
+  impressions: 0,
+  profile_views: 0,
+  engagement_rate: 0,
+};
+
+function toInstagramAnalyticsView(summary: BackendInstagramAnalyticsSummary): InstagramAnalyticsSummary {
+  return {
+    followers: summary.followers,
+    reach: summary.reach,
+    impressions: summary.impressions,
+    profileViews: summary.profile_views,
+    engagementRate: summary.engagement_rate,
+  };
+}
 
 function toCommentModerationView(summary: BackendCommentModerationSummary): CommentModerationViewSummary {
   return {
@@ -434,6 +439,7 @@ export function App() {
     providerCatalog: [],
     providerAttempts: [],
     fileOrphans: [],
+    instagramAnalytics: defaultInstagramAnalyticsSummary,
     balanceSummary: defaultBalanceSummary,
     shipmentPipeline: defaultShipmentPipelineSummary,
     commentModeration: defaultCommentModerationSummary,
@@ -615,6 +621,10 @@ export function App() {
     const messages = firstConversation
       ? await domain.listMessages(firstConversation, 50)
       : { data: [] };
+    const firstIntegrationAccountPublicId = integrationAccounts.data[0]?.public_id;
+    const instagramAnalytics = user?.role === "admin" && firstIntegrationAccountPublicId
+      ? await admin.getInstagramAnalyticsSummary(firstIntegrationAccountPublicId)
+      : defaultInstagramAnalyticsSummary;
 
     setData({
       conversations: conversations.data,
@@ -630,6 +640,7 @@ export function App() {
       providerCatalog: providerCatalog.data,
       providerAttempts: providerAttempts.data.map(toProviderAttemptViewModel),
       fileOrphans: fileOrphans.data,
+      instagramAnalytics,
       balanceSummary,
       shipmentPipeline,
       commentModeration,
@@ -676,6 +687,7 @@ export function App() {
         providerCatalog: [],
         providerAttempts: [],
         fileOrphans: [],
+        instagramAnalytics: defaultInstagramAnalyticsSummary,
         balanceSummary: defaultBalanceSummary,
         shipmentPipeline: defaultShipmentPipelineSummary,
         commentModeration: defaultCommentModerationSummary,
@@ -1085,8 +1097,12 @@ export function App() {
 
   async function handleOpenIntegrationAccount(accountPublicId: string) {
     setStatus("Entegrasyon hesabı detayları backend API üzerinden yükleniyor");
-    const snapshot = await admin.getIntegrationAccount(accountPublicId);
+    const [snapshot, instagramAnalytics] = await Promise.all([
+      admin.getIntegrationAccount(accountPublicId),
+      admin.getInstagramAnalyticsSummary(accountPublicId),
+    ]);
     setIntegrationSnapshot(snapshot);
+    setData((current) => ({ ...current, instagramAnalytics }));
     setStatus("Entegrasyon hesabı detayları backend API üzerinden yüklendi");
   }
 
@@ -1154,8 +1170,12 @@ export function App() {
       secret: "frontend-playwright-token",
       source: "admin-ui",
     });
-    const snapshot = await admin.getIntegrationAccount(accountPublicId);
+    const [snapshot, instagramAnalytics] = await Promise.all([
+      admin.getIntegrationAccount(accountPublicId),
+      admin.getInstagramAnalyticsSummary(accountPublicId),
+    ]);
     setIntegrationSnapshot(snapshot);
+    setData((current) => ({ ...current, instagramAnalytics }));
     setStatus("Entegrasyon token bilgisi maskeli backend API üzerinden kaydedildi");
   }
 
@@ -1165,8 +1185,12 @@ export function App() {
 
     setStatus("Entegrasyon ayarı backend API üzerinden kaydediliyor");
     await admin.upsertIntegrationSetting(accountPublicId, "webhook.enabled", true, false);
-    const snapshot = await admin.getIntegrationAccount(accountPublicId);
+    const [snapshot, instagramAnalytics] = await Promise.all([
+      admin.getIntegrationAccount(accountPublicId),
+      admin.getInstagramAnalyticsSummary(accountPublicId),
+    ]);
     setIntegrationSnapshot(snapshot);
+    setData((current) => ({ ...current, instagramAnalytics }));
     setStatus("Entegrasyon ayarı backend API üzerinden kaydedildi");
   }
 
@@ -1272,7 +1296,7 @@ export function App() {
     { value: "open", label: `Açık ${openConversationCount}` },
     { value: "closed", label: `Kapalı ${closedConversationCount}` },
   ];
-  const instagramAnalytics = instagramAnalyticsFrom(integrationSnapshot?.account.metadata);
+  const instagramAnalytics = toInstagramAnalyticsView(data.instagramAnalytics);
   const selectedProviderAttempt = data.providerAttempts[0] ?? null;
   const selectedProviderPreview = selectedProviderAttempt?.provider_request_preview ?? null;
   const selectedProviderCatalogItem = data.providerCatalog[0] ?? null;

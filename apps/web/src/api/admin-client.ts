@@ -71,6 +71,14 @@ export interface IntegrationAccountSnapshot {
   tokens: IntegrationToken[];
 }
 
+export interface InstagramAnalyticsSummary {
+  followers: number;
+  reach: number;
+  impressions: number;
+  profile_views: number;
+  engagement_rate: number;
+}
+
 export interface ProviderAttempt {
   public_id: string;
   provider_key: string;
@@ -241,6 +249,10 @@ export function createAdminClient(http: BackendHttpClient) {
     getIntegrationAccount: (accountPublicId: string) =>
       http.request<IntegrationAccountSnapshot>(
         `/admin/integrations/accounts/${encodeURIComponent(accountPublicId)}`,
+      ),
+    getInstagramAnalyticsSummary: (accountPublicId: string) =>
+      http.request<InstagramAnalyticsSummary>(
+        `/admin/integrations/accounts/${encodeURIComponent(accountPublicId)}/analytics-summary`,
       ),
     upsertIntegrationAccount: (input: {
       provider_key: string;

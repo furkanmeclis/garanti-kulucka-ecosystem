@@ -255,7 +255,15 @@ const integrationAccounts = [
     display_name: "Instagram Main",
     external_account_id: "ig_main",
     status: "active",
-    metadata: {},
+    metadata: {
+      analytics: {
+        followers: 2240,
+        reach: 1980,
+        impressions: 2450,
+        profile_views: 187,
+        engagement_rate: 8,
+      },
+    },
     created_at: date,
     updated_at: date,
   },
@@ -1407,11 +1415,26 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
         }),
       ]),
     );
+    const instagramAnalyticsSummaryResponse = await api.client.get(
+      "/admin/integrations/accounts/iac_instagram/analytics-summary",
+    );
+    expect(instagramAnalyticsSummaryResponse.status()).toBe(200);
+    await expect(instagramAnalyticsSummaryResponse.json()).resolves.toMatchObject({
+      followers: 2240,
+      reach: 1980,
+      impressions: 2450,
+      profile_views: 187,
+      engagement_rate: 8,
+    });
     const forbiddenProviderCatalogResponse = await api.cargoClient.get("/admin/integrations/provider-catalog");
     expect(forbiddenProviderCatalogResponse.status()).toBe(403);
     expect(await forbiddenProviderCatalogResponse.json()).toMatchObject({
       error: { code: "forbidden" },
     });
+    const forbiddenInstagramAnalyticsSummaryResponse = await api.cargoClient.get(
+      "/admin/integrations/accounts/iac_instagram/analytics-summary",
+    );
+    expect(forbiddenInstagramAnalyticsSummaryResponse.status()).toBe(403);
     const forbiddenPaymentRequestResponse = await api.viewerClient.post("/api/orders/ord_playwright/payment-request", {
       data: {
         amount: "12.55",

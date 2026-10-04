@@ -5,6 +5,7 @@ import { AuditRepository, parseAuditLimit, serializeAuditLog } from "../audit/re
 import { authenticate, requireAdmin, requireDatabase } from "./middleware.js";
 import {
   IntegrationsRepository,
+  instagramAnalyticsSummaryFromMetadata,
   parseProviderAttemptLimit,
   serializeAccount,
   serializeAccountSnapshot,
@@ -170,6 +171,22 @@ export function createIntegrationRoutes() {
     }
 
     return context.json(serializeProviderAttempt(attempt), 202);
+  });
+
+  routes.get("/accounts/:account_public_id/analytics-summary", async (context) => {
+    const db = context.get("db");
+    if (!db) {
+      return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
+    }
+
+    const snapshot = await new IntegrationsRepository(db, context.get("encryptor")).getAccountSnapshot(
+      context.req.param("account_public_id"),
+    );
+    if (!snapshot) {
+      return context.json({ error: { code: "integration_account_not_found", message: "Integration account not found" } }, 404);
+    }
+
+    return context.json(instagramAnalyticsSummaryFromMetadata(snapshot.account.metadata));
   });
 
   routes.get("/accounts/:account_public_id", async (context) => {
