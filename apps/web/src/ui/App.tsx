@@ -139,6 +139,7 @@ const navigationItems: NavigationItem[] = [
   { key: "shipments", label: "Kargo", icon: Truck, roles: ["admin", "calisan", "kargo_operatoru"], path: "/kargo" },
   { key: "shipmentPipeline", label: "Pipeline", icon: Zap, roles: ["admin", "calisan", "kargo_operatoru"], path: "/kargo/pipeline" },
   { key: "suratDebug", label: "Sürat Debug", icon: Bug, roles: ["admin"], path: "/kargo/surat-debug" },
+  { key: "cronDebug", label: "Cron Debug", icon: Bug, roles: ["admin"], path: "/kargo/cron-debug" },
   { key: "cancellations", label: "İptaller", icon: XCircle, roles: ["admin", "calisan"], path: "/iptaller" },
   { key: "inventory", label: "Stoklar", icon: Package, roles: ["admin", "calisan"], path: "/stok" },
   { key: "balances", label: "Bakiyeler", icon: Wallet, roles: ["admin", "calisan"], path: "/bakiye" },
@@ -906,9 +907,19 @@ export function App() {
   const selectedProviderPreview = selectedProviderAttempt?.provider_request_preview ?? null;
   const selectedProviderCatalogItem = data.providerCatalog[0] ?? null;
   const suratProviderCatalogItem = data.providerCatalog.find((item) => item.provider === "surat") ?? null;
+  const pttProviderCatalogItem = data.providerCatalog.find((item) => item.provider === "ptt") ?? null;
+  const pttProviderAttempts = data.providerAttempts.filter((attempt) => attempt.provider_key === "ptt");
   const suratProviderAttempts = data.providerAttempts.filter((attempt) => attempt.provider_key === "surat");
   const latestSuratAttempt = suratProviderAttempts[0] ?? null;
   const latestSuratPreview = latestSuratAttempt?.provider_request_preview ?? null;
+  const trackingCronAttempts = data.providerAttempts.filter(
+    (attempt) =>
+      (attempt.provider_key === "ptt" || attempt.provider_key === "surat") &&
+      attempt.operation === "shipment.track",
+  );
+  const cronUpdatedCount = trackingCronAttempts.filter((attempt) => attempt.status === "succeeded").length;
+  const cronErrorCount = trackingCronAttempts.filter((attempt) => attempt.status === "failed").length;
+  const cronTotalDuration = trackingCronAttempts.reduce((sum, attempt) => sum + attempt.duration_ms, 0);
   const suratRetryCount = suratProviderAttempts.filter((attempt) => attempt.retry_decision === "retry").length;
   const suratFailureCount = suratProviderAttempts.filter((attempt) => attempt.status === "failed").length;
   const suratSuccessCount = suratProviderAttempts.filter((attempt) => attempt.status === "succeeded").length;
@@ -921,6 +932,7 @@ export function App() {
   const deliveredOrderCount = data.orders.filter((order) => order.status === "delivered").length;
   const deliveredShipmentCount = data.shipments.filter((shipment) => shipment.status === "delivered").length;
   const activeShipmentCount = data.shipments.filter((shipment) => shipment.status !== "delivered").length;
+  const cronSkippedCount = Math.max(activeShipmentCount - trackingCronAttempts.length, 0);
   const pendingConfirmationCount = data.orders.filter((order) => order.confirmation_status === null).length;
   const confirmedOrderCount = data.orders.length - pendingConfirmationCount;
   const pttShipmentCount = data.shipments.filter((shipment) => shipment.provider.toLowerCase().includes("ptt")).length;
@@ -1268,6 +1280,54 @@ export function App() {
             <DataRows
               rows={suratProviderAttempts.map((attempt) => [
                 `${attempt.operation} / ${attempt.direction}`,
+                `${attempt.status} / ${attempt.retry_decision}`,
+                `${attempt.provider_request_preview?.path ?? "-"} / ${attempt.duration_ms}ms`,
+              ])}
+            />
+          </FlowPanel>
+        )}
+
+        {activeFlow === "cronDebug" && (
+          <FlowPanel title="Kargo Takip Cron Debug" icon={<Bug size={18} />} testId="cron-debug-flow">
+            <div className="metrics-grid">
+              <Metric title="PTT Log" value={String(pttProviderAttempts.length)} />
+              <Metric title="Sürat Log" value={String(suratProviderAttempts.length)} />
+              <Metric title="Güncellenen" value={String(cronUpdatedCount)} />
+              <Metric title="Hata" value={String(cronErrorCount)} />
+              <Metric title="Atlanan" value={String(cronSkippedCount)} />
+              <Metric title="Toplam Süre" value={`${cronTotalDuration}ms`} />
+            </div>
+            <div className="detail-actions" data-testid="cron-debug-actions">
+              <button className="secondary-action" type="button">
+                Cron tetikleme canlı gate kapalı
+              </button>
+              <button className="secondary-action" type="button">
+                Otomatik yenileme Socket.IO sonrası
+              </button>
+            </div>
+            <DetailPanel title="PTT + Sürat Cron Akışı" testId="cron-debug-detail">
+              <DataRows
+                rows={[
+                  ["Kaynak", "provider attempts API", "legacy /api/ptt/cron-debug + /api/surat/cron-debug"],
+                  [
+                    "PTT gate",
+                    pttProviderCatalogItem?.live_call_permitted === false ? "kapalı" : "-",
+                    pttProviderCatalogItem?.live_feature_flag_key ?? "-",
+                  ],
+                  [
+                    "Sürat gate",
+                    suratProviderCatalogItem?.live_call_permitted === false ? "kapalı" : "-",
+                    suratProviderCatalogItem?.live_feature_flag_key ?? "-",
+                  ],
+                  ["İşlem", "shipment.track", "cron-takip-guncelle canlı çağrı yok"],
+                  ["Durum", `${cronUpdatedCount} güncellendi`, `${cronErrorCount} hata / ${cronSkippedCount} atlanan`],
+                  ["Blok nedeni", "fixture_replay_contract_required", "live HTTP adapter kapalı"],
+                ]}
+              />
+            </DetailPanel>
+            <DataRows
+              rows={trackingCronAttempts.map((attempt) => [
+                `${attempt.provider_key.toUpperCase()} / ${attempt.request_id}`,
                 `${attempt.status} / ${attempt.retry_decision}`,
                 `${attempt.provider_request_preview?.path ?? "-"} / ${attempt.duration_ms}ms`,
               ])}

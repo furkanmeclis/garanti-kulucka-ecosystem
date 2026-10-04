@@ -910,6 +910,43 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
               started_at: "2026-01-01T00:00:02.000Z",
               updated_at: "2026-01-01T00:00:03.000Z",
             },
+            {
+              public_id: "pat_ptt_cron_debug",
+              provider_key: "ptt",
+              account_public_id: null,
+              request_id: "req_ptt_cron_debug",
+              operation: "shipment.track",
+              direction: "outbound",
+              status: "succeeded",
+              status_code: 200,
+              duration_ms: 870,
+              retry_decision: "none",
+              next_retry_at: null,
+              idempotency_key: "trk_ptt_playwright",
+              request_metadata: {
+                authorization: "[redacted]",
+              },
+              provider_request_preview: {
+                method: "POST",
+                path: "/kargo-takip",
+                headers: {
+                  authorization: "Bearer raw-ptt-secret",
+                  "content-type": "application/json",
+                },
+                body: {
+                  takip_no: "TRK-PLAYWRIGHT",
+                  api_key: "raw-ptt-secret",
+                },
+                live_call_performed: false,
+              },
+              response_metadata: {
+                provider_token: "[redacted]",
+              },
+              error_code: null,
+              error_message: null,
+              started_at: "2026-01-01T00:00:04.000Z",
+              updated_at: "2026-01-01T00:00:05.000Z",
+            },
           ],
         }),
       });
@@ -1151,6 +1188,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByRole("link", { name: /analizi/i })).toHaveCount(1);
     await expect(page.getByRole("link", { name: /entegrasyonlar/i })).toHaveCount(1);
     await expect(page.getByRole("link", { name: /sürat debug/i })).toHaveCount(1);
+    await expect(page.getByRole("link", { name: /cron debug/i })).toHaveCount(1);
     await expect(page.getByRole("button", { name: /evrimiçi/i })).toHaveCount(0);
     await expect(page.getByTestId("inbox-flow")).toContainText("Merhaba");
     await expect(page.getByTestId("conversation-detail")).toContainText("Playwright Customer");
@@ -1394,6 +1432,16 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("surat-debug-detail")).not.toContainText("raw-surat-secret");
     await expect(page.getByTestId("surat-debug-flow")).toContainText("shipment.track / outbound");
     await expect(page.getByTestId("surat-debug-flow")).toContainText("failed / retry");
+    await page.getByRole("link", { name: /cron debug/i }).click();
+    await expect(page.getByTestId("cron-debug-flow")).toContainText("Kargo Takip Cron Debug");
+    await expect(page.getByTestId("cron-debug-detail")).toContainText("legacy /api/ptt/cron-debug + /api/surat/cron-debug");
+    await expect(page.getByTestId("cron-debug-detail")).toContainText("providers.ptt.live_mode");
+    await expect(page.getByTestId("cron-debug-detail")).toContainText("providers.surat.live_mode");
+    await expect(page.getByTestId("cron-debug-detail")).toContainText("cron-takip-guncelle canlı çağrı yok");
+    await expect(page.getByTestId("cron-debug-detail")).toContainText("fixture_replay_contract_required");
+    await expect(page.getByTestId("cron-debug-actions")).toContainText("Cron tetikleme canlı gate kapalı");
+    await expect(page.getByTestId("cron-debug-flow")).toContainText("PTT / req_ptt_cron_debug");
+    await expect(page.getByTestId("cron-debug-flow")).toContainText("SURAT / req_surat_debug");
     await page.getByRole("link", { name: /^sms$/i }).click();
     await expect(page.getByTestId("sms-template-detail")).toContainText("Surat Playwright Customer");
     await expect(page.getByTestId("sms-template-detail")).toContainText("TRK-SURAT-PLAYWRIGHT");
@@ -1445,6 +1493,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       { path: "/kargo", testId: "shipments-flow" },
       { path: "/kargo/pipeline", testId: "shipment-pipeline-flow" },
       { path: "/kargo/surat-debug", testId: "surat-debug-flow" },
+      { path: "/kargo/cron-debug", testId: "cron-debug-flow" },
       { path: "/iptaller", testId: "cancellations-flow" },
       { path: "/stok", testId: "inventory-flow" },
       { path: "/bakiye", testId: "balances-flow" },
@@ -1478,6 +1527,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByRole("link", { name: /dosya/i })).toHaveCount(0);
     await expect(page.getByRole("link", { name: /vapi ai/i })).toHaveCount(0);
     await expect(page.getByRole("link", { name: /sürat debug/i })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: /cron debug/i })).toHaveCount(0);
     await expect(page.getByRole("button", { name: /evrimiçi/i })).toBeVisible();
     await Promise.all([
       page.waitForResponse(`${backendBaseUrl}/auth/presence`),
