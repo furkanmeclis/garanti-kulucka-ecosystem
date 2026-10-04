@@ -20,6 +20,7 @@ import {
   ShoppingCart,
   Trash2,
   Truck,
+  Users,
   Wallet,
   Wifi,
   WifiOff,
@@ -36,6 +37,7 @@ import { createAuthClient, type LoginResponse } from "../api/auth-client.js";
 import {
   createDomainClient,
   type ConversationSummary,
+  type CustomerSummary,
   type MessageSummary,
   type OrderSummary,
   type ProductSummary,
@@ -51,6 +53,7 @@ const tokenStorageKey = "garanti.web.access_token";
 
 interface DashboardData {
   conversations: ConversationSummary[];
+  customers: CustomerSummary[];
   messages: MessageSummary[];
   orders: OrderSummary[];
   products: ProductSummary[];
@@ -108,6 +111,7 @@ interface NavigationItem {
 const navigationItems: NavigationItem[] = [
   { key: "inbox", label: "Mesajlar", icon: MessageCircle, roles: ["admin", "calisan", "kargo_operatoru"], path: "/mesajlar" },
   { key: "comments", label: "Yorumlar", icon: MessageSquareText, roles: ["admin", "calisan"], path: "/yorumlar" },
+  { key: "customers", label: "Müşteriler", icon: Users, roles: ["admin", "calisan"], path: "/musteriler" },
   { key: "orders", label: "Siparişler", icon: ShoppingCart, roles: ["admin", "calisan", "kargo_operatoru"], path: "/siparisler" },
   { key: "shipments", label: "Kargo", icon: Truck, roles: ["admin", "calisan", "kargo_operatoru"], path: "/kargo" },
   { key: "cancellations", label: "İptaller", icon: XCircle, roles: ["admin", "calisan"], path: "/iptaller" },
@@ -280,6 +284,7 @@ export function App() {
   const [authChecked, setAuthChecked] = useState(false);
   const [data, setData] = useState<DashboardData>({
     conversations: [],
+    customers: [],
     messages: [],
     orders: [],
     products: [],
@@ -359,8 +364,10 @@ export function App() {
 
   async function loadDashboard() {
     setStatus("Backend API akışları yükleniyor");
-    const [conversations, orders, products, shipments, settings, webphoneConfig] = await Promise.all([
+    const canReadCustomers = user?.role === "admin" || user?.role === "owner" || user?.role === "calisan";
+    const [conversations, customers, orders, products, shipments, settings, webphoneConfig] = await Promise.all([
       domain.listConversations({ limit: 20 }),
+      canReadCustomers ? domain.listCustomers(50) : Promise.resolve({ data: [] }),
       domain.listOrders(20),
       domain.listProducts(50),
       domain.listShipments(20),
@@ -377,6 +384,7 @@ export function App() {
 
     setData({
       conversations: conversations.data,
+      customers: customers.data,
       messages: messages.data,
       orders: orders.data,
       products: products.data,
@@ -414,6 +422,7 @@ export function App() {
       setUser(null);
       setData({
         conversations: [],
+        customers: [],
         messages: [],
         orders: [],
         products: [],
@@ -666,6 +675,7 @@ export function App() {
   const sipServerSettings = sipServerSettingsFrom(activeSettings, data.webphone);
   const selectedConversation =
     data.conversations.find((conversation) => conversation.public_id === selectedConversationId) ?? data.conversations[0] ?? null;
+  const selectedCustomer = data.customers[0] ?? null;
   const selectedOrder = data.orders.find((order) => order.public_id === selectedOrderId) ?? data.orders[0] ?? null;
   const selectedShipment = data.shipments.find((shipment) => shipment.public_id === selectedShipmentId) ?? data.shipments[0] ?? null;
   const smsPreview = smsTemplate
@@ -702,6 +712,9 @@ export function App() {
   ).length;
   const otherShipmentCount = Math.max(data.shipments.length - pttShipmentCount - suratShipmentCount, 0);
   const openConversationCount = data.conversations.filter((conversation) => conversation.status === "open").length;
+  const customerWithPhoneCount = data.customers.filter((customer) => Boolean(customer.phone)).length;
+  const customerWithEmailCount = data.customers.filter((customer) => Boolean(customer.email)).length;
+  const customerWithNotesCount = data.customers.filter((customer) => Boolean(customer.notes)).length;
   const activeProductCount = data.products.filter((product) => product.is_active).length;
   const criticalProducts = data.products.filter((product) => product.stock_quantity <= 3);
   const selectedProduct = data.products[0] ?? null;
@@ -1070,6 +1083,35 @@ export function App() {
                 ))}
               </DetailPanel>
             </div>
+          </FlowPanel>
+        )}
+
+        {activeFlow === "customers" && (
+          <FlowPanel title="Müşteriler" icon={<Users size={18} />} testId="customers-flow">
+            <div className="report-grid">
+              <Metric title="Müşteri" value={String(data.customers.length)} />
+              <Metric title="Telefon" value={String(customerWithPhoneCount)} />
+              <Metric title="E-posta" value={String(customerWithEmailCount)} />
+            </div>
+            <DetailPanel title="Müşteri Listesi" testId="customers-list-detail">
+              <DataRows
+                rows={data.customers.map((customer) => [
+                  customer.full_name,
+                  customer.phone ?? customer.email ?? customer.username ?? "-",
+                  customer.notes ?? "customers API",
+                ])}
+              />
+            </DetailPanel>
+            <DetailPanel title="Müşteri Kartı" testId="customer-card-detail">
+              <DataRows
+                rows={[
+                  ["Seçili müşteri", selectedCustomer?.full_name ?? "-", selectedCustomer?.username ?? "-"],
+                  ["Telefon", selectedCustomer?.phone ?? "-", "customers API"],
+                  ["E-posta", selectedCustomer?.email ?? "-", selectedCustomer?.updated_at ?? "-"],
+                  ["Notlu müşteri", String(customerWithNotesCount), "legacy müşteri notu"],
+                ]}
+              />
+            </DetailPanel>
           </FlowPanel>
         )}
 

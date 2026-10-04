@@ -128,6 +128,36 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       return;
     }
 
+    if (url.pathname === "/api/customers") {
+      expect(currentUser.role).not.toBe("kargo_operatoru");
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          data: [
+            {
+              public_id: "cus_playwright",
+              full_name: "Playwright Customer",
+              phone: "5550000000",
+              email: "playwright@example.com",
+              username: "playwright_customer",
+              notes: "VIP kuluçka müşterisi",
+              updated_at: "2026-01-01T00:00:00.000Z",
+            },
+            {
+              public_id: "cus_facebook",
+              full_name: "Facebook Customer",
+              phone: null,
+              email: "facebook@example.com",
+              username: "facebook_customer",
+              notes: null,
+              updated_at: "2026-01-01T00:00:30.000Z",
+            },
+          ],
+        }),
+      });
+      return;
+    }
+
     if (url.pathname === "/api/conversations/cnv_playwright/messages") {
       if (route.request().method() === "POST") {
         await route.fulfill({
@@ -625,6 +655,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await page.getByRole("button", { name: /giriş yap/i }).click();
     await expect(page.getByTestId("inbox-flow")).toContainText("Playwright Customer");
     await expect(page.getByRole("link", { name: /yorumlar/i })).toHaveCount(1);
+    await expect(page.getByRole("link", { name: /müşteriler/i })).toHaveCount(1);
     await expect(page.getByRole("link", { name: /ptaller/i })).toHaveCount(1);
     await expect(page.getByRole("link", { name: /stoklar/i })).toHaveCount(1);
     await expect(page.getByRole("link", { name: /bakiyeler/i })).toHaveCount(1);
@@ -653,6 +684,13 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("comments-detail")).toContainText("Playwright Customer");
     await expect(page.getByTestId("comments-detail")).toContainText("instagram");
     await expect(page.getByTestId("comments-detail")).toContainText("Merhaba");
+    await page.goto(`${app.url}/musteriler`);
+    await expect(page.getByTestId("customers-flow")).toContainText("Müşteri");
+    await expect(page.getByTestId("customers-list-detail")).toContainText("Playwright Customer");
+    await expect(page.getByTestId("customers-list-detail")).toContainText("VIP kuluçka müşterisi");
+    await expect(page.getByTestId("customer-card-detail")).toContainText("5550000000");
+    await expect(page.getByTestId("customer-card-detail")).toContainText("playwright@example.com");
+    await expect(page.getByTestId("customer-card-detail")).toContainText("customers API");
     await page.goto(`${app.url}/iptaller`);
     await expect(page.getByTestId("cancellations-flow")).toContainText("backend orders");
     await expect(page.getByTestId("cancellation-detail")).toContainText("ORD-PLAYWRIGHT");
@@ -788,6 +826,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     const adminVisualRoutes = [
       { path: "/mesajlar", testId: "inbox-flow" },
       { path: "/yorumlar", testId: "comments-flow" },
+      { path: "/musteriler", testId: "customers-flow" },
       { path: "/siparisler", testId: "orders-flow" },
       { path: "/kargo", testId: "shipments-flow" },
       { path: "/iptaller", testId: "cancellations-flow" },
@@ -818,6 +857,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByRole("link", { name: /siparişler/i })).toHaveCount(1);
     await expect(page.getByRole("link", { name: /kargo/i })).toHaveCount(1);
     await expect(page.getByRole("link", { name: /^sms$/i })).toHaveCount(1);
+    await expect(page.getByRole("link", { name: /müşteriler/i })).toHaveCount(0);
     await expect(page.getByRole("link", { name: /ayarlar/i })).toHaveCount(0);
     await expect(page.getByRole("link", { name: /dosya/i })).toHaveCount(0);
     await expect(page.getByRole("link", { name: /vapi ai/i })).toHaveCount(0);
@@ -846,6 +886,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       "/auth/logout",
       "/auth/presence",
       "/api/conversations",
+      "/api/customers",
       "/api/conversations/cnv_playwright/messages",
       "/admin/integrations/accounts",
       "/admin/integrations/accounts/iac_instagram",

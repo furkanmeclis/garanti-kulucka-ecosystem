@@ -18,6 +18,16 @@ export interface ConversationSummary {
   updated_at: string;
 }
 
+export interface CustomerSummary {
+  public_id: string;
+  full_name: string;
+  phone: string | null;
+  email: string | null;
+  username: string | null;
+  notes: string | null;
+  updated_at: string;
+}
+
 export interface MessageSummary {
   public_id: string;
   sender_type: string;
@@ -80,6 +90,8 @@ export function createDomainClient(http: BackendHttpClient) {
       const query = search.toString();
       return http.request<{ data: ConversationSummary[] }>(`/api/conversations${query ? `?${query}` : ""}`);
     },
+    listCustomers: (limit = 50) =>
+      http.request<{ data: CustomerSummary[] }>(`/api/customers?limit=${limit}`),
     listMessages: (conversationPublicId: string, limit = 100) =>
       http.request<{ data: MessageSummary[] }>(
         `/api/conversations/${encodeURIComponent(conversationPublicId)}/messages?limit=${limit}`,

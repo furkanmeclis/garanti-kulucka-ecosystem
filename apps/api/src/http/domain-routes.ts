@@ -5,6 +5,7 @@ import { authenticate, requireDatabase } from "./middleware.js";
 import {
   DomainRepository,
   serializeConversation,
+  serializeCustomer,
   serializeMessage,
   serializeOrder,
   serializeProduct,
@@ -37,6 +38,10 @@ const updateShipmentStatusSchema = z.object({
   last_event_text: z.string().nullable().default(null),
   raw_payload: z.unknown().nullable().default(null),
 });
+
+function canReadCustomers(role: string | undefined) {
+  return role === "admin" || role === "owner" || role === "calisan";
+}
 
 export function createDomainRoutes() {
   const routes = new Hono<AppBindings>();
@@ -74,6 +79,20 @@ export function createDomainRoutes() {
     );
 
     return context.json({ data: messages.map(serializeMessage) });
+  });
+
+  routes.get("/customers", async (context) => {
+    if (!canReadCustomers(context.get("auth")?.role)) {
+      return context.json({ error: { code: "forbidden", message: "Customer directory access is not allowed" } }, 403);
+    }
+
+    const db = context.get("db");
+    if (!db) {
+      return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
+    }
+
+    const customers = await new DomainRepository(db).listCustomers(limitSchema.parse(context.req.query("limit")));
+    return context.json({ data: customers.map(serializeCustomer) });
   });
 
   routes.post("/conversations/:conversation_public_id/messages", async (context) => {

@@ -71,6 +71,20 @@ const conversation = {
   assigned_user_email: null,
 };
 
+const customers = [
+  {
+    id: 20,
+    public_id: "cus_playwright",
+    full_name: "Playwright Customer",
+    phone: "5550000000",
+    email: "playwright@example.com",
+    username: "playwright_customer",
+    notes: "VIP kuluçka müşterisi",
+    created_at: date,
+    updated_at: date,
+  },
+];
+
 const messages = [
   {
     id: 100,
@@ -261,6 +275,8 @@ class FixtureQuery {
     switch (this.table) {
       case "conversations":
         return [conversation];
+      case "customers":
+        return customers;
       case "messages":
         return messages;
       case "orders":
@@ -318,23 +334,41 @@ async function startFixtureApi() {
     },
     config,
   );
+  const cargoToken = await signAccessToken(
+    {
+      user_public_id: user.public_id,
+      session_public_id: session.public_id,
+      role: "kargo_operatoru",
+    },
+    config,
+  );
   const server = serve({
     fetch: createApp({ config, db: createFixtureDatabase(), encryptor }).fetch,
     port: 0,
   });
   const address = server.address() as AddressInfo;
+  const baseURL = `http://127.0.0.1:${address.port}`;
   const client = await request.newContext({
-    baseURL: `http://127.0.0.1:${address.port}`,
+    baseURL,
     extraHTTPHeaders: {
       authorization: `Bearer ${token}`,
       "x-request-id": "playwright_domain_flows_1",
     },
   });
+  const cargoClient = await request.newContext({
+    baseURL,
+    extraHTTPHeaders: {
+      authorization: `Bearer ${cargoToken}`,
+      "x-request-id": "playwright_domain_flows_cargo",
+    },
+  });
 
   return {
     client,
+    cargoClient,
     async close() {
       await client.dispose();
+      await cargoClient.dispose();
       await new Promise<void>((resolve, reject) => {
         server.close((error) => {
           if (error) reject(error);
@@ -349,9 +383,19 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
   const api = await startFixtureApi();
 
   try {
-    const [conversationResponse, messageResponse, orderResponse, productResponse, shipmentResponse, settingsResponse, webphoneResponse] =
+    const [
+      conversationResponse,
+      customerResponse,
+      messageResponse,
+      orderResponse,
+      productResponse,
+      shipmentResponse,
+      settingsResponse,
+      webphoneResponse,
+    ] =
       await Promise.all([
         api.client.get("/api/conversations?limit=10"),
+        api.client.get("/api/customers?limit=10"),
         api.client.get(`/api/conversations/${conversation.public_id}/messages?limit=10`),
         api.client.get("/api/orders?limit=10"),
         api.client.get("/api/products?limit=10"),
@@ -371,6 +415,26 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
           },
         },
       ],
+    });
+
+    expect(customerResponse.status()).toBe(200);
+    expect(await customerResponse.json()).toMatchObject({
+      data: [
+        {
+          public_id: "cus_playwright",
+          full_name: "Playwright Customer",
+          phone: "5550000000",
+          email: "playwright@example.com",
+          username: "playwright_customer",
+          notes: "VIP kuluçka müşterisi",
+        },
+      ],
+    });
+
+    const forbiddenCustomerResponse = await api.cargoClient.get("/api/customers?limit=10");
+    expect(forbiddenCustomerResponse.status()).toBe(403);
+    expect(await forbiddenCustomerResponse.json()).toMatchObject({
+      error: { code: "forbidden" },
     });
 
     expect(messageResponse.status()).toBe(200);

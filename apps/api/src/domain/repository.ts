@@ -2,6 +2,7 @@ import type { AppDatabase } from "@garanti-kulucka/database";
 import type { Selectable } from "kysely";
 import type {
   ConversationsTable,
+  CustomersTable,
   MessagesTable,
   OrdersTable,
   ProductsTable,
@@ -15,6 +16,7 @@ export type ConversationRecord = Selectable<ConversationsTable> & {
   assigned_user_email: string | null;
 };
 
+export type CustomerRecord = Selectable<CustomersTable>;
 export type MessageRecord = Selectable<MessagesTable>;
 export type OrderRecord = Selectable<OrdersTable> & {
   customer_full_name: string | null;
@@ -107,6 +109,16 @@ export class DomainRepository {
       .selectAll()
       .where("conversation_id", "=", conversation.id)
       .orderBy("sent_at", "asc")
+      .limit(limit)
+      .execute();
+  }
+
+  async listCustomers(limit: number): Promise<CustomerRecord[]> {
+    return this.db
+      .selectFrom("customers")
+      .selectAll()
+      .orderBy("updated_at", "desc")
+      .orderBy("full_name", "asc")
       .limit(limit)
       .execute();
   }
@@ -277,6 +289,18 @@ export function serializeConversation(conversation: ConversationRecord) {
       : null,
     assigned_user_email: conversation.assigned_user_email,
     updated_at: conversation.updated_at,
+  };
+}
+
+export function serializeCustomer(customer: CustomerRecord) {
+  return {
+    public_id: customer.public_id,
+    full_name: customer.full_name,
+    phone: customer.phone,
+    email: customer.email,
+    username: customer.username,
+    notes: customer.notes,
+    updated_at: customer.updated_at,
   };
 }
 
