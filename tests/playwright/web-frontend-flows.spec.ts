@@ -548,6 +548,36 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
           customer_full_name: "Surat Playwright Customer",
           updated_at: "2026-01-01T00:01:00.000Z",
         },
+        {
+          public_id: "shp_message_playwright",
+          provider: "KolayBi",
+          tracking_number: "TRK-MESSAGE-PLAYWRIGHT",
+          barcode_number: "BAR-MESSAGE-PLAYWRIGHT",
+          status: "in_transit",
+          recipient_name: "Message Step Customer",
+          recipient_phone: null,
+          recipient_city: "Izmir",
+          recipient_district: "Konak",
+          last_event_text: "Waiting for message contact",
+          order_number: "ORD-MESSAGE-PLAYWRIGHT",
+          customer_full_name: "Message Step Customer",
+          updated_at: "2026-01-01T00:02:00.000Z",
+        },
+        {
+          public_id: "shp_surat_sms_playwright",
+          provider: "Surat",
+          tracking_number: "TRK-SMS-PLAYWRIGHT",
+          barcode_number: "BAR-SMS-PLAYWRIGHT",
+          status: "in_transit",
+          recipient_name: "SMS Step Customer",
+          recipient_phone: "5552222222",
+          recipient_city: "Bursa",
+          recipient_district: "Nilufer",
+          last_event_text: "SMS step waiting",
+          order_number: "ORD-SMS-PLAYWRIGHT",
+          customer_full_name: "SMS Step Customer",
+          updated_at: "2026-01-01T00:03:00.000Z",
+        },
       ];
       const requestedProvider = url.searchParams.get("provider");
       const requestedStatus = url.searchParams.get("status");
@@ -1545,7 +1575,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("sms-template-detail")).toContainText("TRK-PLAYWRIGHT");
     await expect(page.getByTestId("sms-template-detail")).toContainText("1 SMS");
     await expect(page.getByTestId("sms-history-detail")).toContainText("SMS Gönderim Kayıtları");
-    await expect(page.getByTestId("sms-history-detail")).toContainText("2 alıcı");
+    await expect(page.getByTestId("sms-history-detail")).toContainText("3 alıcı");
     await expect(page.getByTestId("sms-history-detail")).toContainText("5550000000");
     await page.getByRole("button", { name: "SMS gönder" }).click();
     await expect
@@ -1669,9 +1699,10 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("shipments-flow")).toContainText("TRK-PLAYWRIGHT");
     await expect(page.getByTestId("shipments-flow")).toContainText("PTT Kargo");
     await expect(page.getByTestId("shipments-flow")).toContainText("Yoldaki Kargolar");
-    await expect(page.getByTestId("shipment-section-tabs")).toContainText("Tüm kargolar 2");
+    await expect(page.getByTestId("shipment-section-tabs")).toContainText("Tüm kargolar 4");
     await expect(page.getByTestId("shipment-section-tabs")).toContainText("PTT 1");
-    await expect(page.getByTestId("shipment-section-tabs")).toContainText("Sürat 1");
+    await expect(page.getByTestId("shipment-section-tabs")).toContainText("Sürat 2");
+    await expect(page.getByTestId("shipment-section-tabs")).toContainText("Diğer 1");
     await expect(page.getByTestId("shipment-filter-summary")).toContainText("Yeni");
     await expect(page.getByTestId("shipment-filter-summary")).toContainText("PTT Almayan");
     await expect(page.getByTestId("shipment-filter-summary")).toContainText("Sürat Almayan");
@@ -1725,13 +1756,39 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await page.getByRole("button", { name: /trk-surat-playwright detay/i }).click();
     await page.getByRole("link", { name: /pipeline/i }).click();
     await expect(page.getByTestId("shipment-pipeline-flow")).toContainText("Teslim Alınmayan Kargo Pipeline");
-    await expect(page.getByTestId("shipment-pipeline-tabs")).toContainText("Tümü 2");
+    await expect(page.getByTestId("shipment-pipeline-tabs")).toContainText("Tümü 4");
+    await expect(page.getByTestId("shipment-pipeline-tabs")).toContainText("Mesaj 1");
+    await expect(page.getByTestId("shipment-pipeline-tabs")).toContainText("SMS 1");
+    await expect(page.getByTestId("shipment-pipeline-tabs")).toContainText("VAPI 1");
+    await expect(page.getByTestId("shipment-pipeline-tabs")).toContainText("Teslim 1");
     await expect(page.getByTestId("shipment-pipeline-detail")).toContainText("Mesaj SMS VAPI Akışı");
     await expect(page.getByTestId("shipment-pipeline-detail")).toContainText("legacy /kargo/pipeline");
     await expect(page.getByTestId("shipment-pipeline-detail")).toContainText("Supabase channel yok");
     await expect(page.getByTestId("shipment-pipeline-flow")).toContainText("Playwright Customer");
     await expect(page.getByTestId("shipment-pipeline-flow")).toContainText("vapi / isleniyor");
     await expect(page.getByTestId("shipment-pipeline-flow")).toContainText("teslim / teslim");
+    await page.getByTestId("shipment-pipeline-filter-mesaj").click();
+    await expect(page.getByTestId("shipment-pipeline-filter-mesaj")).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByTestId("shipment-pipeline-detail")).toContainText("mesaj");
+    await expect(page.getByTestId("shipment-pipeline-detail")).toContainText("1 kargo");
+    await expect(page.getByTestId("shipment-pipeline-flow")).toContainText("Message Step Customer");
+    await expect(page.getByTestId("shipment-pipeline-flow")).not.toContainText("Playwright Customer");
+    await page.getByTestId("shipment-pipeline-filter-sms").click();
+    await expect(page.getByTestId("shipment-pipeline-filter-sms")).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByTestId("shipment-pipeline-flow")).toContainText("SMS Step Customer");
+    await expect(page.getByTestId("shipment-pipeline-flow")).toContainText("sms / isleniyor");
+    await expect(page.getByTestId("shipment-pipeline-flow")).not.toContainText("Message Step Customer");
+    await page.getByTestId("shipment-pipeline-filter-vapi").click();
+    await expect(page.getByTestId("shipment-pipeline-flow")).toContainText("Playwright Customer");
+    await expect(page.getByTestId("shipment-pipeline-flow")).not.toContainText("SMS Step Customer");
+    await page.getByTestId("shipment-pipeline-filter-teslim").click();
+    await expect(page.getByTestId("shipment-pipeline-flow")).toContainText("Surat Playwright Customer");
+    await expect(page.getByTestId("shipment-pipeline-flow")).toContainText("teslim / teslim");
+    await expect(page.getByTestId("shipment-pipeline-flow")).not.toContainText("TRK-PLAYWRIGHT");
+    await page.getByTestId("shipment-pipeline-filter-all").click();
+    await expect(page.getByTestId("shipment-pipeline-filter-all")).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByTestId("shipment-pipeline-flow")).toContainText("Message Step Customer");
+    await expect(page.getByTestId("shipment-pipeline-flow")).toContainText("SMS Step Customer");
     await page.getByRole("link", { name: /sürat debug/i }).click();
     await expect(page.getByTestId("surat-debug-flow")).toContainText("Sürat Kargo Debug");
     await expect(page.getByTestId("surat-debug-detail")).toContainText("legacy /api/surat-kargo/debug");

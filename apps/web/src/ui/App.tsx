@@ -123,6 +123,9 @@ interface InstagramAnalyticsSummary {
   engagementRate: number;
 }
 
+type ShipmentPipelineStep = "mesaj" | "sms" | "vapi" | "teslim";
+type ShipmentPipelineFilter = "all" | ShipmentPipelineStep;
+
 interface NavigationItem {
   key: string;
   label: string;
@@ -233,10 +236,11 @@ function formatPercent(numerator: number, denominator: number) {
   return denominator > 0 ? `%${Math.round((numerator / denominator) * 100)}` : "%0";
 }
 
-function pipelineStepFromShipment(shipment: ShipmentSummary) {
+function pipelineStepFromShipment(shipment: ShipmentSummary): ShipmentPipelineStep {
   if (shipment.status === "delivered") return "teslim";
   if (!shipment.recipient_phone) return "mesaj";
-  if (shipment.provider.toLocaleLowerCase("tr-TR").includes("sürat")) return "sms";
+  const provider = shipment.provider.toLocaleLowerCase("tr-TR");
+  if (provider.includes("sürat") || provider.includes("surat")) return "sms";
   return "vapi";
 }
 
@@ -436,6 +440,7 @@ export function App() {
   const [conversationStatusFilter, setConversationStatusFilter] = useState("all");
   const [orderFilter, setOrderFilter] = useState("all");
   const [shipmentFilter, setShipmentFilter] = useState("all");
+  const [shipmentPipelineFilter, setShipmentPipelineFilter] = useState<ShipmentPipelineFilter>("all");
   const [realtimeClient, setRealtimeClient] = useState<RealtimeClient | null>(null);
   const selectedConversationIdRef = useRef<string | null>(null);
   const conversationFilterRequestSeqRef = useRef(0);
@@ -793,6 +798,11 @@ export function App() {
     }));
     setSelectedShipmentId(shipments.data[0]?.public_id ?? null);
     setStatus("Kargo filtreleri backend API üzerinden uygulandı");
+  }
+
+  function handleApplyShipmentPipelineFilter(nextFilter: ShipmentPipelineFilter) {
+    setShipmentPipelineFilter(nextFilter);
+    setStatus("Kargo pipeline legacy sekmesi backend shipments verisiyle uygulandı");
   }
 
   async function handleSelectConversation(conversationPublicId: string) {
@@ -1155,10 +1165,23 @@ export function App() {
     step: pipelineStepFromShipment(shipment),
     pipelineStatus: pipelineStatusFromShipment(shipment),
   }));
+  const visibleShipmentPipelineRows = shipmentPipelineRows.filter(
+    (row) => shipmentPipelineFilter === "all" || row.step === shipmentPipelineFilter,
+  );
+  const pipelineMessageCount = shipmentPipelineRows.filter((row) => row.step === "mesaj").length;
+  const pipelineSmsCount = shipmentPipelineRows.filter((row) => row.step === "sms").length;
+  const pipelineVapiCount = shipmentPipelineRows.filter((row) => row.step === "vapi").length;
   const pipelineWaitingCount = shipmentPipelineRows.filter((row) => row.pipelineStatus === "bekliyor").length;
   const pipelineProcessingCount = shipmentPipelineRows.filter((row) => row.pipelineStatus === "isleniyor").length;
   const pipelineErrorCount = shipmentPipelineRows.filter((row) => row.pipelineStatus === "hata").length;
   const pipelineDeliveredCount = shipmentPipelineRows.filter((row) => row.pipelineStatus === "teslim").length;
+  const shipmentPipelineFilters: Array<{ value: ShipmentPipelineFilter; label: string; count: number }> = [
+    { value: "all", label: "Tümü", count: shipmentPipelineRows.length },
+    { value: "mesaj", label: "Mesaj", count: pipelineMessageCount },
+    { value: "sms", label: "SMS", count: pipelineSmsCount },
+    { value: "vapi", label: "VAPI", count: pipelineVapiCount },
+    { value: "teslim", label: "Teslim", count: pipelineDeliveredCount },
+  ];
   const customerWithPhoneCount = data.customers.filter((customer) => Boolean(customer.phone)).length;
   const customerWithEmailCount = data.customers.filter((customer) => Boolean(customer.email)).length;
   const customerWithNotesCount = data.customers.filter((customer) => Boolean(customer.notes)).length;
@@ -1553,31 +1576,32 @@ export function App() {
               <Metric title="Teslim" value={String(pipelineDeliveredCount)} />
             </div>
             <div className="detail-actions" data-testid="shipment-pipeline-tabs">
-              <button className="secondary-action selected" type="button">
-                Tümü {shipmentPipelineRows.length}
-              </button>
-              <button className="secondary-action" type="button">
-                Bekliyor {pipelineWaitingCount}
-              </button>
-              <button className="secondary-action" type="button">
-                İşleniyor {pipelineProcessingCount}
-              </button>
-              <button className="secondary-action" type="button">
-                Teslim {pipelineDeliveredCount}
-              </button>
+              {shipmentPipelineFilters.map(({ value, label, count }) => (
+                <button
+                  key={value}
+                  aria-pressed={shipmentPipelineFilter === value}
+                  className={cx("secondary-action", shipmentPipelineFilter === value && "selected")}
+                  data-testid={`shipment-pipeline-filter-${value}`}
+                  type="button"
+                  onClick={() => handleApplyShipmentPipelineFilter(value)}
+                >
+                  {label} {count}
+                </button>
+              ))}
             </div>
             <DetailPanel title="Mesaj SMS VAPI Akışı" testId="shipment-pipeline-detail">
               <DataRows
                 rows={[
                   ["Kaynak", "shipments API", "legacy /kargo/pipeline"],
                   ["Akış", "Mesaj -> SMS -> VAPI", "backend verisi"],
+                  ["Aktif sekme", shipmentPipelineFilter, `${visibleShipmentPipelineRows.length} kargo`],
                   ["Otomatik yenileme", "Socket.IO sonrası domain refresh", "Supabase channel yok"],
                   ["Canlı provider", "kapalı", "fixture/live gate kontrollü"],
                 ]}
               />
             </DetailPanel>
             <DataRows
-              rows={shipmentPipelineRows.map(({ shipment, step, pipelineStatus }) => [
+              rows={visibleShipmentPipelineRows.map(({ shipment, step, pipelineStatus }) => [
                 shipment.recipient_name,
                 `${step} / ${pipelineStatus}`,
                 shipment.tracking_number ?? shipment.barcode_number ?? shipment.recipient_phone ?? "-",
