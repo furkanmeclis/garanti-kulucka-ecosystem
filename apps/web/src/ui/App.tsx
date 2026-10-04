@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import {
   createAdminClient,
+  type AdminAuditLog,
   type AdminSetting,
   type IntegrationAccount,
   type IntegrationAccountSnapshot,
@@ -62,6 +63,8 @@ interface DashboardData {
   shipments: ShipmentSummary[];
   settings: AdminSetting[];
   integrationAccounts: IntegrationAccount[];
+  settingsAudit: AdminAuditLog[];
+  integrationAudit: AdminAuditLog[];
   providerAttempts: ProviderAttemptViewModel[];
   webphone: WebphoneConfig | null;
 }
@@ -319,6 +322,8 @@ export function App() {
     shipments: [],
     settings: [],
     integrationAccounts: [],
+    settingsAudit: [],
+    integrationAudit: [],
     providerAttempts: [],
     webphone: null,
   });
@@ -456,12 +461,14 @@ export function App() {
       user?.role === "admin" ? admin.listSettings("global") : Promise.resolve({ data: [] }),
       webphone.getConfig(),
     ]);
-    const [integrationAccounts, providerAttempts] = user?.role === "admin"
+    const [integrationAccounts, providerAttempts, settingsAudit, integrationAudit] = user?.role === "admin"
       ? await Promise.all([
           admin.listIntegrationAccounts(),
           admin.listProviderAttempts({ limit: 10 }),
+          admin.listSettingsAudit({ limit: 10 }),
+          admin.listIntegrationAudit({ limit: 10 }),
         ])
-      : [{ data: [] }, { data: [] }];
+      : [{ data: [] }, { data: [] }, { data: [] }, { data: [] }];
     const firstConversation = conversations.data[0]?.public_id;
     const messages = firstConversation
       ? await domain.listMessages(firstConversation, 50)
@@ -476,6 +483,8 @@ export function App() {
       shipments: shipments.data,
       settings: settings.data,
       integrationAccounts: integrationAccounts.data,
+      settingsAudit: settingsAudit.data,
+      integrationAudit: integrationAudit.data,
       providerAttempts: providerAttempts.data.map(toProviderAttemptViewModel),
       webphone: webphoneConfig,
     });
@@ -515,6 +524,8 @@ export function App() {
         shipments: [],
         settings: [],
         integrationAccounts: [],
+        settingsAudit: [],
+        integrationAudit: [],
         providerAttempts: [],
         webphone: null,
       });
@@ -780,6 +791,8 @@ export function App() {
   const instagramAnalytics = instagramAnalyticsFrom(integrationSnapshot?.account.metadata);
   const selectedProviderAttempt = data.providerAttempts[0] ?? null;
   const selectedProviderPreview = selectedProviderAttempt?.provider_request_preview ?? null;
+  const latestSettingsAudit = data.settingsAudit[0] ?? null;
+  const latestIntegrationAudit = data.integrationAudit[0] ?? null;
   const activeOrderCount = data.orders.filter((order) => !["cancelled", "returned", "delivered"].includes(order.status)).length;
   const deliveredOrderCount = data.orders.filter((order) => order.status === "delivered").length;
   const deliveredShipmentCount = data.shipments.filter((shipment) => shipment.status === "delivered").length;
@@ -1045,6 +1058,27 @@ export function App() {
               PTT canlı modu aç
             </button>
             <DataRows rows={activeSettings.map((setting) => [setting.key, setting.scope, JSON.stringify(setting.value)])} />
+            <DetailPanel title="Ayar Denetim Kayıtları" testId="settings-audit-detail">
+              <DataRows
+                rows={[
+                  ["Kayıt", String(data.settingsAudit.length), "settings audit API"],
+                  [
+                    "Son işlem",
+                    latestSettingsAudit ? `${latestSettingsAudit.action} / ${latestSettingsAudit.entity_type}` : "denetim yok",
+                    latestSettingsAudit?.entity_id ?? "-",
+                  ],
+                  [
+                    "Aktör",
+                    latestSettingsAudit?.actor_user_id === null || latestSettingsAudit?.actor_user_id === undefined
+                      ? "sistem"
+                      : String(latestSettingsAudit.actor_user_id),
+                    latestSettingsAudit?.created_at ?? "-",
+                  ],
+                  ["Eski", compactJson(latestSettingsAudit?.old_value), "redacted"],
+                  ["Yeni", compactJson(latestSettingsAudit?.new_value), "redacted"],
+                ]}
+              />
+            </DetailPanel>
           </FlowPanel>
         )}
 
@@ -1119,6 +1153,29 @@ export function App() {
                     compactJson(selectedProviderPreview?.body),
                     "redacted",
                   ],
+                ]}
+              />
+            </DetailPanel>
+            <DetailPanel title="Entegrasyon Denetim Kayıtları" testId="integration-audit-detail">
+              <DataRows
+                rows={[
+                  ["Kayıt", String(data.integrationAudit.length), "integration audit API"],
+                  [
+                    "Son işlem",
+                    latestIntegrationAudit
+                      ? `${latestIntegrationAudit.action} / ${latestIntegrationAudit.entity_type}`
+                      : "denetim yok",
+                    latestIntegrationAudit?.entity_id ?? "-",
+                  ],
+                  [
+                    "Aktör",
+                    latestIntegrationAudit?.actor_user_id === null || latestIntegrationAudit?.actor_user_id === undefined
+                      ? "sistem"
+                      : String(latestIntegrationAudit.actor_user_id),
+                    latestIntegrationAudit?.created_at ?? "-",
+                  ],
+                  ["Eski", compactJson(latestIntegrationAudit?.old_value), "redacted"],
+                  ["Yeni", compactJson(latestIntegrationAudit?.new_value), "redacted"],
                 ]}
               />
             </DetailPanel>

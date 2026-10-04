@@ -502,6 +502,37 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       return;
     }
 
+    if (url.pathname === "/admin/settings/audit") {
+      expect(currentUser.role).toBe("admin");
+      expect(url.searchParams.get("limit")).toBe("10");
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          data: [
+            {
+              id: 901,
+              actor_user_id: 1,
+              action: "settings_change",
+              entity_type: "settings",
+              entity_id: "providers.ptt.live_mode",
+              old_value: {
+                value: false,
+                provider_token: "raw-settings-audit-secret",
+              },
+              new_value: {
+                value: true,
+                access_token: "raw-settings-audit-secret",
+              },
+              ip_address: "127.0.0.1",
+              user_agent: "Playwright",
+              created_at: "2026-01-01T00:06:00.000Z",
+            },
+          ],
+        }),
+      });
+      return;
+    }
+
     if (url.pathname === "/admin/settings/sip_config") {
       expect(route.request().method()).toBe("PUT");
       savedSipConfig = true;
@@ -596,6 +627,36 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
                 },
               },
               updated_at: "2026-01-01T00:00:00.000Z",
+            },
+          ],
+        }),
+      });
+      return;
+    }
+
+    if (url.pathname === "/admin/integrations/audit") {
+      expect(currentUser.role).toBe("admin");
+      expect(url.searchParams.get("limit")).toBe("10");
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          data: [
+            {
+              id: 902,
+              actor_user_id: 1,
+              action: "integration_token_update",
+              entity_type: "integration_tokens",
+              entity_id: "iac_instagram/access_token",
+              old_value: {
+                value: null,
+              },
+              new_value: {
+                token: "raw-integration-audit-secret",
+                expires_at: null,
+              },
+              ip_address: "127.0.0.1",
+              user_agent: "Playwright",
+              created_at: "2026-01-01T00:07:00.000Z",
             },
           ],
         }),
@@ -983,6 +1044,11 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("provider-attempts-detail")).toContainText("[redacted]");
     await expect(page.getByTestId("provider-attempts-detail")).not.toContainText("frontend-playwright-token");
     await expect(page.getByTestId("provider-attempts-detail")).not.toContainText("raw-provider-secret");
+    await expect(page.getByTestId("integration-audit-detail")).toContainText("Entegrasyon Denetim Kayıtları");
+    await expect(page.getByTestId("integration-audit-detail")).toContainText("integration_token_update / integration_tokens");
+    await expect(page.getByTestId("integration-audit-detail")).toContainText("iac_instagram/access_token");
+    await expect(page.getByTestId("integration-audit-detail")).toContainText("[redacted]");
+    await expect(page.getByTestId("integration-audit-detail")).not.toContainText("raw-integration-audit-secret");
     await page.getByRole("button", { name: /instagram main detay/i }).click();
     await expect(page.getByTestId("instagram-analytics-summary")).toContainText("Instagram Analitik Özeti");
     await expect(page.getByTestId("instagram-analytics-summary")).toContainText("1240");
@@ -1040,6 +1106,11 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("sms-confirmation-detail")).toContainText("5551111111");
     await page.getByRole("link", { name: /ayarlar/i }).click();
     await expect(page.getByTestId("admin-flow")).toContainText("webphone.enabled");
+    await expect(page.getByTestId("settings-audit-detail")).toContainText("Ayar Denetim Kayıtları");
+    await expect(page.getByTestId("settings-audit-detail")).toContainText("settings_change / settings");
+    await expect(page.getByTestId("settings-audit-detail")).toContainText("providers.ptt.live_mode");
+    await expect(page.getByTestId("settings-audit-detail")).toContainText("[redacted]");
+    await expect(page.getByTestId("settings-audit-detail")).not.toContainText("raw-settings-audit-secret");
     await page.getByRole("button", { name: /ptt canlı modu aç/i }).click();
     await expect(page.getByTestId("admin-flow")).toContainText("providers.ptt.live_mode");
     await page.getByRole("link", { name: /dosya/i }).click();
@@ -1117,6 +1188,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       "/api/customers",
       "/api/conversations/cnv_playwright/messages",
       "/admin/integrations/accounts",
+      "/admin/integrations/audit",
       "/admin/integrations/provider-attempts",
       "/admin/integrations/accounts/iac_instagram",
       "/admin/integrations/accounts/iac_instagram/settings/webhook.enabled",
@@ -1126,6 +1198,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       "/api/shipments",
       "/api/shipments/shp_surat_playwright/status",
       "/admin/settings",
+      "/admin/settings/audit",
       "/admin/settings/sip_config",
       "/admin/settings/netgsm_teyit_ayarlar",
       "/admin/settings/providers.ptt.live_mode",
