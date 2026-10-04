@@ -803,6 +803,7 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
       customerResponse,
       messageResponse,
       orderResponse,
+      orderSummaryResponse,
       productResponse,
       shipmentResponse,
       shipmentPipelineResponse,
@@ -819,6 +820,7 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
         api.client.get("/api/customers?limit=10"),
         api.client.get(`/api/conversations/${conversation.public_id}/messages?limit=10`),
         api.client.get("/api/orders?limit=10"),
+        api.client.get("/api/orders/summary"),
         api.client.get("/api/products?limit=10"),
         api.client.get("/api/shipments?limit=10"),
         api.client.get("/api/shipments/pipeline-summary"),
@@ -912,6 +914,15 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
     expect(pendingConfirmationOrdersResponse.status()).toBe(200);
     expect(await pendingConfirmationOrdersResponse.json()).toMatchObject({
       data: [{ public_id: "ord_playwright", confirmation_status: null }],
+    });
+    expect(orderSummaryResponse.status()).toBe(200);
+    await expect(orderSummaryResponse.json()).resolves.toMatchObject({
+      total_count: 2,
+      active_count: 1,
+      delivered_count: 1,
+      pending_confirmation_count: 1,
+      total_revenue: 200.5,
+      currency: "TRY",
     });
 
     const [pttShipmentsResponse, otherShipmentsResponse, inTransitShipmentsResponse, missingTrackingShipmentsResponse] = await Promise.all([

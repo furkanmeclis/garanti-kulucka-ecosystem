@@ -120,6 +120,15 @@ export interface BalanceSummary {
   pending_request_count: number;
 }
 
+export interface OrderSummaryStats {
+  total_count: number;
+  active_count: number;
+  delivered_count: number;
+  pending_confirmation_count: number;
+  total_revenue: number;
+  currency: string;
+}
+
 export type ShipmentPipelineStep = "mesaj" | "sms" | "vapi" | "teslim";
 export type ShipmentPipelineStatus = "bekliyor" | "isleniyor" | "hata" | "teslim";
 
@@ -225,6 +234,8 @@ export function createDomainClient(http: BackendHttpClient) {
     },
     getBalanceSummary: () =>
       http.request<BalanceSummary>("/api/balances/summary"),
+    getOrderSummary: () =>
+      http.request<OrderSummaryStats>("/api/orders/summary"),
     listProducts: (limit = 50) =>
       http.request<{ data: ProductSummary[] }>(`/api/products?limit=${limit}`),
     createOrder: (input: {

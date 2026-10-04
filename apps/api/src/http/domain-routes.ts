@@ -351,6 +351,16 @@ export function createDomainRoutes() {
     return context.json({ data: orders.map(serializeOrder) });
   });
 
+  routes.get("/orders/summary", async (context) => {
+    const db = context.get("db");
+    if (!db) {
+      return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
+    }
+
+    const summary = await new DomainRepository(db).getOrderSummary();
+    return context.json(summary);
+  });
+
   routes.get("/balances/summary", async (context) => {
     if (!canReadBalanceSummary(context.get("auth")?.role)) {
       return context.json({ error: { code: "forbidden", message: "Balance summary access is not allowed" } }, 403);

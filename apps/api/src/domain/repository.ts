@@ -112,6 +112,15 @@ export interface BalanceSummaryRecord {
   pending_request_count: number;
 }
 
+export interface OrderSummaryRecord {
+  total_count: number;
+  active_count: number;
+  delivered_count: number;
+  pending_confirmation_count: number;
+  total_revenue: number;
+  currency: string;
+}
+
 export interface ShipmentPipelineRowRecord {
   shipment_public_id: string;
   recipient_name: string;
@@ -404,6 +413,18 @@ export class DomainRepository {
       pending_payment: centsToMoney(pendingPaymentCents),
       available_balance: centsToMoney(Math.max(totalCommissionCents - totalDeductionCents - pendingPaymentCents, 0)),
       pending_request_count: pendingOrders.length,
+    };
+  }
+
+  async getOrderSummary(): Promise<OrderSummaryRecord> {
+    const orders = await this.listOrders({ limit: 200 });
+    return {
+      total_count: orders.length,
+      active_count: orders.filter((order) => !["cancelled", "returned", "delivered"].includes(order.status)).length,
+      delivered_count: orders.filter((order) => order.status === "delivered").length,
+      pending_confirmation_count: orders.filter((order) => order.confirmation_status === null).length,
+      total_revenue: centsToMoney(orders.reduce((sum, order) => sum + moneyCents(order.total_amount), 0)),
+      currency: orders[0]?.currency ?? "TRY",
     };
   }
 

@@ -48,6 +48,7 @@ import {
   type ConversationSummary,
   type CustomerSummary,
   type MessageSummary,
+  type OrderSummaryStats,
   type OrderSummary,
   type ProductSummary,
   type ReportSummary as BackendReportSummary,
@@ -78,6 +79,7 @@ interface DashboardData {
   providerAttempts: ProviderAttemptViewModel[];
   fileOrphans: FileMetadata[];
   instagramAnalytics: BackendInstagramAnalyticsSummary;
+  orderSummary: OrderSummaryStats;
   reportSummary: BackendReportSummary;
   balanceSummary: BackendBalanceSummary;
   shipmentPipeline: ShipmentPipelineSummary;
@@ -236,11 +238,6 @@ function readStoredToken() {
   return window.localStorage.getItem(tokenStorageKey);
 }
 
-function moneyValue(value: string) {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
 function formatMoney(value: number, currency: string) {
   return `${value.toFixed(2)} ${currency}`;
 }
@@ -295,6 +292,15 @@ const defaultBalanceSummary: BackendBalanceSummary = {
   pending_payment: 0,
   available_balance: 0,
   pending_request_count: 0,
+};
+
+const defaultOrderSummary: OrderSummaryStats = {
+  total_count: 0,
+  active_count: 0,
+  delivered_count: 0,
+  pending_confirmation_count: 0,
+  total_revenue: 0,
+  currency: "TRY",
 };
 
 const defaultShipmentPipelineSummary: ShipmentPipelineSummary = {
@@ -457,6 +463,7 @@ export function App() {
     providerAttempts: [],
     fileOrphans: [],
     instagramAnalytics: defaultInstagramAnalyticsSummary,
+    orderSummary: defaultOrderSummary,
     reportSummary: defaultReportSummary,
     balanceSummary: defaultBalanceSummary,
     shipmentPipeline: defaultShipmentPipelineSummary,
@@ -613,11 +620,12 @@ export function App() {
     const canReadComments = user?.role === "admin" || user?.role === "owner" || user?.role === "calisan";
     const canReadBalances = user?.role === "admin" || user?.role === "owner" || user?.role === "calisan";
     const canReadShipmentPipeline = ["admin", "owner", "calisan", "kargo_operatoru"].includes(user?.role ?? "");
-    const [conversations, customers, commentModeration, balanceSummary, shipmentPipeline, reportSummary, orders, products, shipments, settings, webphoneConfig] = await Promise.all([
+    const [conversations, customers, commentModeration, balanceSummary, orderSummary, shipmentPipeline, reportSummary, orders, products, shipments, settings, webphoneConfig] = await Promise.all([
       domain.listConversations({ limit: 20 }),
       canReadCustomers ? domain.listCustomers(50) : Promise.resolve({ data: [] }),
       canReadComments ? domain.getCommentModerationSummary() : Promise.resolve(defaultCommentModerationSummary),
       canReadBalances ? domain.getBalanceSummary() : Promise.resolve(defaultBalanceSummary),
+      domain.getOrderSummary(),
       canReadShipmentPipeline ? domain.getShipmentPipelineSummary() : Promise.resolve(defaultShipmentPipelineSummary),
       user?.role === "admin" ? domain.getReportSummary() : Promise.resolve(defaultReportSummary),
       domain.listOrders(20),
@@ -660,6 +668,7 @@ export function App() {
       providerAttempts: providerAttempts.data.map(toProviderAttemptViewModel),
       fileOrphans: fileOrphans.data,
       instagramAnalytics,
+      orderSummary,
       reportSummary,
       balanceSummary,
       shipmentPipeline,
@@ -708,6 +717,7 @@ export function App() {
         providerAttempts: [],
         fileOrphans: [],
         instagramAnalytics: defaultInstagramAnalyticsSummary,
+        orderSummary: defaultOrderSummary,
         reportSummary: defaultReportSummary,
         balanceSummary: defaultBalanceSummary,
         shipmentPipeline: defaultShipmentPipelineSummary,
@@ -943,8 +953,8 @@ export function App() {
     try {
       const result = await domain.requestPayment(order.public_id, {
         amount: balanceSummary.pendingPayment.toFixed(2),
-        currency: orderCurrency,
-        idempotency_key: `payment_${order.public_id}_${balanceSummary.pendingPayment.toFixed(2)}_${orderCurrency}`,
+        currency: data.orderSummary.currency,
+        idempotency_key: `payment_${order.public_id}_${balanceSummary.pendingPayment.toFixed(2)}_${data.orderSummary.currency}`,
       });
       setData((current) => ({
         ...current,
@@ -1278,8 +1288,6 @@ export function App() {
   const activeSmsTemplateValue = smsVariableValues[activeSmsTemplateVariable];
   const smsInfo = smsSegmentInfo(smsPreview);
   const smsRecipientCount = data.shipments.filter((shipment) => Boolean(shipment.recipient_phone)).length;
-  const orderCurrency = data.orders[0]?.currency ?? "TRY";
-  const reportTotalAmount = data.orders.reduce((sum, order) => sum + moneyValue(order.total_amount), 0);
   const balanceSummary = toBalanceView(data.balanceSummary);
   const commentSummary = toCommentModerationView(data.commentModeration);
   const unreadConversationCount = data.conversations.reduce((sum, conversation) => sum + conversation.unread_count, 0);
@@ -1343,12 +1351,9 @@ export function App() {
     : 0;
   const latestSettingsAudit = data.settingsAudit[0] ?? null;
   const latestIntegrationAudit = data.integrationAudit[0] ?? null;
-  const activeOrderCount = data.orders.filter((order) => !["cancelled", "returned", "delivered"].includes(order.status)).length;
-  const deliveredOrderCount = data.orders.filter((order) => order.status === "delivered").length;
   const deliveredShipmentCount = data.shipments.filter((shipment) => shipment.status === "delivered").length;
   const activeShipmentCount = data.shipments.filter((shipment) => shipment.status !== "delivered").length;
   const cronSkippedCount = Math.max(activeShipmentCount - trackingCronAttempts.length, 0);
-  const pendingConfirmationCount = data.orders.filter((order) => order.confirmation_status === null).length;
   const pttShipmentCount = data.shipments.filter((shipment) => shipment.provider.toLowerCase().includes("ptt")).length;
   const suratShipmentCount = data.shipments.filter((shipment) => {
     const provider = shipment.provider.toLocaleLowerCase("tr-TR");
@@ -1574,10 +1579,10 @@ export function App() {
         {activeFlow === "orders" && (
           <FlowPanel title="Siparişler" icon={<ShoppingCart size={18} />} testId="orders-flow">
             <div className="report-grid">
-              <Metric title="Toplam Sipariş" value={String(data.orders.length)} />
-              <Metric title="Aktif Sipariş" value={String(activeOrderCount)} />
-              <Metric title="Teyit Bekleyen" value={String(pendingConfirmationCount)} />
-              <Metric title="Ciro" value={formatMoney(reportTotalAmount, orderCurrency)} />
+              <Metric title="Toplam Sipariş" value={String(data.orderSummary.total_count)} />
+              <Metric title="Aktif Sipariş" value={String(data.orderSummary.active_count)} />
+              <Metric title="Teyit Bekleyen" value={String(data.orderSummary.pending_confirmation_count)} />
+              <Metric title="Ciro" value={formatMoney(data.orderSummary.total_revenue, data.orderSummary.currency)} />
             </div>
             <div className="detail-actions" data-testid="order-section-filters">
               <button
@@ -1594,7 +1599,7 @@ export function App() {
                 type="button"
                 onClick={() => void handleApplyOrderFilter("active")}
               >
-                Aktif {orderFilter === "all" || orderFilter === "active" ? activeOrderCount : "sonuç"}
+                Aktif {orderFilter === "all" || orderFilter === "active" ? data.orderSummary.active_count : "sonuç"}
               </button>
               <button
                 className={cx("secondary-action", orderFilter === "pending_confirmation" && "selected")}
@@ -1602,7 +1607,7 @@ export function App() {
                 type="button"
                 onClick={() => void handleApplyOrderFilter("pending_confirmation")}
               >
-                Teyit {orderFilter === "all" || orderFilter === "pending_confirmation" ? pendingConfirmationCount : "sonuç"}
+                Teyit {orderFilter === "all" || orderFilter === "pending_confirmation" ? data.orderSummary.pending_confirmation_count : "sonuç"}
               </button>
               <button
                 className={cx("secondary-action", orderFilter === "delivered" && "selected")}
@@ -1610,7 +1615,7 @@ export function App() {
                 type="button"
                 onClick={() => void handleApplyOrderFilter("delivered")}
               >
-                Teslim {orderFilter === "all" || orderFilter === "delivered" ? deliveredOrderCount : "sonuç"}
+                Teslim {orderFilter === "all" || orderFilter === "delivered" ? data.orderSummary.delivered_count : "sonuç"}
               </button>
             </div>
             <button className="primary-action" type="button" onClick={() => void handleCreateOrder("orders")}>
@@ -2337,26 +2342,26 @@ export function App() {
           <FlowPanel title="Bakiyeler" icon={<Wallet size={18} />} testId="balances-flow">
             <div className="report-grid">
               <Metric title="Görünür Ayar" value={String(activeSettings.length)} />
-              <Metric title="Sipariş Tutarı" value={formatMoney(reportTotalAmount, orderCurrency)} />
-              <Metric title="Para Birimi" value={orderCurrency} />
+              <Metric title="Sipariş Tutarı" value={formatMoney(data.orderSummary.total_revenue, data.orderSummary.currency)} />
+              <Metric title="Para Birimi" value={data.orderSummary.currency} />
             </div>
             <DetailPanel title="Bakiye Özeti" testId="balances-detail">
               <DataRows
                 rows={[
                   ["Görünür ayar", String(activeSettings.length), "admin settings"],
-                  ["Para birimi", orderCurrency, "orders API"],
+                  ["Para birimi", data.orderSummary.currency, "orders summary API"],
                   ["Son sipariş", selectedOrder?.order_number ?? "-", selectedOrder ? `${selectedOrder.total_amount} ${selectedOrder.currency}` : "-"],
-                  ["Teyit bekleyen", String(pendingConfirmationCount), "orders API"],
+                  ["Teyit bekleyen", String(data.orderSummary.pending_confirmation_count), "orders summary API"],
                 ]}
               />
             </DetailPanel>
             <DetailPanel title="Ödeme İsteği Kuyruğu" testId="balance-payment-detail">
               <DataRows
                 rows={[
-                  ["Toplam komisyon", formatMoney(balanceSummary.totalCommission, orderCurrency), "legacy bakiye"],
-                  ["Kesinti", formatMoney(balanceSummary.totalDeduction, orderCurrency), "iptal/iade"],
-                  ["Bekleyen ödeme", formatMoney(balanceSummary.pendingPayment, orderCurrency), `${balanceSummary.pendingRequestCount} talep`],
-                  ["Kullanılabilir bakiye", formatMoney(balanceSummary.availableBalance, orderCurrency), "ödeme isteği sonrası"],
+                  ["Toplam komisyon", formatMoney(balanceSummary.totalCommission, data.orderSummary.currency), "legacy bakiye"],
+                  ["Kesinti", formatMoney(balanceSummary.totalDeduction, data.orderSummary.currency), "iptal/iade"],
+                  ["Bekleyen ödeme", formatMoney(balanceSummary.pendingPayment, data.orderSummary.currency), `${balanceSummary.pendingRequestCount} talep`],
+                  ["Kullanılabilir bakiye", formatMoney(balanceSummary.availableBalance, data.orderSummary.currency), "ödeme isteği sonrası"],
                   ["Son ödeme isteği", selectedOrder?.order_number ?? "-", selectedOrder?.customer_full_name ?? "-"],
                   ["Son backend isteği", lastPaymentRequest ?? "-", "canlı ödeme provider kapalı"],
                 ]}

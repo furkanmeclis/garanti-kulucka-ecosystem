@@ -521,6 +521,21 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       return;
     }
 
+    if (url.pathname === "/api/orders/summary") {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          total_count: 5,
+          active_count: 3,
+          delivered_count: 2,
+          pending_confirmation_count: 4,
+          total_revenue: 888.88,
+          currency: "TRY",
+        }),
+      });
+      return;
+    }
+
     if (url.pathname === "/api/orders/ord_playwright/payment-request") {
       paymentRequestPayload = JSON.parse(route.request().postData() ?? "{}") as {
         amount?: string;
@@ -2105,24 +2120,25 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("orders-flow")).toContainText("ORD-PLAYWRIGHT");
     await expect(page.getByTestId("orders-flow")).toContainText("Toplam Sipariş");
     await expect(page.getByTestId("orders-flow")).toContainText("Aktif Sipariş");
+    await expect(page.getByTestId("orders-flow")).toContainText("888.88 TRY");
     await expect(page.getByTestId("order-section-filters")).toContainText("Hepsi 2");
-    await expect(page.getByTestId("order-section-filters")).toContainText("Aktif 1");
-    await expect(page.getByTestId("order-section-filters")).toContainText("Teyit 1");
-    await expect(page.getByTestId("order-section-filters")).toContainText("Teslim 1");
+    await expect(page.getByTestId("order-section-filters")).toContainText("Aktif 3");
+    await expect(page.getByTestId("order-section-filters")).toContainText("Teyit 4");
+    await expect(page.getByTestId("order-section-filters")).toContainText("Teslim 2");
     await expect(page.getByTestId("order-detail")).toContainText("Playwright Customer");
     await expect(page.getByTestId("order-detail")).toContainText("fixture order");
     await page.getByTestId("order-filter-active").click();
     await expect(page.getByTestId("orders-flow")).toContainText("ORD-PLAYWRIGHT");
     await expect(page.getByTestId("orders-flow")).not.toContainText("ORD-DELIVERED");
-    await expect(page.getByTestId("order-section-filters")).toContainText("Aktif 1");
+    await expect(page.getByTestId("order-section-filters")).toContainText("Aktif 3");
     await expect(page.getByTestId("order-section-filters")).toContainText("Hepsi sonuç");
     await page.getByTestId("order-filter-pending-confirmation").click();
     await expect(page.getByTestId("order-detail")).toContainText("teyit bekliyor");
-    await expect(page.getByTestId("order-section-filters")).toContainText("Teyit 1");
+    await expect(page.getByTestId("order-section-filters")).toContainText("Teyit 4");
     await page.getByTestId("order-filter-delivered").click();
     await expect(page.getByTestId("orders-flow")).toContainText("ORD-DELIVERED");
     await expect(page.getByTestId("orders-flow")).not.toContainText("ORD-PLAYWRIGHT");
-    await expect(page.getByTestId("order-section-filters")).toContainText("Teslim 1");
+    await expect(page.getByTestId("order-section-filters")).toContainText("Teslim 2");
     await expect(page.getByTestId("order-section-filters")).toContainText("Aktif sonuç");
     await page.getByTestId("order-filter-all").click();
     await expect(page.getByTestId("order-section-filters")).toContainText("Hepsi 2");
@@ -2382,6 +2398,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       "/api/comments/moderation-summary",
       "/api/balances/summary",
       "/api/reports/summary",
+      "/api/orders/summary",
       "/api/customers",
       "/api/conversations/cnv_playwright/messages",
       "/api/conversations/cnv_playwright/state",

@@ -360,6 +360,23 @@
         }
       }
     },
+    "/api/orders/summary": {
+      "get": {
+        "operationId": "getOrderSummary",
+        "responses": {
+          "200": {
+            "description": "Backend-owned order KPI summary",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderSummaryStats"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/orders/{order_public_id}/status": {
       "patch": {
         "operationId": "updateOrderStatus",
@@ -1866,6 +1883,25 @@
           "updated_at": {
             "type": "string"
           }
+        }
+      },
+      "OrderSummaryStats": {
+        "type": "object",
+        "required": [
+          "total_count",
+          "active_count",
+          "delivered_count",
+          "pending_confirmation_count",
+          "total_revenue",
+          "currency"
+        ],
+        "properties": {
+          "total_count": { "type": "integer", "minimum": 0 },
+          "active_count": { "type": "integer", "minimum": 0 },
+          "delivered_count": { "type": "integer", "minimum": 0 },
+          "pending_confirmation_count": { "type": "integer", "minimum": 0 },
+          "total_revenue": { "type": "number", "minimum": 0 },
+          "currency": { "type": "string" }
         }
       },
       "UpdateShipmentStatusRequest": {
