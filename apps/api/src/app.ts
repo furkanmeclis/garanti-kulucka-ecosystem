@@ -16,7 +16,11 @@ import { createWebphoneRoutes } from "./http/webphone-routes.js";
 import type { AppBindings } from "./http/types.js";
 import { noopRealtimePublisher, type RealtimePublisher } from "./realtime.js";
 import { createSecretEncryptor, type SecretEncryptor } from "./security/encryption.js";
-import type { WebhookQueuePublisher } from "./webhooks/queue-publisher.js";
+import {
+  noopProviderDeliveryQueuePublisher,
+  type ProviderDeliveryQueuePublisher,
+  type WebhookQueuePublisher,
+} from "./webhooks/queue-publisher.js";
 
 const logger = pino({ name: "api" });
 
@@ -25,6 +29,7 @@ export interface CreateAppOptions {
   db?: AppDatabase | null;
   encryptor?: SecretEncryptor;
   webhookQueuePublisher?: WebhookQueuePublisher;
+  providerDeliveryQueuePublisher?: ProviderDeliveryQueuePublisher;
   realtimePublisher?: RealtimePublisher;
 }
 
@@ -53,6 +58,7 @@ export function createApp(options: CreateAppOptions = {}) {
     context.set("auth", null);
     context.set("actorUserId", null);
     context.set("realtimePublisher", options.realtimePublisher ?? noopRealtimePublisher);
+    context.set("providerDeliveryQueuePublisher", options.providerDeliveryQueuePublisher ?? noopProviderDeliveryQueuePublisher);
     await next();
   });
 

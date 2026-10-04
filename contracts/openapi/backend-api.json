@@ -447,6 +447,33 @@
         }
       }
     },
+    "/api/sms/send": {
+      "post": {
+        "operationId": "sendSms",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendSmsRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Queued or prepared SMS provider delivery job",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SendSmsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/files/uploads": {
       "post": {
         "operationId": "createFileUpload",
@@ -1327,6 +1354,69 @@
           },
           "updated_at": {
             "type": "string"
+          }
+        }
+      },
+      "SendSmsRequest": {
+        "type": "object",
+        "required": ["recipient_phone", "message"],
+        "properties": {
+          "recipient_phone": {
+            "type": "string",
+            "minLength": 1
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000
+          },
+          "idempotency_key": {
+            "type": "string"
+          },
+          "shipment_public_id": {
+            "type": "string"
+          }
+        }
+      },
+      "SendSmsResponse": {
+        "type": "object",
+        "required": [
+          "provider",
+          "operation",
+          "request_id",
+          "job_id",
+          "queued",
+          "recipient_phone",
+          "message_preview",
+          "live_call_permitted"
+        ],
+        "properties": {
+          "provider": {
+            "type": "string",
+            "const": "netgsm"
+          },
+          "operation": {
+            "type": "string",
+            "const": "sms.send"
+          },
+          "request_id": {
+            "type": "string"
+          },
+          "job_id": {
+            "type": ["string", "null"]
+          },
+          "queued": {
+            "type": "boolean"
+          },
+          "recipient_phone": {
+            "type": "string"
+          },
+          "message_preview": {
+            "type": "string"
+          },
+          "live_call_permitted": {
+            "type": "boolean",
+            "const": false
           }
         }
       },

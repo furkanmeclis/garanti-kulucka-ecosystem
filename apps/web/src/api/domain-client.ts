@@ -80,6 +80,17 @@ export interface ShipmentSummary {
   updated_at: string;
 }
 
+export interface SmsSendResult {
+  provider: "netgsm";
+  operation: "sms.send";
+  request_id: string;
+  job_id: string | null;
+  queued: boolean;
+  recipient_phone: string;
+  message_preview: string;
+  live_call_permitted: boolean;
+}
+
 export function createDomainClient(http: BackendHttpClient) {
   return {
     listConversations: (params: { channel?: string; status?: string; limit?: number } = {}) => {
@@ -194,5 +205,15 @@ export function createDomainClient(http: BackendHttpClient) {
           body: input,
         },
       ),
+    sendSms: (input: {
+      recipient_phone: string;
+      message: string;
+      idempotency_key?: string;
+      shipment_public_id?: string;
+    }) =>
+      http.request<SmsSendResult>("/api/sms/send", {
+        method: "POST",
+        body: input,
+      }),
   };
 }

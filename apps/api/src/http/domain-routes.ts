@@ -1,5 +1,7 @@
+import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { z } from "zod";
+import { jobEnvelopeSchema, providerDeliveryJobPayloadSchema } from "@garanti-kulucka/shared";
 import type { AppBindings } from "./types.js";
 import { authenticate, requireDatabase } from "./middleware.js";
 import {
@@ -57,8 +59,23 @@ const updateShipmentStatusSchema = z.object({
   raw_payload: z.unknown().nullable().default(null),
 });
 
+const sendSmsSchema = z.object({
+  recipient_phone: z.string().min(1),
+  message: z.string().min(1).max(1000),
+  idempotency_key: z.string().min(1),
+  shipment_public_id: z.string().min(1),
+});
+
 function canReadCustomers(role: string | undefined) {
   return role === "admin" || role === "owner" || role === "calisan";
+}
+
+function canSendSms(role: string | undefined) {
+  return role === "admin" || role === "owner" || role === "calisan" || role === "kargo_operatoru";
+}
+
+function jobIdFromIdempotencyKey(key: string) {
+  return `job_${key.toLowerCase().replace(/[^a-z0-9_]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 96)}`;
 }
 
 export function createDomainRoutes() {
@@ -150,6 +167,62 @@ export function createDomainRoutes() {
     realtimePublisher.broadcast(messageCreatedEnvelope);
 
     return context.json(serializeMessage(message), 201);
+  });
+
+  routes.post("/sms/send", async (context) => {
+    if (!canSendSms(context.get("auth")?.role)) {
+      return context.json({ error: { code: "forbidden", message: "SMS sending is not allowed" } }, 403);
+    }
+
+    const payload = sendSmsSchema.safeParse(await context.req.json());
+    if (!payload.success) {
+      return context.json({ error: { code: "invalid_request", message: "Invalid SMS payload" } }, 400);
+    }
+
+    const occurredAt = new Date().toISOString();
+    const requestId = `req_${randomUUID().replaceAll("-", "")}`;
+    const providerPayload = providerDeliveryJobPayloadSchema.parse({
+      envelope: {
+        request_id: requestId,
+        provider: "netgsm",
+        operation: "sms.send",
+        direction: "outbound",
+        channel: "sms",
+        occurred_at: occurredAt,
+        payload: {
+          recipient_phone: payload.data.recipient_phone,
+          message: payload.data.message,
+          idempotency_key: payload.data.idempotency_key,
+          shipment_public_id: payload.data.shipment_public_id,
+        },
+        legacy_contract: {
+          source: "legacy-manual-sms",
+          legacy_event: "manual_sms_send",
+        },
+      },
+    });
+    const job = jobEnvelopeSchema.parse({
+      job_id: jobIdFromIdempotencyKey(payload.data.idempotency_key),
+      queue: "provider-delivery",
+      name: "netgsm.sms.send",
+      payload: providerPayload,
+      requested_at: occurredAt,
+    });
+    const jobId = await context.get("providerDeliveryQueuePublisher").publish(job);
+
+    return context.json(
+      {
+        provider: "netgsm",
+        operation: "sms.send",
+        request_id: requestId,
+        job_id: jobId,
+        queued: jobId !== null,
+        recipient_phone: payload.data.recipient_phone,
+        message_preview: payload.data.message.slice(0, 80),
+        live_call_permitted: false,
+      },
+      202,
+    );
   });
 
   routes.patch("/conversations/:conversation_public_id/state", async (context) => {

@@ -73,6 +73,12 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
   let conversationOrderCreated = false;
   let cancellationApproved = false;
   let cancellationPayload: { status?: string; notes?: string | null } | null = null;
+  let smsSendPayload: {
+    recipient_phone?: string;
+    message?: string;
+    shipment_public_id?: string;
+    idempotency_key?: string;
+  } | null = null;
   let suratShipmentStatus = "in_transit";
   let suratShipmentLastEvent = "Selected shipment at branch";
 
@@ -1198,6 +1204,30 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       return;
     }
 
+    if (url.pathname === "/api/sms/send") {
+      smsSendPayload = JSON.parse(route.request().postData() ?? "{}") as {
+        recipient_phone?: string;
+        message?: string;
+        shipment_public_id?: string;
+        idempotency_key?: string;
+      };
+      await route.fulfill({
+        status: 202,
+        contentType: "application/json",
+        body: JSON.stringify({
+          provider: "netgsm",
+          operation: "sms.send",
+          request_id: "req_sms_playwright",
+          job_id: "job_manual_sms_shp_playwright",
+          queued: true,
+          recipient_phone: smsSendPayload.recipient_phone,
+          message_preview: smsSendPayload.message?.slice(0, 80) ?? "",
+          live_call_permitted: false,
+        }),
+      });
+      return;
+    }
+
     if (url.pathname === "/api/files/uploads") {
       await route.fulfill({
         contentType: "application/json",
@@ -1517,6 +1547,16 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("sms-history-detail")).toContainText("SMS Gönderim Kayıtları");
     await expect(page.getByTestId("sms-history-detail")).toContainText("2 alıcı");
     await expect(page.getByTestId("sms-history-detail")).toContainText("5550000000");
+    await page.getByRole("button", { name: "SMS gönder" }).click();
+    await expect
+      .poll(() => smsSendPayload)
+      .toMatchObject({
+        recipient_phone: "5550000000",
+        shipment_public_id: "shp_playwright",
+        idempotency_key: "manual_sms_shp_playwright",
+        message: expect.stringContaining("TRK-PLAYWRIGHT"),
+      });
+    await expect(page.getByTestId("sms-history-detail")).toContainText("netgsm sms.send queued req_sms_playwright");
     await expect(page.getByTestId("sms-confirmation-detail")).toContainText("kapalı");
     await expect(page.getByTestId("sms-confirmation-detail")).toContainText("5550000000");
     await page.getByRole("button", { name: /netgsm teyit ayarını kaydet/i }).click();

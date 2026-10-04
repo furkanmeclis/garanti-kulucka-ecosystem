@@ -396,6 +396,41 @@ describe("web API client boundary", () => {
     expect(requests[2]?.url).toBe("http://localhost:3000/api/shipments?tracking_missing=true&limit=20");
   });
 
+  it("maps manual SMS sends to backend provider-delivery route", async () => {
+    const requests: Request[] = [];
+    const client = createApiClient("http://localhost:3000", {
+      fetchImpl: async (input, init) => {
+        requests.push(new Request(input, init));
+        return Response.json({
+          provider: "netgsm",
+          operation: "sms.send",
+          request_id: "req_sms",
+          job_id: "job_sms",
+          queued: true,
+          recipient_phone: "5550000000",
+          message_preview: "Merhaba",
+          live_call_permitted: false,
+        });
+      },
+    });
+
+    await client.domain.sendSms({
+      recipient_phone: "5550000000",
+      message: "Merhaba",
+      shipment_public_id: "shp_test",
+      idempotency_key: "manual_sms_shp_test",
+    });
+
+    expect(requests[0]?.method).toBe("POST");
+    expect(requests[0]?.url).toBe("http://localhost:3000/api/sms/send");
+    await expect(requests[0]?.json()).resolves.toEqual({
+      recipient_phone: "5550000000",
+      message: "Merhaba",
+      shipment_public_id: "shp_test",
+      idempotency_key: "manual_sms_shp_test",
+    });
+  });
+
   it("maps webphone config reads to backend routes", async () => {
     const requests: Request[] = [];
     const client = createApiClient("http://localhost:3000", {

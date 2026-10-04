@@ -3,6 +3,7 @@ import type { ApiConfig } from "../config.js";
 import type { AccessTokenClaims } from "../auth/tokens.js";
 import type { SecretEncryptor } from "../security/encryption.js";
 import type { RealtimePublisher } from "../realtime.js";
+import type { ProviderDeliveryQueuePublisher } from "../webhooks/queue-publisher.js";
 
 export interface AppBindings {
   Variables: {
@@ -12,5 +13,6 @@ export interface AppBindings {
     auth: AccessTokenClaims | null;
     actorUserId: number | null;
     realtimePublisher: RealtimePublisher;
+    providerDeliveryQueuePublisher: ProviderDeliveryQueuePublisher;
   };
 }

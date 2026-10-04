@@ -9,7 +9,16 @@ export interface WebhookQueuePublisher {
   close?: () => Promise<void>;
 }
 
+export interface ProviderDeliveryQueuePublisher {
+  publish: (job: JobEnvelope) => Promise<string | null>;
+  close?: () => Promise<void>;
+}
+
 export const noopWebhookQueuePublisher: WebhookQueuePublisher = {
+  publish: async () => null,
+};
+
+export const noopProviderDeliveryQueuePublisher: ProviderDeliveryQueuePublisher = {
   publish: async () => null,
 };
 
@@ -21,6 +30,21 @@ export function createWebhookQueuePublisher(
       const job = jobEnvelopeSchema.parse(input);
       if (job.queue !== "provider-webhooks") {
         throw new Error(`Webhook publisher cannot publish queue: ${job.queue}`);
+      }
+
+      return addJob(job, { jobId: job.job_id });
+    },
+  };
+}
+
+export function createProviderDeliveryQueuePublisher(
+  addJob: (job: JobEnvelope, options?: JobsOptions) => Promise<string | null>,
+): ProviderDeliveryQueuePublisher {
+  return {
+    publish: async (input) => {
+      const job = jobEnvelopeSchema.parse(input);
+      if (job.queue !== "provider-delivery") {
+        throw new Error(`Provider delivery publisher cannot publish queue: ${job.queue}`);
       }
 
       return addJob(job, { jobId: job.job_id });
@@ -45,6 +69,36 @@ export function createBullMqWebhookQueuePublisher(redisUrl: string): WebhookQueu
     },
   });
   const publisher = createWebhookQueuePublisher(async (job, options) => {
+    const queued = await queue.add(job.name, job, options);
+    return queued.id ?? job.job_id;
+  });
+
+  return {
+    ...publisher,
+    close: async () => {
+      await queue.close();
+      connection.disconnect();
+    },
+  };
+}
+
+export function createBullMqProviderDeliveryQueuePublisher(redisUrl: string): ProviderDeliveryQueuePublisher {
+  const connection = new Redis(redisUrl, {
+    maxRetriesPerRequest: null,
+  });
+  const queue = new Queue<JobEnvelope>("provider-delivery", {
+    connection,
+    defaultJobOptions: {
+      attempts: 5,
+      backoff: {
+        type: "exponential",
+        delay: 2_000,
+      },
+      removeOnComplete: 500,
+      removeOnFail: 1_000,
+    },
+  });
+  const publisher = createProviderDeliveryQueuePublisher(async (job, options) => {
     const queued = await queue.add(job.name, job, options);
     return queued.id ?? job.job_id;
   });

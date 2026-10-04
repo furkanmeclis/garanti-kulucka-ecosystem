@@ -6,7 +6,7 @@ import { createApp } from "../../apps/api/src/app.js";
 import type { ApiConfig } from "../../apps/api/src/config.js";
 import { signAccessToken } from "../../apps/api/src/auth/tokens.js";
 import type { SecretEncryptor } from "../../apps/api/src/security/encryption.js";
-import type { RealtimeEnvelope, RealtimeRoom } from "../../packages/shared/src/index.js";
+import type { JobEnvelope, RealtimeEnvelope, RealtimeRoom } from "../../packages/shared/src/index.js";
 
 const date = new Date("2026-01-01T00:00:00.000Z");
 
@@ -543,7 +543,16 @@ async function startFixtureApi() {
     },
     config,
   );
+  const viewerToken = await signAccessToken(
+    {
+      user_public_id: user.public_id,
+      session_public_id: session.public_id,
+      role: "viewer",
+    },
+    config,
+  );
   const publishedRealtime: Array<{ room: RealtimeRoom; envelope: RealtimeEnvelope }> = [];
+  const providerDeliveryJobs: JobEnvelope[] = [];
   const server = serve({
     fetch: createApp({
       config,
@@ -556,6 +565,12 @@ async function startFixtureApi() {
         publishToConversation: (conversationPublicId, envelope) =>
           publishedRealtime.push({ room: `conversation:${conversationPublicId}` as RealtimeRoom, envelope }),
         broadcast: (envelope) => publishedRealtime.push({ room: "broadcast", envelope }),
+      },
+      providerDeliveryQueuePublisher: {
+        publish: async (job) => {
+          providerDeliveryJobs.push(job);
+          return job.job_id;
+        },
       },
     }).fetch,
     port: 0,
@@ -576,14 +591,24 @@ async function startFixtureApi() {
       "x-request-id": "playwright_domain_flows_cargo",
     },
   });
+  const viewerClient = await request.newContext({
+    baseURL,
+    extraHTTPHeaders: {
+      authorization: `Bearer ${viewerToken}`,
+      "x-request-id": "playwright_domain_flows_viewer",
+    },
+  });
 
   return {
     client,
     cargoClient,
+    viewerClient,
     publishedRealtime,
+    providerDeliveryJobs,
     async close() {
       await client.dispose();
       await cargoClient.dispose();
+      await viewerClient.dispose();
       await new Promise<void>((resolve, reject) => {
         server.close((error) => {
           if (error) reject(error);
@@ -771,6 +796,51 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
       customer_full_name: "Playwright Customer",
     });
     expect(Date.parse(cancelledOrder.updated_at)).toBeGreaterThan(date.getTime());
+
+    const smsResponse = await api.client.post("/api/sms/send", {
+      data: {
+        recipient_phone: "5550000000",
+        message: "Playwright SMS kaniti",
+        shipment_public_id: "shp_playwright",
+        idempotency_key: "manual_sms_shp_playwright",
+      },
+    });
+    expect(smsResponse.status()).toBe(202);
+    await expect(smsResponse.json()).resolves.toMatchObject({
+      provider: "netgsm",
+      operation: "sms.send",
+      job_id: "job_manual_sms_shp_playwright",
+      queued: true,
+      recipient_phone: "5550000000",
+      live_call_permitted: false,
+    });
+    expect(api.providerDeliveryJobs.at(-1)).toMatchObject({
+      queue: "provider-delivery",
+      name: "netgsm.sms.send",
+      payload: {
+        envelope: {
+          provider: "netgsm",
+          operation: "sms.send",
+          direction: "outbound",
+          channel: "sms",
+          payload: {
+            recipient_phone: "5550000000",
+            message: "Playwright SMS kaniti",
+            shipment_public_id: "shp_playwright",
+            idempotency_key: "manual_sms_shp_playwright",
+          },
+        },
+      },
+    });
+    const forbiddenSmsResponse = await api.viewerClient.post("/api/sms/send", {
+      data: {
+        recipient_phone: "5550000000",
+        message: "Yetkisiz SMS",
+        shipment_public_id: "shp_playwright",
+        idempotency_key: "manual_sms_forbidden",
+      },
+    });
+    expect(forbiddenSmsResponse.status()).toBe(403);
 
     expect(orderResponse.status()).toBe(200);
     expect((await orderResponse.json()).data).toEqual(

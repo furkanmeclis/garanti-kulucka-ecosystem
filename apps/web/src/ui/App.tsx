@@ -426,6 +426,7 @@ export function App() {
   const [status, setStatus] = useState("Hazır");
   const [uploadedFile, setUploadedFile] = useState<FileMetadata | null>(null);
   const [downloadInstruction, setDownloadInstruction] = useState<DownloadInstruction | null>(null);
+  const [lastSmsSend, setLastSmsSend] = useState<string | null>(null);
   const [presenceUpdating, setPresenceUpdating] = useState(false);
   const [integrationSnapshot, setIntegrationSnapshot] = useState<IntegrationAccountSnapshot | null>(null);
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
@@ -837,6 +838,21 @@ export function App() {
     }));
     setSelectedOrderId(updated.public_id);
     setStatus("İptal durumu backend API üzerinden güncellendi");
+  }
+
+  async function handleSendSms() {
+    const shipment = selectedShipment;
+    if (!shipment?.recipient_phone) return;
+
+    setStatus("SMS backend provider-delivery kuyruğuna gönderiliyor");
+    const result = await domain.sendSms({
+      recipient_phone: shipment.recipient_phone,
+      message: smsPreview,
+      shipment_public_id: shipment.public_id,
+      idempotency_key: `manual_sms_${shipment.public_id}`,
+    });
+    setLastSmsSend(`${result.provider} ${result.operation} ${result.queued ? "queued" : "dry-run"} ${result.request_id}`);
+    setStatus("SMS backend provider-delivery sınırında hazırlandı");
   }
 
   async function handleUpdateShipment() {
@@ -2121,6 +2137,9 @@ export function App() {
                     {variable}
                   </button>
                 ))}
+                <button className="primary-action" type="button" onClick={() => void handleSendSms()}>
+                  SMS gönder
+                </button>
               </div>
             </DetailPanel>
             <DetailPanel title="SMS Gönderim Kayıtları" testId="sms-history-detail">
@@ -2130,6 +2149,7 @@ export function App() {
                   ["Seçili alıcı", selectedShipment?.recipient_phone ?? "-", selectedShipment?.recipient_name ?? "-"],
                   ["Son taslak", smsPreview, `${smsInfo.segmentCount} SMS`],
                   ["Şablon durumu", "aktif", "manuel gönderim"],
+                  ["Son gönderim", lastSmsSend ?? "-", "provider-delivery API"],
                 ]}
               />
             </DetailPanel>

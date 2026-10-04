@@ -3,13 +3,19 @@ import { createApp } from "./app.js";
 import { loadConfig } from "./config.js";
 import { createApiDatabase } from "./database.js";
 import { attachRealtime, noopRealtimePublisher, type RealtimePublisher } from "./realtime.js";
-import { createBullMqWebhookQueuePublisher } from "./webhooks/queue-publisher.js";
+import {
+  createBullMqProviderDeliveryQueuePublisher,
+  createBullMqWebhookQueuePublisher,
+} from "./webhooks/queue-publisher.js";
 
 const port = Number.parseInt(process.env.PORT ?? "3000", 10);
 const config = loadConfig();
 const database = createApiDatabase(config);
 const webhookQueuePublisher = config.redisUrl
   ? createBullMqWebhookQueuePublisher(config.redisUrl)
+  : undefined;
+const providerDeliveryQueuePublisher = config.redisUrl
+  ? createBullMqProviderDeliveryQueuePublisher(config.redisUrl)
   : undefined;
 let activeRealtimePublisher: RealtimePublisher = noopRealtimePublisher;
 const realtimePublisher: RealtimePublisher = {
@@ -24,6 +30,7 @@ const app = createApp({
   db: database.db,
   realtimePublisher,
   ...(webhookQueuePublisher ? { webhookQueuePublisher } : {}),
+  ...(providerDeliveryQueuePublisher ? { providerDeliveryQueuePublisher } : {}),
 });
 
 const server = serve({
@@ -38,6 +45,7 @@ async function shutdown(signal: NodeJS.Signals) {
   console.log(`Received ${signal}, closing API server`);
   await realtime.close();
   await webhookQueuePublisher?.close?.();
+  await providerDeliveryQueuePublisher?.close?.();
   await database.destroy();
   server.close((error) => {
     if (error) {
