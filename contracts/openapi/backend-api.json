@@ -345,6 +345,27 @@
         "operationId": "listShipments",
         "parameters": [
           {
+            "name": "provider",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tracking_missing",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
             "$ref": "#/components/parameters/Limit"
           }
         ],

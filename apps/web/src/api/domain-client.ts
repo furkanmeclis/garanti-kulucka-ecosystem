@@ -155,8 +155,16 @@ export function createDomainClient(http: BackendHttpClient) {
         method: "POST",
         body: input,
       }),
-    listShipments: (limit = 50) =>
-      http.request<{ data: ShipmentSummary[] }>(`/api/shipments?limit=${limit}`),
+    listShipments: (params: { provider?: string; status?: string; tracking_missing?: boolean; limit?: number } | number = {}) => {
+      const normalized = typeof params === "number" ? { limit: params } : params;
+      const search = new URLSearchParams();
+      if (normalized.provider) search.set("provider", normalized.provider);
+      if (normalized.status) search.set("status", normalized.status);
+      if (normalized.tracking_missing !== undefined) search.set("tracking_missing", String(normalized.tracking_missing));
+      if (normalized.limit !== undefined) search.set("limit", String(normalized.limit));
+      const query = search.toString();
+      return http.request<{ data: ShipmentSummary[] }>(`/api/shipments${query ? `?${query}` : ""}`);
+    },
     updateShipmentStatus: (
       shipmentPublicId: string,
       input: {

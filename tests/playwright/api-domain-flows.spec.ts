@@ -281,6 +281,7 @@ const settings = [
 
 class FixtureQuery {
   private readonly whereValues = new Map<string, unknown>();
+  private readonly whereOperators = new Map<string, string>();
 
   constructor(private readonly table: string) {}
 
@@ -315,6 +316,7 @@ class FixtureQuery {
   where(columnOrExpression: string | ((expression: unknown) => unknown), operator?: string, value?: unknown) {
     if (typeof columnOrExpression === "string" && operator !== undefined) {
       this.whereValues.set(columnOrExpression, value);
+      this.whereOperators.set(columnOrExpression, operator);
     }
     return this;
   }
@@ -346,7 +348,27 @@ class FixtureQuery {
       case "products":
         return products;
       case "shipments":
-        return shipments;
+        return shipments.filter((shipment) => {
+          const providerFilter = this.whereValues.get("shipments.provider");
+          const statusFilter = this.whereValues.get("shipments.status");
+          const trackingNumberFilter = this.whereValues.get("shipments.tracking_number");
+          const barcodeNumberFilter = this.whereValues.get("shipments.barcode_number");
+          const providerMatches =
+            providerFilter === undefined ||
+            (Array.isArray(providerFilter)
+              ? this.whereOperators.get("shipments.provider") === "not in"
+                ? !providerFilter.includes(shipment.provider)
+                : providerFilter.includes(shipment.provider)
+              : shipment.provider === providerFilter);
+          const statusMatches = statusFilter === undefined || shipment.status === statusFilter;
+          const trackingMatches =
+            trackingNumberFilter === undefined ||
+            (trackingNumberFilter === null && shipment.tracking_number === null);
+          const barcodeMatches =
+            barcodeNumberFilter === undefined ||
+            (barcodeNumberFilter === null && shipment.barcode_number === null);
+          return providerMatches && statusMatches && trackingMatches && barcodeMatches;
+        });
       case "files":
         return files.filter((file) => file.public_id === "fil_orphan");
       case "settings":
@@ -629,6 +651,25 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
     expect(await pendingConfirmationOrdersResponse.json()).toMatchObject({
       data: [{ public_id: "ord_playwright", confirmation_status: null }],
     });
+
+    const [pttShipmentsResponse, otherShipmentsResponse, inTransitShipmentsResponse, missingTrackingShipmentsResponse] = await Promise.all([
+      api.client.get("/api/shipments?provider=ptt&limit=10"),
+      api.client.get("/api/shipments?provider=other&limit=10"),
+      api.client.get("/api/shipments?status=in_transit&limit=10"),
+      api.client.get("/api/shipments?tracking_missing=true&limit=10"),
+    ]);
+    expect(pttShipmentsResponse.status()).toBe(200);
+    expect(await pttShipmentsResponse.json()).toMatchObject({
+      data: [{ public_id: "shp_playwright", provider: "ptt" }],
+    });
+    expect(otherShipmentsResponse.status()).toBe(200);
+    expect(await otherShipmentsResponse.json()).toMatchObject({ data: [] });
+    expect(inTransitShipmentsResponse.status()).toBe(200);
+    expect(await inTransitShipmentsResponse.json()).toMatchObject({
+      data: [{ public_id: "shp_playwright", status: "in_transit" }],
+    });
+    expect(missingTrackingShipmentsResponse.status()).toBe(200);
+    expect(await missingTrackingShipmentsResponse.json()).toMatchObject({ data: [] });
 
     const forbiddenCustomerResponse = await api.cargoClient.get("/api/customers?limit=10");
     expect(forbiddenCustomerResponse.status()).toBe(403);

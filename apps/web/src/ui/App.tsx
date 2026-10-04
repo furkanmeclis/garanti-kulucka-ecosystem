@@ -193,6 +193,29 @@ function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
 
+function shipmentFilterParams(filter: string): { provider?: string; status?: string; tracking_missing?: boolean; limit: number } {
+  const params: { provider?: string; status?: string; tracking_missing?: boolean; limit: number } = { limit: 20 };
+  if (filter === "ptt") {
+    params.provider = "ptt";
+  }
+  if (filter === "surat") {
+    params.provider = "surat";
+  }
+  if (filter === "other") {
+    params.provider = "other";
+  }
+  if (filter === "in_transit") {
+    params.status = "in_transit";
+  }
+  if (filter === "delivered") {
+    params.status = "delivered";
+  }
+  if (filter === "tracking_missing") {
+    params.tracking_missing = true;
+  }
+  return params;
+}
+
 function readStoredToken() {
   return window.localStorage.getItem(tokenStorageKey);
 }
@@ -411,10 +434,12 @@ export function App() {
   const [conversationChannelFilter, setConversationChannelFilter] = useState("all");
   const [conversationStatusFilter, setConversationStatusFilter] = useState("all");
   const [orderFilter, setOrderFilter] = useState("all");
+  const [shipmentFilter, setShipmentFilter] = useState("all");
   const [realtimeClient, setRealtimeClient] = useState<RealtimeClient | null>(null);
   const selectedConversationIdRef = useRef<string | null>(null);
   const conversationFilterRequestSeqRef = useRef(0);
   const orderFilterRequestSeqRef = useRef(0);
+  const shipmentFilterRequestSeqRef = useRef(0);
 
   const http = useMemo(
     () =>
@@ -754,6 +779,21 @@ export function App() {
     setStatus("Sipariş filtreleri backend API üzerinden uygulandı");
   }
 
+  async function handleApplyShipmentFilter(nextFilter: string) {
+    const requestSeq = shipmentFilterRequestSeqRef.current + 1;
+    shipmentFilterRequestSeqRef.current = requestSeq;
+    setShipmentFilter(nextFilter);
+    setStatus("Kargo filtreleri backend API üzerinden uygulanıyor");
+    const shipments = await domain.listShipments(shipmentFilterParams(nextFilter));
+    if (shipmentFilterRequestSeqRef.current !== requestSeq) return;
+    setData((current) => ({
+      ...current,
+      shipments: shipments.data,
+    }));
+    setSelectedShipmentId(shipments.data[0]?.public_id ?? null);
+    setStatus("Kargo filtreleri backend API üzerinden uygulandı");
+  }
+
   async function handleSelectConversation(conversationPublicId: string) {
     selectedConversationIdRef.current = conversationPublicId;
     setSelectedConversationId(conversationPublicId);
@@ -792,6 +832,16 @@ export function App() {
       last_event_text: "Frontend teslim kaniti",
       raw_payload: null,
     });
+    if (shipmentFilter !== "all") {
+      const shipments = await domain.listShipments(shipmentFilterParams(shipmentFilter));
+      setData((current) => ({
+        ...current,
+        shipments: shipments.data,
+      }));
+      setSelectedShipmentId(shipments.data[0]?.public_id ?? null);
+      setStatus("Kargo durumu backend API üzerinden güncellendi");
+      return;
+    }
     setData((current) => ({
       ...current,
       shipments: current.shipments.map((item) => (item.public_id === updated.public_id ? updated : item)),
@@ -1351,17 +1401,61 @@ export function App() {
               <Metric title="Teslim Edilen" value={String(deliveredShipmentCount)} />
             </div>
             <div className="detail-actions" data-testid="shipment-section-tabs">
-              <button className="secondary-action selected" type="button">
-                Tüm kargolar {data.shipments.length}
+              <button
+                className={cx("secondary-action", shipmentFilter === "all" && "selected")}
+                data-testid="shipment-filter-all"
+                type="button"
+                onClick={() => void handleApplyShipmentFilter("all")}
+              >
+                Tüm kargolar {shipmentFilter === "all" ? data.shipments.length : "sonuç"}
               </button>
-              <button className="secondary-action" type="button">
-                PTT {pttShipmentCount}
+              <button
+                className={cx("secondary-action", shipmentFilter === "ptt" && "selected")}
+                data-testid="shipment-filter-ptt"
+                type="button"
+                onClick={() => void handleApplyShipmentFilter("ptt")}
+              >
+                PTT {shipmentFilter === "all" || shipmentFilter === "ptt" ? pttShipmentCount : "sonuç"}
               </button>
-              <button className="secondary-action" type="button">
-                Sürat {suratShipmentCount}
+              <button
+                className={cx("secondary-action", shipmentFilter === "surat" && "selected")}
+                data-testid="shipment-filter-surat"
+                type="button"
+                onClick={() => void handleApplyShipmentFilter("surat")}
+              >
+                Sürat {shipmentFilter === "all" || shipmentFilter === "surat" ? suratShipmentCount : "sonuç"}
               </button>
-              <button className="secondary-action" type="button">
-                Diğer {otherShipmentCount}
+              <button
+                className={cx("secondary-action", shipmentFilter === "other" && "selected")}
+                data-testid="shipment-filter-other"
+                type="button"
+                onClick={() => void handleApplyShipmentFilter("other")}
+              >
+                Diğer {shipmentFilter === "all" || shipmentFilter === "other" ? otherShipmentCount : "sonuç"}
+              </button>
+              <button
+                className={cx("secondary-action", shipmentFilter === "in_transit" && "selected")}
+                data-testid="shipment-filter-in-transit"
+                type="button"
+                onClick={() => void handleApplyShipmentFilter("in_transit")}
+              >
+                Yoldaki {shipmentFilter === "all" || shipmentFilter === "in_transit" ? activeShipmentCount : "sonuç"}
+              </button>
+              <button
+                className={cx("secondary-action", shipmentFilter === "delivered" && "selected")}
+                data-testid="shipment-filter-delivered"
+                type="button"
+                onClick={() => void handleApplyShipmentFilter("delivered")}
+              >
+                Teslim {shipmentFilter === "all" || shipmentFilter === "delivered" ? deliveredShipmentCount : "sonuç"}
+              </button>
+              <button
+                className={cx("secondary-action", shipmentFilter === "tracking_missing" && "selected")}
+                data-testid="shipment-filter-tracking-missing"
+                type="button"
+                onClick={() => void handleApplyShipmentFilter("tracking_missing")}
+              >
+                Takipsiz {shipmentFilter === "all" || shipmentFilter === "tracking_missing" ? trackingMissingCount : "sonuç"}
               </button>
             </div>
             <button className="primary-action" type="button" onClick={handleUpdateShipment}>

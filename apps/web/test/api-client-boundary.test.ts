@@ -344,6 +344,24 @@ describe("web API client boundary", () => {
     expect(requests[1]?.url).toBe("http://localhost:3000/api/orders?confirmation_status=pending&limit=20");
   });
 
+  it("maps domain shipment filters to backend routes", async () => {
+    const requests: Request[] = [];
+    const client = createApiClient("http://localhost:3000", {
+      fetchImpl: async (input, init) => {
+        requests.push(new Request(input, init));
+        return Response.json({ data: [] });
+      },
+    });
+
+    await client.domain.listShipments({ provider: "surat", limit: 20 });
+    await client.domain.listShipments({ status: "delivered", limit: 20 });
+    await client.domain.listShipments({ tracking_missing: true, limit: 20 });
+
+    expect(requests[0]?.url).toBe("http://localhost:3000/api/shipments?provider=surat&limit=20");
+    expect(requests[1]?.url).toBe("http://localhost:3000/api/shipments?status=delivered&limit=20");
+    expect(requests[2]?.url).toBe("http://localhost:3000/api/shipments?tracking_missing=true&limit=20");
+  });
+
   it("maps webphone config reads to backend routes", async () => {
     const requests: Request[] = [];
     const client = createApiClient("http://localhost:3000", {

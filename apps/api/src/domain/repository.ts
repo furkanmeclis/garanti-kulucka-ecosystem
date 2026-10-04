@@ -59,6 +59,15 @@ export interface ListOrdersFilter {
   limit: number;
 }
 
+export interface ListShipmentsFilter {
+  provider?: string;
+  providers?: string[];
+  excludeProviders?: string[];
+  status?: string;
+  trackingMissing?: boolean;
+  limit: number;
+}
+
 export interface CreateOrderInput {
   customerPublicId: string | null;
   conversationPublicId: string | null;
@@ -325,15 +334,28 @@ export class DomainRepository {
     });
   }
 
-  async listShipments(limit: number): Promise<ShipmentRecord[]> {
+  async listShipments(filter: ListShipmentsFilter): Promise<ShipmentRecord[]> {
     return this.db
       .selectFrom("shipments")
       .leftJoin("orders", "orders.id", "shipments.order_id")
       .leftJoin("customers", "customers.id", "shipments.customer_id")
       .selectAll("shipments")
       .select(["orders.order_number as order_number", "customers.full_name as customer_full_name"])
+      .$if(Boolean(filter.providers?.length), (builder) =>
+        builder.where("shipments.provider", "in", filter.providers as string[]),
+      )
+      .$if(Boolean(filter.excludeProviders?.length), (builder) =>
+        builder.where("shipments.provider", "not in", filter.excludeProviders as string[]),
+      )
+      .$if(Boolean(filter.provider), (builder) => builder.where("shipments.provider", "=", filter.provider as string))
+      .$if(Boolean(filter.status), (builder) => builder.where("shipments.status", "=", filter.status as string))
+      .$if(filter.trackingMissing === true, (builder) =>
+        builder
+          .where("shipments.tracking_number", "is", null)
+          .where("shipments.barcode_number", "is", null),
+      )
       .orderBy("shipments.created_at", "desc")
-      .limit(limit)
+      .limit(filter.limit)
       .execute();
   }
 

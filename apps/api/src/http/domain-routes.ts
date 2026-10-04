@@ -4,6 +4,7 @@ import type { AppBindings } from "./types.js";
 import { authenticate, requireDatabase } from "./middleware.js";
 import {
   DomainRepository,
+  type ListShipmentsFilter,
   serializeConversation,
   serializeCustomer,
   serializeMessage,
@@ -233,7 +234,23 @@ export function createDomainRoutes() {
       return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
     }
 
-    const shipments = await new DomainRepository(db).listShipments(limitSchema.parse(context.req.query("limit")));
+    const provider = context.req.query("provider");
+    const shipmentFilter: ListShipmentsFilter = { limit: limitSchema.parse(context.req.query("limit")) };
+    if (provider === "surat") {
+      shipmentFilter.providers = ["surat", "Sürat"];
+    } else if (provider === "other") {
+      shipmentFilter.excludeProviders = ["ptt", "surat", "Sürat"];
+    } else if (provider) {
+      shipmentFilter.provider = provider;
+    }
+    const shipmentStatus = context.req.query("status");
+    if (shipmentStatus) {
+      shipmentFilter.status = shipmentStatus;
+    }
+    if (context.req.query("tracking_missing") === "true") {
+      shipmentFilter.trackingMissing = true;
+    }
+    const shipments = await new DomainRepository(db).listShipments(shipmentFilter);
     return context.json({ data: shipments.map(serializeShipment) });
   });
 

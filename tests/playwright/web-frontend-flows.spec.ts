@@ -56,6 +56,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
   const allRequestUrls: string[] = [];
   const conversationQueryUrls: string[] = [];
   const orderQueryUrls: string[] = [];
+  const shipmentQueryUrls: string[] = [];
   let currentUser = loginUser();
   let savedIntegrationToken = false;
   let savedIntegrationSetting = false;
@@ -69,6 +70,8 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
   let conversationHumanAgent = false;
   let conversationAssignedUserEmail: string | null = null;
   let conversationOrderCreated = false;
+  let suratShipmentStatus = "in_transit";
+  let suratShipmentLastEvent = "Selected shipment at branch";
 
   await page.addInitScript(`
     (() => {
@@ -450,6 +453,8 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     }
 
     if (url.pathname === "/api/shipments/shp_surat_playwright/status") {
+      suratShipmentStatus = "delivered";
+      suratShipmentLastEvent = "Selected shipment delivered";
       await route.fulfill({
         contentType: "application/json",
         body: JSON.stringify({
@@ -457,12 +462,12 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
           provider: "Sürat",
           tracking_number: "TRK-SURAT-PLAYWRIGHT",
           barcode_number: "BAR-SURAT-PLAYWRIGHT",
-          status: "delivered",
+          status: suratShipmentStatus,
           recipient_name: "Surat Playwright Customer",
           recipient_phone: "5551111111",
           recipient_city: "Ankara",
           recipient_district: "Cankaya",
-          last_event_text: "Selected shipment delivered",
+          last_event_text: suratShipmentLastEvent,
           order_number: "ORD-SURAT-PLAYWRIGHT",
           customer_full_name: "Surat Playwright Customer",
           updated_at: "2026-01-01T00:02:00.000Z",
@@ -472,41 +477,59 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     }
 
     if (url.pathname === "/api/shipments") {
+      shipmentQueryUrls.push(`${url.pathname}${url.search}`);
+      const shipments = [
+        {
+          public_id: "shp_playwright",
+          provider: "ptt",
+          tracking_number: "TRK-PLAYWRIGHT",
+          barcode_number: "BAR-PLAYWRIGHT",
+          status: "in_transit",
+          recipient_name: "Playwright Customer",
+          recipient_phone: "5550000000",
+          recipient_city: "Istanbul",
+          recipient_district: "Kadikoy",
+          last_event_text: "Accepted at branch",
+          order_number: "ORD-PLAYWRIGHT",
+          customer_full_name: "Playwright Customer",
+          updated_at: "2026-01-01T00:00:00.000Z",
+        },
+        {
+          public_id: "shp_surat_playwright",
+          provider: "Sürat",
+          tracking_number: "TRK-SURAT-PLAYWRIGHT",
+          barcode_number: "BAR-SURAT-PLAYWRIGHT",
+          status: suratShipmentStatus,
+          recipient_name: "Surat Playwright Customer",
+          recipient_phone: "5551111111",
+          recipient_city: "Ankara",
+          recipient_district: "Cankaya",
+          last_event_text: suratShipmentLastEvent,
+          order_number: "ORD-SURAT-PLAYWRIGHT",
+          customer_full_name: "Surat Playwright Customer",
+          updated_at: "2026-01-01T00:01:00.000Z",
+        },
+      ];
+      const requestedProvider = url.searchParams.get("provider");
+      const requestedStatus = url.searchParams.get("status");
+      const trackingMissing = url.searchParams.get("tracking_missing") === "true";
+      const filteredShipments = shipments.filter((shipment) => {
+        const normalizedProvider = shipment.provider.toLocaleLowerCase("tr-TR");
+        const providerMatches =
+          !requestedProvider ||
+          (requestedProvider === "surat"
+            ? normalizedProvider.includes("sürat") || normalizedProvider.includes("surat")
+            : requestedProvider === "other"
+              ? !normalizedProvider.includes("ptt") && !normalizedProvider.includes("sürat") && !normalizedProvider.includes("surat")
+              : normalizedProvider.includes(requestedProvider));
+        const statusMatches = !requestedStatus || shipment.status === requestedStatus;
+        const trackingMatches = !trackingMissing || (!shipment.tracking_number && !shipment.barcode_number);
+        return providerMatches && statusMatches && trackingMatches;
+      });
       await route.fulfill({
         contentType: "application/json",
         body: JSON.stringify({
-          data: [
-            {
-              public_id: "shp_playwright",
-              provider: "ptt",
-              tracking_number: "TRK-PLAYWRIGHT",
-              barcode_number: "BAR-PLAYWRIGHT",
-              status: "in_transit",
-              recipient_name: "Playwright Customer",
-              recipient_phone: "5550000000",
-              recipient_city: "Istanbul",
-              recipient_district: "Kadikoy",
-              last_event_text: "Accepted at branch",
-              order_number: "ORD-PLAYWRIGHT",
-              customer_full_name: "Playwright Customer",
-              updated_at: "2026-01-01T00:00:00.000Z",
-            },
-            {
-              public_id: "shp_surat_playwright",
-              provider: "Sürat",
-              tracking_number: "TRK-SURAT-PLAYWRIGHT",
-              barcode_number: "BAR-SURAT-PLAYWRIGHT",
-              status: "in_transit",
-              recipient_name: "Surat Playwright Customer",
-              recipient_phone: "5551111111",
-              recipient_city: "Ankara",
-              recipient_district: "Cankaya",
-              last_event_text: "Selected shipment at branch",
-              order_number: "ORD-SURAT-PLAYWRIGHT",
-              customer_full_name: "Surat Playwright Customer",
-              updated_at: "2026-01-01T00:01:00.000Z",
-            },
-          ],
+          data: filteredShipments,
         }),
       });
       return;
@@ -1566,6 +1589,21 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("shipment-filter-summary")).toContainText("PTT Almayan");
     await expect(page.getByTestId("shipment-filter-summary")).toContainText("Sürat Almayan");
     await expect(page.getByTestId("shipment-filter-summary")).toContainText("Takip No Yok");
+    await page.getByTestId("shipment-filter-ptt").click();
+    await expect(page.getByTestId("shipments-flow")).toContainText("TRK-PLAYWRIGHT");
+    await expect(page.getByTestId("shipments-flow")).not.toContainText("TRK-SURAT-PLAYWRIGHT");
+    await expect(page.getByTestId("shipment-section-tabs")).toContainText("PTT 1");
+    await expect(page.getByTestId("shipment-section-tabs")).toContainText("Sürat sonuç");
+    await page.getByTestId("shipment-filter-surat").click();
+    await expect(page.getByTestId("shipments-flow")).toContainText("TRK-SURAT-PLAYWRIGHT");
+    await expect(page.getByTestId("shipments-flow")).not.toContainText("TRK-PLAYWRIGHT");
+    await page.getByTestId("shipment-filter-other").click();
+    await expect(page.getByTestId("shipments-flow")).not.toContainText("TRK-PLAYWRIGHT");
+    await expect(page.getByTestId("shipments-flow")).not.toContainText("TRK-SURAT-PLAYWRIGHT");
+    await page.getByTestId("shipment-filter-in-transit").click();
+    await expect(page.getByTestId("shipments-flow")).toContainText("TRK-PLAYWRIGHT");
+    await expect(page.getByTestId("shipments-flow")).toContainText("TRK-SURAT-PLAYWRIGHT");
+    await page.getByTestId("shipment-filter-all").click();
     await expect(page.getByTestId("shipment-detail")).toContainText("Accepted at branch");
     await expect(page.getByTestId("shipment-detail")).toContainText("Kadikoy / Istanbul");
     await expect(page.getByTestId("shipment-detail")).toContainText("BAR-PLAYWRIGHT");
@@ -1573,10 +1611,31 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await page.getByRole("button", { name: /trk-surat-playwright detay/i }).click();
     await expect(page.getByTestId("shipment-detail")).toContainText("Selected shipment at branch");
     await expect(page.getByTestId("shipment-detail")).toContainText("Cankaya / Ankara");
+    await page.getByTestId("shipment-filter-in-transit").click();
+    await page.getByRole("button", { name: /trk-surat-playwright detay/i }).click();
     await page.getByRole("button", { name: /teslim edildi yap/i }).click();
-    await expect(page.getByTestId("shipments-flow")).toContainText("delivered");
+    await expect(page.getByTestId("shipments-flow")).not.toContainText("TRK-SURAT-PLAYWRIGHT");
+    await expect(page.getByTestId("shipment-detail")).toContainText("Accepted at branch");
+    await page.getByTestId("shipment-filter-delivered").click();
+    await expect(page.getByTestId("shipments-flow")).toContainText("TRK-SURAT-PLAYWRIGHT");
+    await expect(page.getByTestId("shipments-flow")).not.toContainText("TRK-PLAYWRIGHT");
     await expect(page.getByTestId("shipment-detail")).toContainText("Selected shipment delivered");
     await expect(page.getByTestId("shipment-detail")).toContainText("delivered");
+    await page.getByTestId("shipment-filter-tracking-missing").click();
+    await expect(page.getByTestId("shipments-flow")).not.toContainText("TRK-PLAYWRIGHT");
+    await page.getByTestId("shipment-filter-all").click();
+    expect(shipmentQueryUrls).toEqual(
+      expect.arrayContaining([
+        "/api/shipments?limit=20",
+        "/api/shipments?provider=ptt&limit=20",
+        "/api/shipments?provider=surat&limit=20",
+        "/api/shipments?provider=other&limit=20",
+        "/api/shipments?status=in_transit&limit=20",
+        "/api/shipments?status=delivered&limit=20",
+        "/api/shipments?tracking_missing=true&limit=20",
+      ]),
+    );
+    await page.getByRole("button", { name: /trk-surat-playwright detay/i }).click();
     await page.getByRole("link", { name: /pipeline/i }).click();
     await expect(page.getByTestId("shipment-pipeline-flow")).toContainText("Teslim Alınmayan Kargo Pipeline");
     await expect(page.getByTestId("shipment-pipeline-tabs")).toContainText("Tümü 2");
