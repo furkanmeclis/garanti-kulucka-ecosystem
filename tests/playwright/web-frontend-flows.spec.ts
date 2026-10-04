@@ -1573,6 +1573,14 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("sms-template-detail")).toContainText("{musteri_adi}");
     await expect(page.getByTestId("sms-template-detail")).toContainText("Playwright Customer");
     await expect(page.getByTestId("sms-template-detail")).toContainText("TRK-PLAYWRIGHT");
+    await expect(page.getByTestId("sms-template-variable-musteri-adi")).toHaveAttribute("aria-pressed", "true");
+    await page.getByTestId("sms-template-variable-takip-no").click();
+    await expect(page.getByTestId("sms-template-variable-takip-no")).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByTestId("sms-template-detail")).toContainText("Seçili değişken");
+    await expect(page.getByTestId("sms-template-selected-variable")).toContainText("{takip_no}: TRK-PLAYWRIGHT");
+    await page.getByTestId("sms-template-variable-kargo-firmasi").click();
+    await expect(page.getByTestId("sms-template-variable-kargo-firmasi")).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByTestId("sms-template-selected-variable")).toContainText("{kargo_firmasi}: ptt");
     await expect(page.getByTestId("sms-template-detail")).toContainText("1 SMS");
     await expect(page.getByTestId("sms-history-detail")).toContainText("SMS Gönderim Kayıtları");
     await expect(page.getByTestId("sms-history-detail")).toContainText("3 alıcı");

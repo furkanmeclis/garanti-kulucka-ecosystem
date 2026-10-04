@@ -182,9 +182,12 @@ const defaultOperationalPolicy: OperationalPolicySettings = {
 };
 
 const smsTemplate = "{musteri_adi}, {takip_no} takip numarali kargonuz {kargo_firmasi} ile yoldadir.";
+const smsTemplateVariables = ["{musteri_adi}", "{takip_no}", "{kargo_firmasi}"] as const;
 const instagramDraftImageUrl = "https://example.com/garanti-kulucka.jpg";
 const instagramDraftCaption = "Kuluçka makineleri ve yedek parça operasyonundan güncel ürün duyurusu.";
 const instagramCaptionLimit = 2200;
+
+type SmsTemplateVariable = typeof smsTemplateVariables[number];
 
 function flowFromPath(pathname: string) {
   return [...navigationItems]
@@ -431,6 +434,7 @@ export function App() {
   const [uploadedFile, setUploadedFile] = useState<FileMetadata | null>(null);
   const [downloadInstruction, setDownloadInstruction] = useState<DownloadInstruction | null>(null);
   const [lastSmsSend, setLastSmsSend] = useState<string | null>(null);
+  const [activeSmsTemplateVariable, setActiveSmsTemplateVariable] = useState<SmsTemplateVariable>("{musteri_adi}");
   const [presenceUpdating, setPresenceUpdating] = useState(false);
   const [integrationSnapshot, setIntegrationSnapshot] = useState<IntegrationAccountSnapshot | null>(null);
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
@@ -1066,10 +1070,16 @@ export function App() {
   const selectedCustomer = data.customers[0] ?? null;
   const selectedOrder = data.orders.find((order) => order.public_id === selectedOrderId) ?? data.orders[0] ?? null;
   const selectedShipment = data.shipments.find((shipment) => shipment.public_id === selectedShipmentId) ?? data.shipments[0] ?? null;
-  const smsPreview = smsTemplate
-    .replace("{musteri_adi}", selectedShipment?.recipient_name ?? selectedOrder?.customer_full_name ?? "Müşteri")
-    .replace("{takip_no}", selectedShipment?.tracking_number ?? selectedShipment?.barcode_number ?? "takip bekliyor")
-    .replace("{kargo_firmasi}", selectedShipment?.provider ?? "Kargo");
+  const smsVariableValues: Record<SmsTemplateVariable, string> = {
+    "{musteri_adi}": selectedShipment?.recipient_name ?? selectedOrder?.customer_full_name ?? "Müşteri",
+    "{takip_no}": selectedShipment?.tracking_number ?? selectedShipment?.barcode_number ?? "takip bekliyor",
+    "{kargo_firmasi}": selectedShipment?.provider ?? "Kargo",
+  };
+  const smsPreview = smsTemplateVariables.reduce(
+    (message, variable) => message.replace(variable, smsVariableValues[variable]),
+    smsTemplate,
+  );
+  const activeSmsTemplateValue = smsVariableValues[activeSmsTemplateVariable];
   const smsInfo = smsSegmentInfo(smsPreview);
   const smsRecipientCount = data.shipments.filter((shipment) => Boolean(shipment.recipient_phone)).length;
   const orderCurrency = data.orders[0]?.currency ?? "TRY";
@@ -2152,12 +2162,23 @@ export function App() {
                 rows={[
                   ["Şablon", smsTemplate, "değişkenli mesaj"],
                   ["Önizleme", smsPreview, smsInfo.usesUnicode ? "Türkçe karakter" : "GSM karakter"],
+                  ["Seçili değişken", activeSmsTemplateVariable, activeSmsTemplateValue],
                   ["Sayaç", `${smsInfo.length} karakter`, `${smsInfo.segmentCount} SMS`],
                 ]}
               />
+              <p className="detail-note" data-testid="sms-template-selected-variable">
+                {activeSmsTemplateVariable}: {activeSmsTemplateValue}
+              </p>
               <div className="detail-actions">
-                {["{musteri_adi}", "{takip_no}", "{kargo_firmasi}"].map((variable) => (
-                  <button className="secondary-action" key={variable} type="button">
+                {smsTemplateVariables.map((variable) => (
+                  <button
+                    aria-pressed={activeSmsTemplateVariable === variable}
+                    className={cx("secondary-action", activeSmsTemplateVariable === variable && "selected")}
+                    data-testid={`sms-template-variable-${variable.slice(1, -1).replaceAll("_", "-")}`}
+                    key={variable}
+                    type="button"
+                    onClick={() => setActiveSmsTemplateVariable(variable)}
+                  >
                     {variable}
                   </button>
                 ))}
