@@ -72,6 +72,13 @@ export interface ConversationSummaryRecord {
   };
 }
 
+export interface CustomerSummaryRecord {
+  total_count: number;
+  with_phone_count: number;
+  with_email_count: number;
+  with_notes_count: number;
+}
+
 export interface ListOrdersFilter {
   status?: string;
   confirmationStatus?: string;
@@ -361,6 +368,25 @@ export class DomainRepository {
       .orderBy("full_name", "asc")
       .limit(limit)
       .execute();
+  }
+
+  async getCustomerSummary(): Promise<CustomerSummaryRecord> {
+    const summary = await this.db
+      .selectFrom("customers")
+      .select((expression) => [
+        expression.fn.countAll<number>().as("total_count"),
+        expression.fn.count<number>("phone").as("with_phone_count"),
+        expression.fn.count<number>("email").as("with_email_count"),
+        expression.fn.count<number>("notes").as("with_notes_count"),
+      ])
+      .executeTakeFirst();
+
+    return {
+      total_count: Number(summary?.total_count ?? 0),
+      with_phone_count: Number(summary?.with_phone_count ?? 0),
+      with_email_count: Number(summary?.with_email_count ?? 0),
+      with_notes_count: Number(summary?.with_notes_count ?? 0),
+    };
   }
 
   async createMessage(input: CreateMessageInput): Promise<MessageRecord> {
@@ -864,6 +890,10 @@ export function serializeCustomer(customer: CustomerRecord) {
     notes: customer.notes,
     updated_at: customer.updated_at,
   };
+}
+
+export function serializeCustomerSummary(summary: CustomerSummaryRecord) {
+  return summary;
 }
 
 export function serializeMessage(message: MessageRecord) {

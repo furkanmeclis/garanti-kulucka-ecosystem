@@ -597,6 +597,7 @@ describe("web API client boundary", () => {
     await client.domain.getCommentModerationSummary();
     await client.domain.getBalanceSummary();
     await client.domain.getOrderSummary();
+    await client.domain.getCustomerSummary();
     await client.domain.listMessages("cnv_test");
 
     expect(requests[0]?.url).toBe("http://localhost:3000/api/conversations?channel=instagram&limit=25");
@@ -604,7 +605,8 @@ describe("web API client boundary", () => {
     expect(requests[2]?.url).toBe("http://localhost:3000/api/comments/moderation-summary");
     expect(requests[3]?.url).toBe("http://localhost:3000/api/balances/summary");
     expect(requests[4]?.url).toBe("http://localhost:3000/api/orders/summary");
-    expect(requests[5]?.url).toBe("http://localhost:3000/api/conversations/cnv_test/messages?limit=100");
+    expect(requests[5]?.url).toBe("http://localhost:3000/api/customers/summary");
+    expect(requests[6]?.url).toBe("http://localhost:3000/api/conversations/cnv_test/messages?limit=100");
   });
 
   it("maps domain order filters to backend routes", async () => {

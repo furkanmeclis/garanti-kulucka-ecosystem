@@ -354,6 +354,7 @@ const settings = [
 class FixtureQuery {
   private readonly whereValues = new Map<string, unknown>();
   private readonly whereOperators = new Map<string, string>();
+  private readonly aggregateCounts = new Map<string, string | "*">();
 
   constructor(private readonly table: string) {}
 
@@ -369,7 +370,25 @@ class FixtureQuery {
     return this;
   }
 
-  select() {
+  select(selection?: unknown) {
+    if (typeof selection !== "function") {
+      return this;
+    }
+
+    const aggregateSelection = selection as (expression: {
+      fn: {
+        countAll: () => { as: (alias: string) => { alias: string; column: "*" } };
+        count: (column: string) => { as: (alias: string) => { alias: string; column: string } };
+      };
+    }) => Array<{ alias: string; column: string | "*" }>;
+    for (const aggregate of aggregateSelection({
+      fn: {
+        countAll: () => ({ as: (alias: string) => ({ alias, column: "*" }) }),
+        count: (column: string) => ({ as: (alias: string) => ({ alias, column }) }),
+      },
+    })) {
+      this.aggregateCounts.set(aggregate.alias, aggregate.column);
+    }
     return this;
   }
 
@@ -472,6 +491,17 @@ class FixtureQuery {
   }
 
   async executeTakeFirst() {
+    if (this.table === "customers" && this.aggregateCounts.size > 0) {
+      return Object.fromEntries(
+        [...this.aggregateCounts.entries()].map(([alias, column]) => [
+          alias,
+          column === "*"
+            ? customers.length
+            : customers.filter((customer) => Boolean(customer[column as keyof typeof customer])).length,
+        ]),
+      );
+    }
+
     switch (this.table) {
       case "users":
         return user;
@@ -806,6 +836,7 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
       balanceSummaryResponse,
       reportSummaryResponse,
       customerResponse,
+      customerSummaryResponse,
       messageResponse,
       orderResponse,
       orderSummaryResponse,
@@ -827,6 +858,7 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
         api.client.get("/api/balances/summary"),
         api.client.get("/api/reports/summary"),
         api.client.get("/api/customers?limit=10"),
+        api.client.get("/api/customers/summary"),
         api.client.get(`/api/conversations/${conversation.public_id}/messages?limit=10`),
         api.client.get("/api/orders?limit=10"),
         api.client.get("/api/orders/summary"),
@@ -930,6 +962,13 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
         },
       ],
     });
+    expect(customerSummaryResponse.status()).toBe(200);
+    await expect(customerSummaryResponse.json()).resolves.toMatchObject({
+      total_count: 1,
+      with_phone_count: 1,
+      with_email_count: 1,
+      with_notes_count: 1,
+    });
 
     const [activeOrdersResponse, pendingConfirmationOrdersResponse] = await Promise.all([
       api.client.get("/api/orders?status=active&limit=10"),
@@ -1032,6 +1071,11 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
     const forbiddenCustomerResponse = await api.cargoClient.get("/api/customers?limit=10");
     expect(forbiddenCustomerResponse.status()).toBe(403);
     expect(await forbiddenCustomerResponse.json()).toMatchObject({
+      error: { code: "forbidden" },
+    });
+    const forbiddenCustomerSummaryResponse = await api.cargoClient.get("/api/customers/summary");
+    expect(forbiddenCustomerSummaryResponse.status()).toBe(403);
+    expect(await forbiddenCustomerSummaryResponse.json()).toMatchObject({
       error: { code: "forbidden" },
     });
 

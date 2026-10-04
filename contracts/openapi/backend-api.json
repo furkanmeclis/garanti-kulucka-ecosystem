@@ -316,6 +316,51 @@
         }
       }
     },
+    "/api/customers": {
+      "get": {
+        "operationId": "listCustomers",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Limit"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Customer directory entries",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerList"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/customers/summary": {
+      "get": {
+        "operationId": "getCustomerSummary",
+        "responses": {
+          "200": {
+            "description": "Backend-owned customer directory summary",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerSummaryStats"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/api/orders": {
       "get": {
         "operationId": "listOrders",
@@ -1511,6 +1556,45 @@
             "$ref": "#/components/schemas/DataEnvelope"
           }
         ]
+      },
+      "CustomerList": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/DataEnvelope"
+          }
+        ]
+      },
+      "Customer": {
+        "type": "object",
+        "required": [
+          "public_id",
+          "full_name",
+          "updated_at"
+        ],
+        "properties": {
+          "public_id": { "type": "string" },
+          "full_name": { "type": "string" },
+          "phone": { "type": ["string", "null"] },
+          "email": { "type": ["string", "null"] },
+          "username": { "type": ["string", "null"] },
+          "notes": { "type": ["string", "null"] },
+          "updated_at": { "type": "string" }
+        }
+      },
+      "CustomerSummaryStats": {
+        "type": "object",
+        "required": [
+          "total_count",
+          "with_phone_count",
+          "with_email_count",
+          "with_notes_count"
+        ],
+        "properties": {
+          "total_count": { "type": "integer", "minimum": 0 },
+          "with_phone_count": { "type": "integer", "minimum": 0 },
+          "with_email_count": { "type": "integer", "minimum": 0 },
+          "with_notes_count": { "type": "integer", "minimum": 0 }
+        }
       },
       "OrderList": {
         "allOf": [

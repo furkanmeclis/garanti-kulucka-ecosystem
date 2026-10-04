@@ -10,6 +10,7 @@ import {
   serializeConversation,
   serializeConversationSummary,
   serializeCustomer,
+  serializeCustomerSummary,
   serializeMessage,
   serializeOrder,
   serializeProduct,
@@ -225,6 +226,20 @@ export function createDomainRoutes() {
 
     const customers = await new DomainRepository(db).listCustomers(limitSchema.parse(context.req.query("limit")));
     return context.json({ data: customers.map(serializeCustomer) });
+  });
+
+  routes.get("/customers/summary", async (context) => {
+    if (!canReadCustomers(context.get("auth")?.role)) {
+      return context.json({ error: { code: "forbidden", message: "Customer directory access is not allowed" } }, 403);
+    }
+
+    const db = context.get("db");
+    if (!db) {
+      return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
+    }
+
+    const summary = await new DomainRepository(db).getCustomerSummary();
+    return context.json(serializeCustomerSummary(summary));
   });
 
   routes.post("/conversations/:conversation_public_id/messages", async (context) => {

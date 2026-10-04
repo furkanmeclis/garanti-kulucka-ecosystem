@@ -49,6 +49,7 @@ import {
   type ConversationSummary,
   type ConversationSummaryStats,
   type CustomerSummary,
+  type CustomerSummaryStats,
   type MessageSummary,
   type OrderSummaryStats,
   type OrderSummary,
@@ -85,6 +86,7 @@ interface DashboardData {
   fileOrphans: FileMetadata[];
   instagramAnalytics: BackendInstagramAnalyticsSummary;
   conversationSummary: ConversationSummaryStats;
+  customerSummary: CustomerSummaryStats;
   orderSummary: OrderSummaryStats;
   productSummary: ProductSummaryStats;
   reportSummary: BackendReportSummary;
@@ -315,6 +317,13 @@ const defaultConversationSummary: ConversationSummaryStats = {
     open: 0,
     closed: 0,
   },
+};
+
+const defaultCustomerSummary: CustomerSummaryStats = {
+  total_count: 0,
+  with_phone_count: 0,
+  with_email_count: 0,
+  with_notes_count: 0,
 };
 
 const defaultOrderSummary: OrderSummaryStats = {
@@ -561,6 +570,7 @@ export function App() {
     fileOrphans: [],
     instagramAnalytics: defaultInstagramAnalyticsSummary,
     conversationSummary: defaultConversationSummary,
+    customerSummary: defaultCustomerSummary,
     orderSummary: defaultOrderSummary,
     productSummary: defaultProductSummary,
     reportSummary: defaultReportSummary,
@@ -720,10 +730,11 @@ export function App() {
     const canReadComments = user?.role === "admin" || user?.role === "owner" || user?.role === "calisan";
     const canReadBalances = user?.role === "admin" || user?.role === "owner" || user?.role === "calisan";
     const canReadShipmentPipeline = ["admin", "owner", "calisan", "kargo_operatoru"].includes(user?.role ?? "");
-    const [conversations, conversationSummary, customers, commentModeration, balanceSummary, orderSummary, productSummary, shipmentSummary, shipmentPipeline, reportSummary, orders, products, shipments, settings, webphoneConfig] = await Promise.all([
+    const [conversations, conversationSummary, customers, customerSummary, commentModeration, balanceSummary, orderSummary, productSummary, shipmentSummary, shipmentPipeline, reportSummary, orders, products, shipments, settings, webphoneConfig] = await Promise.all([
       domain.listConversations({ limit: 20 }),
       domain.getConversationSummary(),
       canReadCustomers ? domain.listCustomers(50) : Promise.resolve({ data: [] }),
+      canReadCustomers ? domain.getCustomerSummary() : Promise.resolve(defaultCustomerSummary),
       canReadComments ? domain.getCommentModerationSummary() : Promise.resolve(defaultCommentModerationSummary),
       canReadBalances ? domain.getBalanceSummary() : Promise.resolve(defaultBalanceSummary),
       domain.getOrderSummary(),
@@ -774,6 +785,7 @@ export function App() {
       fileOrphans: fileOrphans.data,
       instagramAnalytics,
       conversationSummary,
+      customerSummary,
       orderSummary,
       productSummary,
       reportSummary,
@@ -827,6 +839,7 @@ export function App() {
         fileOrphans: [],
         instagramAnalytics: defaultInstagramAnalyticsSummary,
         conversationSummary: defaultConversationSummary,
+        customerSummary: defaultCustomerSummary,
         orderSummary: defaultOrderSummary,
         productSummary: defaultProductSummary,
         reportSummary: defaultReportSummary,
@@ -1488,9 +1501,9 @@ export function App() {
     { value: "vapi", label: "VAPI", count: pipelineVapiCount },
     { value: "teslim", label: "Teslim", count: pipelineDeliveredCount },
   ];
-  const customerWithPhoneCount = data.customers.filter((customer) => Boolean(customer.phone)).length;
-  const customerWithEmailCount = data.customers.filter((customer) => Boolean(customer.email)).length;
-  const customerWithNotesCount = data.customers.filter((customer) => Boolean(customer.notes)).length;
+  const customerWithPhoneCount = data.customerSummary.with_phone_count;
+  const customerWithEmailCount = data.customerSummary.with_email_count;
+  const customerWithNotesCount = data.customerSummary.with_notes_count;
   const activeProductCount = data.productSummary.active_count;
   const criticalProducts = data.products.filter((product) => product.stock_quantity <= data.productSummary.critical_threshold);
   const selectedProduct = data.products[0] ?? null;
@@ -2315,7 +2328,7 @@ export function App() {
         {activeFlow === "customers" && (
           <FlowPanel title="Müşteriler" icon={<Users size={18} />} testId="customers-flow">
             <div className="report-grid">
-              <Metric title="Müşteri" value={String(data.customers.length)} />
+              <Metric title="Müşteri" value={String(data.customerSummary.total_count)} />
               <Metric title="Telefon" value={String(customerWithPhoneCount)} />
               <Metric title="E-posta" value={String(customerWithEmailCount)} />
             </div>

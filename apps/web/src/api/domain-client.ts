@@ -127,6 +127,13 @@ export interface ConversationSummaryStats {
   };
 }
 
+export interface CustomerSummaryStats {
+  total_count: number;
+  with_phone_count: number;
+  with_email_count: number;
+  with_notes_count: number;
+}
+
 export interface BalanceSummary {
   total_commission: number;
   total_deduction: number;
@@ -228,6 +235,8 @@ export function createDomainClient(http: BackendHttpClient) {
       http.request<ConversationSummaryStats>("/api/conversations/summary"),
     listCustomers: (limit = 50) =>
       http.request<{ data: CustomerSummary[] }>(`/api/customers?limit=${limit}`),
+    getCustomerSummary: () =>
+      http.request<CustomerSummaryStats>("/api/customers/summary"),
     getCommentModerationSummary: () =>
       http.request<CommentModerationSummary>("/api/comments/moderation-summary"),
     listMessages: (conversationPublicId: string, limit = 100) =>

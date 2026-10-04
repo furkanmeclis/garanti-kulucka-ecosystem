@@ -391,6 +391,20 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       return;
     }
 
+    if (url.pathname === "/api/customers/summary") {
+      expect(currentUser.role).not.toBe("kargo_operatoru");
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          total_count: 14,
+          with_phone_count: 9,
+          with_email_count: 11,
+          with_notes_count: 6,
+        }),
+      });
+      return;
+    }
+
     if (url.pathname === "/api/conversations/cnv_playwright/messages") {
       if (route.request().method() === "POST") {
         await route.fulfill({
@@ -2033,11 +2047,15 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("comments-detail")).toContainText("Merhaba");
     await page.goto(`${app.url}/musteriler`);
     await expect(page.getByTestId("customers-flow")).toContainText("Müşteri");
+    await expect(page.getByTestId("customers-flow")).toContainText("14");
+    await expect(page.getByTestId("customers-flow")).toContainText("9");
+    await expect(page.getByTestId("customers-flow")).toContainText("11");
     await expect(page.getByTestId("customers-list-detail")).toContainText("Playwright Customer");
     await expect(page.getByTestId("customers-list-detail")).toContainText("VIP kuluçka müşterisi");
     await expect(page.getByTestId("customer-card-detail")).toContainText("5550000000");
     await expect(page.getByTestId("customer-card-detail")).toContainText("playwright@example.com");
     await expect(page.getByTestId("customer-card-detail")).toContainText("customers API");
+    await expect(page.getByTestId("customer-card-detail")).toContainText("6");
     await page.goto(`${app.url}/iptaller`);
     await expect(page.getByTestId("cancellations-flow")).toContainText("backend orders");
     await expect(page.getByTestId("cancellation-detail")).toContainText("ORD-PLAYWRIGHT");
@@ -2539,6 +2557,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       "/api/reports/summary",
       "/api/orders/summary",
       "/api/customers",
+      "/api/customers/summary",
       "/api/conversations/cnv_playwright/messages",
       "/api/conversations/cnv_playwright/state",
       "/admin/integrations/accounts",
