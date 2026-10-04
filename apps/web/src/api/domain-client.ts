@@ -129,6 +129,18 @@ export interface OrderSummaryStats {
   currency: string;
 }
 
+export interface ProductSummaryStats {
+  total_count: number;
+  active_count: number;
+  critical_count: number;
+  critical_threshold: number;
+  category_counts: {
+    incubator: number;
+    spare_part: number;
+    other: number;
+  };
+}
+
 export type ShipmentPipelineStep = "mesaj" | "sms" | "vapi" | "teslim";
 export type ShipmentPipelineStatus = "bekliyor" | "isleniyor" | "hata" | "teslim";
 
@@ -236,6 +248,8 @@ export function createDomainClient(http: BackendHttpClient) {
       http.request<BalanceSummary>("/api/balances/summary"),
     getOrderSummary: () =>
       http.request<OrderSummaryStats>("/api/orders/summary"),
+    getProductSummary: () =>
+      http.request<ProductSummaryStats>("/api/products/summary"),
     listProducts: (limit = 50) =>
       http.request<{ data: ProductSummary[] }>(`/api/products?limit=${limit}`),
     createOrder: (input: {

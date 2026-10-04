@@ -461,6 +461,45 @@
         }
       }
     },
+    "/api/products": {
+      "get": {
+        "operationId": "listProducts",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Limit"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Product summaries",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductList"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/products/summary": {
+      "get": {
+        "operationId": "getProductSummary",
+        "responses": {
+          "200": {
+            "description": "Backend-owned product inventory summary",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductSummaryStats"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/shipments": {
       "get": {
         "operationId": "listShipments",
@@ -1389,6 +1428,13 @@
           }
         ]
       },
+      "ProductList": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/DataEnvelope"
+          }
+        ]
+      },
       "ShipmentList": {
         "allOf": [
           {
@@ -2021,6 +2067,53 @@
           "pending_confirmation_count": { "type": "integer", "minimum": 0 },
           "total_revenue": { "type": "number", "minimum": 0 },
           "currency": { "type": "string" }
+        }
+      },
+      "Product": {
+        "type": "object",
+        "required": [
+          "public_id",
+          "name",
+          "unit_price",
+          "stock_quantity",
+          "is_active",
+          "updated_at"
+        ],
+        "properties": {
+          "public_id": { "type": "string" },
+          "sku": { "type": ["string", "null"] },
+          "name": { "type": "string" },
+          "category": { "type": ["string", "null"] },
+          "unit_price": { "type": "string" },
+          "stock_quantity": { "type": "integer" },
+          "is_active": { "type": "boolean" },
+          "external_product_id": { "type": ["string", "null"] },
+          "updated_at": { "type": "string" }
+        }
+      },
+      "ProductSummaryStats": {
+        "type": "object",
+        "required": [
+          "total_count",
+          "active_count",
+          "critical_count",
+          "critical_threshold",
+          "category_counts"
+        ],
+        "properties": {
+          "total_count": { "type": "integer", "minimum": 0 },
+          "active_count": { "type": "integer", "minimum": 0 },
+          "critical_count": { "type": "integer", "minimum": 0 },
+          "critical_threshold": { "type": "integer", "minimum": 0 },
+          "category_counts": {
+            "type": "object",
+            "required": ["incubator", "spare_part", "other"],
+            "properties": {
+              "incubator": { "type": "integer", "minimum": 0 },
+              "spare_part": { "type": "integer", "minimum": 0 },
+              "other": { "type": "integer", "minimum": 0 }
+            }
+          }
         }
       },
       "UpdateShipmentStatusRequest": {

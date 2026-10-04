@@ -121,6 +121,18 @@ export interface OrderSummaryRecord {
   currency: string;
 }
 
+export interface ProductSummaryRecord {
+  total_count: number;
+  active_count: number;
+  critical_count: number;
+  critical_threshold: number;
+  category_counts: {
+    incubator: number;
+    spare_part: number;
+    other: number;
+  };
+}
+
 export interface ShipmentPipelineRowRecord {
   shipment_public_id: string;
   recipient_name: string;
@@ -467,6 +479,25 @@ export class DomainRepository {
       .execute();
   }
 
+  async getProductSummary(): Promise<ProductSummaryRecord> {
+    const criticalThreshold = 3;
+    const products = await this.listProducts(200);
+    const incubatorCount = products.filter((product) => product.category === "incubator").length;
+    const sparePartCount = products.filter((product) => product.category === "spare_part").length;
+
+    return {
+      total_count: products.length,
+      active_count: products.filter((product) => product.is_active).length,
+      critical_count: products.filter((product) => product.stock_quantity <= criticalThreshold).length,
+      critical_threshold: criticalThreshold,
+      category_counts: {
+        incubator: incubatorCount,
+        spare_part: sparePartCount,
+        other: Math.max(products.length - incubatorCount - sparePartCount, 0),
+      },
+    };
+  }
+
   async createOrder(input: CreateOrderInput): Promise<OrderRecord> {
     return this.db.transaction().execute(async (transaction) => {
       const [customer, conversation] = await Promise.all([
@@ -782,6 +813,10 @@ export function serializeProduct(product: ProductRecord) {
     external_product_id: product.external_product_id,
     updated_at: product.updated_at,
   };
+}
+
+export function serializeProductSummary(summary: ProductSummaryRecord) {
+  return summary;
 }
 
 export function serializeShipment(shipment: ShipmentRecord) {

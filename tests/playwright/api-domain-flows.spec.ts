@@ -809,6 +809,7 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
       orderResponse,
       orderSummaryResponse,
       productResponse,
+      productSummaryResponse,
       shipmentResponse,
       shipmentPipelineResponse,
       fileOrphansResponse,
@@ -827,6 +828,7 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
         api.client.get("/api/orders?limit=10"),
         api.client.get("/api/orders/summary"),
         api.client.get("/api/products?limit=10"),
+        api.client.get("/api/products/summary"),
         api.client.get("/api/shipments?limit=10"),
         api.client.get("/api/shipments/pipeline-summary"),
         api.client.get("/api/files/orphans?limit=10"),
@@ -929,6 +931,18 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
       pending_confirmation_count: 1,
       total_revenue: 200.5,
       currency: "TRY",
+    });
+    expect(productSummaryResponse.status()).toBe(200);
+    await expect(productSummaryResponse.json()).resolves.toMatchObject({
+      total_count: 2,
+      active_count: 2,
+      critical_count: 1,
+      critical_threshold: 3,
+      category_counts: {
+        incubator: 1,
+        spare_part: 1,
+        other: 0,
+      },
     });
 
     const [pttShipmentsResponse, otherShipmentsResponse, inTransitShipmentsResponse, missingTrackingShipmentsResponse] = await Promise.all([

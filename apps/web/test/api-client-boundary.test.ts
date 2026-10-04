@@ -321,6 +321,37 @@ describe("web API client boundary", () => {
     expect(requests[0]?.url).toBe("http://localhost:3000/api/reports/summary");
   });
 
+  it("maps product summary reads to the backend route", async () => {
+    const requests: Request[] = [];
+    const client = createApiClient("http://localhost:3000", {
+      fetchImpl: async (input, init) => {
+        requests.push(new Request(input, init));
+        return Response.json({
+          total_count: 9,
+          active_count: 6,
+          critical_count: 4,
+          critical_threshold: 3,
+          category_counts: {
+            incubator: 5,
+            spare_part: 3,
+            other: 1,
+          },
+        });
+      },
+    });
+
+    await expect(client.domain.getProductSummary()).resolves.toMatchObject({
+      total_count: 9,
+      critical_count: 4,
+      category_counts: {
+        incubator: 5,
+        spare_part: 3,
+        other: 1,
+      },
+    });
+    expect(requests[0]?.url).toBe("http://localhost:3000/api/products/summary");
+  });
+
   it("maps provider catalog reads to backend routes without live-call enablement", async () => {
     const requests: Request[] = [];
     const client = createApiClient("http://localhost:3000", {

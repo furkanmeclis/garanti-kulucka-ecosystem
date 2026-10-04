@@ -12,6 +12,7 @@ import {
   serializeMessage,
   serializeOrder,
   serializeProduct,
+  serializeProductSummary,
   serializeShipment,
 } from "../domain/repository.js";
 
@@ -373,6 +374,16 @@ export function createDomainRoutes() {
 
     const summary = await new DomainRepository(db).getBalanceSummary();
     return context.json(summary);
+  });
+
+  routes.get("/products/summary", async (context) => {
+    const db = context.get("db");
+    if (!db) {
+      return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
+    }
+
+    const summary = await new DomainRepository(db).getProductSummary();
+    return context.json(serializeProductSummary(summary));
   });
 
   routes.get("/products", async (context) => {

@@ -836,6 +836,24 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       return;
     }
 
+    if (url.pathname === "/api/products/summary") {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          total_count: 9,
+          active_count: 6,
+          critical_count: 4,
+          critical_threshold: 3,
+          category_counts: {
+            incubator: 5,
+            spare_part: 3,
+            other: 1,
+          },
+        }),
+      });
+      return;
+    }
+
     if (url.pathname === "/admin/settings") {
       await route.fulfill({
         contentType: "application/json",
@@ -1987,11 +2005,17 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("cancellation-detail")).toContainText("Frontend iptal inceleme onayi");
     await page.goto(`${app.url}/stok`);
     await expect(page.getByTestId("inventory-flow")).toContainText("Ürün");
+    await expect(page.getByTestId("inventory-flow")).toContainText("9");
+    await expect(page.getByTestId("inventory-flow")).toContainText("6");
     await expect(page.getByTestId("inventory-flow")).toContainText("Kritik Stok");
+    await expect(page.getByTestId("inventory-flow")).toContainText("4");
     await expect(page.getByTestId("inventory-flow")).toContainText("orders API");
     await expect(page.getByTestId("inventory-categories")).toContainText("Kuluçka Makineleri");
+    await expect(page.getByTestId("inventory-categories")).toContainText("5");
     await expect(page.getByTestId("inventory-categories")).toContainText("Yedek Parçalar");
+    await expect(page.getByTestId("inventory-categories")).toContainText("3");
     await expect(page.getByTestId("inventory-categories")).toContainText("Diğer Malzemeler");
+    await expect(page.getByTestId("inventory-categories")).toContainText("1");
     await expect(page.getByTestId("inventory-categories")).toContainText("products API");
     await expect(page.getByTestId("inventory-products-detail")).toContainText("Kuluçka Pro 56");
     await expect(page.getByTestId("inventory-products-detail")).toContainText("SKU-KUL-56");
@@ -2466,6 +2490,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       "/admin/integrations/accounts/iac_instagram/tokens/access_token",
       "/api/orders",
       "/api/products",
+      "/api/products/summary",
       "/api/shipments",
       "/api/shipments/pipeline-summary",
       "/api/shipments/shp_surat_playwright/status",

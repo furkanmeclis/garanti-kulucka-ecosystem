@@ -51,6 +51,7 @@ import {
   type MessageSummary,
   type OrderSummaryStats,
   type OrderSummary,
+  type ProductSummaryStats,
   type ProductSummary,
   type ReportSummary as BackendReportSummary,
   type ShipmentPipelineSummary,
@@ -82,6 +83,7 @@ interface DashboardData {
   fileOrphans: FileMetadata[];
   instagramAnalytics: BackendInstagramAnalyticsSummary;
   orderSummary: OrderSummaryStats;
+  productSummary: ProductSummaryStats;
   reportSummary: BackendReportSummary;
   balanceSummary: BackendBalanceSummary;
   shipmentPipeline: ShipmentPipelineSummary;
@@ -305,6 +307,18 @@ const defaultOrderSummary: OrderSummaryStats = {
   currency: "TRY",
 };
 
+const defaultProductSummary: ProductSummaryStats = {
+  total_count: 0,
+  active_count: 0,
+  critical_count: 0,
+  critical_threshold: 3,
+  category_counts: {
+    incubator: 0,
+    spare_part: 0,
+    other: 0,
+  },
+};
+
 const defaultProviderDebugSummary: ProviderDebugSummary = {
   providers: [
     {
@@ -512,6 +526,7 @@ export function App() {
     fileOrphans: [],
     instagramAnalytics: defaultInstagramAnalyticsSummary,
     orderSummary: defaultOrderSummary,
+    productSummary: defaultProductSummary,
     reportSummary: defaultReportSummary,
     balanceSummary: defaultBalanceSummary,
     shipmentPipeline: defaultShipmentPipelineSummary,
@@ -668,12 +683,13 @@ export function App() {
     const canReadComments = user?.role === "admin" || user?.role === "owner" || user?.role === "calisan";
     const canReadBalances = user?.role === "admin" || user?.role === "owner" || user?.role === "calisan";
     const canReadShipmentPipeline = ["admin", "owner", "calisan", "kargo_operatoru"].includes(user?.role ?? "");
-    const [conversations, customers, commentModeration, balanceSummary, orderSummary, shipmentPipeline, reportSummary, orders, products, shipments, settings, webphoneConfig] = await Promise.all([
+    const [conversations, customers, commentModeration, balanceSummary, orderSummary, productSummary, shipmentPipeline, reportSummary, orders, products, shipments, settings, webphoneConfig] = await Promise.all([
       domain.listConversations({ limit: 20 }),
       canReadCustomers ? domain.listCustomers(50) : Promise.resolve({ data: [] }),
       canReadComments ? domain.getCommentModerationSummary() : Promise.resolve(defaultCommentModerationSummary),
       canReadBalances ? domain.getBalanceSummary() : Promise.resolve(defaultBalanceSummary),
       domain.getOrderSummary(),
+      domain.getProductSummary(),
       canReadShipmentPipeline ? domain.getShipmentPipelineSummary() : Promise.resolve(defaultShipmentPipelineSummary),
       user?.role === "admin" ? domain.getReportSummary() : Promise.resolve(defaultReportSummary),
       domain.listOrders(20),
@@ -719,6 +735,7 @@ export function App() {
       fileOrphans: fileOrphans.data,
       instagramAnalytics,
       orderSummary,
+      productSummary,
       reportSummary,
       balanceSummary,
       shipmentPipeline,
@@ -769,6 +786,7 @@ export function App() {
         fileOrphans: [],
         instagramAnalytics: defaultInstagramAnalyticsSummary,
         orderSummary: defaultOrderSummary,
+        productSummary: defaultProductSummary,
         reportSummary: defaultReportSummary,
         balanceSummary: defaultBalanceSummary,
         shipmentPipeline: defaultShipmentPipelineSummary,
@@ -1442,12 +1460,12 @@ export function App() {
   const customerWithPhoneCount = data.customers.filter((customer) => Boolean(customer.phone)).length;
   const customerWithEmailCount = data.customers.filter((customer) => Boolean(customer.email)).length;
   const customerWithNotesCount = data.customers.filter((customer) => Boolean(customer.notes)).length;
-  const activeProductCount = data.products.filter((product) => product.is_active).length;
-  const criticalProducts = data.products.filter((product) => product.stock_quantity <= 3);
+  const activeProductCount = data.productSummary.active_count;
+  const criticalProducts = data.products.filter((product) => product.stock_quantity <= data.productSummary.critical_threshold);
   const selectedProduct = data.products[0] ?? null;
-  const incubatorProductCount = data.products.filter((product) => product.category === "incubator").length;
-  const sparePartProductCount = data.products.filter((product) => product.category === "spare_part").length;
-  const otherProductCount = Math.max(data.products.length - incubatorProductCount - sparePartProductCount, 0);
+  const incubatorProductCount = data.productSummary.category_counts.incubator;
+  const sparePartProductCount = data.productSummary.category_counts.spare_part;
+  const otherProductCount = data.productSummary.category_counts.other;
 
   return (
     <div className="app-shell">
@@ -2327,9 +2345,9 @@ export function App() {
         {activeFlow === "inventory" && (
           <FlowPanel title="Stoklar" icon={<Package size={18} />} testId="inventory-flow">
             <div className="report-grid">
-              <Metric title="Ürün" value={String(data.products.length)} />
+              <Metric title="Ürün" value={String(data.productSummary.total_count)} />
               <Metric title="Aktif Stok" value={String(activeProductCount)} />
-              <Metric title="Kritik Stok" value={String(criticalProducts.length)} />
+              <Metric title="Kritik Stok" value={String(data.productSummary.critical_count)} />
             </div>
             <DetailPanel title="Stok Kategorileri" testId="inventory-categories">
               <DataRows
@@ -2373,7 +2391,7 @@ export function App() {
                 rows={(criticalProducts.length > 0 ? criticalProducts : data.products.slice(0, 1)).map((product) => [
                   product.name,
                   `${product.stock_quantity} adet`,
-                  product.stock_quantity <= 3 ? "kritik stok" : "normal stok",
+                  product.stock_quantity <= data.productSummary.critical_threshold ? "kritik stok" : "normal stok",
                 ])}
               />
             </DetailPanel>
