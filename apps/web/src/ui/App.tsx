@@ -673,6 +673,29 @@ export function App() {
     setStatus("Mesaj backend API üzerinden gönderildi");
   }
 
+  async function handleUpdateConversationState(input: {
+    status?: string;
+    unread_count?: number;
+    human_agent_enabled?: boolean;
+    is_in_pool?: boolean;
+    assign_to_me?: boolean;
+  }) {
+    const conversationId = selectedConversation?.public_id;
+    if (!conversationId) return;
+
+    setStatus("Konuşma durumu backend API üzerinden güncelleniyor");
+    const conversation = await domain.updateConversationState(conversationId, input);
+    setData((current) => ({
+      ...current,
+      conversations: current.conversations.map((item) =>
+        item.public_id === conversation.public_id ? conversation : item
+      ),
+    }));
+    setSelectedConversationId(conversation.public_id);
+    selectedConversationIdRef.current = conversation.public_id;
+    setStatus("Konuşma durumu backend API üzerinden güncellendi");
+  }
+
   async function handleSelectConversation(conversationPublicId: string) {
     selectedConversationIdRef.current = conversationPublicId;
     setSelectedConversationId(conversationPublicId);
@@ -1127,6 +1150,39 @@ export function App() {
                         ["Okunmamış", String(selectedConversation.unread_count), selectedConversation.last_message_sender_type ?? "-"],
                       ]}
                     />
+                    <div className="detail-actions" data-testid="conversation-state-actions">
+                      <button
+                        className="secondary-action"
+                        type="button"
+                        onClick={() => void handleUpdateConversationState({ unread_count: 0 })}
+                      >
+                        Okundu yap
+                      </button>
+                      <button
+                        className="secondary-action"
+                        type="button"
+                        onClick={() =>
+                          void handleUpdateConversationState({
+                            human_agent_enabled: !selectedConversation.human_agent_enabled,
+                          })
+                        }
+                      >
+                        {selectedConversation.human_agent_enabled ? "Human agent kapat" : "Human agent aç"}
+                      </button>
+                      <button
+                        className="secondary-action"
+                        type="button"
+                        onClick={() =>
+                          void handleUpdateConversationState(
+                            selectedConversation.is_in_pool
+                              ? { assign_to_me: true, is_in_pool: false }
+                              : { assign_to_me: false, is_in_pool: true }
+                          )
+                        }
+                      >
+                        {selectedConversation.is_in_pool ? "Havuzdan al" : "Havuza bırak"}
+                      </button>
+                    </div>
                   </DetailPanel>
                 )}
                 {data.messages.map((message) => (

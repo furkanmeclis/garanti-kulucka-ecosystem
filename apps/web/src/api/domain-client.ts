@@ -113,6 +113,23 @@ export function createDomainClient(http: BackendHttpClient) {
           body: input,
         },
       ),
+    updateConversationState: (
+      conversationPublicId: string,
+      input: {
+        status?: string;
+        unread_count?: number;
+        human_agent_enabled?: boolean;
+        is_in_pool?: boolean;
+        assign_to_me?: boolean;
+      },
+    ) =>
+      http.request<ConversationSummary>(
+        `/api/conversations/${encodeURIComponent(conversationPublicId)}/state`,
+        {
+          method: "PATCH",
+          body: input,
+        },
+      ),
     listOrders: (limit = 50) =>
       http.request<{ data: OrderSummary[] }>(`/api/orders?limit=${limit}`),
     listProducts: (limit = 50) =>

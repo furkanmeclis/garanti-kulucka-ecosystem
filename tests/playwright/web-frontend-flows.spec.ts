@@ -62,6 +62,10 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
   let savedOperationalPolicy = false;
   let realtimeMessageDelivered = false;
   let facebookRealtimeDelivered = false;
+  let conversationUnreadCount = 2;
+  let conversationInPool = true;
+  let conversationHumanAgent = false;
+  let conversationAssignedUserEmail: string | null = null;
 
   await page.addInitScript(`
     (() => {
@@ -165,14 +169,14 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
               public_id: "cnv_playwright",
               channel: "instagram",
               status: "open",
-              is_in_pool: true,
-              human_agent_enabled: false,
-              unread_count: realtimeMessageDelivered ? 3 : 2,
+              is_in_pool: conversationInPool,
+              human_agent_enabled: conversationHumanAgent,
+              unread_count: realtimeMessageDelivered ? conversationUnreadCount + 1 : conversationUnreadCount,
               last_message_text: realtimeMessageDelivered ? "Socket.IO canlı mesaj" : "Merhaba",
               last_message_sender_type: "customer",
               last_message_at: realtimeMessageDelivered ? "2026-01-01T00:01:30.000Z" : "2026-01-01T00:00:00.000Z",
               customer: { full_name: "Playwright Customer", phone: "5550000000" },
-              assigned_user_email: null,
+              assigned_user_email: conversationAssignedUserEmail,
               updated_at: realtimeMessageDelivered ? "2026-01-01T00:01:30.000Z" : "2026-01-01T00:00:00.000Z",
             },
             {
@@ -190,6 +194,39 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
               updated_at: facebookRealtimeDelivered ? "2026-01-01T00:01:10.000Z" : "2026-01-01T00:00:30.000Z",
             },
           ],
+        }),
+      });
+      return;
+    }
+
+    if (url.pathname === "/api/conversations/cnv_playwright/state") {
+      expect(route.request().method()).toBe("PATCH");
+      const payload = JSON.parse(route.request().postData() ?? "{}") as {
+        unread_count?: number;
+        human_agent_enabled?: boolean;
+        is_in_pool?: boolean;
+        assign_to_me?: boolean;
+      };
+      if (payload.unread_count !== undefined) conversationUnreadCount = payload.unread_count;
+      if (payload.human_agent_enabled !== undefined) conversationHumanAgent = payload.human_agent_enabled;
+      if (payload.is_in_pool !== undefined) conversationInPool = payload.is_in_pool;
+      if (payload.assign_to_me === true) conversationAssignedUserEmail = "admin@example.com";
+      if (payload.assign_to_me === false) conversationAssignedUserEmail = null;
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          public_id: "cnv_playwright",
+          channel: "instagram",
+          status: "open",
+          is_in_pool: conversationInPool,
+          human_agent_enabled: conversationHumanAgent,
+          unread_count: conversationUnreadCount,
+          last_message_text: realtimeMessageDelivered ? "Socket.IO canlı mesaj" : "Merhaba",
+          last_message_sender_type: "customer",
+          last_message_at: realtimeMessageDelivered ? "2026-01-01T00:01:30.000Z" : "2026-01-01T00:00:00.000Z",
+          customer: { full_name: "Playwright Customer", phone: "5550000000" },
+          assigned_user_email: conversationAssignedUserEmail,
+          updated_at: "2026-01-01T00:02:00.000Z",
         }),
       });
       return;
@@ -1216,6 +1253,21 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await page.getByTestId("conversation-channel-filter-all").click();
     await expect(page.getByTestId("conversation-detail")).toContainText("Playwright Customer");
     await expect(page.getByTestId("conversation-detail")).toContainText("instagram");
+    await Promise.all([
+      page.waitForResponse(`${backendBaseUrl}/api/conversations/cnv_playwright/state`),
+      page.getByRole("button", { name: /okundu yap/i }).click(),
+    ]);
+    await expect(page.getByTestId("conversation-detail")).toContainText(/Okunmamış\s*0/);
+    await Promise.all([
+      page.waitForResponse(`${backendBaseUrl}/api/conversations/cnv_playwright/state`),
+      page.getByRole("button", { name: /human agent aç/i }).click(),
+    ]);
+    await expect(page.getByRole("button", { name: /human agent kapat/i })).toBeVisible();
+    await Promise.all([
+      page.waitForResponse(`${backendBaseUrl}/api/conversations/cnv_playwright/state`),
+      page.getByRole("button", { name: /havuzdan al/i }).click(),
+    ]);
+    await expect(page.getByTestId("conversation-detail")).toContainText("admin@example.com");
     await expect.poll(async () =>
       page.evaluate(() => window.__GARANTI_REALTIME_TEST__?.emitted ?? []),
     ).toEqual(
@@ -1579,6 +1631,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       "/api/conversations",
       "/api/customers",
       "/api/conversations/cnv_playwright/messages",
+      "/api/conversations/cnv_playwright/state",
       "/admin/integrations/accounts",
       "/admin/integrations/audit",
       "/admin/integrations/provider-catalog",

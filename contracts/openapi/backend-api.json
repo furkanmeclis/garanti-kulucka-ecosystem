@@ -247,6 +247,38 @@
         }
       }
     },
+    "/api/conversations/{conversation_public_id}/state": {
+      "patch": {
+        "operationId": "updateConversationState",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ConversationPublicId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateConversationStateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated conversation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Conversation"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/orders": {
       "get": {
         "operationId": "listOrders",
@@ -946,6 +978,59 @@
           }
         ]
       },
+      "Conversation": {
+        "type": "object",
+        "required": ["public_id", "channel", "status", "is_in_pool", "human_agent_enabled", "unread_count", "updated_at"],
+        "properties": {
+          "public_id": {
+            "type": "string"
+          },
+          "channel": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "is_in_pool": {
+            "type": "boolean"
+          },
+          "human_agent_enabled": {
+            "type": "boolean"
+          },
+          "unread_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "last_message_text": {
+            "type": ["string", "null"]
+          },
+          "last_message_sender_type": {
+            "type": ["string", "null"]
+          },
+          "last_message_at": {
+            "type": ["string", "null"],
+            "format": "date-time"
+          },
+          "customer": {
+            "type": ["object", "null"],
+            "properties": {
+              "full_name": {
+                "type": "string"
+              },
+              "phone": {
+                "type": ["string", "null"]
+              }
+            }
+          },
+          "assigned_user_email": {
+            "type": ["string", "null"]
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "Message": {
         "type": "object",
         "required": ["public_id", "sender_type", "is_read", "sent_at"],
@@ -997,6 +1082,28 @@
           },
           "raw_payload": true
         }
+      },
+      "UpdateConversationStateRequest": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "unread_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "human_agent_enabled": {
+            "type": "boolean"
+          },
+          "is_in_pool": {
+            "type": "boolean"
+          },
+          "assign_to_me": {
+            "type": "boolean"
+          }
+        },
+        "minProperties": 1
       },
       "CreateOrderRequest": {
         "type": "object",

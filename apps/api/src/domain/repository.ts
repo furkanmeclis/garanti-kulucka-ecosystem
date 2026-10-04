@@ -43,6 +43,15 @@ export interface CreateMessageInput {
   rawPayload: unknown | null;
 }
 
+export interface UpdateConversationStateInput {
+  conversationPublicId: string;
+  status?: string;
+  unreadCount?: number;
+  humanAgentEnabled?: boolean;
+  isInPool?: boolean;
+  assignedUserId?: number | null;
+}
+
 export interface CreateOrderInput {
   customerPublicId: string | null;
   conversationPublicId: string | null;
@@ -64,6 +73,23 @@ export interface UpdateShipmentStatusInput {
 
 export class DomainRepository {
   constructor(private readonly db: AppDatabase) {}
+
+  private async getConversationByPublicId(db: AppDatabase, conversationPublicId: string): Promise<ConversationRecord | null> {
+    const conversation = await db
+      .selectFrom("conversations")
+      .leftJoin("customers", "customers.id", "conversations.customer_id")
+      .leftJoin("users", "users.id", "conversations.assigned_user_id")
+      .selectAll("conversations")
+      .select([
+        "customers.full_name as customer_full_name",
+        "customers.phone as customer_phone",
+        "users.email as assigned_user_email",
+      ])
+      .where("conversations.public_id", "=", conversationPublicId)
+      .executeTakeFirst();
+
+    return conversation ?? null;
+  }
 
   async listConversations(filter: ListConversationsFilter): Promise<ConversationRecord[]> {
     let query = this.db
@@ -164,6 +190,50 @@ export class DomainRepository {
         .execute();
 
       return message;
+    });
+  }
+
+  async updateConversationState(input: UpdateConversationStateInput): Promise<ConversationRecord> {
+    return this.db.transaction().execute(async (transaction) => {
+      const conversation = await transaction
+        .selectFrom("conversations")
+        .select("id")
+        .where("public_id", "=", input.conversationPublicId)
+        .executeTakeFirst();
+
+      if (!conversation) {
+        throw new Error(`Unknown conversation: ${input.conversationPublicId}`);
+      }
+
+      if (input.unreadCount === 0) {
+        await transaction
+          .updateTable("messages")
+          .set({
+            is_read: true,
+            updated_at: new Date(),
+          })
+          .where("conversation_id", "=", conversation.id)
+          .execute();
+      }
+
+      await transaction
+        .updateTable("conversations")
+        .set({
+          ...(input.status !== undefined ? { status: input.status } : {}),
+          ...(input.unreadCount !== undefined ? { unread_count: input.unreadCount } : {}),
+          ...(input.humanAgentEnabled !== undefined ? { human_agent_enabled: input.humanAgentEnabled } : {}),
+          ...(input.isInPool !== undefined ? { is_in_pool: input.isInPool } : {}),
+          ...(input.assignedUserId !== undefined ? { assigned_user_id: input.assignedUserId } : {}),
+          updated_at: new Date(),
+        })
+        .where("id", "=", conversation.id)
+        .execute();
+
+      const updatedConversation = await this.getConversationByPublicId(transaction as AppDatabase, input.conversationPublicId);
+      if (!updatedConversation) {
+        throw new Error(`Unknown conversation: ${input.conversationPublicId}`);
+      }
+      return updatedConversation;
     });
   }
 

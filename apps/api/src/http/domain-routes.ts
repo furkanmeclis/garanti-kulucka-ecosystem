@@ -22,6 +22,18 @@ const createMessageSchema = z.object({
   raw_payload: z.unknown().nullable().default(null),
 });
 
+const updateConversationStateSchema = z
+  .object({
+    status: z.string().min(1).optional(),
+    unread_count: z.number().int().min(0).optional(),
+    human_agent_enabled: z.boolean().optional(),
+    is_in_pool: z.boolean().optional(),
+    assign_to_me: z.boolean().optional(),
+  })
+  .refine((payload) => Object.values(payload).some((value) => value !== undefined), {
+    message: "At least one conversation state field is required",
+  });
+
 const createOrderSchema = z.object({
   customer_public_id: z.string().min(1).nullable().default(null),
   conversation_public_id: z.string().min(1).nullable().default(null),
@@ -129,6 +141,34 @@ export function createDomainRoutes() {
     realtimePublisher.broadcast(messageCreatedEnvelope);
 
     return context.json(serializeMessage(message), 201);
+  });
+
+  routes.patch("/conversations/:conversation_public_id/state", async (context) => {
+    const payload = updateConversationStateSchema.safeParse(await context.req.json());
+    if (!payload.success) {
+      return context.json({ error: { code: "invalid_request", message: "Invalid conversation state payload" } }, 400);
+    }
+
+    const db = context.get("db");
+    if (!db) {
+      return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
+    }
+
+    const actorUserId = context.get("actorUserId");
+    if (payload.data.assign_to_me === true && !actorUserId) {
+      return context.json({ error: { code: "forbidden", message: "Conversation assignment requires an authenticated user" } }, 403);
+    }
+
+    const conversation = await new DomainRepository(db).updateConversationState({
+      conversationPublicId: context.req.param("conversation_public_id"),
+      ...(payload.data.status !== undefined ? { status: payload.data.status } : {}),
+      ...(payload.data.unread_count !== undefined ? { unreadCount: payload.data.unread_count } : {}),
+      ...(payload.data.human_agent_enabled !== undefined ? { humanAgentEnabled: payload.data.human_agent_enabled } : {}),
+      ...(payload.data.is_in_pool !== undefined ? { isInPool: payload.data.is_in_pool } : {}),
+      ...(payload.data.assign_to_me !== undefined ? { assignedUserId: payload.data.assign_to_me ? actorUserId : null } : {}),
+    });
+
+    return context.json(serializeConversation(conversation));
   });
 
   routes.get("/orders", async (context) => {

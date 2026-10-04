@@ -23,6 +23,7 @@ const expectedOperations = new Map<string, string[]>([
   ["/auth/me", ["get"]],
   ["/api/conversations", ["get"]],
   ["/api/conversations/{conversation_public_id}/messages", ["get", "post"]],
+  ["/api/conversations/{conversation_public_id}/state", ["patch"]],
   ["/api/orders", ["get", "post"]],
   ["/api/shipments", ["get"]],
   ["/api/shipments/{shipment_public_id}/status", ["patch"]],
@@ -55,7 +56,9 @@ describe("backend OpenAPI contract", () => {
       expect.arrayContaining([
         "AuthSession",
         "AuthUser",
+        "Conversation",
         "ConversationList",
+        "UpdateConversationStateRequest",
         "Message",
         "Order",
         "Shipment",

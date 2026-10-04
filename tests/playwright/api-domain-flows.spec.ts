@@ -333,7 +333,10 @@ class FixtureQuery {
       case "user_sessions":
         return session;
       case "conversations":
-        return this.whereValues.get("public_id") === conversation.public_id ? { id: conversation.id } : null;
+        return this.whereValues.get("public_id") === conversation.public_id ||
+          this.whereValues.get("conversations.public_id") === conversation.public_id
+          ? conversation
+          : null;
       default:
         return null;
     }
@@ -378,19 +381,51 @@ class FixtureInsert {
 }
 
 class FixtureUpdate {
+  private readonly valuesToSet: Record<string, unknown> = {};
+  private readonly whereValues = new Map<string, unknown>();
+
   constructor(private readonly table: string) {}
 
-  set() {
+  set(values: Record<string, unknown>) {
+    Object.assign(this.valuesToSet, values);
     return this;
   }
 
-  where() {
+  where(column: string, _operator?: string, value?: unknown) {
+    this.whereValues.set(column, value);
     return this;
+  }
+
+  returningAll() {
+    return this;
+  }
+
+  async executeTakeFirst() {
+    if (this.table !== "shipments") {
+      throw new Error(`Unsupported fixture returning update: ${this.table}`);
+    }
+    Object.assign(shipments[0], this.valuesToSet);
+    return shipments[0];
   }
 
   async execute() {
+    if (this.table === "messages") {
+      for (const message of messages) {
+        if (message.conversation_id === this.whereValues.get("conversation_id")) {
+          Object.assign(message, this.valuesToSet);
+        }
+      }
+      return [];
+    }
     if (this.table !== "conversations") {
       throw new Error(`Unsupported fixture update: ${this.table}`);
+    }
+    Object.assign(conversation, this.valuesToSet);
+    if (conversation.assigned_user_id === user.id) {
+      conversation.assigned_user_email = user.email;
+    }
+    if (conversation.assigned_user_id === null) {
+      conversation.assigned_user_email = null;
     }
     return [];
   }
@@ -598,6 +633,26 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
         envelope: expectedMessageEnvelope,
       },
     ]);
+
+    const updatedConversationResponse = await api.client.patch(
+      `/api/conversations/${conversation.public_id}/state`,
+      {
+        data: {
+          unread_count: 0,
+          human_agent_enabled: true,
+          is_in_pool: false,
+          assign_to_me: true,
+        },
+      },
+    );
+    expect(updatedConversationResponse.status()).toBe(200);
+    expect(await updatedConversationResponse.json()).toMatchObject({
+      public_id: conversation.public_id,
+      unread_count: 0,
+      human_agent_enabled: true,
+      is_in_pool: false,
+      assigned_user_email: "admin@example.com",
+    });
 
     expect(orderResponse.status()).toBe(200);
     expect(await orderResponse.json()).toMatchObject({
