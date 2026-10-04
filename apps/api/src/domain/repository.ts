@@ -158,6 +158,22 @@ export interface ShipmentPipelineRowRecord {
   pipeline_status: ShipmentPipelineStatus;
 }
 
+export interface ShipmentSummaryRecord {
+  total_count: number;
+  active_count: number;
+  delivered_count: number;
+  provider_counts: {
+    ptt: number;
+    surat: number;
+    other: number;
+  };
+  exception_counts: {
+    ptt_not_delivered: number;
+    surat_not_delivered: number;
+    tracking_missing: number;
+  };
+}
+
 export interface ShipmentPipelineSummaryRecord {
   counts: {
     all: number;
@@ -720,6 +736,32 @@ export class DomainRepository {
       .execute();
   }
 
+  async getShipmentSummary(): Promise<ShipmentSummaryRecord> {
+    const shipments = await this.listShipments({ limit: 200 });
+    const pttShipments = shipments.filter((shipment) => shipment.provider.toLocaleLowerCase("tr-TR").includes("ptt"));
+    const suratShipments = shipments.filter((shipment) => {
+      const provider = shipment.provider.toLocaleLowerCase("tr-TR");
+      return provider.includes("sürat") || provider.includes("surat");
+    });
+    const deliveredShipments = shipments.filter((shipment) => shipment.status === "delivered");
+
+    return {
+      total_count: shipments.length,
+      active_count: shipments.length - deliveredShipments.length,
+      delivered_count: deliveredShipments.length,
+      provider_counts: {
+        ptt: pttShipments.length,
+        surat: suratShipments.length,
+        other: Math.max(shipments.length - pttShipments.length - suratShipments.length, 0),
+      },
+      exception_counts: {
+        ptt_not_delivered: pttShipments.filter((shipment) => shipment.status !== "delivered").length,
+        surat_not_delivered: suratShipments.filter((shipment) => shipment.status !== "delivered").length,
+        tracking_missing: shipments.filter((shipment) => !shipment.tracking_number && !shipment.barcode_number).length,
+      },
+    };
+  }
+
   async getShipmentPipelineSummary(): Promise<ShipmentPipelineSummaryRecord> {
     const shipments = await this.listShipments({ limit: 200 });
     const rows = shipments.map((shipment) => ({
@@ -867,6 +909,10 @@ export function serializeProduct(product: ProductRecord) {
 }
 
 export function serializeProductSummary(summary: ProductSummaryRecord) {
+  return summary;
+}
+
+export function serializeShipmentSummary(summary: ShipmentSummaryRecord) {
   return summary;
 }
 

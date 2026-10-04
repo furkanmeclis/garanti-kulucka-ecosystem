@@ -812,6 +812,7 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
       productResponse,
       productSummaryResponse,
       shipmentResponse,
+      shipmentSummaryResponse,
       shipmentPipelineResponse,
       fileOrphansResponse,
       providerCatalogResponse,
@@ -832,6 +833,7 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
         api.client.get("/api/products?limit=10"),
         api.client.get("/api/products/summary"),
         api.client.get("/api/shipments?limit=10"),
+        api.client.get("/api/shipments/summary"),
         api.client.get("/api/shipments/pipeline-summary"),
         api.client.get("/api/files/orphans?limit=10"),
         api.client.get("/admin/integrations/provider-catalog"),
@@ -981,6 +983,23 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
     });
     expect(missingTrackingShipmentsResponse.status()).toBe(200);
     expect(await missingTrackingShipmentsResponse.json()).toMatchObject({ data: [] });
+
+    expect(shipmentSummaryResponse.status()).toBe(200);
+    await expect(shipmentSummaryResponse.json()).resolves.toMatchObject({
+      total_count: 1,
+      active_count: 1,
+      delivered_count: 0,
+      provider_counts: {
+        ptt: 1,
+        surat: 0,
+        other: 0,
+      },
+      exception_counts: {
+        ptt_not_delivered: 1,
+        surat_not_delivered: 0,
+        tracking_missing: 0,
+      },
+    });
 
     expect(shipmentPipelineResponse.status()).toBe(200);
     expect(await shipmentPipelineResponse.json()).toMatchObject({

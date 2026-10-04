@@ -560,6 +560,23 @@
         }
       }
     },
+    "/api/shipments/summary": {
+      "get": {
+        "operationId": "getShipmentSummary",
+        "responses": {
+          "200": {
+            "description": "Backend-owned shipment KPI summary",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShipmentSummaryStats"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/shipments/pipeline-summary": {
       "get": {
         "operationId": "getShipmentPipelineSummary",
@@ -2309,6 +2326,42 @@
           "live_call_permitted": {
             "type": "boolean",
             "const": false
+          }
+        }
+      },
+      "ShipmentSummaryStats": {
+        "type": "object",
+        "required": ["total_count", "active_count", "delivered_count", "provider_counts", "exception_counts"],
+        "properties": {
+          "total_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "active_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "delivered_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "provider_counts": {
+            "type": "object",
+            "required": ["ptt", "surat", "other"],
+            "properties": {
+              "ptt": { "type": "integer", "minimum": 0 },
+              "surat": { "type": "integer", "minimum": 0 },
+              "other": { "type": "integer", "minimum": 0 }
+            }
+          },
+          "exception_counts": {
+            "type": "object",
+            "required": ["ptt_not_delivered", "surat_not_delivered", "tracking_missing"],
+            "properties": {
+              "ptt_not_delivered": { "type": "integer", "minimum": 0 },
+              "surat_not_delivered": { "type": "integer", "minimum": 0 },
+              "tracking_missing": { "type": "integer", "minimum": 0 }
+            }
           }
         }
       },

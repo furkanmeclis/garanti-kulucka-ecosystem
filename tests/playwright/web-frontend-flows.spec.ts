@@ -726,6 +726,28 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       return;
     }
 
+    if (url.pathname === "/api/shipments/summary") {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          total_count: 20,
+          active_count: 12,
+          delivered_count: 8,
+          provider_counts: {
+            ptt: 7,
+            surat: 5,
+            other: 8,
+          },
+          exception_counts: {
+            ptt_not_delivered: 4,
+            surat_not_delivered: 3,
+            tracking_missing: 6,
+          },
+        }),
+      });
+      return;
+    }
+
     if (url.pathname === "/api/shipments") {
       shipmentQueryUrls.push(`${url.pathname}${url.search}`);
       const shipments = [
@@ -2254,18 +2276,25 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("shipments-flow")).toContainText("TRK-PLAYWRIGHT");
     await expect(page.getByTestId("shipments-flow")).toContainText("PTT Kargo");
     await expect(page.getByTestId("shipments-flow")).toContainText("Yoldaki Kargolar");
-    await expect(page.getByTestId("shipment-section-tabs")).toContainText("Tüm kargolar 4");
-    await expect(page.getByTestId("shipment-section-tabs")).toContainText("PTT 1");
-    await expect(page.getByTestId("shipment-section-tabs")).toContainText("Sürat 2");
-    await expect(page.getByTestId("shipment-section-tabs")).toContainText("Diğer 1");
+    await expect(page.getByTestId("shipment-section-tabs")).toContainText("Tüm kargolar 20");
+    await expect(page.getByTestId("shipment-section-tabs")).toContainText("PTT 7");
+    await expect(page.getByTestId("shipment-section-tabs")).toContainText("Sürat 5");
+    await expect(page.getByTestId("shipment-section-tabs")).toContainText("Diğer 8");
+    await expect(page.getByTestId("shipment-section-tabs")).toContainText("Yoldaki 12");
+    await expect(page.getByTestId("shipment-section-tabs")).toContainText("Teslim 8");
+    await expect(page.getByTestId("shipment-section-tabs")).toContainText("Takipsiz 6");
     await expect(page.getByTestId("shipment-filter-summary")).toContainText("Yeni");
+    await expect(page.getByTestId("shipment-filter-summary")).toContainText("12");
     await expect(page.getByTestId("shipment-filter-summary")).toContainText("PTT Almayan");
+    await expect(page.getByTestId("shipment-filter-summary")).toContainText("4");
     await expect(page.getByTestId("shipment-filter-summary")).toContainText("Sürat Almayan");
+    await expect(page.getByTestId("shipment-filter-summary")).toContainText("3");
     await expect(page.getByTestId("shipment-filter-summary")).toContainText("Takip No Yok");
+    await expect(page.getByTestId("shipment-filter-summary")).toContainText("6");
     await page.getByTestId("shipment-filter-ptt").click();
     await expect(page.getByTestId("shipments-flow")).toContainText("TRK-PLAYWRIGHT");
     await expect(page.getByTestId("shipments-flow")).not.toContainText("TRK-SURAT-PLAYWRIGHT");
-    await expect(page.getByTestId("shipment-section-tabs")).toContainText("PTT 1");
+    await expect(page.getByTestId("shipment-section-tabs")).toContainText("PTT 7");
     await expect(page.getByTestId("shipment-section-tabs")).toContainText("Sürat sonuç");
     await page.getByTestId("shipment-filter-surat").click();
     await expect(page.getByTestId("shipments-flow")).toContainText("TRK-SURAT-PLAYWRIGHT");
@@ -2525,6 +2554,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       "/api/products",
       "/api/products/summary",
       "/api/shipments",
+      "/api/shipments/summary",
       "/api/shipments/pipeline-summary",
       "/api/shipments/shp_surat_playwright/status",
       "/admin/settings",

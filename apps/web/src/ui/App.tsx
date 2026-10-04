@@ -57,6 +57,7 @@ import {
   type ReportSummary as BackendReportSummary,
   type ShipmentPipelineSummary,
   type ShipmentPipelineStep,
+  type ShipmentSummaryStats,
   type ShipmentSummary,
 } from "../api/domain-client.js";
 import { createFileClient, type DownloadInstruction, type FileMetadata, type FileOrphanCleanupDryRun } from "../api/file-client.js";
@@ -88,6 +89,7 @@ interface DashboardData {
   productSummary: ProductSummaryStats;
   reportSummary: BackendReportSummary;
   balanceSummary: BackendBalanceSummary;
+  shipmentSummary: ShipmentSummaryStats;
   shipmentPipeline: ShipmentPipelineSummary;
   commentModeration: BackendCommentModerationSummary;
   webphone: WebphoneConfig | null;
@@ -395,6 +397,22 @@ const defaultShipmentPipelineSummary: ShipmentPipelineSummary = {
   rows: [],
 };
 
+const defaultShipmentSummary: ShipmentSummaryStats = {
+  total_count: 0,
+  active_count: 0,
+  delivered_count: 0,
+  provider_counts: {
+    ptt: 0,
+    surat: 0,
+    other: 0,
+  },
+  exception_counts: {
+    ptt_not_delivered: 0,
+    surat_not_delivered: 0,
+    tracking_missing: 0,
+  },
+};
+
 const defaultCommentModerationSummary: BackendCommentModerationSummary = {
   manual_queue: 0,
   automatic_queue: 0,
@@ -547,6 +565,7 @@ export function App() {
     productSummary: defaultProductSummary,
     reportSummary: defaultReportSummary,
     balanceSummary: defaultBalanceSummary,
+    shipmentSummary: defaultShipmentSummary,
     shipmentPipeline: defaultShipmentPipelineSummary,
     commentModeration: defaultCommentModerationSummary,
     webphone: null,
@@ -701,7 +720,7 @@ export function App() {
     const canReadComments = user?.role === "admin" || user?.role === "owner" || user?.role === "calisan";
     const canReadBalances = user?.role === "admin" || user?.role === "owner" || user?.role === "calisan";
     const canReadShipmentPipeline = ["admin", "owner", "calisan", "kargo_operatoru"].includes(user?.role ?? "");
-    const [conversations, conversationSummary, customers, commentModeration, balanceSummary, orderSummary, productSummary, shipmentPipeline, reportSummary, orders, products, shipments, settings, webphoneConfig] = await Promise.all([
+    const [conversations, conversationSummary, customers, commentModeration, balanceSummary, orderSummary, productSummary, shipmentSummary, shipmentPipeline, reportSummary, orders, products, shipments, settings, webphoneConfig] = await Promise.all([
       domain.listConversations({ limit: 20 }),
       domain.getConversationSummary(),
       canReadCustomers ? domain.listCustomers(50) : Promise.resolve({ data: [] }),
@@ -709,6 +728,7 @@ export function App() {
       canReadBalances ? domain.getBalanceSummary() : Promise.resolve(defaultBalanceSummary),
       domain.getOrderSummary(),
       domain.getProductSummary(),
+      domain.getShipmentSummary(),
       canReadShipmentPipeline ? domain.getShipmentPipelineSummary() : Promise.resolve(defaultShipmentPipelineSummary),
       user?.role === "admin" ? domain.getReportSummary() : Promise.resolve(defaultReportSummary),
       domain.listOrders(20),
@@ -758,6 +778,7 @@ export function App() {
       productSummary,
       reportSummary,
       balanceSummary,
+      shipmentSummary,
       shipmentPipeline,
       commentModeration,
       webphone: webphoneConfig,
@@ -810,6 +831,7 @@ export function App() {
         productSummary: defaultProductSummary,
         reportSummary: defaultReportSummary,
         balanceSummary: defaultBalanceSummary,
+        shipmentSummary: defaultShipmentSummary,
         shipmentPipeline: defaultShipmentPipelineSummary,
         commentModeration: defaultCommentModerationSummary,
         webphone: null,
@@ -1440,25 +1462,15 @@ export function App() {
   const suratAverageDuration = suratProviderDebug.average_duration_ms;
   const latestSettingsAudit = data.settingsAudit[0] ?? null;
   const latestIntegrationAudit = data.integrationAudit[0] ?? null;
-  const deliveredShipmentCount = data.shipments.filter((shipment) => shipment.status === "delivered").length;
-  const activeShipmentCount = data.shipments.filter((shipment) => shipment.status !== "delivered").length;
+  const deliveredShipmentCount = data.shipmentSummary.delivered_count;
+  const activeShipmentCount = data.shipmentSummary.active_count;
   const cronSkippedCount = Math.max(activeShipmentCount - data.providerDebugSummary.cron.total_attempts, 0);
-  const pttShipmentCount = data.shipments.filter((shipment) => shipment.provider.toLowerCase().includes("ptt")).length;
-  const suratShipmentCount = data.shipments.filter((shipment) => {
-    const provider = shipment.provider.toLocaleLowerCase("tr-TR");
-    return provider.includes("sürat") || provider.includes("surat");
-  }).length;
-  const pttNotDeliveredCount = data.shipments.filter(
-    (shipment) => shipment.provider.toLowerCase().includes("ptt") && shipment.status !== "delivered",
-  ).length;
-  const suratNotDeliveredCount = data.shipments.filter((shipment) => {
-    const provider = shipment.provider.toLocaleLowerCase("tr-TR");
-    return (provider.includes("sürat") || provider.includes("surat")) && shipment.status !== "delivered";
-  }).length;
-  const trackingMissingCount = data.shipments.filter(
-    (shipment) => !shipment.tracking_number && !shipment.barcode_number,
-  ).length;
-  const otherShipmentCount = Math.max(data.shipments.length - pttShipmentCount - suratShipmentCount, 0);
+  const pttShipmentCount = data.shipmentSummary.provider_counts.ptt;
+  const suratShipmentCount = data.shipmentSummary.provider_counts.surat;
+  const pttNotDeliveredCount = data.shipmentSummary.exception_counts.ptt_not_delivered;
+  const suratNotDeliveredCount = data.shipmentSummary.exception_counts.surat_not_delivered;
+  const trackingMissingCount = data.shipmentSummary.exception_counts.tracking_missing;
+  const otherShipmentCount = data.shipmentSummary.provider_counts.other;
   const visibleShipmentPipelineRows = data.shipmentPipeline.rows.filter(
     (row) => shipmentPipelineFilter === "all" || row.step === shipmentPipelineFilter,
   );
@@ -1757,7 +1769,7 @@ export function App() {
                 type="button"
                 onClick={() => void handleApplyShipmentFilter("all")}
               >
-                Tüm kargolar {shipmentFilter === "all" ? data.shipments.length : "sonuç"}
+                Tüm kargolar {shipmentFilter === "all" ? data.shipmentSummary.total_count : "sonuç"}
               </button>
               <button
                 className={cx("secondary-action", shipmentFilter === "ptt" && "selected")}

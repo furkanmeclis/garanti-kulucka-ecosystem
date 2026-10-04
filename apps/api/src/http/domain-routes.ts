@@ -15,6 +15,7 @@ import {
   serializeProduct,
   serializeProductSummary,
   serializeShipment,
+  serializeShipmentSummary,
 } from "../domain/repository.js";
 
 const limitSchema = z.coerce.number().int().min(1).max(200).default(50);
@@ -532,6 +533,16 @@ export function createDomainRoutes() {
     }
     const shipments = await new DomainRepository(db).listShipments(shipmentFilter);
     return context.json({ data: shipments.map(serializeShipment) });
+  });
+
+  routes.get("/shipments/summary", async (context) => {
+    const db = context.get("db");
+    if (!db) {
+      return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
+    }
+
+    const summary = await new DomainRepository(db).getShipmentSummary();
+    return context.json(serializeShipmentSummary(summary));
   });
 
   routes.get("/shipments/pipeline-summary", async (context) => {

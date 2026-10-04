@@ -183,6 +183,22 @@ export interface ShipmentPipelineSummary {
   rows: ShipmentPipelineRow[];
 }
 
+export interface ShipmentSummaryStats {
+  total_count: number;
+  active_count: number;
+  delivered_count: number;
+  provider_counts: {
+    ptt: number;
+    surat: number;
+    other: number;
+  };
+  exception_counts: {
+    ptt_not_delivered: number;
+    surat_not_delivered: number;
+    tracking_missing: number;
+  };
+}
+
 export interface ReportSummary {
   conversation_count: number;
   order_count: number;
@@ -322,6 +338,8 @@ export function createDomainClient(http: BackendHttpClient) {
       const query = search.toString();
       return http.request<{ data: ShipmentSummary[] }>(`/api/shipments${query ? `?${query}` : ""}`);
     },
+    getShipmentSummary: () =>
+      http.request<ShipmentSummaryStats>("/api/shipments/summary"),
     getShipmentPipelineSummary: () =>
       http.request<ShipmentPipelineSummary>("/api/shipments/pipeline-summary"),
     getReportSummary: () =>
