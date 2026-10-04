@@ -82,6 +82,18 @@ interface SipServerSettings {
   stun: string;
 }
 
+interface OperationalPolicySettings {
+  max_attempts: number;
+  retry_delay_ms: number;
+  request_timeout_ms: number;
+  webhook_timeout_ms: number;
+  provider_rate_limit_per_minute: number;
+  queue_concurrency: number;
+  storage_bucket: string;
+  lifecycle_days: number;
+  orphan_cleanup_enabled: boolean;
+}
+
 interface BalanceSummary {
   totalCommission: number;
   totalDeduction: number;
@@ -144,6 +156,18 @@ const defaultSipServerSettings: SipServerSettings = {
   ws_url: "",
   domain: "",
   stun: "stun:stun.l.google.com:19302",
+};
+
+const defaultOperationalPolicy: OperationalPolicySettings = {
+  max_attempts: 3,
+  retry_delay_ms: 30000,
+  request_timeout_ms: 10000,
+  webhook_timeout_ms: 5000,
+  provider_rate_limit_per_minute: 60,
+  queue_concurrency: 4,
+  storage_bucket: "garage-media",
+  lifecycle_days: 90,
+  orphan_cleanup_enabled: true,
 };
 
 const smsTemplate = "{musteri_adi}, {takip_no} takip numarali kargonuz {kargo_firmasi} ile yoldadir.";
@@ -304,6 +328,31 @@ function sipServerSettingsFrom(settings: AdminSetting[], webphoneConfig: Webphon
     ws_url: typeof record.ws_url === "string" ? record.ws_url : webphoneConfig?.sip_websocket_url ?? defaultSipServerSettings.ws_url,
     domain: typeof record.domain === "string" ? record.domain : webphoneConfig?.sip_domain ?? defaultSipServerSettings.domain,
     stun: typeof record.stun === "string" ? record.stun : defaultSipServerSettings.stun,
+  };
+}
+
+function operationalPolicyFrom(settings: AdminSetting[]): OperationalPolicySettings {
+  const value = settings.find((setting) => setting.key === "operations.policy")?.value;
+  const record = typeof value === "object" && value !== null && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+  return {
+    max_attempts: readNumberSetting(record.max_attempts, defaultOperationalPolicy.max_attempts),
+    retry_delay_ms: readNumberSetting(record.retry_delay_ms, defaultOperationalPolicy.retry_delay_ms),
+    request_timeout_ms: readNumberSetting(record.request_timeout_ms, defaultOperationalPolicy.request_timeout_ms),
+    webhook_timeout_ms: readNumberSetting(record.webhook_timeout_ms, defaultOperationalPolicy.webhook_timeout_ms),
+    provider_rate_limit_per_minute: readNumberSetting(
+      record.provider_rate_limit_per_minute,
+      defaultOperationalPolicy.provider_rate_limit_per_minute,
+    ),
+    queue_concurrency: readNumberSetting(record.queue_concurrency, defaultOperationalPolicy.queue_concurrency),
+    storage_bucket: typeof record.storage_bucket === "string"
+      ? record.storage_bucket
+      : defaultOperationalPolicy.storage_bucket,
+    lifecycle_days: readNumberSetting(record.lifecycle_days, defaultOperationalPolicy.lifecycle_days),
+    orphan_cleanup_enabled: typeof record.orphan_cleanup_enabled === "boolean"
+      ? record.orphan_cleanup_enabled
+      : defaultOperationalPolicy.orphan_cleanup_enabled,
   };
 }
 
@@ -676,6 +725,31 @@ export function App() {
     setStatus("Santral SIP ayarı backend admin settings üzerinden kaydedildi");
   }
 
+  async function handleSaveOperationalPolicy() {
+    setStatus("Operasyon politikaları backend admin settings üzerinden kaydediliyor");
+    const setting = await admin.upsertSetting(
+      "operations.policy",
+      {
+        max_attempts: 5,
+        retry_delay_ms: 45000,
+        request_timeout_ms: 12000,
+        webhook_timeout_ms: 6000,
+        provider_rate_limit_per_minute: 90,
+        queue_concurrency: 6,
+        storage_bucket: "garage-media",
+        lifecycle_days: 120,
+        orphan_cleanup_enabled: true,
+      },
+      false,
+      "global",
+    );
+    setData((current) => ({
+      ...current,
+      settings: [setting, ...current.settings.filter((item) => item.key !== setting.key)],
+    }));
+    setStatus("Operasyon politikaları backend admin settings üzerinden kaydedildi");
+  }
+
   async function handleUpsertIntegrationAccount() {
     setStatus("Entegrasyon hesabı backend API üzerinden kaydediliyor");
     const account = await admin.upsertIntegrationAccount({
@@ -773,6 +847,7 @@ export function App() {
   const canTogglePresence = Boolean(user && user.role !== "admin");
   const netgsmSettings = netgsmSettingsFrom(activeSettings);
   const sipServerSettings = sipServerSettingsFrom(activeSettings, data.webphone);
+  const operationalPolicy = operationalPolicyFrom(activeSettings);
   const selectedConversation =
     data.conversations.find((conversation) => conversation.public_id === selectedConversationId) ?? data.conversations[0] ?? null;
   const selectedCustomer = data.customers[0] ?? null;
@@ -1057,7 +1132,34 @@ export function App() {
             <button className="primary-action" type="button" onClick={handleEnableProviderLiveMode}>
               PTT canlı modu aç
             </button>
+            <button className="secondary-action" type="button" onClick={handleSaveOperationalPolicy}>
+              Operasyon politikasını kaydet
+            </button>
             <DataRows rows={activeSettings.map((setting) => [setting.key, setting.scope, JSON.stringify(setting.value)])} />
+            <DetailPanel title="Operasyon Politikaları" testId="operation-policy-detail">
+              <DataRows
+                rows={[
+                  ["Retry", `${operationalPolicy.max_attempts} deneme`, `${operationalPolicy.retry_delay_ms} ms bekleme`],
+                  [
+                    "Timeout",
+                    `${operationalPolicy.request_timeout_ms} ms provider`,
+                    `${operationalPolicy.webhook_timeout_ms} ms webhook`,
+                  ],
+                  [
+                    "Rate Limit",
+                    `${operationalPolicy.provider_rate_limit_per_minute}/dk`,
+                    `queue concurrency ${operationalPolicy.queue_concurrency}`,
+                  ],
+                  [
+                    "Storage",
+                    operationalPolicy.storage_bucket,
+                    `${operationalPolicy.lifecycle_days} gün / orphan cleanup ${
+                      operationalPolicy.orphan_cleanup_enabled ? "açık" : "kapalı"
+                    }`,
+                  ],
+                ]}
+              />
+            </DetailPanel>
             <DetailPanel title="Ayar Denetim Kayıtları" testId="settings-audit-detail">
               <DataRows
                 rows={[

@@ -58,6 +58,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
   let savedIntegrationSetting = false;
   let savedNetgsmSetting = false;
   let savedSipConfig = false;
+  let savedOperationalPolicy = false;
   let realtimeMessageDelivered = false;
   let facebookRealtimeDelivered = false;
 
@@ -496,6 +497,35 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
               is_secret: false,
               updated_at: "2026-01-01T00:00:00.000Z",
             },
+            {
+              key: "operations.policy",
+              scope: "global",
+              value: savedOperationalPolicy
+                ? {
+                    max_attempts: 5,
+                    retry_delay_ms: 45000,
+                    request_timeout_ms: 12000,
+                    webhook_timeout_ms: 6000,
+                    provider_rate_limit_per_minute: 90,
+                    queue_concurrency: 6,
+                    storage_bucket: "garage-media",
+                    lifecycle_days: 120,
+                    orphan_cleanup_enabled: true,
+                  }
+                : {
+                    max_attempts: 3,
+                    retry_delay_ms: 30000,
+                    request_timeout_ms: 10000,
+                    webhook_timeout_ms: 5000,
+                    provider_rate_limit_per_minute: 60,
+                    queue_concurrency: 4,
+                    storage_bucket: "garage-media",
+                    lifecycle_days: 90,
+                    orphan_cleanup_enabled: true,
+                  },
+              is_secret: false,
+              updated_at: "2026-01-01T00:00:00.000Z",
+            },
           ],
         }),
       });
@@ -569,6 +599,32 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
           },
           is_secret: false,
           updated_at: "2026-01-01T00:03:00.000Z",
+        }),
+      });
+      return;
+    }
+
+    if (url.pathname === "/admin/settings/operations.policy") {
+      expect(route.request().method()).toBe("PUT");
+      savedOperationalPolicy = true;
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          key: "operations.policy",
+          scope: "global",
+          value: {
+            max_attempts: 5,
+            retry_delay_ms: 45000,
+            request_timeout_ms: 12000,
+            webhook_timeout_ms: 6000,
+            provider_rate_limit_per_minute: 90,
+            queue_concurrency: 6,
+            storage_bucket: "garage-media",
+            lifecycle_days: 120,
+            orphan_cleanup_enabled: true,
+          },
+          is_secret: false,
+          updated_at: "2026-01-01T00:08:00.000Z",
         }),
       });
       return;
@@ -1106,6 +1162,17 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("sms-confirmation-detail")).toContainText("5551111111");
     await page.getByRole("link", { name: /ayarlar/i }).click();
     await expect(page.getByTestId("admin-flow")).toContainText("webphone.enabled");
+    await expect(page.getByTestId("operation-policy-detail")).toContainText("Operasyon Politikaları");
+    await expect(page.getByTestId("operation-policy-detail")).toContainText("3 deneme");
+    await expect(page.getByTestId("operation-policy-detail")).toContainText("10000 ms provider");
+    await expect(page.getByTestId("operation-policy-detail")).toContainText("60/dk");
+    await expect(page.getByTestId("operation-policy-detail")).toContainText("90 gün / orphan cleanup açık");
+    await page.getByRole("button", { name: /operasyon politikasını kaydet/i }).click();
+    await expect(page.getByTestId("operation-policy-detail")).toContainText("5 deneme");
+    await expect(page.getByTestId("operation-policy-detail")).toContainText("12000 ms provider");
+    await expect(page.getByTestId("operation-policy-detail")).toContainText("90/dk");
+    await expect(page.getByTestId("operation-policy-detail")).toContainText("queue concurrency 6");
+    await expect(page.getByTestId("operation-policy-detail")).toContainText("120 gün / orphan cleanup açık");
     await expect(page.getByTestId("settings-audit-detail")).toContainText("Ayar Denetim Kayıtları");
     await expect(page.getByTestId("settings-audit-detail")).toContainText("settings_change / settings");
     await expect(page.getByTestId("settings-audit-detail")).toContainText("providers.ptt.live_mode");
@@ -1199,6 +1266,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       "/api/shipments/shp_surat_playwright/status",
       "/admin/settings",
       "/admin/settings/audit",
+      "/admin/settings/operations.policy",
       "/admin/settings/sip_config",
       "/admin/settings/netgsm_teyit_ayarlar",
       "/admin/settings/providers.ptt.live_mode",
