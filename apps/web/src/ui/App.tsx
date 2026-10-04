@@ -46,7 +46,7 @@ import {
   type ProductSummary,
   type ShipmentSummary,
 } from "../api/domain-client.js";
-import { createFileClient, type FileMetadata } from "../api/file-client.js";
+import { createFileClient, type DownloadInstruction, type FileMetadata } from "../api/file-client.js";
 import { createBackendHttpClient } from "../api/http-client.js";
 import { createRealtimeClient, type RealtimeClient } from "../api/realtime-client.js";
 import { createWebphoneClient, type WebphoneConfig } from "../api/webphone-client.js";
@@ -378,6 +378,7 @@ export function App() {
   });
   const [status, setStatus] = useState("Hazır");
   const [uploadedFile, setUploadedFile] = useState<FileMetadata | null>(null);
+  const [downloadInstruction, setDownloadInstruction] = useState<DownloadInstruction | null>(null);
   const [presenceUpdating, setPresenceUpdating] = useState(false);
   const [integrationSnapshot, setIntegrationSnapshot] = useState<IntegrationAccountSnapshot | null>(null);
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
@@ -606,6 +607,14 @@ export function App() {
 
     const verifiedFile = await files.getFile(response.file.public_id);
     setUploadedFile(verifiedFile);
+    const download = await files.createDownload(verifiedFile.public_id);
+    if (download.download.presigned_url) {
+      await fetch(download.download.presigned_url, {
+        method: download.download.method,
+        headers: download.download.headers,
+      });
+    }
+    setDownloadInstruction(download.download);
     setStatus("Dosya akışı presigned S3 sınırından geçti");
   }
 
@@ -1667,6 +1676,17 @@ export function App() {
                     ["Object key", uploadedFile.object_key, uploadedFile.mime_type ?? "-"],
                     ["Boyut", uploadedFile.byte_size === null ? "-" : `${uploadedFile.byte_size} byte`, uploadedFile.checksum ?? "-"],
                     ["Kayıt", uploadedFile.public_id, uploadedFile.updated_at],
+                  ]}
+                />
+              </DetailPanel>
+            )}
+            {downloadInstruction && (
+              <DetailPanel title="Dosya İndirme" testId="file-download-detail">
+                <DataRows
+                  rows={[
+                    ["Method", downloadInstruction.method, "presigned download"],
+                    ["Bucket", downloadInstruction.bucket, downloadInstruction.object_key],
+                    ["URL", downloadInstruction.presigned_url ? "hazır" : "kapalı", downloadInstruction.expires_at ?? "-"],
                   ]}
                 />
               </DetailPanel>

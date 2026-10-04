@@ -1,4 +1,4 @@
-import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import type { S3ClientConfig } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { assertSafeObjectKey } from "./object-key.js";
@@ -21,6 +21,15 @@ export interface UploadInstructionInput {
 
 export interface UploadInstruction {
   method: "PUT";
+  bucket: string;
+  object_key: string;
+  headers: Record<string, string>;
+  presigned_url: string | null;
+  expires_at: string | null;
+}
+
+export interface DownloadInstruction {
+  method: "GET";
   bucket: string;
   object_key: string;
   headers: Record<string, string>;
@@ -106,6 +115,25 @@ export class MediaStorageService {
       bucket: this.bucket,
       object_key: objectKey,
       headers,
+      presigned_url: await getSignedUrl(this.client, command, { expiresIn }),
+      expires_at: expiresAt,
+    };
+  }
+
+  async createDownloadInstruction(objectKeyInput: string): Promise<DownloadInstruction> {
+    const objectKey = assertSafeObjectKey(objectKeyInput);
+    const expiresIn = Math.max(60, Math.min(3600, this.config.uploadUrlExpiresSeconds));
+    const expiresAt = new Date(Date.now() + expiresIn * 1000).toISOString();
+    const command = new GetObjectCommand({
+      Bucket: this.bucket,
+      Key: objectKey,
+    });
+
+    return {
+      method: "GET",
+      bucket: this.bucket,
+      object_key: objectKey,
+      headers: {},
       presigned_url: await getSignedUrl(this.client, command, { expiresIn }),
       expires_at: expiresAt,
     };

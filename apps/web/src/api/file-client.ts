@@ -21,6 +21,15 @@ export interface UploadInstruction {
   expires_at: string | null;
 }
 
+export interface DownloadInstruction {
+  method: "GET";
+  bucket: string;
+  object_key: string;
+  headers: Record<string, string>;
+  presigned_url: string | null;
+  expires_at: string | null;
+}
+
 export interface CreateFileUploadInput {
   original_name?: string | null;
   mime_type?: string | null;
@@ -37,5 +46,9 @@ export function createFileClient(http: BackendHttpClient) {
       }),
     getFile: (filePublicId: string) =>
       http.request<FileMetadata>(`/api/files/${encodeURIComponent(filePublicId)}`),
+    createDownload: (filePublicId: string) =>
+      http.request<{ file: FileMetadata; download: DownloadInstruction }>(
+        `/api/files/${encodeURIComponent(filePublicId)}/download`,
+      ),
   };
 }

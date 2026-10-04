@@ -61,4 +61,29 @@ describe("file API client", () => {
 
     expect(requests[0]?.url).toBe("http://localhost:3000/api/files/fil_test");
   });
+
+  it("maps file download instructions to the backend route", async () => {
+    const requests: Request[] = [];
+    const http = createBackendHttpClient({
+      baseUrl: "http://localhost:3000",
+      fetchImpl: async (input, init) => {
+        requests.push(new Request(input, init));
+        return Response.json({
+          file: {},
+          download: {
+            method: "GET",
+            bucket: "garanti-media",
+            object_key: "media/2026/01/02/fil_test/invoice.pdf",
+            headers: {},
+            presigned_url: "http://localhost:3000/presigned/download/invoice.pdf",
+            expires_at: "2026-01-02T03:19:05.000Z",
+          },
+        });
+      },
+    });
+
+    await createFileClient(http).createDownload("fil_test");
+
+    expect(requests[0]?.url).toBe("http://localhost:3000/api/files/fil_test/download");
+  });
 });

@@ -912,8 +912,45 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       return;
     }
 
+    if (url.pathname === "/api/files/fil_playwright/download") {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          file: {
+            public_id: "fil_playwright",
+            bucket: "media",
+            object_key: "uploads/kanit.txt",
+            original_name: "kanit.txt",
+            mime_type: "text/plain",
+            byte_size: 12,
+            checksum: "sha256:frontend-smoke",
+            created_at: "2026-01-01T00:00:00.000Z",
+            updated_at: "2026-01-01T00:01:00.000Z",
+          },
+          download: {
+            method: "GET",
+            bucket: "media",
+            object_key: "uploads/kanit.txt",
+            headers: {},
+            presigned_url: `${backendBaseUrl}/presigned/downloads/kanit.txt`,
+            expires_at: "2026-01-01T00:16:00.000Z",
+          },
+        }),
+      });
+      return;
+    }
+
     if (url.pathname === "/presigned/uploads/kanit.txt") {
       await route.fulfill({ status: 200, body: "ok" });
+      return;
+    }
+
+    if (url.pathname === "/presigned/downloads/kanit.txt") {
+      expect(route.request().method()).toBe("GET");
+      await route.fulfill({
+        contentType: "text/plain",
+        body: "frontend-ok",
+      });
       return;
     }
 
@@ -1187,6 +1224,10 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("file-metadata-detail")).toContainText("uploads/kanit.txt");
     await expect(page.getByTestId("file-metadata-detail")).toContainText("12 byte");
     await expect(page.getByTestId("file-metadata-detail")).toContainText("sha256:frontend-smoke");
+    await expect(page.getByTestId("file-download-detail")).toContainText("Dosya İndirme");
+    await expect(page.getByTestId("file-download-detail")).toContainText("GET");
+    await expect(page.getByTestId("file-download-detail")).toContainText("presigned download");
+    await expect(page.getByTestId("file-download-detail")).toContainText("hazır");
     await page.getByRole("link", { name: /santral/i }).click();
     await expect(page.getByTestId("webphone-flow")).toContainText("sip.example.com");
     const adminVisualRoutes = [
@@ -1272,7 +1313,9 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       "/admin/settings/providers.ptt.live_mode",
       "/api/files/uploads",
       "/api/files/fil_playwright",
+      "/api/files/fil_playwright/download",
       "/presigned/uploads/kanit.txt",
+      "/presigned/downloads/kanit.txt",
       "/api/webphone/config",
     ]),
   );

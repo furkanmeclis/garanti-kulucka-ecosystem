@@ -52,6 +52,24 @@ export function createFileRoutes() {
     );
   });
 
+  routes.get("/:file_public_id/download", async (context) => {
+    const db = context.get("db");
+    if (!db) {
+      return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
+    }
+
+    const file = await new FilesRepository(db).findByPublicId(context.req.param("file_public_id"));
+    if (!file) {
+      return context.json({ error: { code: "not_found", message: "File was not found" } }, 404);
+    }
+
+    const storage = createMediaStorageFromEnv();
+    return context.json({
+      file: serializeFile(file),
+      download: await storage.createDownloadInstruction(file.object_key),
+    });
+  });
+
   routes.get("/:file_public_id", async (context) => {
     const db = context.get("db");
     if (!db) {

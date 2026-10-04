@@ -84,4 +84,29 @@ describe("file storage foundation", () => {
     expect(instruction.expires_at).toEqual(expect.any(String));
     expect(JSON.stringify(instruction)).not.toContain("secret-key");
   });
+
+  it("creates secret-free presigned download instructions", async () => {
+    const storage = new MediaStorageService({
+      endpoint: "http://garage:3900",
+      region: "garage",
+      accessKeyId: "access-key",
+      secretAccessKey: "secret-key",
+      bucket: "garanti-media",
+      uploadUrlExpiresSeconds: 600,
+    });
+
+    const instruction = await storage.createDownloadInstruction("media/2026/01/02/fil_test/invoice.pdf");
+
+    expect(instruction).toMatchObject({
+      method: "GET",
+      bucket: "garanti-media",
+      object_key: "media/2026/01/02/fil_test/invoice.pdf",
+      headers: {},
+    });
+    expect(instruction.presigned_url).toContain("http://garage:3900/garanti-media/media/2026/01/02/fil_test/invoice.pdf");
+    expect(instruction.presigned_url).toContain("X-Amz-Signature=");
+    expect(instruction.presigned_url).toContain("X-Amz-Expires=600");
+    expect(instruction.expires_at).toEqual(expect.any(String));
+    expect(JSON.stringify(instruction)).not.toContain("secret-key");
+  });
 });
