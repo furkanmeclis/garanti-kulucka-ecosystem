@@ -1706,7 +1706,7 @@ export function App() {
                 type="button"
                 onClick={() => void handleApplyOrderFilter("all")}
               >
-                Hepsi {orderFilter === "all" ? data.orders.length : "sonuç"}
+                Hepsi {orderFilter === "all" ? data.orderSummary.total_count : "sonuç"}
               </button>
               <button
                 className={cx("secondary-action", orderFilter === "active" && "selected")}
@@ -2373,7 +2373,7 @@ export function App() {
             <DetailPanel title="İptal İncelemesi" testId="cancellation-detail">
               <DataRows
                 rows={[
-                  ["Sipariş kaydı", String(data.orders.length), "backend orders"],
+                  ["Sipariş kaydı", String(data.orderSummary.total_count), "orders summary API"],
                   ["Seçili sipariş", selectedOrder?.order_number ?? "-", selectedOrder?.customer_full_name ?? "-"],
                   ["Durum", selectedOrder?.status ?? "-", selectedOrder?.confirmation_status ?? "teyit bekliyor"],
                   ["Tutar", selectedOrder ? `${selectedOrder.total_amount} ${selectedOrder.currency}` : "-", selectedOrder?.source ?? "-"],
@@ -2443,10 +2443,10 @@ export function App() {
             <DetailPanel title="Stok ve Sevkiyat Sinyali" testId="inventory-detail">
               <DataRows
                 rows={[
-                  ["Sipariş kaynaklı stok sinyali", String(data.orders.length), "orders API"],
+                  ["Sipariş kaynaklı stok sinyali", String(data.orderSummary.total_count), "orders summary API"],
                   ["Son sipariş", selectedOrder?.order_number ?? "-", selectedOrder?.status ?? "-"],
                   ["Müşteri", selectedOrder?.customer_full_name ?? "-", selectedOrder?.source ?? "-"],
-                  ["Depo entegrasyonu", data.shipments.length > 0 ? "sevkiyat bağlı" : "hazır", "API senkron"],
+                  ["Depo entegrasyonu", data.shipmentSummary.total_count > 0 ? "sevkiyat bağlı" : "hazır", "shipments summary API"],
                 ]}
               />
             </DetailPanel>

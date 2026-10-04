@@ -2058,7 +2058,8 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("customer-card-detail")).toContainText("customers API");
     await expect(page.getByTestId("customer-card-detail")).toContainText("6");
     await page.goto(`${app.url}/iptaller`);
-    await expect(page.getByTestId("cancellations-flow")).toContainText("backend orders");
+    await expect(page.getByTestId("cancellations-flow")).toContainText("orders summary API");
+    await expect(page.getByTestId("cancellation-detail")).toContainText("5");
     await expect(page.getByTestId("cancellation-detail")).toContainText("ORD-PLAYWRIGHT");
     await expect(page.getByTestId("cancellation-detail")).toContainText("Playwright Customer");
     await expect(page.getByTestId("cancellation-detail")).toContainText("fixture order");
@@ -2082,7 +2083,8 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("inventory-flow")).toContainText("6");
     await expect(page.getByTestId("inventory-flow")).toContainText("Kritik Stok");
     await expect(page.getByTestId("inventory-flow")).toContainText("4");
-    await expect(page.getByTestId("inventory-flow")).toContainText("orders API");
+    await expect(page.getByTestId("inventory-flow")).toContainText("orders summary API");
+    await expect(page.getByTestId("inventory-flow")).toContainText("shipments summary API");
     await expect(page.getByTestId("inventory-categories")).toContainText("Kuluçka Makineleri");
     await expect(page.getByTestId("inventory-categories")).toContainText("5");
     await expect(page.getByTestId("inventory-categories")).toContainText("Yedek Parçalar");
@@ -2258,7 +2260,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("orders-flow")).toContainText("Toplam Sipariş");
     await expect(page.getByTestId("orders-flow")).toContainText("Aktif Sipariş");
     await expect(page.getByTestId("orders-flow")).toContainText("888.88 TRY");
-    await expect(page.getByTestId("order-section-filters")).toContainText("Hepsi 2");
+    await expect(page.getByTestId("order-section-filters")).toContainText("Hepsi 5");
     await expect(page.getByTestId("order-section-filters")).toContainText("Aktif 3");
     await expect(page.getByTestId("order-section-filters")).toContainText("Teyit 4");
     await expect(page.getByTestId("order-section-filters")).toContainText("Teslim 2");
@@ -2278,7 +2280,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("order-section-filters")).toContainText("Teslim 2");
     await expect(page.getByTestId("order-section-filters")).toContainText("Aktif sonuç");
     await page.getByTestId("order-filter-all").click();
-    await expect(page.getByTestId("order-section-filters")).toContainText("Hepsi 2");
+    await expect(page.getByTestId("order-section-filters")).toContainText("Hepsi 5");
     expect(orderQueryUrls).toEqual(
       expect.arrayContaining([
         "/api/orders?limit=20",
