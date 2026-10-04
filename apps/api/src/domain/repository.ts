@@ -169,6 +169,7 @@ export interface ShipmentSummaryRecord {
   total_count: number;
   active_count: number;
   delivered_count: number;
+  recipient_phone_count: number;
   provider_counts: {
     ptt: number;
     surat: number;
@@ -775,6 +776,7 @@ export class DomainRepository {
       total_count: shipments.length,
       active_count: shipments.length - deliveredShipments.length,
       delivered_count: deliveredShipments.length,
+      recipient_phone_count: shipments.filter((shipment) => Boolean(shipment.recipient_phone)).length,
       provider_counts: {
         ptt: pttShipments.length,
         surat: suratShipments.length,

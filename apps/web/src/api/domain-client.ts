@@ -194,6 +194,7 @@ export interface ShipmentSummaryStats {
   total_count: number;
   active_count: number;
   delivered_count: number;
+  recipient_phone_count: number;
   provider_counts: {
     ptt: number;
     surat: number;

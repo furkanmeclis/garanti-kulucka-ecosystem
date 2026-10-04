@@ -1028,6 +1028,7 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
       total_count: 1,
       active_count: 1,
       delivered_count: 0,
+      recipient_phone_count: 1,
       provider_counts: {
         ptt: 1,
         surat: 0,

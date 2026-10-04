@@ -2415,7 +2415,14 @@
       },
       "ShipmentSummaryStats": {
         "type": "object",
-        "required": ["total_count", "active_count", "delivered_count", "provider_counts", "exception_counts"],
+        "required": [
+          "total_count",
+          "active_count",
+          "delivered_count",
+          "recipient_phone_count",
+          "provider_counts",
+          "exception_counts"
+        ],
         "properties": {
           "total_count": {
             "type": "integer",
@@ -2426,6 +2433,10 @@
             "minimum": 0
           },
           "delivered_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "recipient_phone_count": {
             "type": "integer",
             "minimum": 0
           },

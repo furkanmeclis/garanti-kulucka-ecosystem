@@ -410,6 +410,7 @@ const defaultShipmentSummary: ShipmentSummaryStats = {
   total_count: 0,
   active_count: 0,
   delivered_count: 0,
+  recipient_phone_count: 0,
   provider_counts: {
     ptt: 0,
     surat: 0,
@@ -1412,7 +1413,7 @@ export function App() {
   );
   const activeSmsTemplateValue = smsVariableValues[activeSmsTemplateVariable];
   const smsInfo = smsSegmentInfo(smsPreview);
-  const smsRecipientCount = data.shipments.filter((shipment) => Boolean(shipment.recipient_phone)).length;
+  const smsRecipientCount = data.shipmentSummary.recipient_phone_count;
   const balanceSummary = toBalanceView(data.balanceSummary);
   const commentSummary = toCommentModerationView(data.commentModeration);
   const unreadConversationCount = data.conversationSummary.unread_count;
