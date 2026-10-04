@@ -673,6 +673,22 @@ async function startFixtureApi() {
     },
     config,
   );
+  const ownerToken = await signAccessToken(
+    {
+      user_public_id: user.public_id,
+      session_public_id: session.public_id,
+      role: "owner",
+    },
+    config,
+  );
+  const staffToken = await signAccessToken(
+    {
+      user_public_id: user.public_id,
+      session_public_id: session.public_id,
+      role: "calisan",
+    },
+    config,
+  );
   const viewerToken = await signAccessToken(
     {
       user_public_id: user.public_id,
@@ -721,6 +737,20 @@ async function startFixtureApi() {
       "x-request-id": "playwright_domain_flows_cargo",
     },
   });
+  const ownerClient = await request.newContext({
+    baseURL,
+    extraHTTPHeaders: {
+      authorization: `Bearer ${ownerToken}`,
+      "x-request-id": "playwright_domain_flows_owner",
+    },
+  });
+  const staffClient = await request.newContext({
+    baseURL,
+    extraHTTPHeaders: {
+      authorization: `Bearer ${staffToken}`,
+      "x-request-id": "playwright_domain_flows_staff",
+    },
+  });
   const viewerClient = await request.newContext({
     baseURL,
     extraHTTPHeaders: {
@@ -732,12 +762,16 @@ async function startFixtureApi() {
   return {
     client,
     cargoClient,
+    ownerClient,
+    staffClient,
     viewerClient,
     publishedRealtime,
     providerDeliveryJobs,
     async close() {
       await client.dispose();
       await cargoClient.dispose();
+      await ownerClient.dispose();
+      await staffClient.dispose();
       await viewerClient.dispose();
       await new Promise<void>((resolve, reject) => {
         server.close((error) => {
@@ -755,6 +789,7 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
   try {
     const [
       conversationResponse,
+      commentModerationResponse,
       customerResponse,
       messageResponse,
       orderResponse,
@@ -767,6 +802,7 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
     ] =
       await Promise.all([
         api.client.get("/api/conversations?limit=10"),
+        api.client.get("/api/comments/moderation-summary"),
         api.client.get("/api/customers?limit=10"),
         api.client.get(`/api/conversations/${conversation.public_id}/messages?limit=10`),
         api.client.get("/api/orders?limit=10"),
@@ -790,6 +826,21 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
         },
       ],
     });
+
+    expect(commentModerationResponse.status()).toBe(200);
+    expect(await commentModerationResponse.json()).toMatchObject({
+      manual_queue: 1,
+      automatic_queue: 0,
+      answered: 0,
+      instagram: 1,
+      facebook: 0,
+    });
+    const [ownerCommentModerationResponse, staffCommentModerationResponse] = await Promise.all([
+      api.ownerClient.get("/api/comments/moderation-summary"),
+      api.staffClient.get("/api/comments/moderation-summary"),
+    ]);
+    expect(ownerCommentModerationResponse.status()).toBe(200);
+    expect(staffCommentModerationResponse.status()).toBe(200);
 
     expect(customerResponse.status()).toBe(200);
     expect(await customerResponse.json()).toMatchObject({
@@ -1267,6 +1318,11 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
     const forbiddenFileOrphansResponse = await api.cargoClient.get("/api/files/orphans?limit=10");
     expect(forbiddenFileOrphansResponse.status()).toBe(403);
     expect(await forbiddenFileOrphansResponse.json()).toMatchObject({
+      error: { code: "forbidden" },
+    });
+    const forbiddenCommentModerationResponse = await api.cargoClient.get("/api/comments/moderation-summary");
+    expect(forbiddenCommentModerationResponse.status()).toBe(403);
+    expect(await forbiddenCommentModerationResponse.json()).toMatchObject({
       error: { code: "forbidden" },
     });
     const forbiddenOrphanCleanupDryRunResponse = await api.cargoClient.post("/api/files/fil_orphan/orphan-cleanup-dry-run", {

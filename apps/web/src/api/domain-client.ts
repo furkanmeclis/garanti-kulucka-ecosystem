@@ -104,6 +104,14 @@ export interface PaymentRequestResult {
   order: OrderSummary;
 }
 
+export interface CommentModerationSummary {
+  manual_queue: number;
+  automatic_queue: number;
+  answered: number;
+  instagram: number;
+  facebook: number;
+}
+
 export function createDomainClient(http: BackendHttpClient) {
   return {
     listConversations: (params: { channel?: string; status?: string; limit?: number } = {}) => {
@@ -116,6 +124,8 @@ export function createDomainClient(http: BackendHttpClient) {
     },
     listCustomers: (limit = 50) =>
       http.request<{ data: CustomerSummary[] }>(`/api/customers?limit=${limit}`),
+    getCommentModerationSummary: () =>
+      http.request<CommentModerationSummary>("/api/comments/moderation-summary"),
     listMessages: (conversationPublicId: string, limit = 100) =>
       http.request<{ data: MessageSummary[] }>(
         `/api/conversations/${encodeURIComponent(conversationPublicId)}/messages?limit=${limit}`,

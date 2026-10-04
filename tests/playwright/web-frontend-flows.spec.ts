@@ -205,6 +205,21 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       return;
     }
 
+    if (url.pathname === "/api/comments/moderation-summary") {
+      expect(["admin", "calisan"].includes(currentUser.role)).toBe(true);
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          manual_queue: 7,
+          automatic_queue: 3,
+          answered: 11,
+          instagram: 5,
+          facebook: 2,
+        }),
+      });
+      return;
+    }
+
     if (url.pathname === "/api/conversations") {
       conversationQueryUrls.push(`${url.pathname}${url.search}`);
       const conversations = [
@@ -1770,9 +1785,12 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await page.goto(`${app.url}/yorumlar`);
     await expect(page.getByTestId("comments-flow")).toContainText("backend conversations");
     await expect(page.getByTestId("comments-ai-summary")).toContainText("Manuel bekleyen");
+    await expect(page.getByTestId("comments-ai-summary")).toContainText("7");
     await expect(page.getByTestId("comments-ai-summary")).toContainText("Instagram");
     await expect(page.getByTestId("comments-ai-summary")).toContainText("Facebook");
     await expect(page.getByTestId("comments-ai-summary")).toContainText("Cevaplı");
+    await expect(page.getByTestId("comments-ai-summary")).toContainText("11");
+    await expect(page.getByTestId("comments-ai-summary")).toContainText("3");
     await expect(page.getByTestId("comments-ai-summary")).toContainText("AI cevap tipi");
     await expect(page.getByTestId("comments-detail")).toContainText("Playwright Customer");
     await expect(page.getByTestId("comments-detail")).toContainText("instagram");
@@ -2243,6 +2261,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       "/auth/logout",
       "/auth/presence",
       "/api/conversations",
+      "/api/comments/moderation-summary",
       "/api/customers",
       "/api/conversations/cnv_playwright/messages",
       "/api/conversations/cnv_playwright/state",

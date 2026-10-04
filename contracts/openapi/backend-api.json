@@ -247,6 +247,26 @@
         }
       }
     },
+    "/api/comments/moderation-summary": {
+      "get": {
+        "operationId": "getCommentModerationSummary",
+        "responses": {
+          "200": {
+            "description": "Backend-owned comment moderation queue summary",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommentModerationSummary"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/api/conversations/{conversation_public_id}/state": {
       "patch": {
         "operationId": "updateConversationState",
@@ -1473,6 +1493,32 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "CommentModerationSummary": {
+        "type": "object",
+        "required": ["manual_queue", "automatic_queue", "answered", "instagram", "facebook"],
+        "properties": {
+          "manual_queue": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "automatic_queue": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "answered": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "instagram": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "facebook": {
+            "type": "integer",
+            "minimum": 0
           }
         }
       },

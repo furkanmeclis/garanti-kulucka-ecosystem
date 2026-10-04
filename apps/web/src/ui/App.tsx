@@ -42,6 +42,7 @@ import {
 import { createAuthClient, type LoginResponse } from "../api/auth-client.js";
 import {
   createDomainClient,
+  type CommentModerationSummary as BackendCommentModerationSummary,
   type ConversationSummary,
   type CustomerSummary,
   type MessageSummary,
@@ -71,6 +72,7 @@ interface DashboardData {
   providerCatalog: ProviderCatalogItem[];
   providerAttempts: ProviderAttemptViewModel[];
   fileOrphans: FileMetadata[];
+  commentModeration: BackendCommentModerationSummary;
   webphone: WebphoneConfig | null;
 }
 
@@ -107,7 +109,7 @@ interface BalanceSummary {
   pendingRequestCount: number;
 }
 
-interface CommentModerationSummary {
+interface CommentModerationViewSummary {
   manualQueue: number;
   automaticQueue: number;
   answered: number;
@@ -325,23 +327,22 @@ function balanceSummaryFromOrders(orders: OrderSummary[]): BalanceSummary {
   };
 }
 
-function commentModerationSummaryFrom(conversations: ConversationSummary[]): CommentModerationSummary {
-  return conversations.reduce<CommentModerationSummary>(
-    (summary, conversation) => {
-      const channel = conversation.channel.toLocaleLowerCase("tr-TR");
-      if (channel.includes("instagram")) summary.instagram += 1;
-      if (channel.includes("facebook") || channel.includes("messenger")) summary.facebook += 1;
-      if (conversation.status === "closed" || conversation.status === "resolved") {
-        summary.answered += 1;
-      } else if (conversation.human_agent_enabled || conversation.unread_count > 0) {
-        summary.manualQueue += 1;
-      } else if (conversation.is_in_pool) {
-        summary.automaticQueue += 1;
-      }
-      return summary;
-    },
-    { manualQueue: 0, automaticQueue: 0, answered: 0, instagram: 0, facebook: 0 },
-  );
+const defaultCommentModerationSummary: BackendCommentModerationSummary = {
+  manual_queue: 0,
+  automatic_queue: 0,
+  answered: 0,
+  instagram: 0,
+  facebook: 0,
+};
+
+function toCommentModerationView(summary: BackendCommentModerationSummary): CommentModerationViewSummary {
+  return {
+    manualQueue: summary.manual_queue,
+    automaticQueue: summary.automatic_queue,
+    answered: summary.answered,
+    instagram: summary.instagram,
+    facebook: summary.facebook,
+  };
 }
 
 function smsSegmentInfo(message: string) {
@@ -428,6 +429,7 @@ export function App() {
     providerCatalog: [],
     providerAttempts: [],
     fileOrphans: [],
+    commentModeration: defaultCommentModerationSummary,
     webphone: null,
   });
   const [status, setStatus] = useState("Hazır");
@@ -577,9 +579,11 @@ export function App() {
   async function loadDashboard() {
     setStatus("Backend API akışları yükleniyor");
     const canReadCustomers = user?.role === "admin" || user?.role === "owner" || user?.role === "calisan";
-    const [conversations, customers, orders, products, shipments, settings, webphoneConfig] = await Promise.all([
+    const canReadComments = user?.role === "admin" || user?.role === "owner" || user?.role === "calisan";
+    const [conversations, customers, commentModeration, orders, products, shipments, settings, webphoneConfig] = await Promise.all([
       domain.listConversations({ limit: 20 }),
       canReadCustomers ? domain.listCustomers(50) : Promise.resolve({ data: [] }),
+      canReadComments ? domain.getCommentModerationSummary() : Promise.resolve(defaultCommentModerationSummary),
       domain.listOrders(20),
       domain.listProducts(50),
       domain.listShipments(20),
@@ -615,6 +619,7 @@ export function App() {
       providerCatalog: providerCatalog.data,
       providerAttempts: providerAttempts.data.map(toProviderAttemptViewModel),
       fileOrphans: fileOrphans.data,
+      commentModeration,
       webphone: webphoneConfig,
     });
     setSelectedConversationId((current) => current ?? firstConversation ?? null);
@@ -658,6 +663,7 @@ export function App() {
         providerCatalog: [],
         providerAttempts: [],
         fileOrphans: [],
+        commentModeration: defaultCommentModerationSummary,
         webphone: null,
       });
       setIntegrationSnapshot(null);
@@ -1212,7 +1218,7 @@ export function App() {
   const orderCurrency = data.orders[0]?.currency ?? "TRY";
   const reportTotalAmount = data.orders.reduce((sum, order) => sum + moneyValue(order.total_amount), 0);
   const balanceSummary = balanceSummaryFromOrders(data.orders);
-  const commentSummary = commentModerationSummaryFrom(data.conversations);
+  const commentSummary = toCommentModerationView(data.commentModeration);
   const unreadConversationCount = data.conversations.reduce((sum, conversation) => sum + conversation.unread_count, 0);
   const poolConversationCount = data.conversations.filter((conversation) => conversation.is_in_pool).length;
   const humanAgentConversationCount = data.conversations.filter((conversation) => conversation.human_agent_enabled).length;

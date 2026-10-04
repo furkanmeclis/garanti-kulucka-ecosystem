@@ -76,6 +76,10 @@ function canReadCustomers(role: string | undefined) {
   return role === "admin" || role === "owner" || role === "calisan";
 }
 
+function canReadCommentModeration(role: string | undefined) {
+  return role === "admin" || role === "owner" || role === "calisan";
+}
+
 function canSendSms(role: string | undefined) {
   return role === "admin" || role === "owner" || role === "calisan" || role === "kargo_operatoru";
 }
@@ -117,6 +121,43 @@ export function createDomainRoutes() {
     });
 
     return context.json({ data: conversations.map(serializeConversation) });
+  });
+
+  routes.get("/comments/moderation-summary", async (context) => {
+    if (!canReadCommentModeration(context.get("auth")?.role)) {
+      return context.json({ error: { code: "forbidden", message: "Comment moderation access is not allowed" } }, 403);
+    }
+
+    const db = context.get("db");
+    if (!db) {
+      return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
+    }
+
+    const conversations = await new DomainRepository(db).listConversations({ limit: 200 });
+    const summary = conversations.reduce(
+      (current, conversation) => {
+        const channel = conversation.channel.toLocaleLowerCase("tr-TR");
+        if (channel.includes("instagram")) current.instagram += 1;
+        if (channel.includes("facebook") || channel.includes("messenger")) current.facebook += 1;
+        if (conversation.status === "closed" || conversation.status === "resolved") {
+          current.answered += 1;
+        } else if (conversation.human_agent_enabled || conversation.unread_count > 0) {
+          current.manual_queue += 1;
+        } else if (conversation.is_in_pool) {
+          current.automatic_queue += 1;
+        }
+        return current;
+      },
+      {
+        manual_queue: 0,
+        automatic_queue: 0,
+        answered: 0,
+        instagram: 0,
+        facebook: 0,
+      },
+    );
+
+    return context.json(summary);
   });
 
   routes.get("/conversations/:conversation_public_id/messages", async (context) => {
