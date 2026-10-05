@@ -20,6 +20,12 @@ cleanup() {
 
 trap cleanup EXIT
 
+# The isolated config dir drops credentials helpers, but CLI plugins (buildx) must stay reachable,
+# otherwise Docker Desktop falls back to the legacy builder without --mount/--build-context support.
+ORIGINAL_DOCKER_CONFIG=${DOCKER_CONFIG:-$HOME/.docker}
+if [ -d "$ORIGINAL_DOCKER_CONFIG/cli-plugins" ]; then
+  ln -s "$ORIGINAL_DOCKER_CONFIG/cli-plugins" "$DOCKER_CONFIG_DIR/cli-plugins"
+fi
 export DOCKER_CONFIG=$DOCKER_CONFIG_DIR
 
 cache_is_available() {

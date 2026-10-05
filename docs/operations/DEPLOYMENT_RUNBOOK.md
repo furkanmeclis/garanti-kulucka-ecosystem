@@ -47,7 +47,8 @@ değişken adlarını ve kuralı loglar; değerler (secret, URL içindeki parola
 - Her ortamda: URL'ler protokol bazında (`postgres(ql)://`, `redis(s)://`, `http(s)://`) ve sayısal
   ayarlar (`PORT`, TTL'ler, `WORKER_CONCURRENCY`, shutdown timeout'ları) doğrulanır. Herhangi bir
   `S3_*` değişkeni verilirse `S3_ENDPOINT`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`,
-  `S3_BUCKET_MEDIA` birlikte zorunludur.
+  `S3_BUCKET_MEDIA` birlikte zorunludur. `METRICS_ENABLED=true` ise `METRICS_BEARER_TOKEN` veya
+  `METRICS_PORT` zorunludur; katı ortamlarda bearer token da 32 karakter kuralına tabidir.
 
 Deploy öncesi doğrulama: yeni image'ı hedef ortam env'i ile bir kez `--rm` başlatın; exit code 78
 görülürse rollout başlamaz.
@@ -86,7 +87,8 @@ Sıra her zaman **migrate → worker → api → web** şeklindedir.
    BullMQ worker'larını pause eder, aktif job'ları `WORKER_SHUTDOWN_TIMEOUT_MS` (varsayılan 30s) kadar
    bekler; süre aşılırsa kalan worker'lar force-close edilir ve job'lar stalled olarak başka worker'a
    geçer (processor'lar idempotent olmalıdır). Orchestrator `stop_grace_period` değeri bu timeout'tan
-   en az 5 saniye büyük olmalıdır (compose: 45s / 40s).
+   en az 5 saniye büyük olmalıdır (compose: 45s / 40s). Worker health (`WORKER_HTTP_PORT`) ve ayrı
+   `METRICS_PORT` listener'ları drain süresince açık kalır, job'lar bittikten sonra kapatılır.
 3. **api:** Instance'lar birer birer değiştirilir. Yeni instance `/health/ready` 200 dönmeden trafiğe
    alınmaz. Eski instance `SIGTERM` aldığında:
    - yeni HTTP istekleri `503 server_draining` + `Connection: close` alır (readiness da 503 döner,
@@ -95,7 +97,7 @@ Sıra her zaman **migrate → worker → api → web** şeklindedir.
    - Socket.IO yeni handshake'leri reddeder ve bağlı istemcileri disconnect eder; istemciler sağlıklı
      instance'a yeniden bağlanır (Redis streams adapter oda yayınlarını taşır),
    - süren istekler `API_SHUTDOWN_TIMEOUT_MS` (varsayılan 25s) kadar beklenir; sonra Redis, kuyruk
-     publisher'ları ve DB pool kapatılır. Timeout aşılırsa exit code 1 ile loglanır.
+     publisher'ları, internal `METRICS_PORT` listener'ı ve DB pool kapatılır. Timeout aşılırsa exit code 1 ile loglanır.
 4. **web:** Statik bundle en son değiştirilir; böylece yeni UI'nin çağırdığı API alanları zaten
    yayındadır.
 
