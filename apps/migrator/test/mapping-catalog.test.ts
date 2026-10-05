@@ -25,8 +25,8 @@ describe("legacy mapping catalog", () => {
       .not.toThrow();
     expect(customerMapping.targetEntities).toEqual([
       { entity: "customers", mapping: "direct", readiness: "dry-run" },
-      { entity: "customer_addresses", mapping: "synthetic", readiness: "descriptive" },
-      { entity: "customer_external_identities", mapping: "synthetic", readiness: "descriptive" },
+      { entity: "customer_addresses", mapping: "synthetic", readiness: "apply-ready" },
+      { entity: "customer_external_identities", mapping: "synthetic", readiness: "apply-ready" },
     ]);
     expect(customerMapping.columns.map((column) => column.name)).toEqual([
       "id",
@@ -252,10 +252,8 @@ describe("legacy mapping catalog", () => {
     ]);
   });
 
-  it("blocks customer apply while external identities or addresses are descriptive or undeclared", () => {
-    expect(() => assertApplyPrerequisites(legacyMappingCatalog, ["customers"])).toThrow(
-      "Migration entity customers cannot be applied while customer_external_identities is descriptive in catalog",
-    );
+  it("allows customer apply prerequisites only when external identities and addresses are apply-ready", () => {
+    expect(() => assertApplyPrerequisites(legacyMappingCatalog, ["customers"])).not.toThrow();
     expect(() => assertApplyPrerequisites(createLegacyMappingCatalog({
       ...legacyMappingCatalog,
       tables: [{
@@ -272,11 +270,11 @@ describe("legacy mapping catalog", () => {
       tables: [{
         ...customerMapping,
         targetEntities: customerMapping.targetEntities.map((target) => target.entity === "customer_external_identities"
-          ? { ...target, mapping: "direct" as const, readiness: "dry-run" as const }
+          ? { ...target, readiness: "descriptive" as const }
           : target),
       }],
     }), ["customers"])).toThrow(
-      "Migration entity customers cannot be applied while customer_addresses is descriptive in catalog",
+      "Migration entity customers cannot be applied while customer_external_identities is descriptive in catalog",
     );
     expect(() => assertApplyPrerequisites(createLegacyMappingCatalog({
       ...legacyMappingCatalog,
@@ -284,9 +282,7 @@ describe("legacy mapping catalog", () => {
         ...customerMapping,
         targetEntities: customerMapping.targetEntities.filter(
           (target) => target.entity !== "customer_addresses",
-        ).map((target) => target.entity === "customer_external_identities"
-          ? { ...target, mapping: "direct" as const, readiness: "dry-run" as const }
-          : target),
+        ),
       }],
     }), ["customers"])).toThrow(
       "Migration entity customers cannot be applied while customer_addresses is undeclared in catalog",
@@ -296,16 +292,15 @@ describe("legacy mapping catalog", () => {
       tables: [{
         ...customerMapping,
         targetEntities: customerMapping.targetEntities.map((target) => {
-          if (target.entity === "customer_external_identities") {
-            return { ...target, mapping: "direct" as const, readiness: "dry-run" as const };
-          }
           if (target.entity === "customer_addresses") {
-            return { ...target, mapping: "direct" as const, readiness: "dry-run" as const };
+            return { ...target, readiness: "descriptive" as const };
           }
           return target;
         }),
       }],
-    }), ["customers"])).not.toThrow();
+    }), ["customers"])).toThrow(
+      "Migration entity customers cannot be applied while customer_addresses is descriptive in catalog",
+    );
   });
 
   it.each([
@@ -371,7 +366,7 @@ describe("legacy mapping catalog", () => {
 
   it.each([
     ["synthetic dry-run", "synthetic", "dry-run", "synthetic target customers cannot be dry-run-ready"],
-    ["direct descriptive", "direct", "descriptive", "direct target customers cannot be descriptive"],
+    ["direct descriptive", "direct", "descriptive", "direct target customers must be dry-run-ready"],
   ] as const)("rejects %s readiness", (_label, mapping, readiness, message) => {
     const catalog = catalogWith();
     const table = catalog.tables[0]!;

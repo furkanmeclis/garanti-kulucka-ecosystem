@@ -10,6 +10,8 @@ import { assertMigrationRunId } from "./source-manifest.js";
 import type {
   CanonicalRecord,
   CanonicalWriteResult,
+  CustomerAddressCanonicalRecord,
+  CustomerExternalIdentityCanonicalRecord,
   LegacyIdMapEntry,
   LegacyIdMapKey,
   LegacyIdMapWrite,
@@ -99,6 +101,69 @@ export class DatabaseMigrationTarget implements MigrationTarget {
   }
 
   async writeCanonicalRecord(input: CanonicalRecord): Promise<CanonicalWriteResult> {
+    return this.writeResolvedRecord(input);
+  }
+
+  async writeCustomerAddressRecord(input: CustomerAddressCanonicalRecord): Promise<CanonicalWriteResult> {
+    const customerId = await this.findRequiredPublicId("customers", input.customerPublicId, "customer");
+    return this.writeResolvedRecord({
+      targetTable: input.targetTable,
+      targetId: input.targetId,
+      checksum: input.checksum,
+      payload: {
+        customer_id: customerId,
+        label: input.payload.label,
+        address_line: input.payload.address_line,
+        district: input.payload.district,
+        city: input.payload.city,
+        country: input.payload.country,
+        postal_code: input.payload.postal_code,
+        is_default: input.payload.is_default,
+      },
+    });
+  }
+
+  async writeCustomerExternalIdentityRecord(
+    input: CustomerExternalIdentityCanonicalRecord,
+  ): Promise<CanonicalWriteResult> {
+    const customerId = await this.findRequiredPublicId("customers", input.customerPublicId, "customer");
+    const integrationAccountId = await this.findRequiredPublicId(
+      "integration_accounts",
+      input.integrationAccountPublicId,
+      "integration account",
+    );
+    return this.writeResolvedRecord({
+      targetTable: input.targetTable,
+      targetId: input.targetId,
+      checksum: input.checksum,
+      payload: {
+        customer_id: customerId,
+        integration_account_id: integrationAccountId,
+        external_id: input.payload.external_id,
+        metadata: jsonb(input.payload.metadata),
+      },
+    });
+  }
+
+  private async findRequiredPublicId(
+    table: "customers" | "integration_accounts",
+    publicId: string,
+    label: string,
+  ): Promise<number> {
+    const db = this.db as unknown as DynamicMigrationDatabase;
+    const row = await db
+      .selectFrom(table)
+      .select("id")
+      .where("public_id", "=", publicId)
+      .executeTakeFirst();
+    const id = row?.id;
+    if (typeof id !== "number") {
+      throw new Error(`Cannot resolve ${label} public id ${publicId} for customer fan-out write`);
+    }
+    return id;
+  }
+
+  private async writeResolvedRecord(input: CanonicalRecord): Promise<CanonicalWriteResult> {
     const values = mapCanonicalRecordToInsert(input);
     const db = this.db as unknown as DynamicMigrationDatabase;
     const existing = await db

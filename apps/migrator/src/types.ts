@@ -113,6 +113,8 @@ export interface MigrationTarget {
   ): Promise<T>;
   runInTransaction?<T>(operation: (target: MigrationTarget) => Promise<T>): Promise<T>;
   writeCanonicalRecord(input: CanonicalRecord): Promise<CanonicalWriteResult>;
+  writeCustomerAddressRecord?(input: CustomerAddressCanonicalRecord): Promise<CanonicalWriteResult>;
+  writeCustomerExternalIdentityRecord?(input: CustomerExternalIdentityCanonicalRecord): Promise<CanonicalWriteResult>;
   findLegacyIdMap(input: LegacyIdMapKey): Promise<LegacyIdMapEntry | null>;
   upsertLegacyIdMap(input: LegacyIdMapWrite): Promise<LegacyIdMapEntry>;
   findMigrationBatchState(input: MigrationBatchStateKey): Promise<MigrationBatchState | null>;
@@ -120,6 +122,34 @@ export interface MigrationTarget {
   recordMigrationBatchSucceeded(input: MigrationBatchStateSuccess): Promise<MigrationBatchState>;
   recordMigrationBatchFailed(input: MigrationBatchStateFailure): Promise<MigrationBatchState>;
   registerMigrationRun(input: MigrationRunRegistration): Promise<MigrationRunState>;
+}
+
+export interface CustomerAddressCanonicalRecord {
+  readonly targetTable: "customer_addresses";
+  readonly targetId: string;
+  readonly customerPublicId: string;
+  readonly payload: {
+    readonly label: string | null;
+    readonly address_line: string;
+    readonly district: string | null;
+    readonly city: string | null;
+    readonly country: string;
+    readonly postal_code: string | null;
+    readonly is_default: boolean;
+  };
+  readonly checksum: string;
+}
+
+export interface CustomerExternalIdentityCanonicalRecord {
+  readonly targetTable: "customer_external_identities";
+  readonly targetId: string;
+  readonly customerPublicId: string;
+  readonly integrationAccountPublicId: string;
+  readonly payload: {
+    readonly external_id: string;
+    readonly metadata: Record<string, unknown>;
+  };
+  readonly checksum: string;
 }
 
 export interface MigrationRunRegistration {

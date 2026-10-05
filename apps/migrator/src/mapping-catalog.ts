@@ -15,7 +15,7 @@ export interface LegacyTableMapping {
   readonly targetEntities: readonly {
     readonly entity: MigrationEntity;
     readonly mapping: "direct" | "synthetic";
-    readonly readiness: "dry-run" | "descriptive";
+    readonly readiness: "dry-run" | "apply-ready" | "descriptive";
   }[];
   readonly columns: readonly LegacyColumnContract[];
 }
@@ -29,7 +29,7 @@ export const mappingCatalogVersion = "p2-shipment-transform-v1";
 
 const canonicalMigrationEntitySet = new Set<string>(canonicalMigrationEntities);
 const targetMappingValues = new Set<string>(["direct", "synthetic"]);
-const targetReadinessValues = new Set<string>(["dry-run", "descriptive"]);
+const targetReadinessValues = new Set<string>(["dry-run", "apply-ready", "descriptive"]);
 const applyPrerequisites: Partial<Record<MigrationEntity, readonly MigrationEntity[]>> = {
   // Customer drafts fan out into identity/address targets; apply stays closed until both are executable.
   customers: ["customer_external_identities", "customer_addresses"],
@@ -43,8 +43,8 @@ export const legacyMappingCatalog = createLegacyMappingCatalog({
       idColumn: "id",
       targetEntities: [
         { entity: "customers", mapping: "direct", readiness: "dry-run" },
-        { entity: "customer_addresses", mapping: "synthetic", readiness: "descriptive" },
-        { entity: "customer_external_identities", mapping: "synthetic", readiness: "descriptive" },
+        { entity: "customer_addresses", mapping: "synthetic", readiness: "apply-ready" },
+        { entity: "customer_external_identities", mapping: "synthetic", readiness: "apply-ready" },
       ],
       columns: [
         column("id", "uuid", "uuid", false),
@@ -303,8 +303,8 @@ export function validateLegacyMappingCatalog(catalog: LegacyMappingCatalog): voi
       if (target.mapping === "synthetic" && target.readiness === "dry-run") {
         throw new Error(`Legacy mapping catalog synthetic target ${target.entity} cannot be dry-run-ready`);
       }
-      if (target.mapping === "direct" && target.readiness === "descriptive") {
-        throw new Error(`Legacy mapping catalog direct target ${target.entity} cannot be descriptive`);
+      if (target.mapping === "direct" && target.readiness !== "dry-run") {
+        throw new Error(`Legacy mapping catalog direct target ${target.entity} must be dry-run-ready`);
       }
     }
 
@@ -357,7 +357,7 @@ export function assertApplyPrerequisites(
   for (const entity of entities) {
     for (const prerequisite of applyPrerequisites[entity] ?? []) {
       const prerequisiteReadiness = readiness.get(prerequisite);
-      if (prerequisiteReadiness === undefined || prerequisiteReadiness === "descriptive") {
+      if (prerequisiteReadiness === undefined || prerequisiteReadiness !== "apply-ready") {
         throw new Error(
           `Migration entity ${entity} cannot be applied while ${prerequisite} is ${prerequisiteReadiness ?? "undeclared"} in catalog`,
         );

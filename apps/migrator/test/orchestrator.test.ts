@@ -275,7 +275,7 @@ describe("migration orchestrator", () => {
     await expect(runMigration({
       mode: "apply",
       source,
-      mappingCatalog: legacyMappingCatalog,
+      mappingCatalog: customerIdentityDescriptiveCatalog,
       target,
       runId: "legacy-import-2026-09",
       batchSize: 100,
@@ -1046,8 +1046,22 @@ const identityReadyCatalog = createLegacyMappingCatalog({
     idColumn: "id",
     targetEntities: [
       { entity: "customers", mapping: "direct", readiness: "dry-run" },
-      { entity: "customer_external_identities", mapping: "direct", readiness: "dry-run" },
-      { entity: "customer_addresses", mapping: "direct", readiness: "dry-run" },
+      { entity: "customer_external_identities", mapping: "synthetic", readiness: "apply-ready" },
+      { entity: "customer_addresses", mapping: "synthetic", readiness: "apply-ready" },
+    ],
+    columns: [{ name: "id", dataType: "bigint", udtName: "int8", nullable: false, required: true }],
+  }],
+});
+
+const customerIdentityDescriptiveCatalog = createLegacyMappingCatalog({
+  version: "identity-descriptive-catalog-v1",
+  tables: [{
+    sourceTable: "public.customers",
+    idColumn: "id",
+    targetEntities: [
+      { entity: "customers", mapping: "direct", readiness: "dry-run" },
+      { entity: "customer_external_identities", mapping: "synthetic", readiness: "descriptive" },
+      { entity: "customer_addresses", mapping: "synthetic", readiness: "apply-ready" },
     ],
     columns: [{ name: "id", dataType: "bigint", udtName: "int8", nullable: false, required: true }],
   }],
