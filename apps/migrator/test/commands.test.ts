@@ -186,6 +186,175 @@ describe("migrator commands", () => {
     expect(executeMigration).not.toHaveBeenCalled();
   });
 
+  it.each([
+    {
+      name: "missing explicit enable flag",
+      env: {},
+      message: migrationApplyDisabledMessage,
+    },
+    {
+      name: "missing backup evidence path",
+      env: { MIGRATION_APPLY_ENABLED: "true" },
+      message: "MIGRATION_BACKUP_EVIDENCE is required",
+    },
+    {
+      name: "unreadable backup evidence",
+      env: { MIGRATION_APPLY_ENABLED: "true", MIGRATION_BACKUP_EVIDENCE: "/tmp/not-a-real-backup-evidence.json" },
+      message: "MIGRATION_BACKUP_EVIDENCE could not be read",
+    },
+    {
+      name: "same source and target database",
+      env: {
+        MIGRATION_APPLY_ENABLED: "true",
+        MIGRATION_BACKUP_EVIDENCE: "same",
+        TARGET_DATABASE_URL: "postgres://db.example/legacy",
+      },
+      message: "Source and target database identities must be different",
+    },
+  ])("refuses apply gate when $name without opening migration connections", async ({ env, message }) => {
+    const directory = await mkdtemp(join(tmpdir(), "migrator-apply-gate-"));
+    const evidenceFile = join(directory, "backup.json");
+    const executeMigration = vi.fn().mockResolvedValue(undefined);
+    const verifyTarget = vi.fn();
+
+    try {
+      await writeFile(evidenceFile, JSON.stringify({
+        targetDatabaseIdentity: { host: "db.example", port: "5432", database: "canonical" },
+        createdAt: new Date().toISOString(),
+      }));
+      const resolvedEnv = Object.fromEntries(
+        Object.entries(env).map(([key, value]) => [key, value === "same" ? evidenceFile : value]),
+      );
+
+      await expect(runMigratorCommand(
+        "migrate:apply",
+        {
+          SOURCE_DATABASE_URL: "postgres://db.example/legacy",
+          TARGET_DATABASE_URL: "postgres://db.example/canonical",
+          MIGRATION_RUN_ID: "legacy-import-2026-10",
+          ...resolvedEnv,
+        },
+        {},
+        { executeMigration, verifyTarget },
+      )).rejects.toThrow(message);
+      expect(executeMigration).not.toHaveBeenCalled();
+      expect(verifyTarget).not.toHaveBeenCalled();
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    {
+      name: "malformed backup evidence",
+      evidence: "{",
+      message: "MIGRATION_BACKUP_EVIDENCE must contain valid JSON",
+    },
+    {
+      name: "invalid backup manifest",
+      evidence: JSON.stringify({ createdAt: "2026-10-05T00:00:00.000Z" }),
+      message: "MIGRATION_BACKUP_EVIDENCE must contain a backup manifest",
+    },
+    {
+      name: "stale backup manifest",
+      evidence: JSON.stringify({
+        targetDatabaseIdentity: { host: "db.example", port: "5432", database: "canonical" },
+        createdAt: "2000-01-01T00:00:00.000Z",
+      }),
+      message: "MIGRATION_BACKUP_EVIDENCE is older than 24 hours",
+    },
+    {
+      name: "wrong target identity",
+      evidence: JSON.stringify({
+        targetDatabaseIdentity: { host: "db.example", port: "5432", database: "other" },
+        createdAt: new Date().toISOString(),
+      }),
+      message: "MIGRATION_BACKUP_EVIDENCE target database identity does not match",
+    },
+  ])("refuses apply gate for $name without opening migration connections", async ({ evidence, message }) => {
+    const directory = await mkdtemp(join(tmpdir(), "migrator-apply-evidence-"));
+    const evidenceFile = join(directory, "backup.json");
+    const executeMigration = vi.fn().mockResolvedValue(undefined);
+    const verifyTarget = vi.fn();
+
+    try {
+      await writeFile(evidenceFile, evidence);
+      await expect(runMigratorCommand(
+        "migrate:apply",
+        {
+          SOURCE_DATABASE_URL: "postgres://db.example/legacy",
+          TARGET_DATABASE_URL: "postgres://db.example/canonical",
+          MIGRATION_RUN_ID: "legacy-import-2026-10",
+          MIGRATION_APPLY_ENABLED: "true",
+          MIGRATION_BACKUP_EVIDENCE: evidenceFile,
+        },
+        {},
+        { executeMigration, verifyTarget },
+      )).rejects.toThrow(message);
+      expect(executeMigration).not.toHaveBeenCalled();
+      expect(verifyTarget).not.toHaveBeenCalled();
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("runs apply, then verify, and writes a secret-free operation report when both gates pass", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "migrator-apply-report-"));
+    const evidenceFile = join(directory, "backup.json");
+    const reportFile = join(directory, "report.json");
+    const executeMigration = vi.fn().mockResolvedValue({
+      mode: "apply",
+      deferredReconciliation: { examined: 1, resolved: 1, pending: 0 },
+      batches: [{ entity: "customers", batchNumber: 1, readRows: 1, writtenRows: 2 }],
+    });
+    const verifyTarget = vi.fn().mockResolvedValue({
+      status: "passed",
+      checks: [],
+      totals: { passed: 0, failed: 0 },
+      generatedAt: "2026-10-05T00:00:00.000Z",
+    });
+
+    try {
+      await writeFile(evidenceFile, JSON.stringify({
+        targetDatabaseIdentity: { host: "db.example", port: "5432", database: "canonical" },
+        createdAt: new Date().toISOString(),
+      }));
+      await expect(runMigratorCommand(
+        "migrate:apply",
+        {
+          SOURCE_DATABASE_URL: "postgres://source-secret:pass@db.example/legacy",
+          TARGET_DATABASE_URL: "postgres://target-secret:pass@db.example/canonical",
+          MIGRATION_RUN_ID: "legacy-import-2026-10",
+          MIGRATION_APPLY_ENABLED: "true",
+          MIGRATION_BACKUP_EVIDENCE: evidenceFile,
+        },
+        { reportFile },
+        { executeMigration, verifyTarget },
+      )).resolves.toBeUndefined();
+
+      expect(executeMigration).toHaveBeenCalledWith(expect.objectContaining({
+        mode: "apply",
+        runId: "legacy-import-2026-10",
+        applyApproval: expect.objectContaining({
+          runId: "legacy-import-2026-10",
+          backupEvidenceCreatedAt: expect.any(String),
+        }),
+      }));
+      expect(verifyTarget).toHaveBeenCalledWith(
+        "postgres://target-secret:pass@db.example/canonical",
+        "legacy-import-2026-10",
+      );
+      const report = await readFile(reportFile, "utf8");
+      expect(report).toContain("\"status\": \"passed\"");
+      expect(report).toContain("\"reconciliation\"");
+      expect(report).not.toContain("source-secret");
+      expect(report).not.toContain("target-secret");
+      expect(report).not.toContain("postgres://");
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("writes a failed command report without leaking database configuration", async () => {
     const tempDir = await mkdtemp(join(tmpdir(), "garanti-migrator-"));
     const reportFile = join(tempDir, "nested", "report.json");

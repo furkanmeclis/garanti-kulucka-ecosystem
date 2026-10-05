@@ -1,7 +1,8 @@
 import { Client, TypeOverrides } from "pg";
+import { createDatabase } from "@garanti-kulucka/database";
+import { assertMigrationApplyApproval } from "./apply-approval.js";
 import type { ExecutePostgresMigrationInput } from "./commands.js";
-import { migrationApplyDisabledMessage } from "./errors.js";
-import { normalizePostgresDatabaseIdentity } from "./database-identity.js";
+import { assertDistinctPostgresDatabases, normalizePostgresDatabaseIdentity } from "./database-identity.js";
 import { LegacyDatabaseSource, type LegacyQueryDatabase, type LegacySourceTableMap } from "./legacy-source.js";
 import {
   dryRunMigrationEntities,
@@ -14,6 +15,7 @@ import {
   withReadonlyRepeatableReadTransaction,
   type PostgresSourceClient,
 } from "./source-transaction.js";
+import { DatabaseMigrationTarget } from "./target.js";
 
 const postgresInt8Oid = 20;
 const postgresTimestampOid = 1114;
@@ -23,13 +25,53 @@ export async function executePostgresMigration(
   input: ExecutePostgresMigrationInput,
 ): Promise<MigrationRunResult> {
   if (input.mode === "apply") {
-    throw new Error(migrationApplyDisabledMessage);
+    assertMigrationApplyApproval(input.applyApproval, {
+      runId: input.runId,
+      targetDatabaseUrl: input.targetDatabaseUrl,
+    });
+    const applyApproval = input.applyApproval;
+    assertDistinctPostgresDatabases(input.sourceDatabaseUrl, input.targetDatabaseUrl);
+
+    const sourceClient = new Client({
+      connectionString: input.sourceDatabaseUrl,
+      types: createLegacyPostgresTypeOverrides(),
+    });
+    const targetDb = createDatabase(input.targetDatabaseUrl);
+
+    try {
+      return await withReadonlyRepeatableReadTransaction(sourceClient, async () => {
+        const source = new LegacyDatabaseSource({
+          db: postgresLegacyQueryDatabase(sourceClient),
+          sourceSystem: input.sourceSystem,
+          tables: canonicalSourceTableMap(legacyMappingCatalog),
+          mappingCatalog: legacyMappingCatalog,
+        });
+
+        return runMigration({
+          mode: input.mode,
+          source,
+          target: new DatabaseMigrationTarget(targetDb),
+          mappingCatalog: legacyMappingCatalog,
+          batchSize: input.batchSize,
+          sourceSystem: input.sourceSystem,
+          runId: input.runId,
+          applyApproval,
+          sourceDatabaseIdentity: normalizePostgresDatabaseIdentity(input.sourceDatabaseUrl),
+          entities: dryRunMigrationEntities(legacyMappingCatalog),
+          ...(input.conversationAccounts ? { conversationAccounts: input.conversationAccounts } : {}),
+          ...(input.userPublicIds ? { userPublicIds: input.userPublicIds } : {}),
+        });
+      });
+    } finally {
+      await targetDb.destroy();
+    }
   }
 
   const sourceClient = new Client({
     connectionString: input.sourceDatabaseUrl,
     types: createLegacyPostgresTypeOverrides(),
   });
+
   return withReadonlyRepeatableReadTransaction(sourceClient, async () => {
     const source = new LegacyDatabaseSource({
       db: postgresLegacyQueryDatabase(sourceClient),
@@ -82,7 +124,7 @@ export function canonicalSourceTableMap(catalog: LegacyMappingCatalog): LegacySo
   const tables: LegacySourceTableMap = {};
   for (const mapping of catalog.tables) {
     for (const target of mapping.targetEntities) {
-      if (target.readiness !== "dry-run") continue;
+      if (target.mapping !== "direct") continue;
       tables[target.entity] = { tableName: mapping.sourceTable, idColumn: mapping.idColumn };
     }
   }

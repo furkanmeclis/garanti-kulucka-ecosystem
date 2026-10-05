@@ -297,16 +297,18 @@ function hasCompleteManifestEntityCoverage(manifest: SourceManifest): boolean {
   const rowCountSet = new Set<string>(rowCountEntities);
   const rowContentSet = rowContentEntities ? new Set<string>(rowContentEntities) : null;
 
-  return tableEntities.length === canonicalMigrationEntities.length &&
-    rowCountEntities.length === canonicalMigrationEntities.length &&
-    (rowContentEntities === null || rowContentEntities.length === canonicalMigrationEntities.length) &&
-    tableSet.size === canonicalMigrationEntities.length &&
-    rowCountSet.size === canonicalMigrationEntities.length &&
-    (rowContentSet === null || rowContentSet.size === canonicalMigrationEntities.length) &&
-    canonicalMigrationEntities.every((entity) =>
-      tableSet.has(entity) &&
+  return tableEntities.length > 0 &&
+    tableEntities.length === rowCountEntities.length &&
+    tableSet.size === tableEntities.length &&
+    rowCountSet.size === rowCountEntities.length &&
+    (rowContentEntities === null || rowContentSet?.size === rowContentEntities.length) &&
+    tableEntities.every((entity) =>
       rowCountSet.has(entity) &&
       (rowContentSet === null || rowContentSet.has(entity))) &&
+    rowCountEntities.every((entity) =>
+      tableSet.has(entity) &&
+      (rowContentSet === null || rowContentSet.has(entity))) &&
+    (rowContentEntities === null || rowContentEntities.every((entity) => tableSet.has(entity) && rowCountSet.has(entity))) &&
     [...tableSet].every((entity) => expected.has(entity)) &&
     [...rowCountSet].every((entity) => expected.has(entity)) &&
     (rowContentSet === null || [...rowContentSet].every((entity) => expected.has(entity)));
@@ -348,13 +350,24 @@ function verifyLegacyIdMapFoundationRules(snapshot: MigrationVerificationSnapsho
     if (entry.source_system !== manifest.sourceSystem) return true;
     return !manifest.rowCounts.some(({ entity }) => {
       const sourceTables = manifestSourceTableIdentities(manifest, entity);
-      return sourceTables.has(entry.source_table) &&
-        entry.target_table === legacyEntityTargetTable(entity) &&
-        entry.mapping_role === "primary";
+      return sourceTables.has(entry.source_table) && isAllowedLegacyIdMapForEntity(entity, entry);
     });
   }).length ?? 0;
 
   return countCheck("legacy_id_map.foundation_rules", 0, invalidCount);
+}
+
+function isAllowedLegacyIdMapForEntity(entity: MigrationEntity, entry: VerificationLegacyIdMapEntry): boolean {
+  if (entry.target_table === legacyEntityTargetTable(entity) && entry.mapping_role === "primary") return true;
+  if (entity === "customers") {
+    return (entry.target_table === "customer_addresses" && entry.mapping_role === "address:default")
+      || (entry.target_table === "customer_external_identities"
+        && entry.mapping_role.startsWith("external_identity:"));
+  }
+  if (entity === "orders") {
+    return entry.target_table === "orders" && entry.mapping_role.startsWith("tracking_number:");
+  }
+  return false;
 }
 
 function legacyEntityTargetTable(entity: string): string {

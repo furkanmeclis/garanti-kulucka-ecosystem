@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { createMigrationApplyApproval } from "../src/apply-approval.js";
 import type { VerifiedConversationAccount } from "../src/conversation-mapping.js";
 import type { VerifiedIntegrationAccount } from "../src/customer-mapping.js";
+import { migrationApplyDisabledMessage } from "../src/errors.js";
 import { calculateSourcePayloadChecksum } from "../src/legacy-source.js";
 import { createLegacyMappingCatalog, legacyMappingCatalog } from "../src/mapping-catalog.js";
 import { runMigration } from "../src/orchestrator.js";
@@ -278,6 +280,7 @@ describe("migration orchestrator", () => {
       mappingCatalog: customerIdentityDescriptiveCatalog,
       target,
       runId: "legacy-import-2026-09",
+      applyApproval: fixtureApplyApproval("legacy-import-2026-09"),
       batchSize: 100,
       entities: ["customers"],
       sourceSystem: "legacy_postgres",
@@ -291,7 +294,7 @@ describe("migration orchestrator", () => {
     expect(target.runs.size).toBe(0);
   });
 
-  it("rejects apply before source access until catalog transforms are apply-ready", async () => {
+  it("rejects apply before source access when executable catalog routes the writer from the wrong table", async () => {
     const source = new FixtureSource({ customers: [customer] });
     const target = new MemoryTarget();
 
@@ -301,11 +304,35 @@ describe("migration orchestrator", () => {
       mappingCatalog: identityReadyCatalog,
       target,
       runId: "legacy-import-2026-09",
+      applyApproval: fixtureApplyApproval("legacy-import-2026-09"),
       batchSize: 100,
       entities: ["customers"],
       sourceSystem: "legacy_postgres",
       sourceDatabaseIdentity: sourceIdentity,
-    })).rejects.toThrow("Apply mode is unavailable until the mapping catalog declares apply-ready transforms");
+    })).rejects.toThrow(
+      "Customer dry-run requires catalog source table public.musteriler; catalog routes customers from public.customers",
+    );
+
+    expect(source.operations).toEqual([]);
+    expect(source.reads).toEqual([]);
+    expect(target.runs.size).toBe(0);
+  });
+
+  it("rejects apply without command-layer approval before source access", async () => {
+    const source = new FixtureSource({ customers: [customer] });
+    const target = new MemoryTarget();
+
+    await expect(runMigration({
+      mode: "apply",
+      source,
+      mappingCatalog: legacyMappingCatalog,
+      target,
+      runId: "legacy-import-2026-09",
+      batchSize: 100,
+      entities: ["customers"],
+      sourceSystem: "legacy_postgres",
+      sourceDatabaseIdentity: sourceIdentity,
+    })).rejects.toThrow(migrationApplyDisabledMessage);
 
     expect(source.operations).toEqual([]);
     expect(source.reads).toEqual([]);
@@ -1028,6 +1055,14 @@ const sourceIdentity: SourceManifest["databaseIdentity"] = {
   port: "5432",
   database: "legacy",
 };
+
+function fixtureApplyApproval(runId: string) {
+  return createMigrationApplyApproval({
+    runId,
+    targetDatabaseIdentity: { host: "target-db.internal", port: "5432", database: "canonical" },
+    backupEvidenceCreatedAt: new Date().toISOString(),
+  });
+}
 
 const fixtureCatalog = createLegacyMappingCatalog({
   version: "fixture-catalog-v1",

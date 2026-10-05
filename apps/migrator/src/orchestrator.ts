@@ -1,4 +1,22 @@
 import {
+  applyConversationMigrationBatchWithState,
+  applyCustomerMigrationBatchWithState,
+  applyMessageMigrationBatchWithState,
+  applyOrderItemMigrationBatchWithState,
+  applyOrderMigrationBatchWithState,
+  applyProductMigrationBatchWithState,
+  applyShipmentMigrationBatchWithState,
+  reconcileDeferredReconciliations,
+  type ApplyConversationMigrationBatchInput,
+  type ApplyCustomerMigrationBatchInput,
+  type ApplyMessageMigrationBatchInput,
+  type ApplyOrderItemMigrationBatchInput,
+  type ApplyOrderMigrationBatchInput,
+  type ApplyProductMigrationBatchInput,
+  type ApplyShipmentMigrationBatchInput,
+} from "./apply.js";
+import { assertMigrationApplyApproval, type MigrationApplyApproval } from "./apply-approval.js";
+import {
   assertVerifiedConversationAccounts,
   legacyConversationTable,
   legacyMessageTable,
@@ -28,7 +46,7 @@ import {
   validateLegacySourceSnapshots,
   type LegacyMappingCatalog,
 } from "./mapping-catalog.js";
-import { createSourceManifest, createSourceRowContentChecksum } from "./source-manifest.js";
+import { createSourceManifest, createSourceRowContentChecksum, registerMigrationRun } from "./source-manifest.js";
 import type {
   ConversationTransformSummary,
   CustomerTransformSummary,
@@ -36,6 +54,7 @@ import type {
   LegacyRecord,
   LegacySource,
   MessageTransformSummary,
+  DeferredReconciliationResult,
   MigrationBatch,
   MigrationBatchApplyResult,
   MigrationEntity,
@@ -71,6 +90,10 @@ export interface RunMigrationApplyInput extends RunMigrationInputBase {
   readonly mode: "apply";
   readonly target: MigrationTarget;
   readonly runId: string;
+  readonly applyApproval?: MigrationApplyApproval;
+  readonly integrationAccounts?: readonly VerifiedIntegrationAccount[];
+  readonly conversationAccounts?: readonly VerifiedConversationAccount[];
+  readonly userPublicIds?: ReadonlyMap<string, string>;
 }
 
 export type RunMigrationInput = RunMigrationDryRunInput | RunMigrationApplyInput;
@@ -82,6 +105,7 @@ export interface MigrationRunResult {
   readonly sourceManifest: SourceManifest;
   readonly dryRunReport?: DryRunReport;
   readonly batches: MigrationBatchApplyResult[];
+  readonly deferredReconciliation?: DeferredReconciliationResult;
 }
 
 export async function runMigration(input: RunMigrationInput): Promise<MigrationRunResult> {
@@ -91,8 +115,8 @@ export async function runMigration(input: RunMigrationInput): Promise<MigrationR
   assertDryRunReadyEntitySelection(requestedEntities, readyEntities);
   const entities = orderMigrationEntities(requestedEntities);
   if (input.mode === "apply") {
+    assertMigrationApplyApproval(input.applyApproval, { runId: input.runId });
     assertApplyPrerequisites(catalog, entities);
-    throw new Error("Apply mode is unavailable until the mapping catalog declares apply-ready transforms");
   }
 
   assertDryRunEntityDependencies(entities);
@@ -128,9 +152,10 @@ export async function runMigration(input: RunMigrationInput): Promise<MigrationR
     ...(input.now ? { now: input.now } : {}),
   });
 
+  const rowContentRecords = createRowContentRecordMap(entities);
+  const source = trackSourceRowContent(input.source, rowContentRecords);
+
   if (input.mode === "dry-run") {
-    const rowContentRecords = createRowContentRecordMap(entities);
-    const source = trackSourceRowContent(input.source, rowContentRecords);
     const customers = validateCustomerRows
       ? await validateCustomerBatches(source, plan, integrationAccounts)
       : undefined;
@@ -199,7 +224,88 @@ export async function runMigration(input: RunMigrationInput): Promise<MigrationR
     };
   }
 
-  throw new Error("Apply mode is unavailable until the mapping catalog declares apply-ready transforms");
+  const sourceManifest = createSourceManifest({
+    sourceSystem: input.sourceSystem,
+    databaseIdentity: input.sourceDatabaseIdentity,
+    tables,
+    plan,
+    mappingCatalogVersion: catalog.version,
+    rowContentChecksums: await createApplyRowContentChecksums(source, plan, entities, rowContentRecords),
+  });
+  await registerMigrationRun(input.target, input.runId, sourceManifest);
+
+  const batches: MigrationBatchApplyResult[] = [];
+  for (const batch of plan.batches) {
+    batches.push(await applyPlannedBatch({
+      source,
+      target: input.target,
+      runId: input.runId,
+      batch,
+      integrationAccounts,
+      conversationAccounts,
+      userPublicIds,
+    }));
+  }
+  const deferredReconciliation = await reconcileDeferredReconciliations(input.target, input.runId);
+
+  return {
+    mode: input.mode,
+    runId: input.runId,
+    plan,
+    sourceManifest,
+    batches,
+    deferredReconciliation,
+  };
+}
+
+async function createApplyRowContentChecksums(
+  source: LegacySource,
+  plan: MigrationPlan,
+  entities: readonly MigrationEntity[],
+  recordsByEntity: ReadonlyMap<MigrationEntity, readonly LegacyRecord[]>,
+) {
+  for (const batch of plan.batches) {
+    await source.readBatch(batch.entity, { limit: batch.limit, offset: batch.offset });
+  }
+  return createRowContentChecksums(entities, recordsByEntity);
+}
+
+async function applyPlannedBatch(input:
+  & Pick<ApplyCustomerMigrationBatchInput, "source" | "target" | "runId" | "batch">
+  & {
+    readonly integrationAccounts: readonly VerifiedIntegrationAccount[];
+    readonly conversationAccounts: readonly VerifiedConversationAccount[];
+    readonly userPublicIds: ReadonlyMap<string, string>;
+  },
+): Promise<MigrationBatchApplyResult> {
+  switch (input.batch.entity) {
+    case "customers":
+      return applyCustomerMigrationBatchWithState({
+        ...input,
+        integrationAccounts: input.integrationAccounts,
+      } satisfies ApplyCustomerMigrationBatchInput);
+    case "conversations":
+      return applyConversationMigrationBatchWithState({
+        ...input,
+        integrationAccounts: input.conversationAccounts,
+        userPublicIds: input.userPublicIds,
+      } satisfies ApplyConversationMigrationBatchInput);
+    case "messages":
+      return applyMessageMigrationBatchWithState(input satisfies ApplyMessageMigrationBatchInput);
+    case "products":
+      return applyProductMigrationBatchWithState(input satisfies ApplyProductMigrationBatchInput);
+    case "orders":
+      return applyOrderMigrationBatchWithState({
+        ...input,
+        userPublicIds: input.userPublicIds,
+      } satisfies ApplyOrderMigrationBatchInput);
+    case "order_items":
+      return applyOrderItemMigrationBatchWithState(input satisfies ApplyOrderItemMigrationBatchInput);
+    case "shipments":
+      return applyShipmentMigrationBatchWithState(input satisfies ApplyShipmentMigrationBatchInput);
+    default:
+      throw new Error(`No executable apply writer for ${input.batch.entity}`);
+  }
 }
 
 function createRowContentRecordMap(

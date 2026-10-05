@@ -394,11 +394,6 @@ describe("migration verification", () => {
   });
 
   it.each([
-    ["missing entity", (value: SourceManifest) => ({
-      ...value,
-      tables: value.tables.slice(1),
-      rowCounts: value.rowCounts.slice(1),
-    })],
     ["duplicate entity", (value: SourceManifest) => ({
       ...value,
       tables: [...value.tables.slice(0, -1), value.tables[0]!],
@@ -465,8 +460,21 @@ describe("migration verification", () => {
     });
   });
 
-  it("accepts a manifest containing every canonical entity exactly once in both sets", () => {
+  it("accepts a manifest containing its planned entities exactly once in both sets", () => {
     expect(verifySourceManifestEntityCoverage(manifest({ customers: 1 }))).toMatchObject({
+      status: "passed",
+      actual: 1,
+    });
+    const base = manifest({ customers: 1 });
+    const changed = {
+      ...base,
+      tables: base.tables.filter((table) => table.entity === "customers"),
+      rowCounts: base.rowCounts.filter((count) => count.entity === "customers"),
+    };
+    expect(verifySourceManifestEntityCoverage({
+      ...changed,
+      sourceManifestHash: calculateSourceManifestHash(changed),
+    })).toMatchObject({
       status: "passed",
       actual: 1,
     });

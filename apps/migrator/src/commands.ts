@@ -1,12 +1,20 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { Client } from "pg";
+import { createMigrationApplyApproval, type MigrationApplyApproval } from "./apply-approval.js";
 import { assertVerifiedConversationAccounts, type VerifiedConversationAccount } from "./conversation-mapping.js";
+import { normalizePostgresDatabaseIdentity } from "./database-identity.js";
 import { migrationApplyDisabledMessage, toSafeMigratorError } from "./errors.js";
 import { canonicalMigrationEntities } from "./plan.js";
 import { createVerificationReport } from "./reports.js";
 import { createTargetVerificationSnapshot } from "./target-snapshot.js";
-import type { MigratorCommandReport, MigratorCommandReportError, VerificationReport } from "./types.js";
+import type {
+  DeferredReconciliationResult,
+  MigratorCommandReport,
+  MigratorCommandReportError,
+  SourceDatabaseIdentity,
+  VerificationReport,
+} from "./types.js";
 import { createMigrationVerificationReport } from "./verify.js";
 
 export type MigratorCommand = "migrate:dry-run" | "migrate:apply" | "verify";
@@ -41,6 +49,9 @@ export interface ExecutePostgresApplyInput {
   readonly sourceSystem: string;
   readonly runId: string;
   readonly batchSize: number;
+  readonly applyApproval?: MigrationApplyApproval;
+  readonly conversationAccounts?: readonly VerifiedConversationAccount[];
+  readonly userPublicIds?: ReadonlyMap<string, string>;
 }
 
 export type ExecutePostgresMigrationInput = ExecutePostgresDryRunInput | ExecutePostgresApplyInput;
@@ -55,6 +66,7 @@ const defaultCommandDependencies: MigratorCommandDependencies = {
 
 const defaultMigrationBatchSize = 500;
 const defaultMigrationSourceSystem = "legacy_postgres";
+const defaultBackupEvidenceMaxAgeHours = 24;
 export { migrationApplyDisabledMessage } from "./errors.js";
 
 const requiredCanonicalTables = [
@@ -91,6 +103,9 @@ export async function runMigratorCommand(
 ): Promise<void> {
   const startedAt = new Date();
   let failedVerification: VerificationReport | undefined;
+  let commandMigration: unknown;
+  let commandReconciliation: DeferredReconciliationResult | undefined;
+  let commandVerification: VerificationReport | undefined;
 
   try {
     if (command === "verify") {
@@ -101,7 +116,10 @@ export async function runMigratorCommand(
         throw new Error("Canonical database verification failed");
       }
 
-      await writeMigratorCommandReport(options, createCommandReport(command, "passed", startedAt, undefined, verification));
+      await writeMigratorCommandReport(
+        options,
+        createCommandReport(command, "passed", startedAt, undefined, { verification }),
+      );
       return;
     }
 
@@ -113,17 +131,44 @@ export async function runMigratorCommand(
     const sourceSystem = env.MIGRATION_SOURCE_SYSTEM?.trim() || defaultMigrationSourceSystem;
     const batchSize = parseMigrationBatchSize(env.MIGRATION_BATCH_SIZE);
 
-    if (command === "migrate:apply") {
-      resolveMigrationRunId(env);
-      throw new Error(migrationApplyDisabledMessage);
-    }
-
     const conversationAccountsFile = env.MIGRATION_CONVERSATION_ACCOUNTS_FILE?.trim();
     const userPublicIdsFile = env.MIGRATION_USER_PUBLIC_IDS_FILE?.trim();
     const conversationAccounts = conversationAccountsFile
       ? await readConversationAccountsFile(conversationAccountsFile)
       : undefined;
     const userPublicIds = userPublicIdsFile ? await readUserPublicIdsFile(userPublicIdsFile) : undefined;
+
+    if (command === "migrate:apply") {
+      const runId = resolveMigrationRunId(env);
+      const applyApproval = await assertMigrationApplyGateWithEvidence(env, sourceDatabaseUrl, runId, startedAt);
+      const targetDatabaseUrl = resolveTargetDatabaseUrl(env);
+      commandMigration = await dependencies.executeMigration({
+        mode: "apply",
+        sourceDatabaseUrl,
+        targetDatabaseUrl,
+        sourceSystem,
+        runId,
+        batchSize,
+        applyApproval,
+        ...(conversationAccounts ? { conversationAccounts } : {}),
+        ...(userPublicIds ? { userPublicIds } : {}),
+      });
+      commandReconciliation = extractDeferredReconciliation(commandMigration);
+      commandVerification = await dependencies.verifyTarget(targetDatabaseUrl, runId);
+      if (commandVerification.status === "failed") {
+        failedVerification = commandVerification;
+        throw new Error("Canonical database verification failed");
+      }
+      await writeMigratorCommandReport(
+        options,
+        createCommandReport(command, "passed", startedAt, undefined, {
+          migration: commandMigration,
+          verification: commandVerification,
+          ...(commandReconciliation ? { reconciliation: commandReconciliation } : {}),
+        }),
+      );
+      return;
+    }
 
     await dependencies.executeMigration({
       mode: "dry-run",
@@ -139,13 +184,78 @@ export async function runMigratorCommand(
     try {
       await writeMigratorCommandReport(
         options,
-        createCommandReport(command, "failed", startedAt, safeError, failedVerification),
+        createCommandReport(command, "failed", startedAt, safeError, {
+          ...(commandMigration ? { migration: commandMigration } : {}),
+          ...(commandReconciliation ? { reconciliation: commandReconciliation } : {}),
+          ...(failedVerification ?? commandVerification
+            ? { verification: (failedVerification ?? commandVerification)! }
+            : {}),
+        }),
       );
     } catch {
       // Reporting is best-effort; the safe migration error remains the command result.
     }
     throw safeError;
   }
+}
+
+export interface MigrationBackupEvidence {
+  readonly targetDatabaseIdentity: SourceDatabaseIdentity;
+  readonly createdAt: string;
+}
+
+export function assertMigrationApplyGate(
+  env: NodeJS.ProcessEnv,
+  sourceDatabaseUrl: string,
+  now = new Date(),
+): void {
+  if (env.MIGRATION_APPLY_ENABLED !== "true") {
+    throw new Error(migrationApplyDisabledMessage);
+  }
+
+  const evidencePath = env.MIGRATION_BACKUP_EVIDENCE?.trim();
+  if (!evidencePath) {
+    throw new Error("MIGRATION_BACKUP_EVIDENCE is required when MIGRATION_APPLY_ENABLED=true");
+  }
+
+  const targetDatabaseUrl = resolveTargetDatabaseUrl(env);
+  const sourceIdentity = normalizePostgresDatabaseIdentity(sourceDatabaseUrl);
+  const targetIdentity = normalizePostgresDatabaseIdentity(targetDatabaseUrl);
+  if (databaseIdentityKey(sourceIdentity) === databaseIdentityKey(targetIdentity)) {
+    throw new Error("Source and target database identities must be different");
+  }
+}
+
+export async function readAndValidateMigrationBackupEvidence(
+  path: string,
+  targetDatabaseUrl: string,
+  now = new Date(),
+  maxAgeHours = defaultBackupEvidenceMaxAgeHours,
+): Promise<MigrationBackupEvidence> {
+  const value = await readJsonSnapshotFile(path, "MIGRATION_BACKUP_EVIDENCE");
+  const invalid = "MIGRATION_BACKUP_EVIDENCE must contain a backup manifest with targetDatabaseIdentity and createdAt";
+  if (value === null || typeof value !== "object" || Array.isArray(value)) throw new Error(invalid);
+  const candidate = value as Record<string, unknown>;
+  const targetDatabaseIdentity = candidate.targetDatabaseIdentity;
+  const createdAt = candidate.createdAt;
+  if (!isDatabaseIdentity(targetDatabaseIdentity) || typeof createdAt !== "string" || !createdAt.trim()) {
+    throw new Error(invalid);
+  }
+  const createdAtMs = Date.parse(createdAt);
+  if (!Number.isFinite(createdAtMs)) throw new Error(invalid);
+  if (!Number.isFinite(maxAgeHours) || maxAgeHours <= 0) {
+    throw new Error("MIGRATION_BACKUP_MAX_AGE_HOURS must be a positive number");
+  }
+  const ageMs = now.getTime() - createdAtMs;
+  if (ageMs < 0) throw new Error("MIGRATION_BACKUP_EVIDENCE createdAt must not be in the future");
+  if (ageMs > maxAgeHours * 60 * 60 * 1000) {
+    throw new Error(`MIGRATION_BACKUP_EVIDENCE is older than ${maxAgeHours} hours`);
+  }
+  const targetIdentity = normalizePostgresDatabaseIdentity(targetDatabaseUrl);
+  if (databaseIdentityKey(targetDatabaseIdentity) !== databaseIdentityKey(targetIdentity)) {
+    throw new Error("MIGRATION_BACKUP_EVIDENCE target database identity does not match TARGET_DATABASE_URL");
+  }
+  return { targetDatabaseIdentity, createdAt };
 }
 
 function parseMigratorOptions(args: (string | undefined)[]): MigratorCommandOptions {
@@ -257,7 +367,11 @@ function createCommandReport(
   status: MigratorCommandReport["status"],
   startedAt: Date,
   error?: unknown,
-  verification?: VerificationReport,
+  details: {
+    readonly migration?: unknown;
+    readonly reconciliation?: DeferredReconciliationResult;
+    readonly verification?: VerificationReport;
+  } = {},
 ): MigratorCommandReport {
   const finishedAt = new Date();
   return {
@@ -266,7 +380,9 @@ function createCommandReport(
     startedAt: startedAt.toISOString(),
     finishedAt: finishedAt.toISOString(),
     durationMs: Math.max(0, finishedAt.getTime() - startedAt.getTime()),
-    ...(verification ? { verification } : {}),
+    ...(details.migration ? { migration: details.migration } : {}),
+    ...(details.reconciliation ? { reconciliation: details.reconciliation } : {}),
+    ...(details.verification ? { verification: details.verification } : {}),
     ...(error ? { error: createReportError(error) } : {}),
   };
 }
@@ -321,3 +437,58 @@ export function createCanonicalTableVerificationReport(existingTables: string[])
 
 const usage =
   "Usage: garanti-migrator migrate --dry-run [--report-file path] | migrate --apply [--report-file path] | verify [--report-file path]";
+
+async function assertMigrationApplyGateWithEvidence(
+  env: NodeJS.ProcessEnv,
+  sourceDatabaseUrl: string,
+  runId: string,
+  now = new Date(),
+): Promise<MigrationApplyApproval> {
+  assertMigrationApplyGate(env, sourceDatabaseUrl, now);
+  const evidencePath = env.MIGRATION_BACKUP_EVIDENCE?.trim();
+  const maxAgeHours = parseBackupMaxAgeHours(env.MIGRATION_BACKUP_MAX_AGE_HOURS);
+  const evidence = await readAndValidateMigrationBackupEvidence(
+    evidencePath!,
+    resolveTargetDatabaseUrl(env),
+    now,
+    maxAgeHours,
+  );
+  return createMigrationApplyApproval({
+    runId,
+    targetDatabaseIdentity: evidence.targetDatabaseIdentity,
+    backupEvidenceCreatedAt: evidence.createdAt,
+  });
+}
+
+function parseBackupMaxAgeHours(value: string | undefined): number {
+  if (value === undefined || value.trim() === "") return defaultBackupEvidenceMaxAgeHours;
+  const hours = Number(value);
+  if (!Number.isFinite(hours) || hours <= 0) {
+    throw new Error("MIGRATION_BACKUP_MAX_AGE_HOURS must be a positive number");
+  }
+  return hours;
+}
+
+function isDatabaseIdentity(value: unknown): value is SourceDatabaseIdentity {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+  const candidate = value as Record<string, unknown>;
+  return typeof candidate.host === "string" && candidate.host.trim() !== ""
+    && typeof candidate.port === "string" && candidate.port.trim() !== ""
+    && typeof candidate.database === "string" && candidate.database.trim() !== "";
+}
+
+function databaseIdentityKey(identity: SourceDatabaseIdentity): string {
+  return `${identity.host.toLowerCase().replace(/\.$/, "")}:${identity.port}/${identity.database}`;
+}
+
+function extractDeferredReconciliation(value: unknown): DeferredReconciliationResult | undefined {
+  if (value === null || typeof value !== "object") return undefined;
+  const reconciliation = (value as { deferredReconciliation?: unknown }).deferredReconciliation;
+  if (reconciliation === null || typeof reconciliation !== "object") return undefined;
+  const candidate = reconciliation as Partial<DeferredReconciliationResult>;
+  return typeof candidate.examined === "number"
+    && typeof candidate.resolved === "number"
+    && typeof candidate.pending === "number"
+    ? candidate as DeferredReconciliationResult
+    : undefined;
+}

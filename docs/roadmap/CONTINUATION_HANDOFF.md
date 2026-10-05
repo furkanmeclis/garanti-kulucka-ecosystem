@@ -775,18 +775,19 @@ Bu listenin tamamı işaretlenmeden `migrate --apply` açılmayacaktır:
 - [x] BIGINT runtime type politikası tamam
 - [x] Source schema introspection tamamlanan legacy dry-run entity'leri için tamam
 - [x] Source manifest ve completeness doğrulaması tamam
-- [ ] Customer mapping tamam
-- [ ] Customer address sentetik mapping tamam
-- [ ] External identity account resolution tamam
-- [ ] Conversation mapping ve account/provider uyumu tamam
-- [ ] Message mapping ve media/medya drift çözümü tamam
-- [ ] Zorunlu FK çözümleme ve deferred reconciliation tamam
+- [x] Customer mapping tamam
+- [x] Customer address sentetik mapping tamam
+- [x] External identity account resolution tamam
+- [x] Conversation mapping ve account/provider uyumu tamam
+- [x] Message mapping ve media/medya drift çözümü tamam
+- [x] Zorunlu FK çözümleme ve deferred reconciliation tamam
 - [x] Atomic transaction ve concurrent-run lock tamam
 - [x] Resume fingerprint, row-content persistence ve retry idempotency tamam
 - [x] Full-transform dry-run validation tamamlanan P2 legacy entity'leri için tamam
 - [x] Secret redaction ve operation report testleri tamam
 - [x] Gerçek PostgreSQL source/target dry-run E2E tamam
 - [x] Gerçek PostgreSQL recovery E2E tamam
+- [x] Gerçek PostgreSQL command-layer apply E2E yazildi
 - [x] Backup ve restore runbook tatbikatı tamam
 - [x] P4 evidence checkpoint'i için full `npm run check` başarılı
 - [ ] Production apply açılışı öncesi final full `npm run check` başarılı

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { createMigrationApplyApproval } from "../src/apply-approval.js";
 import { migrationApplyDisabledMessage } from "../src/errors.js";
 import { legacyMappingCatalog } from "../src/mapping-catalog.js";
 import {
@@ -112,7 +113,7 @@ describe("PostgreSQL migration runtime", () => {
     });
   });
 
-  it("rejects apply before constructing a source or target connection", async () => {
+  it("rejects apply without command-layer approval before constructing a source connection", async () => {
     await expect(
       executePostgresMigration({
         mode: "apply",
@@ -123,6 +124,25 @@ describe("PostgreSQL migration runtime", () => {
         batchSize: 500,
       }),
     ).rejects.toThrow(migrationApplyDisabledMessage);
+    expect(postgresClientConstructor).not.toHaveBeenCalled();
+  });
+
+  it("rejects apply when source and target database identities match before constructing a source connection", async () => {
+    await expect(
+      executePostgresMigration({
+        mode: "apply",
+        sourceDatabaseUrl: "postgres://source/legacy",
+        targetDatabaseUrl: "postgres://source/legacy",
+        sourceSystem: "legacy_postgres",
+        runId: "legacy-import-2026-09",
+        batchSize: 500,
+        applyApproval: createMigrationApplyApproval({
+          runId: "legacy-import-2026-09",
+          targetDatabaseIdentity: { host: "source", port: "5432", database: "legacy" },
+          backupEvidenceCreatedAt: new Date().toISOString(),
+        }),
+      }),
+    ).rejects.toThrow("Source and target database identities must be different");
     expect(postgresClientConstructor).not.toHaveBeenCalled();
   });
 

@@ -49,13 +49,15 @@ Compose, dry-run icin `SOURCE_DATABASE_URL` degerini migrator servisine aktarir.
 
 `verify`, canonical hedefi kontrol eder ve `TARGET_DATABASE_URL` ister. `DATABASE_URL` yalniz target dogrulamasi icin uyumluluk fallback'i olarak desteklenir.
 
-Apply komutu su anda operasyonel degildir:
+Apply komutu varsayilan olarak kapali kalir ve yalniz explicit iki kapili operasyon akisiyle calisir:
 
 ```bash
-docker compose --profile tools run --rm migrator migrate --apply
+MIGRATION_APPLY_ENABLED=true \
+MIGRATION_BACKUP_EVIDENCE=/secure/migration/backup-evidence.json \
+docker compose --profile tools run --rm migrator migrate --apply --report-file /secure/migration/apply-report.json
 ```
 
-Komut, explicit `MIGRATION_RUN_ID` kontrolunden sonra target URL cozmeden ve veritabanlarina baglanmadan fail-closed olarak cikar. Gercek legacy tablo, alan ve foreign-key mapping katalogu ile target write akisi tamamlanip incelenene kadar apply acilmayacaktir. Migration summary, row count, unmapped field, rejected row ve final reconciliation raporlari roadmap kapsamindadir; mevcut dry-run bunlari uretmez.
+`MIGRATION_APPLY_ENABLED=true` yoksa veya `MIGRATION_BACKUP_EVIDENCE` okunabilir ve guncel bir backup manifest dosyasina isaret etmiyorsa komut veritabanina baglanmadan fail-closed cikar. Ayrintili operasyon adimlari icin `docs/operations/MIGRATION_APPLY_RUNBOOK.md` dosyasini kullanin.
 
 ## First Admin
 
