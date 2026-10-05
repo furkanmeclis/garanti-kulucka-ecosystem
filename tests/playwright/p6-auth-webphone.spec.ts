@@ -156,7 +156,7 @@ test("browser role denial keeps kargo operator away from admin routes but reads 
     await expect(page.getByRole("link", { name: "Ayarlar" })).toHaveCount(0);
     await expect(page.getByRole("link", { name: "Santral" })).toHaveCount(0);
     expect(requestedPaths).not.toContain("/admin/settings");
-    expect(requestedPaths).toContain("/api/webphone/config");
+    await expect.poll(() => requestedPaths).toContain("/api/webphone/config");
 
     const nonAdminWrite = await page.evaluate(async (baseUrl) => {
       const response = await fetch(`${baseUrl}/admin/settings/sip_config`, {
@@ -202,7 +202,7 @@ test("browser calisan users read webphone config for softphone initialization", 
     await page.getByLabel("E-posta").fill("calisan@example.com");
     await page.getByRole("button", { name: "Giriş yap" }).click();
     await expect(page.getByTestId("inbox-flow")).toBeVisible();
-    expect(requestedPaths).toContain("/api/webphone/config");
+    await expect.poll(() => requestedPaths).toContain("/api/webphone/config");
   } finally {
     await closeWebApp(app.server);
   }
@@ -231,7 +231,7 @@ test("browser webphone shows SIP boundary and persists VAPI call log without a r
     await expect(page.getByTestId("webphone-flow")).toBeVisible();
     await expect(page.getByText("Santral aktif")).toBeVisible();
     await expect(page.getByText("sip.example.com")).toBeVisible();
-    expect(requestedPaths).toContain("/api/webphone/config");
+    await expect.poll(() => requestedPaths).toContain("/api/webphone/config");
 
     await page.goto(`${app.url}/sesli-asistan`);
     await expect(page.getByTestId("sip-config-detail")).toContainText("direct_sip_over_webrtc");
