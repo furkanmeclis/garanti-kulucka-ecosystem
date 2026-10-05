@@ -29,7 +29,7 @@ export const providerAdapters: ProviderAdapterDefinition[] = [
     channels: ["cargo"],
     webhook_operations: [],
     delivery_operations: ["shipment.create", "shipment.track"],
-    live_calls_enabled: false,
+    live_calls_enabled: true,
   },
   {
     provider: "kolaybi",

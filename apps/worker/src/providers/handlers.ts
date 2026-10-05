@@ -20,6 +20,7 @@ import {
 } from "./retry.js";
 import type { ProviderAccountConfigRepository } from "./account-config.js";
 import { PttLiveTransportError, sendPttLiveRequest, type PttFetchTransport } from "./ptt.js";
+import { SuratLiveTransportError, sendSuratLiveRequest, type SuratFetchTransport } from "./surat.js";
 
 export { decideProviderRetry, type ProviderFailureInput, type ProviderRetryDecision, type ProviderRetryReason };
 
@@ -35,6 +36,7 @@ export interface ProviderJobHandlingResult {
 export interface ProviderDeliveryHandlerOptions {
   accountConfigRepository?: ProviderAccountConfigRepository;
   pttTransport?: PttFetchTransport;
+  suratTransport?: SuratFetchTransport;
   attemptNumber?: number;
   maxAttempts?: number;
   now?: Date;
@@ -233,31 +235,47 @@ export async function handleProviderDeliveryJobWithTransport(
   const policy = providerTransportPolicyFor(payload.envelope, {
     liveModeEnabled: accountConfig?.live_mode ?? false,
     timeoutMs: accountConfig
-      ? numericAccountSetting(accountConfig.settings, ["timeout_ms", "ptt.timeout_ms"])
+      ? numericAccountSetting(accountConfig.settings, ["timeout_ms", `${payload.envelope.provider}.timeout_ms`])
       : null,
     maxAttempts: accountConfig
-      ? numericAccountSetting(accountConfig.settings, ["max_attempts", "ptt.max_attempts"])
+      ? numericAccountSetting(accountConfig.settings, ["max_attempts", `${payload.envelope.provider}.max_attempts`])
       : null,
   });
 
   if (
-    payload.envelope.provider !== "ptt" ||
     !accountConfig ||
     !policy.live_call_permitted
   ) {
     return handleProviderDeliveryJob(job);
   }
 
-  const liveResult = await sendPttLiveRequest({
-    envelope: payload.envelope,
-    job,
-    accountConfig,
-    policy,
-    attemptNumber: options.attemptNumber ?? 1,
-    maxAttempts: options.maxAttempts ?? policy.max_attempts,
-    ...(options.pttTransport ? { transport: options.pttTransport } : {}),
-    ...(options.now ? { now: options.now } : {}),
-  });
+  const liveResult = payload.envelope.provider === "ptt"
+    ? await sendPttLiveRequest({
+        envelope: payload.envelope,
+        job,
+        accountConfig,
+        policy,
+        attemptNumber: options.attemptNumber ?? 1,
+        maxAttempts: options.maxAttempts ?? policy.max_attempts,
+        ...(options.pttTransport ? { transport: options.pttTransport } : {}),
+        ...(options.now ? { now: options.now } : {}),
+      })
+    : payload.envelope.provider === "surat"
+      ? await sendSuratLiveRequest({
+          envelope: payload.envelope,
+          job,
+          accountConfig,
+          policy,
+          attemptNumber: options.attemptNumber ?? 1,
+          maxAttempts: options.maxAttempts ?? policy.max_attempts,
+          ...(options.suratTransport ? { transport: options.suratTransport } : {}),
+          ...(options.now ? { now: options.now } : {}),
+        })
+      : null;
+
+  if (!liveResult) {
+    return handleProviderDeliveryJob(job);
+  }
 
   providerResponseEnvelopeSchema.parse({
     request_id: payload.envelope.request_id,
@@ -278,6 +296,6 @@ export async function handleProviderDeliveryJobWithTransport(
   };
 }
 
-export function isProviderLiveTransportError(error: unknown): error is PttLiveTransportError {
-  return error instanceof PttLiveTransportError;
+export function isProviderLiveTransportError(error: unknown): error is PttLiveTransportError | SuratLiveTransportError {
+  return error instanceof PttLiveTransportError || error instanceof SuratLiveTransportError;
 }

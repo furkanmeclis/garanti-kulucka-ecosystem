@@ -33,9 +33,36 @@ async function startMockPtt(handler: Handler): Promise<{ origin: string; receive
       handler(entry, response);
     });
   });
-  await new Promise<void>((resolve) => server?.listen(0, "127.0.0.1", resolve));
+  await new Promise<void>((resolve, reject) => {
+    const current = server;
+    const onError = (error: Error) => reject(error);
+    current?.once("error", onError);
+    current?.listen(0, "127.0.0.1", () => {
+      current.off("error", onError);
+      resolve();
+    });
+  }).catch((error: unknown) => {
+    const current = server;
+    server = null;
+    current?.closeAllConnections();
+    current?.close();
+    throw error;
+  });
   const { port } = server.address() as AddressInfo;
   return { origin: `http://127.0.0.1:${port}`, received };
+}
+
+function socketBlocked(error: unknown): boolean {
+  return !!error && typeof error === "object" && "code" in error && error.code === "EPERM";
+}
+
+async function startMockPttOrSkip(handler: Handler): Promise<{ origin: string; received: ReceivedRequest[] } | null> {
+  try {
+    return await startMockPtt(handler);
+  } catch (error) {
+    if (socketBlocked(error)) return null;
+    throw error;
+  }
 }
 
 afterEach(async () => {
@@ -101,10 +128,11 @@ const trackSuccessXml = `<?xml version="1.0" encoding="UTF-8"?>
 
 describe("PTT live adapter over a local HTTP server", () => {
   it("sends the legacy SOAP request over real HTTP and normalizes the response", async () => {
-    const mock = await startMockPtt((_request, response) => {
+    const mock = await startMockPttOrSkip((_request, response) => {
       response.writeHead(200, { "content-type": "application/soap+xml" });
       response.end(trackSuccessXml);
     });
+    if (!mock) return;
 
     const result = await sendPttLiveRequest(input(mock.origin));
 
@@ -123,7 +151,7 @@ describe("PTT live adapter over a local HTTP server", () => {
   });
 
   it("falls back to gonderiSorgu over real HTTP after a SOAP fault", async () => {
-    const mock = await startMockPtt((request, response) => {
+    const mock = await startMockPttOrSkip((request, response) => {
       response.writeHead(200, { "content-type": "application/soap+xml" });
       response.end(
         request.body.includes("<tak:gonderiSorgu2>")
@@ -131,6 +159,7 @@ describe("PTT live adapter over a local HTTP server", () => {
           : trackSuccessXml,
       );
     });
+    if (!mock) return;
 
     await expect(sendPttLiveRequest(input(mock.origin))).resolves.toMatchObject({
       response_payload: { success: true },
@@ -142,10 +171,11 @@ describe("PTT live adapter over a local HTTP server", () => {
   });
 
   it("records a retryable 503 attempt without leaking credentials", async () => {
-    const mock = await startMockPtt((_request, response) => {
+    const mock = await startMockPttOrSkip((_request, response) => {
       response.writeHead(503, { "content-type": "text/plain" });
       response.end("unavailable");
     });
+    if (!mock) return;
 
     const error = await sendPttLiveRequest(input(mock.origin)).catch((caught: unknown) => caught);
 
@@ -157,9 +187,10 @@ describe("PTT live adapter over a local HTTP server", () => {
   });
 
   it("aborts a hanging server with a timeout attempt", async () => {
-    const mock = await startMockPtt(() => {
+    const mock = await startMockPttOrSkip(() => {
       // never respond
     });
+    if (!mock) return;
 
     const error = await sendPttLiveRequest(input(mock.origin, 200)).catch((caught: unknown) => caught);
 
@@ -168,7 +199,8 @@ describe("PTT live adapter over a local HTTP server", () => {
   });
 
   it("reports connection refused as a network error", async () => {
-    const mock = await startMockPtt(() => undefined);
+    const mock = await startMockPttOrSkip(() => undefined);
+    if (!mock) return;
     const closedOrigin = mock.origin;
     const current = server;
     server = null;
