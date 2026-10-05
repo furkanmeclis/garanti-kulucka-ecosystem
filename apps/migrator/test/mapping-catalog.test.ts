@@ -303,9 +303,12 @@ describe("legacy mapping catalog", () => {
     );
   });
 
-  it("declares conversation and message apply prerequisites in dependency order", () => {
+  it("declares FK-resolving apply prerequisites in dependency order", () => {
     expect(() => assertApplyPrerequisites(legacyMappingCatalog, ["conversations"])).not.toThrow();
     expect(() => assertApplyPrerequisites(legacyMappingCatalog, ["messages"])).not.toThrow();
+    expect(() => assertApplyPrerequisites(legacyMappingCatalog, ["orders"])).not.toThrow();
+    expect(() => assertApplyPrerequisites(legacyMappingCatalog, ["order_items"])).not.toThrow();
+    expect(() => assertApplyPrerequisites(legacyMappingCatalog, ["shipments"])).not.toThrow();
     expect(() => assertApplyPrerequisites(createLegacyMappingCatalog({
       ...legacyMappingCatalog,
       tables: legacyMappingCatalog.tables.filter((table) => table.sourceTable !== "public.musteriler"),
@@ -317,6 +320,18 @@ describe("legacy mapping catalog", () => {
       tables: legacyMappingCatalog.tables.filter((table) => table.sourceTable !== "public.konusmalar"),
     }), ["messages"])).toThrow(
       "Migration entity messages cannot be applied while conversations is undeclared in catalog",
+    );
+    expect(() => assertApplyPrerequisites(createLegacyMappingCatalog({
+      ...legacyMappingCatalog,
+      tables: legacyMappingCatalog.tables.filter((table) => table.sourceTable !== "public.urunler"),
+    }), ["order_items"])).toThrow(
+      "Migration entity order_items cannot be applied while products is undeclared in catalog",
+    );
+    expect(() => assertApplyPrerequisites(createLegacyMappingCatalog({
+      ...legacyMappingCatalog,
+      tables: legacyMappingCatalog.tables.filter((table) => table.sourceTable !== "public.siparisler"),
+    }), ["shipments"])).toThrow(
+      "Migration entity shipments cannot be applied while orders is undeclared in catalog",
     );
   });
 

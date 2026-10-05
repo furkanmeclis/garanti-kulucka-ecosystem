@@ -117,7 +117,16 @@ export interface MigrationTarget {
   writeCustomerExternalIdentityRecord?(input: CustomerExternalIdentityCanonicalRecord): Promise<CanonicalWriteResult>;
   writeConversationRecord?(input: ConversationCanonicalRecord): Promise<CanonicalWriteResult>;
   writeMessageRecord?(input: MessageCanonicalRecord): Promise<CanonicalWriteResult>;
+  writeOrderRecord?(input: OrderCanonicalRecord): Promise<CanonicalWriteResult>;
+  writeOrderItemRecord?(input: OrderItemCanonicalRecord): Promise<CanonicalWriteResult>;
+  writeShipmentRecord?(input: ShipmentCanonicalRecord): Promise<CanonicalWriteResult>;
+  findProductPublicIdBySku?(sku: string): Promise<string | null>;
+  findProductPublicIdByExternalId?(externalProductId: string): Promise<string | null>;
+  recordDeferredReconciliation?(input: DeferredReconciliationWrite): Promise<DeferredReconciliationEntry>;
+  reconcileDeferredReconciliations?(runId: string): Promise<DeferredReconciliationResult>;
+  assertOrderTotalsConsistent?(input: OrderTotalConsistencyCheck): Promise<void>;
   findLegacyIdMap(input: LegacyIdMapKey): Promise<LegacyIdMapEntry | null>;
+  findLegacyIdMapsByMappingRole?(input: LegacyIdMapRoleLookup): Promise<readonly LegacyIdMapEntry[]>;
   upsertLegacyIdMap(input: LegacyIdMapWrite): Promise<LegacyIdMapEntry>;
   findMigrationBatchState(input: MigrationBatchStateKey): Promise<MigrationBatchState | null>;
   recordMigrationBatchStarted(input: MigrationBatchStateStart): Promise<MigrationBatchState>;
@@ -189,6 +198,97 @@ export interface MessageCanonicalRecord {
   };
 }
 
+export interface OrderCanonicalRecord {
+  readonly targetTable: "orders";
+  readonly targetId: string;
+  readonly customerPublicId: string;
+  readonly conversationPublicId: string | null;
+  readonly createdByUserPublicId: string | null;
+  readonly checksum: string;
+  readonly payload: {
+    readonly order_number: string;
+    readonly status: string;
+    readonly source: string;
+    readonly total_amount: string;
+    readonly currency: string;
+    readonly confirmation_status: string | null;
+    readonly notes: string | null;
+    readonly external_order_id: string | null;
+  };
+}
+
+export interface OrderItemCanonicalRecord {
+  readonly targetTable: "order_items";
+  readonly targetId: string;
+  readonly orderPublicId: string;
+  readonly productPublicId: string;
+  readonly checksum: string;
+  readonly payload: {
+    readonly name: string;
+    readonly quantity: number;
+    readonly unit_price: string;
+    readonly total_amount: string;
+    readonly external_product_id: string | null;
+  };
+}
+
+export interface ShipmentCanonicalRecord {
+  readonly targetTable: "shipments";
+  readonly targetId: string;
+  readonly orderPublicId: string | null;
+  readonly customerPublicId: string | null;
+  readonly checksum: string;
+  readonly payload: {
+    readonly provider: string;
+    readonly tracking_number: string | null;
+    readonly barcode_number: string | null;
+    readonly status: string;
+    readonly recipient_name: string;
+    readonly recipient_phone: string | null;
+    readonly recipient_address: string;
+    readonly recipient_city: string | null;
+    readonly recipient_district: string | null;
+    readonly last_event_text: string | null;
+    readonly shipped_at: string | null;
+    readonly delivered_at: string | null;
+    readonly raw_payload: Record<string, unknown> | null;
+  };
+}
+
+export type DeferredReconciliationStatus = "pending" | "resolved";
+
+export interface DeferredReconciliationWrite {
+  readonly runId: string;
+  readonly sourceSystem: string;
+  readonly sourceTable: string;
+  readonly sourceId: string;
+  readonly targetTable: string;
+  readonly targetId: string;
+  readonly targetColumn: string;
+  readonly lookupSourceTable: string;
+  readonly lookupSourceId: string;
+  readonly lookupTargetTable: string;
+  readonly lookupMappingRole: string;
+}
+
+export interface DeferredReconciliationEntry extends DeferredReconciliationWrite {
+  readonly publicId: string;
+  readonly status: DeferredReconciliationStatus;
+  readonly resolvedTargetId: string | null;
+  readonly resolvedAt: Date | null;
+  readonly errorMessage: string | null;
+}
+
+export interface DeferredReconciliationResult {
+  readonly examined: number;
+  readonly resolved: number;
+  readonly pending: number;
+}
+
+export interface OrderTotalConsistencyCheck {
+  readonly orderPublicId: string;
+}
+
 export interface MigrationRunRegistration {
   readonly runId: string;
   readonly manifest: SourceManifest;
@@ -217,6 +317,14 @@ export interface LegacyIdMapKey {
 export interface LegacyIdMapWrite extends LegacyIdMapKey {
   readonly targetId: string;
   readonly checksum: string | null;
+}
+
+export interface LegacyIdMapRoleLookup {
+  readonly runId: string;
+  readonly sourceSystem: string;
+  readonly sourceTable: string;
+  readonly targetTable: string;
+  readonly mappingRole: string;
 }
 
 export interface MigrationBatch {

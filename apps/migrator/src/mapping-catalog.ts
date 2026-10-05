@@ -35,6 +35,9 @@ const applyPrerequisites: Partial<Record<MigrationEntity, readonly MigrationEnti
   customers: ["customer_external_identities", "customer_addresses"],
   conversations: ["customers"],
   messages: ["conversations"],
+  orders: ["customers"],
+  order_items: ["orders", "products"],
+  shipments: ["orders"],
 };
 
 export const legacyMappingCatalog = createLegacyMappingCatalog({

@@ -12,12 +12,18 @@ import {
   transformLegacyCustomer,
   type VerifiedIntegrationAccount,
 } from "./customer-mapping.js";
+import { transformLegacyOrder } from "./order-mapping.js";
+import { transformLegacyOrderItem } from "./order-item-mapping.js";
+import { transformLegacyProduct } from "./product-mapping.js";
+import { transformLegacyShipment } from "./shipment-mapping.js";
 import type {
   BatchReadOptions,
   CanonicalRecord,
   ConversationCanonicalRecord,
   CustomerAddressCanonicalRecord,
   CustomerExternalIdentityCanonicalRecord,
+  DeferredReconciliationResult,
+  LegacyIdMapEntry,
   LegacyRecord,
   MessageCanonicalRecord,
   MigrationBatch,
@@ -25,6 +31,9 @@ import type {
   MigrationTarget,
   LegacySource,
   MigrationEntity,
+  OrderCanonicalRecord,
+  OrderItemCanonicalRecord,
+  ShipmentCanonicalRecord,
 } from "./types.js";
 
 export interface ApplyMigrationBatchInput {
@@ -55,6 +64,35 @@ export interface ApplyConversationMigrationBatchInput {
 }
 
 export interface ApplyMessageMigrationBatchInput {
+  readonly source: LegacySource;
+  readonly target: MigrationTarget;
+  readonly runId: string;
+  readonly batch: MigrationBatch;
+}
+
+export interface ApplyProductMigrationBatchInput {
+  readonly source: LegacySource;
+  readonly target: MigrationTarget;
+  readonly runId: string;
+  readonly batch: MigrationBatch;
+}
+
+export interface ApplyOrderMigrationBatchInput {
+  readonly source: LegacySource;
+  readonly target: MigrationTarget;
+  readonly runId: string;
+  readonly batch: MigrationBatch;
+  readonly userPublicIds?: ReadonlyMap<string, string>;
+}
+
+export interface ApplyOrderItemMigrationBatchInput {
+  readonly source: LegacySource;
+  readonly target: MigrationTarget;
+  readonly runId: string;
+  readonly batch: MigrationBatch;
+}
+
+export interface ApplyShipmentMigrationBatchInput {
   readonly source: LegacySource;
   readonly target: MigrationTarget;
   readonly runId: string;
@@ -235,6 +273,126 @@ export async function applyMessageMigrationBatchWithState(
     });
     throw safeError;
   }
+}
+
+export async function applyProductMigrationBatchWithState(
+  input: ApplyProductMigrationBatchInput,
+): Promise<MigrationBatchApplyResult> {
+  if (input.batch.entity !== "products") {
+    throw new Error(`Product writer cannot apply ${input.batch.entity} batches`);
+  }
+
+  const existing = await input.target.findMigrationBatchState({
+    runId: input.runId,
+    batch: input.batch,
+  });
+  if (existing?.status === "succeeded") {
+    return migrationBatchResultFromState(existing);
+  }
+
+  try {
+    return await runExclusiveSuccessfulBatchApply(input, applyProductMigrationBatch);
+  } catch (error) {
+    const safeError = toSafeMigratorError(error);
+    await input.target.recordMigrationBatchFailed({
+      runId: input.runId,
+      batch: input.batch,
+      error: safeError,
+    });
+    throw safeError;
+  }
+}
+
+export async function applyOrderMigrationBatchWithState(
+  input: ApplyOrderMigrationBatchInput,
+): Promise<MigrationBatchApplyResult> {
+  if (input.batch.entity !== "orders") {
+    throw new Error(`Order writer cannot apply ${input.batch.entity} batches`);
+  }
+
+  const existing = await input.target.findMigrationBatchState({
+    runId: input.runId,
+    batch: input.batch,
+  });
+  if (existing?.status === "succeeded") {
+    return migrationBatchResultFromState(existing);
+  }
+
+  try {
+    return await runExclusiveSuccessfulBatchApply(input, applyOrderMigrationBatch);
+  } catch (error) {
+    const safeError = toSafeMigratorError(error);
+    await input.target.recordMigrationBatchFailed({
+      runId: input.runId,
+      batch: input.batch,
+      error: safeError,
+    });
+    throw safeError;
+  }
+}
+
+export async function applyOrderItemMigrationBatchWithState(
+  input: ApplyOrderItemMigrationBatchInput,
+): Promise<MigrationBatchApplyResult> {
+  if (input.batch.entity !== "order_items") {
+    throw new Error(`Order item writer cannot apply ${input.batch.entity} batches`);
+  }
+
+  const existing = await input.target.findMigrationBatchState({
+    runId: input.runId,
+    batch: input.batch,
+  });
+  if (existing?.status === "succeeded") {
+    return migrationBatchResultFromState(existing);
+  }
+
+  try {
+    return await runExclusiveSuccessfulBatchApply(input, applyOrderItemMigrationBatch);
+  } catch (error) {
+    const safeError = toSafeMigratorError(error);
+    await input.target.recordMigrationBatchFailed({
+      runId: input.runId,
+      batch: input.batch,
+      error: safeError,
+    });
+    throw safeError;
+  }
+}
+
+export async function applyShipmentMigrationBatchWithState(
+  input: ApplyShipmentMigrationBatchInput,
+): Promise<MigrationBatchApplyResult> {
+  if (input.batch.entity !== "shipments") {
+    throw new Error(`Shipment writer cannot apply ${input.batch.entity} batches`);
+  }
+
+  const existing = await input.target.findMigrationBatchState({
+    runId: input.runId,
+    batch: input.batch,
+  });
+  if (existing?.status === "succeeded") {
+    return migrationBatchResultFromState(existing);
+  }
+
+  try {
+    return await runExclusiveSuccessfulBatchApply(input, applyShipmentMigrationBatch);
+  } catch (error) {
+    const safeError = toSafeMigratorError(error);
+    await input.target.recordMigrationBatchFailed({
+      runId: input.runId,
+      batch: input.batch,
+      error: safeError,
+    });
+    throw safeError;
+  }
+}
+
+export async function reconcileDeferredReconciliations(
+  target: MigrationTarget,
+  runId: string,
+): Promise<DeferredReconciliationResult> {
+  assertDeferredReconciliationTarget(target);
+  return target.reconcileDeferredReconciliations(runId);
 }
 
 async function runExclusiveSuccessfulBatchApply<TInput extends ApplyMigrationBatchWithStateInput>(
@@ -553,6 +711,340 @@ async function applyMessageMigrationBatch(
   return result;
 }
 
+async function applyProductMigrationBatch(
+  input: ApplyProductMigrationBatchInput,
+): Promise<MigrationBatchApplyResult> {
+  const records = await readExpectedBatch(input);
+  const result = newApplyResult(input.batch, records.length);
+
+  for (const legacyRecord of records) {
+    const productResult = transformLegacyProduct(legacyRecord);
+    const product = productResult.product;
+    const productRecord: CanonicalRecord = {
+      targetTable: product.targetTable,
+      targetId: product.publicId,
+      checksum: productResult.sourcePayloadChecksum,
+      payload: {
+        sku: product.sku,
+        name: product.name,
+        category: product.category,
+        unit_price: product.unitPrice,
+        stock_quantity: product.stockQuantity,
+        is_active: product.isActive,
+        external_product_id: product.externalProductId,
+      },
+    };
+
+    await input.target.writeCanonicalRecord(productRecord);
+    result.writtenRows += 1;
+    countIdMapResult(result, await upsertLegacyIdMap(input.target, {
+      runId: input.runId,
+      sourceSystem: legacyRecord.sourceSystem,
+      sourceTable: legacyRecord.sourceTable,
+      sourceId: legacyRecord.sourceId,
+      targetTable: productRecord.targetTable,
+      mappingRole: product.mappingRole,
+      targetId: productRecord.targetId,
+      checksum: productRecord.checksum,
+    }));
+  }
+
+  return result;
+}
+
+async function applyOrderMigrationBatch(
+  input: ApplyOrderMigrationBatchInput,
+): Promise<MigrationBatchApplyResult> {
+  assertOrderTarget(input.target);
+  const records = await readExpectedBatch(input);
+  const result = newApplyResult(input.batch, records.length);
+
+  for (const legacyRecord of records) {
+    const legacyCustomerId = requiredPayloadString(legacyRecord, "musteri_id").toLowerCase();
+    const customerPublicId = await resolveRequiredLegacyMap(input.target, {
+      runId: input.runId,
+      sourceSystem: legacyRecord.sourceSystem,
+      sourceTable: "public.musteriler",
+      sourceId: legacyCustomerId,
+      targetTable: "customers",
+      mappingRole: "primary",
+      errorLabel: "customer",
+    });
+
+    const conversationPublicIds = new Map<string, string>();
+    const legacyConversationId = optionalPayloadString(legacyRecord, "konusma_id")?.toLowerCase() ?? null;
+    if (legacyConversationId !== null) {
+      const conversationEntry = await input.target.findLegacyIdMap({
+        runId: input.runId,
+        sourceSystem: legacyRecord.sourceSystem,
+        sourceTable: "public.konusmalar",
+        sourceId: legacyConversationId,
+        targetTable: "conversations",
+        mappingRole: "primary",
+      });
+      if (conversationEntry) conversationPublicIds.set(legacyConversationId, conversationEntry.targetId);
+    }
+
+    const orderResult = transformLegacyOrder(legacyRecord, {
+      customerPublicIds: new Map([[legacyCustomerId, customerPublicId]]),
+      conversationPublicIds,
+      userPublicIds: input.userPublicIds ?? new Map(),
+    });
+    const order = orderResult.order;
+    const orderRecord: OrderCanonicalRecord = {
+      targetTable: order.targetTable,
+      targetId: order.publicId,
+      customerPublicId: order.customerPublicId,
+      conversationPublicId: order.conversationPublicId,
+      createdByUserPublicId: order.createdByUserPublicId,
+      checksum: orderResult.sourcePayloadChecksum,
+      payload: {
+        order_number: order.orderNumber,
+        status: order.status,
+        source: order.source,
+        total_amount: order.totalAmount,
+        currency: order.currency,
+        confirmation_status: order.confirmationStatus,
+        notes: order.notes,
+        external_order_id: order.externalOrderId,
+      },
+    };
+
+    await input.target.writeOrderRecord(orderRecord);
+    result.writtenRows += 1;
+    countIdMapResult(result, await upsertLegacyIdMap(input.target, {
+      runId: input.runId,
+      sourceSystem: legacyRecord.sourceSystem,
+      sourceTable: legacyRecord.sourceTable,
+      sourceId: legacyRecord.sourceId,
+      targetTable: orderRecord.targetTable,
+      mappingRole: order.mappingRole,
+      targetId: orderRecord.targetId,
+      checksum: orderRecord.checksum,
+    }));
+    const trackingNumber = normalizedPayloadString(legacyRecord, "kargo_takip_no");
+    if (trackingNumber !== null) {
+      // Shipments link through legacy tracking numbers, so apply records a role-scoped order lookup.
+      countIdMapResult(result, await upsertLegacyIdMap(input.target, {
+        runId: input.runId,
+        sourceSystem: legacyRecord.sourceSystem,
+        sourceTable: legacyRecord.sourceTable,
+        sourceId: legacyRecord.sourceId,
+        targetTable: orderRecord.targetTable,
+        mappingRole: orderTrackingMappingRole(trackingNumber),
+        targetId: orderRecord.targetId,
+        checksum: orderRecord.checksum,
+      }));
+    }
+
+    for (const reconciliation of orderResult.reconciliation) {
+      if (reconciliation.code === "unresolved_conversation") {
+        await input.target.recordDeferredReconciliation({
+          runId: input.runId,
+          sourceSystem: legacyRecord.sourceSystem,
+          sourceTable: legacyRecord.sourceTable,
+          sourceId: legacyRecord.sourceId,
+          targetTable: orderRecord.targetTable,
+          targetId: orderRecord.targetId,
+          targetColumn: "conversation_id",
+          lookupSourceTable: "public.konusmalar",
+          lookupSourceId: reconciliation.legacyConversationId,
+          lookupTargetTable: "conversations",
+          lookupMappingRole: "primary",
+        });
+        result.warnings.push({
+          entity: input.batch.entity,
+          code: "deferred_reconciliation",
+          message: `Deferred order conversation FK for ${legacyRecord.sourceTable}.${legacyRecord.sourceId}`,
+        });
+      }
+      if (reconciliation.code === "unresolved_created_by") {
+        result.warnings.push({
+          entity: input.batch.entity,
+          code: "unresolved_optional_user",
+          message: `Order creator legacy id ${reconciliation.legacyUserId} was not mapped`,
+        });
+      }
+    }
+  }
+
+  return result;
+}
+
+async function applyOrderItemMigrationBatch(
+  input: ApplyOrderItemMigrationBatchInput,
+): Promise<MigrationBatchApplyResult> {
+  assertOrderItemTarget(input.target);
+  const records = await readExpectedBatch(input);
+  const result = newApplyResult(input.batch, records.length);
+  const touchedOrders = new Set<string>();
+
+  for (const legacyRecord of records) {
+    const legacyOrderId = requiredPayloadString(legacyRecord, "siparis_id").toLowerCase();
+    const orderPublicId = await resolveRequiredLegacyMap(input.target, {
+      runId: input.runId,
+      sourceSystem: legacyRecord.sourceSystem,
+      sourceTable: "public.siparisler",
+      sourceId: legacyOrderId,
+      targetTable: "orders",
+      mappingRole: "primary",
+      errorLabel: "order",
+    });
+    const sku = optionalPayloadString(legacyRecord, "urun_kodu");
+    const externalProductId = optionalPayloadString(legacyRecord, "kolaybi_product_id");
+    const productPublicIdsBySku = new Map<string, string>();
+    const productPublicIdsByExternalId = new Map<string, string>();
+    if (sku !== null) {
+      const productPublicId = await input.target.findProductPublicIdBySku(sku);
+      if (productPublicId !== null) productPublicIdsBySku.set(sku, productPublicId);
+    }
+    if (externalProductId !== null) {
+      const productPublicId = await input.target.findProductPublicIdByExternalId(externalProductId);
+      if (productPublicId !== null) productPublicIdsByExternalId.set(externalProductId, productPublicId);
+    }
+
+    const itemResult = transformLegacyOrderItem(legacyRecord, {
+      orderPublicIds: new Map([[legacyOrderId, orderPublicId]]),
+      productPublicIdsBySku,
+      productPublicIdsByExternalId,
+    });
+    const item = itemResult.orderItem;
+    if (item.productPublicId === null) {
+      throw new Error(
+        `Cannot resolve product FK for order item ${legacyRecord.sourceTable}.${legacyRecord.sourceId}`,
+      );
+    }
+
+    const itemRecord: OrderItemCanonicalRecord = {
+      targetTable: item.targetTable,
+      targetId: item.publicId,
+      orderPublicId: item.orderPublicId,
+      productPublicId: item.productPublicId,
+      checksum: itemResult.sourcePayloadChecksum,
+      payload: {
+        name: item.name,
+        quantity: item.quantity,
+        unit_price: item.unitPrice,
+        total_amount: item.totalAmount,
+        external_product_id: item.externalProductId,
+      },
+    };
+
+    await input.target.writeOrderItemRecord(itemRecord);
+    touchedOrders.add(item.orderPublicId);
+    result.writtenRows += 1;
+    countIdMapResult(result, await upsertLegacyIdMap(input.target, {
+      runId: input.runId,
+      sourceSystem: legacyRecord.sourceSystem,
+      sourceTable: legacyRecord.sourceTable,
+      sourceId: legacyRecord.sourceId,
+      targetTable: itemRecord.targetTable,
+      mappingRole: item.mappingRole,
+      targetId: itemRecord.targetId,
+      checksum: itemRecord.checksum,
+    }));
+  }
+
+  for (const orderPublicId of touchedOrders) {
+    await input.target.assertOrderTotalsConsistent({ orderPublicId });
+  }
+
+  return result;
+}
+
+async function applyShipmentMigrationBatch(
+  input: ApplyShipmentMigrationBatchInput,
+): Promise<MigrationBatchApplyResult> {
+  assertShipmentTarget(input.target);
+  const records = await readExpectedBatch(input);
+  const result = newApplyResult(input.batch, records.length);
+
+  for (const legacyRecord of records) {
+    const orderResolution = await resolveShipmentOrderByTracking(input.target, {
+      runId: input.runId,
+      sourceSystem: legacyRecord.sourceSystem,
+      trackingNumbers: shipmentTrackingCandidates(legacyRecord),
+    });
+
+    const legacyCustomerId = optionalPayloadString(legacyRecord, "musteri_id")?.toLowerCase() ?? null;
+    const customerEntry = legacyCustomerId === null
+      ? null
+      : await input.target.findLegacyIdMap({
+        runId: input.runId,
+        sourceSystem: legacyRecord.sourceSystem,
+        sourceTable: "public.musteriler",
+        sourceId: legacyCustomerId,
+        targetTable: "customers",
+        mappingRole: "primary",
+      });
+    const shipmentResult = transformLegacyShipment(legacyRecord, {
+      customerPublicIds: customerEntry === null || legacyCustomerId === null
+        ? new Map()
+        : new Map([[legacyCustomerId, customerEntry.targetId]]),
+    });
+    const shipment = shipmentResult.shipment;
+    const shipmentRecord: ShipmentCanonicalRecord = {
+      targetTable: shipment.targetTable,
+      targetId: shipment.publicId,
+      orderPublicId: orderResolution.order?.targetId ?? null,
+      customerPublicId: shipment.customerPublicId,
+      checksum: shipmentResult.sourcePayloadChecksum,
+      payload: {
+        provider: shipment.provider,
+        tracking_number: shipment.trackingNumber,
+        barcode_number: shipment.barcodeNumber,
+        status: shipment.status,
+        recipient_name: shipment.recipientName,
+        recipient_phone: shipment.recipientPhone,
+        recipient_address: shipment.recipientAddress,
+        recipient_city: shipment.recipientCity,
+        recipient_district: shipment.recipientDistrict,
+        last_event_text: shipment.lastEventText,
+        shipped_at: shipment.shippedAt,
+        delivered_at: shipment.deliveredAt,
+        raw_payload: shipment.rawPayload,
+      },
+    };
+
+    await input.target.writeShipmentRecord(shipmentRecord);
+    result.writtenRows += 1;
+    countIdMapResult(result, await upsertLegacyIdMap(input.target, {
+      runId: input.runId,
+      sourceSystem: legacyRecord.sourceSystem,
+      sourceTable: legacyRecord.sourceTable,
+      sourceId: legacyRecord.sourceId,
+      targetTable: shipmentRecord.targetTable,
+      mappingRole: shipment.mappingRole,
+      targetId: shipmentRecord.targetId,
+      checksum: shipmentRecord.checksum,
+    }));
+
+    if (orderResolution.order === null) {
+      const lookup = orderResolution.deferredTrackingNumber ?? `missing:${legacyRecord.sourceId}`;
+      await input.target.recordDeferredReconciliation({
+        runId: input.runId,
+        sourceSystem: legacyRecord.sourceSystem,
+        sourceTable: legacyRecord.sourceTable,
+        sourceId: legacyRecord.sourceId,
+        targetTable: shipmentRecord.targetTable,
+        targetId: shipmentRecord.targetId,
+        targetColumn: "order_id",
+        lookupSourceTable: "public.siparisler",
+        lookupSourceId: lookup,
+        lookupTargetTable: "orders",
+        lookupMappingRole: orderTrackingMappingRole(lookup),
+      });
+      result.warnings.push({
+        entity: input.batch.entity,
+        code: "deferred_reconciliation",
+        message: `Deferred shipment order FK for ${legacyRecord.sourceTable}.${legacyRecord.sourceId}`,
+      });
+    }
+  }
+
+  return result;
+}
+
 async function readExpectedBatch(input: ApplyMigrationBatchInput): Promise<LegacyRecord[]> {
   const readOptions: BatchReadOptions = {
     limit: input.batch.limit,
@@ -610,6 +1102,62 @@ function requiredPayloadString(record: LegacyRecord, field: string): string {
   return value;
 }
 
+function optionalPayloadString(record: LegacyRecord, field: string): string | null {
+  if (!Object.hasOwn(record.payload, field)) return null;
+  const value = record.payload[field];
+  if (value === null) return null;
+  if (typeof value !== "string") {
+    throw new Error(`Cannot resolve apply prerequisite from non-string legacy field ${field}`);
+  }
+  const trimmed = value.trim();
+  return trimmed || null;
+}
+
+function normalizedPayloadString(record: LegacyRecord, field: string): string | null {
+  return optionalPayloadString(record, field);
+}
+
+function orderTrackingMappingRole(trackingNumber: string): string {
+  return `tracking_number:${trackingNumber}`;
+}
+
+function shipmentTrackingCandidates(record: LegacyRecord): readonly string[] {
+  const candidates = [
+    normalizedPayloadString(record, "takip_no"),
+    normalizedPayloadString(record, "surat_kargo_takip_no"),
+  ].filter((value): value is string => value !== null);
+  return [...new Set(candidates)];
+}
+
+async function resolveShipmentOrderByTracking(
+  target: MigrationTarget & Required<Pick<MigrationTarget, "findLegacyIdMapsByMappingRole">>,
+  input: {
+    readonly runId: string;
+    readonly sourceSystem: string;
+    readonly trackingNumbers: readonly string[];
+  },
+): Promise<{
+  readonly order: LegacyIdMapEntry | null;
+  readonly deferredTrackingNumber: string | null;
+}> {
+  for (const trackingNumber of input.trackingNumbers) {
+    const matches = await target.findLegacyIdMapsByMappingRole({
+      runId: input.runId,
+      sourceSystem: input.sourceSystem,
+      sourceTable: "public.siparisler",
+      targetTable: "orders",
+      mappingRole: orderTrackingMappingRole(trackingNumber),
+    });
+    if (matches.length > 1) {
+      throw new Error(`Shipment tracking number ${trackingNumber} resolves to multiple migrated orders`);
+    }
+    if (matches.length === 1) {
+      return { order: matches[0]!, deferredTrackingNumber: null };
+    }
+  }
+  return { order: null, deferredTrackingNumber: input.trackingNumbers[0] ?? null };
+}
+
 function assertConversationTarget(
   target: MigrationTarget,
 ): asserts target is MigrationTarget & Required<Pick<MigrationTarget, "writeConversationRecord">> {
@@ -623,6 +1171,52 @@ function assertMessageTarget(
 ): asserts target is MigrationTarget & Required<Pick<MigrationTarget, "writeMessageRecord">> {
   if (!target.writeMessageRecord) {
     throw new Error("Message apply requires a target with FK-resolving message writer");
+  }
+}
+
+function assertOrderTarget(
+  target: MigrationTarget,
+): asserts target is MigrationTarget & Required<Pick<
+  MigrationTarget,
+  "writeOrderRecord" | "recordDeferredReconciliation"
+>> {
+  if (!target.writeOrderRecord || !target.recordDeferredReconciliation) {
+    throw new Error("Order apply requires a target with FK-resolving order and deferred reconciliation writers");
+  }
+}
+
+function assertOrderItemTarget(
+  target: MigrationTarget,
+): asserts target is MigrationTarget & Required<Pick<
+  MigrationTarget,
+  "writeOrderItemRecord" | "findProductPublicIdBySku" | "findProductPublicIdByExternalId" | "assertOrderTotalsConsistent"
+>> {
+  if (
+    !target.writeOrderItemRecord
+    || !target.findProductPublicIdBySku
+    || !target.findProductPublicIdByExternalId
+    || !target.assertOrderTotalsConsistent
+  ) {
+    throw new Error("Order item apply requires a target with FK-resolving order item writers and product lookup");
+  }
+}
+
+function assertShipmentTarget(
+  target: MigrationTarget,
+): asserts target is MigrationTarget & Required<Pick<
+  MigrationTarget,
+  "writeShipmentRecord" | "recordDeferredReconciliation" | "findLegacyIdMapsByMappingRole"
+>> {
+  if (!target.writeShipmentRecord || !target.recordDeferredReconciliation || !target.findLegacyIdMapsByMappingRole) {
+    throw new Error("Shipment apply requires a target with FK-resolving shipment, tracking lookup, and deferred reconciliation writers");
+  }
+}
+
+function assertDeferredReconciliationTarget(
+  target: MigrationTarget,
+): asserts target is MigrationTarget & Required<Pick<MigrationTarget, "reconcileDeferredReconciliations">> {
+  if (!target.reconcileDeferredReconciliations) {
+    throw new Error("Deferred reconciliation requires a target with a reconciliation runner");
   }
 }
 

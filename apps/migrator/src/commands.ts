@@ -65,6 +65,7 @@ const requiredCanonicalTables = [
   "migration_runs",
   "migration_batches",
   "legacy_id_map",
+  "migration_deferred_reconciliations",
 ];
 
 export function parseMigratorCommand(args: string[]): MigratorCommand {

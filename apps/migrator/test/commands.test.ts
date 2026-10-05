@@ -358,6 +358,14 @@ describe("migrator commands", () => {
     );
     expect(report.checks).toContainEqual(
       expect.objectContaining({
+        name: "canonical_table.migration_deferred_reconciliations",
+        status: "failed",
+        expected: 1,
+        actual: 0,
+      }),
+    );
+    expect(report.checks).toContainEqual(
+      expect.objectContaining({
         name: "canonical_table.migration_batches",
         status: "failed",
         expected: 1,

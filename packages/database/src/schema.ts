@@ -47,6 +47,7 @@ export interface Database {
   migration_runs: MigrationRunsTable;
   migration_batches: MigrationBatchesTable;
   legacy_id_map: LegacyIdMapTable;
+  migration_deferred_reconciliations: MigrationDeferredReconciliationsTable;
 }
 
 export interface BaseTable {
@@ -391,6 +392,24 @@ export interface LegacyIdMapTable {
   target_id: string;
   checksum: string | null;
   migrated_at: Timestamp;
+}
+
+export interface MigrationDeferredReconciliationsTable extends BaseTable {
+  run_id: string;
+  source_system: string;
+  source_table: string;
+  source_id: string;
+  target_table: string;
+  target_id: string;
+  target_column: string;
+  lookup_source_table: string;
+  lookup_source_id: string;
+  lookup_target_table: string;
+  lookup_mapping_role: string;
+  status: string;
+  resolved_target_id: string | null;
+  resolved_at: Timestamp | null;
+  error_message: string | null;
 }
 
 export type User = Selectable<UsersTable>;

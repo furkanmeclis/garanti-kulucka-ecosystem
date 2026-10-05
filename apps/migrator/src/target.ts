@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type {
   AppDatabase,
   LegacyIdMapTable,
+  MigrationDeferredReconciliationsTable,
   MigrationBatchesTable,
   MigrationRunsTable,
 } from "@garanti-kulucka/database";
@@ -15,6 +16,7 @@ import type {
   CustomerExternalIdentityCanonicalRecord,
   LegacyIdMapEntry,
   LegacyIdMapKey,
+  LegacyIdMapRoleLookup,
   LegacyIdMapWrite,
   MessageCanonicalRecord,
   MigrationBatchState,
@@ -26,6 +28,13 @@ import type {
   MigrationTarget,
   MigrationRunRegistration,
   MigrationRunState,
+  OrderCanonicalRecord,
+  OrderItemCanonicalRecord,
+  OrderTotalConsistencyCheck,
+  DeferredReconciliationEntry,
+  DeferredReconciliationResult,
+  DeferredReconciliationWrite,
+  ShipmentCanonicalRecord,
   SourceDatabaseIdentity,
   SourceEntityRowCount,
   SourceTableSnapshot,
@@ -200,8 +209,245 @@ export class DatabaseMigrationTarget implements MigrationTarget {
     });
   }
 
+  async writeOrderRecord(input: OrderCanonicalRecord): Promise<CanonicalWriteResult> {
+    const customerId = await this.findRequiredPublicId("customers", input.customerPublicId, "customer");
+    const conversationId = input.conversationPublicId === null
+      ? null
+      : await this.findRequiredPublicId("conversations", input.conversationPublicId, "conversation");
+    const createdByUserId = input.createdByUserPublicId === null
+      ? null
+      : await this.findRequiredPublicId("users", input.createdByUserPublicId, "created by user");
+
+    return this.writeResolvedRecord({
+      targetTable: input.targetTable,
+      targetId: input.targetId,
+      checksum: input.checksum,
+      payload: {
+        customer_id: customerId,
+        conversation_id: conversationId,
+        created_by_user_id: createdByUserId,
+        order_number: input.payload.order_number,
+        status: input.payload.status,
+        source: input.payload.source,
+        total_amount: input.payload.total_amount,
+        currency: input.payload.currency,
+        confirmation_status: input.payload.confirmation_status,
+        notes: input.payload.notes,
+        external_order_id: input.payload.external_order_id,
+      },
+    });
+  }
+
+  async writeOrderItemRecord(input: OrderItemCanonicalRecord): Promise<CanonicalWriteResult> {
+    const orderId = await this.findRequiredPublicId("orders", input.orderPublicId, "order");
+    const productId = await this.findRequiredPublicId("products", input.productPublicId, "product");
+
+    return this.writeResolvedRecord({
+      targetTable: input.targetTable,
+      targetId: input.targetId,
+      checksum: input.checksum,
+      payload: {
+        order_id: orderId,
+        product_id: productId,
+        name: input.payload.name,
+        quantity: input.payload.quantity,
+        unit_price: input.payload.unit_price,
+        total_amount: input.payload.total_amount,
+        external_product_id: input.payload.external_product_id,
+      },
+    });
+  }
+
+  async writeShipmentRecord(input: ShipmentCanonicalRecord): Promise<CanonicalWriteResult> {
+    const orderId = input.orderPublicId === null
+      ? null
+      : await this.findRequiredPublicId("orders", input.orderPublicId, "order");
+    const customerId = input.customerPublicId === null
+      ? null
+      : await this.findRequiredPublicId("customers", input.customerPublicId, "customer");
+
+    return this.writeResolvedRecord({
+      targetTable: input.targetTable,
+      targetId: input.targetId,
+      checksum: input.checksum,
+      payload: {
+        order_id: orderId,
+        customer_id: customerId,
+        provider: input.payload.provider,
+        tracking_number: input.payload.tracking_number,
+        barcode_number: input.payload.barcode_number,
+        status: input.payload.status,
+        recipient_name: input.payload.recipient_name,
+        recipient_phone: input.payload.recipient_phone,
+        recipient_address: input.payload.recipient_address,
+        recipient_city: input.payload.recipient_city,
+        recipient_district: input.payload.recipient_district,
+        last_event_text: input.payload.last_event_text,
+        shipped_at: input.payload.shipped_at,
+        delivered_at: input.payload.delivered_at,
+        raw_payload: input.payload.raw_payload === null ? null : jsonb(input.payload.raw_payload),
+      },
+    });
+  }
+
+  async findProductPublicIdBySku(sku: string): Promise<string | null> {
+    const row = await this.db
+      .selectFrom("products")
+      .select("public_id")
+      .where("sku", "=", sku)
+      .executeTakeFirst();
+    return row?.public_id ?? null;
+  }
+
+  async findProductPublicIdByExternalId(externalProductId: string): Promise<string | null> {
+    const row = await this.db
+      .selectFrom("products")
+      .select("public_id")
+      .where("external_product_id", "=", externalProductId)
+      .executeTakeFirst();
+    return row?.public_id ?? null;
+  }
+
+  async recordDeferredReconciliation(input: DeferredReconciliationWrite): Promise<DeferredReconciliationEntry> {
+    const publicId = deferredReconciliationPublicId(input);
+    const row = await this.db
+      .insertInto("migration_deferred_reconciliations")
+      .values({
+        public_id: publicId,
+        run_id: input.runId,
+        source_system: input.sourceSystem,
+        source_table: input.sourceTable,
+        source_id: input.sourceId,
+        target_table: input.targetTable,
+        target_id: input.targetId,
+        target_column: input.targetColumn,
+        lookup_source_table: input.lookupSourceTable,
+        lookup_source_id: input.lookupSourceId,
+        lookup_target_table: input.lookupTargetTable,
+        lookup_mapping_role: input.lookupMappingRole,
+        status: "pending",
+      })
+      .onConflict((conflict) =>
+        conflict.columns([
+          "run_id",
+          "source_system",
+          "source_table",
+          "source_id",
+          "target_table",
+          "target_id",
+          "target_column",
+        ]).doUpdateSet({
+          lookup_source_table: input.lookupSourceTable,
+          lookup_source_id: input.lookupSourceId,
+          lookup_target_table: input.lookupTargetTable,
+          lookup_mapping_role: input.lookupMappingRole,
+          error_message: null,
+          updated_at: new Date(),
+        }),
+      )
+      .returningAll()
+      .executeTakeFirstOrThrow();
+
+    return mapDeferredReconciliationRow(row);
+  }
+
+  async reconcileDeferredReconciliations(runId: string): Promise<DeferredReconciliationResult> {
+    const rows = await this.db
+      .selectFrom("migration_deferred_reconciliations")
+      .selectAll()
+      .where("run_id", "=", runId)
+      .where("status", "=", "pending")
+      .execute();
+
+    let resolved = 0;
+    let pending = 0;
+    for (const row of rows) {
+      const maps = row.target_table === "shipments" && row.target_column === "order_id"
+        ? await this.findLegacyIdMapsByMappingRole({
+          runId,
+          sourceSystem: row.source_system,
+          sourceTable: row.lookup_source_table,
+          targetTable: row.lookup_target_table,
+          mappingRole: row.lookup_mapping_role,
+        })
+        : [await this.findLegacyIdMap({
+          runId,
+          sourceSystem: row.source_system,
+          sourceTable: row.lookup_source_table,
+          sourceId: row.lookup_source_id,
+          targetTable: row.lookup_target_table,
+          mappingRole: row.lookup_mapping_role,
+        })].filter((map): map is LegacyIdMapEntry => map !== null);
+      if (maps.length > 1) {
+        throw new Error(
+          `Deferred reconciliation ${row.public_id} found ambiguous ${row.lookup_mapping_role} legacy_id_map entries`,
+        );
+      }
+      const map = maps[0] ?? null;
+      if (!map) {
+        pending += 1;
+        continue;
+      }
+
+      if (row.target_table === "orders" && row.target_column === "conversation_id") {
+        const fk = await this.findRequiredPublicId("conversations", map.targetId, "conversation");
+        await this.db
+          .updateTable("orders")
+          .set({ conversation_id: fk, updated_at: new Date() })
+          .where("public_id", "=", row.target_id)
+          .execute();
+      } else if (row.target_table === "shipments" && row.target_column === "order_id") {
+        const fk = await this.findRequiredPublicId("orders", map.targetId, "order");
+        await this.db
+          .updateTable("shipments")
+          .set({ order_id: fk, updated_at: new Date() })
+          .where("public_id", "=", row.target_id)
+          .execute();
+      } else {
+        throw new Error(`Unsupported deferred reconciliation target ${row.target_table}.${row.target_column}`);
+      }
+
+      const resolvedAt = new Date();
+      await this.db
+        .updateTable("migration_deferred_reconciliations")
+        .set({
+          status: "resolved",
+          resolved_target_id: map.targetId,
+          resolved_at: resolvedAt,
+          error_message: null,
+          updated_at: resolvedAt,
+        })
+        .where("public_id", "=", row.public_id)
+        .where("status", "=", "pending")
+        .execute();
+      resolved += 1;
+    }
+
+    return { examined: rows.length, resolved, pending };
+  }
+
+  async assertOrderTotalsConsistent(input: OrderTotalConsistencyCheck): Promise<void> {
+    const row = await this.db
+      .selectFrom("orders")
+      .leftJoin("order_items", "order_items.order_id", "orders.id")
+      .select((eb) => [
+        "orders.total_amount as order_total",
+        eb.fn.coalesce(eb.fn.sum("order_items.total_amount"), sql<string>`0`).as("items_total"),
+      ])
+      .where("orders.public_id", "=", input.orderPublicId)
+      .groupBy("orders.id")
+      .groupBy("orders.total_amount")
+      .executeTakeFirst();
+    if (!row) throw new Error(`Cannot verify totals for missing order ${input.orderPublicId}`);
+    if (String(row.order_total) !== String(row.items_total)) {
+      throw new Error(
+        `Order total mismatch for ${input.orderPublicId}: order total ${row.order_total} does not equal item total ${row.items_total}`,
+      );
+    }
+  }
+
   private async findRequiredPublicId(
-    table: "customers" | "integration_accounts" | "conversations" | "users",
+    table: "customers" | "integration_accounts" | "conversations" | "orders" | "products" | "users",
     publicId: string,
     label: string,
   ): Promise<number> {
@@ -279,6 +525,21 @@ export class DatabaseMigrationTarget implements MigrationTarget {
       .executeTakeFirst();
 
     return row ? mapLegacyIdMapRow(row) : null;
+  }
+
+  async findLegacyIdMapsByMappingRole(input: LegacyIdMapRoleLookup): Promise<readonly LegacyIdMapEntry[]> {
+    const rows = await this.db
+      .selectFrom("legacy_id_map")
+      .selectAll()
+      .where("run_id", "=", input.runId)
+      .where("source_system", "=", input.sourceSystem)
+      .where("source_table", "=", input.sourceTable)
+      .where("target_table", "=", input.targetTable)
+      .where("mapping_role", "=", input.mappingRole)
+      .orderBy("source_id", "asc")
+      .execute();
+
+    return rows.map((row) => mapLegacyIdMapRow(row));
   }
 
   async upsertLegacyIdMap(input: LegacyIdMapWrite): Promise<LegacyIdMapEntry> {
@@ -573,8 +834,47 @@ function migrationRunPublicId(runId: string): string {
   return `mrn_${hash}`;
 }
 
+function deferredReconciliationPublicId(input: DeferredReconciliationWrite): string {
+  const hash = createHash("sha256")
+    .update([
+      input.runId,
+      input.sourceSystem,
+      input.sourceTable,
+      input.sourceId,
+      input.targetTable,
+      input.targetId,
+      input.targetColumn,
+    ].join(":"))
+    .digest("hex")
+    .slice(0, 24);
+  return `mdr_${hash}`;
+}
+
 function jsonb(value: unknown): string {
   return JSON.stringify(value);
+}
+
+function mapDeferredReconciliationRow(
+  row: Selectable<MigrationDeferredReconciliationsTable>,
+): DeferredReconciliationEntry {
+  return {
+    publicId: row.public_id,
+    runId: row.run_id,
+    sourceSystem: row.source_system,
+    sourceTable: row.source_table,
+    sourceId: row.source_id,
+    targetTable: row.target_table,
+    targetId: row.target_id,
+    targetColumn: row.target_column,
+    lookupSourceTable: row.lookup_source_table,
+    lookupSourceId: row.lookup_source_id,
+    lookupTargetTable: row.lookup_target_table,
+    lookupMappingRole: row.lookup_mapping_role,
+    status: row.status as DeferredReconciliationEntry["status"],
+    resolvedTargetId: row.resolved_target_id,
+    resolvedAt: row.resolved_at ? new Date(row.resolved_at) : null,
+    errorMessage: row.error_message,
+  };
 }
 
 function mapMigrationRunState(row: Selectable<MigrationRunsTable>): MigrationRunState {
