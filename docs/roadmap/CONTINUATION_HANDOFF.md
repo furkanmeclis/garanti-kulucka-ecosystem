@@ -554,7 +554,7 @@ Kabul kapısı: web container `/` adresinde gerçek uygulamayı döndürmeli; me
 
 1. Browser login, refresh rotation, logout, revoked session, disabled user ve role denial senaryolarını çalıştır.
 2. Socket.IO auth reject, reconnect, room membership, Redis fanout ve stale session disconnect senaryolarını gerçek browser/client akışıyla doğrula.
-3. Conversation görüntüleme, mesaj gönderme, selected conversation refresh, unselected conversation broadcast refresh ve room join/leave komutları `v0.1.222` ile kanıtlandı; kalan realtime iş auth reject, reconnect, Redis fanout ve stale session disconnect kapsamıdır.
+3. Conversation görüntüleme, mesaj gönderme, selected conversation refresh, unselected conversation broadcast refresh ve room join/leave komutları `v0.1.222` ile kanıtlandı. İki API realtime instance arası Redis streams fanout `tests/websocket/redis-fanout.test.ts` ile Docker Redis üzerinde kanıtlandı; kalan realtime iş auth reject, reconnect ve stale session disconnect browser kapsamıdır.
 4. Admin ayarı değiştiğinde API/worker restart sonrası değerin PostgreSQL’den hydrate edildiğini kanıtla.
 5. Instagram, Messenger ve WhatsApp hesap bağlantılarının restart sonrası kaybolmadığını E2E test et.
 6. Webphone config permission, JsSIP/SIP boundary ve call-log persistence akışını gerçek SIP çağrısı yapmadan browser seviyesinde doğrula.
@@ -641,10 +641,10 @@ Kabul kapısı: upload/download browser E2E, restart persistence, orphan cleanup
 - JSON structured log şemasını API, worker ve migrator için tekilleştir.
 - Password, token, authorization header, cookie, connection string, presigned query ve provider secret redaction testlerini genişlet.
 - Admin audit, integration audit ve provider attempt görünürlüğünü operasyon dashboardlarına bağla.
-- Queue depth, retry, dead-letter, webhook latency, provider latency/error rate, websocket connection count ve migration progress metrics ekle.
-- Health, readiness ve dependency health sinyallerini ayır.
-- Alert eşikleri ve incident runbookları yaz.
-- Log retention ve kişisel veri politikalarını tanımla.
+- Tamamlandı: API ve worker `/metrics` (Prometheus text, `METRICS_ENABLED` + bearer token veya internal `METRICS_PORT`): HTTP route/status, queue depth/retry/dead-letter, webhook ingress latency, provider latency/error rate, Socket.IO connection count, migration progress ve storage metrikleri (`docs/operations/OBSERVABILITY.md`).
+- Tamamlandı: Worker `/health/live` ve `/health/ready` (redis + database dependency) API ile aynı ayrımla; compose healthcheck eklendi.
+- Tamamlandı: Alert eşikleri ve incident runbookları (`docs/operations/ALERTS_AND_INCIDENT_RUNBOOKS.md`), log retention ve kişisel veri politikası (`docs/operations/LOG_RETENTION_AND_PERSONAL_DATA.md`).
+- Kalan: Prometheus/Alertmanager kurulumu ve dashboard'lar, `provider_attempts`/webhook event pruning job'ı, migrator apply raporlarının `migration-reports` kuyruğuna otomatik gönderimi.
 
 ### P11. Production Hazırlığı
 

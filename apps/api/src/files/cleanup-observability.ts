@@ -1,6 +1,7 @@
 import type { Context } from "hono";
 import { createStructuredLog, redactValue } from "@garanti-kulucka/shared";
 import type { AppBindings } from "../http/types.js";
+import { getApiMetrics } from "../observability/metrics.js";
 import type { FileRecord } from "./repository.js";
 
 export type OrphanCleanupMode = "dry_run" | "apply";
@@ -35,6 +36,14 @@ export function logOrphanCleanup(input: OrphanCleanupLogInput): void {
     cleanup_request_id: orphanCleanupRequestId(filePublicId),
     result_code: input.resultCode,
   };
+
+  const metricLabels = { bucket: input.file?.bucket ?? "unknown", result_code: input.resultCode };
+  if (input.mode === "apply") {
+    getApiMetrics().storageOrphanApply.inc(metricLabels);
+  }
+  if ((input.level ?? "info") === "error") {
+    getApiMetrics().storageOrphanErrors.inc(metricLabels);
+  }
 
   if (input.error !== undefined) {
     contextPayload.error = redactLogValue(input.error);

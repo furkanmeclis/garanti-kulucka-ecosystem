@@ -2,6 +2,7 @@ import { serve } from "@hono/node-server";
 import { createApp } from "./app.js";
 import { loadConfig } from "./config.js";
 import { createApiDatabase } from "./database.js";
+import { getApiMetrics, startInternalMetricsServer } from "./observability/metrics.js";
 import { attachRealtime, noopRealtimePublisher, type RealtimePublisher } from "./realtime.js";
 import { SettingsCache } from "./settings/cache.js";
 import { RedisSettingsChangeBus, subscribeSettingsCacheInvalidation } from "./settings/change-bus.js";
@@ -52,9 +53,15 @@ const server = serve({
 
 const realtime = await attachRealtime(server, config, { db: database.db });
 activeRealtimePublisher = realtime.publisher;
+const apiMetrics = getApiMetrics();
+apiMetrics.registry.addCollector(() => {
+  apiMetrics.socketConnections.set({}, realtime.io.engine.clientsCount);
+});
+const internalMetricsServer = startInternalMetricsServer(apiMetrics.registry);
 
 async function shutdown(signal: NodeJS.Signals) {
   console.log(`Received ${signal}, closing API server`);
+  internalMetricsServer?.close();
   await realtime.close();
   await settingsChangeBus?.close();
   await webhookQueuePublisher?.close?.();

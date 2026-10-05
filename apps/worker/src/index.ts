@@ -1,11 +1,30 @@
 import pino from "pino";
 import { createStructuredLog } from "@garanti-kulucka/shared";
+import { resolveMetricsExposure } from "@garanti-kulucka/shared";
+import { startWorkerHttpServer } from "./observability.js";
 import { createWorkerRuntime } from "./runtime.js";
 
 const logger = pino({ name: "worker" });
 const redisUrl = process.env.REDIS_URL ?? "redis://localhost:6379";
 const runtime = createWorkerRuntime({ redisUrl, logger, databaseUrl: process.env.DATABASE_URL ?? null });
 let shuttingDown = false;
+const metricsExposure = resolveMetricsExposure(process.env);
+const healthPort = Number.parseInt(process.env.WORKER_HTTP_PORT ?? "3001", 10);
+const httpServer = startWorkerHttpServer(healthPort, {
+  metrics: runtime.metrics,
+  health: { redis: runtime.connection, db: runtime.db },
+  exposure: metricsExposure,
+  internalListener: metricsExposure.port === healthPort,
+});
+const internalMetricsServer =
+  metricsExposure.enabled && metricsExposure.port !== null && metricsExposure.port !== healthPort
+    ? startWorkerHttpServer(metricsExposure.port, {
+        metrics: runtime.metrics,
+        health: { redis: runtime.connection, db: runtime.db },
+        exposure: metricsExposure,
+        internalListener: true,
+      })
+    : null;
 
 logger.info(
   createStructuredLog({
@@ -36,6 +55,8 @@ async function shutdown(signal: NodeJS.Signals): Promise<void> {
   );
 
   try {
+    httpServer.close();
+    internalMetricsServer?.close();
     await runtime.close();
     logger.info(
       createStructuredLog({

@@ -3,7 +3,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger as honoLogger } from "hono/logger";
 import pino from "pino";
-import { createStructuredLog, healthStatusSchema } from "@garanti-kulucka/shared";
+import { createStructuredLog, healthStatusSchema, resolveMetricsExposure, type MetricsExposureConfig } from "@garanti-kulucka/shared";
 import type { AppDatabase } from "@garanti-kulucka/database";
 import { loadConfig, type ApiConfig } from "./config.js";
 import { createAuthRoutes } from "./http/auth-routes.js";
@@ -15,6 +15,7 @@ import { createWebhookRoutes } from "./http/webhook-routes.js";
 import { createWebphoneRoutes } from "./http/webphone-routes.js";
 import { createRateLimitStore, type RateLimitStore } from "./http/rate-limit.js";
 import type { ApiLogger, AppBindings } from "./http/types.js";
+import { getApiMetrics, httpMetricsMiddleware, metricsRouteHandler, type ApiMetrics } from "./observability/metrics.js";
 import { noopRealtimePublisher, type RealtimePublisher } from "./realtime.js";
 import { createSecretEncryptor, type SecretEncryptor } from "./security/encryption.js";
 import type { SettingsCache } from "./settings/cache.js";
@@ -38,6 +39,8 @@ export interface CreateAppOptions {
   settingsChangePublisher?: SettingsChangePublisher;
   rateLimitStore?: RateLimitStore;
   logger?: ApiLogger;
+  metrics?: ApiMetrics;
+  metricsExposure?: MetricsExposureConfig;
 }
 
 export function createApp(options: CreateAppOptions = {}) {
@@ -46,7 +49,11 @@ export function createApp(options: CreateAppOptions = {}) {
   const encryptor =
     options.encryptor ?? createSecretEncryptor(config.encryptionKey, config.encryptionKeyId);
   const rateLimitStore = options.rateLimitStore ?? createRateLimitStore(config);
+  const metrics = options.metrics ?? getApiMetrics();
+  const metricsExposure = options.metricsExposure ?? resolveMetricsExposure(process.env);
   const app = new Hono<AppBindings>();
+
+  app.use("*", httpMetricsMiddleware(metrics));
 
   if (config.corsOrigin) {
     app.use(
@@ -148,6 +155,8 @@ export function createApp(options: CreateAppOptions = {}) {
 
     return context.json(payload, status === "ok" ? 200 : 503);
   });
+
+  app.get("/metrics", metricsRouteHandler(metrics, metricsExposure));
 
   app.route("/auth", createAuthRoutes());
   app.route("/api", createDomainRoutes());

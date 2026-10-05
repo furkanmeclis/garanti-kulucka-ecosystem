@@ -2,8 +2,8 @@
 
 Socket.IO authentication, room membership, reconnect, fanout, stale-session, and schema tests.
 
-## P6 Redis Fanout Gap
+## P6 Redis Fanout
 
-The current websocket harness is Vitest-only and does not bind HTTP ports, launch two API processes, or attach a live Redis streams adapter. It covers Redis fanout only at the configuration boundary: `apps/api/src/realtime.ts` installs the Redis adapter when `redisUrl` is configured, and unit tests cover validated publisher fanout plus room semantics in memory.
+`redis-fanout.test.ts` starts Redis in Docker (`redis:8-alpine`, override with `REDIS_FANOUT_IMAGE`, or point `REDIS_FANOUT_URL` at an existing Redis), then starts two independent API realtime instances: each has its own HTTP listener on a random port, its own Socket.IO server created by `attachRealtime`, and its own Redis connection with the Redis streams adapter. One Socket.IO client connects to each instance with a signed access token, both join the same conversation room, an envelope is published through instance A's `RealtimePublisher`, and the test asserts the client on instance B receives it. A second case proves user-room fanout across instances without leaking to another user. The container is removed in `afterAll`.
 
-A full P6 Redis fanout proof still needs an environment that can start Redis and two API instances, connect one Socket.IO client to each instance, subscribe both to the same conversation room, publish through one API instance, and assert the client on the other instance receives the envelope.
+The suite is skipped only when neither Docker nor `REDIS_FANOUT_URL` is available.

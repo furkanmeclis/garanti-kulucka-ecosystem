@@ -23,6 +23,14 @@ import {
   type ProviderAccountConfigRepository,
 } from "./providers/account-config.js";
 import { createSecretDecryptor } from "./providers/encryption.js";
+import {
+  createWorkerMetrics,
+  MetricsProviderAttemptRepository,
+  recordJobCompletion,
+  recordJobFailure,
+  registerQueueDepthCollector,
+  type WorkerMetrics,
+} from "./observability.js";
 
 class RedisSettingsChangeSubscriber implements SettingsChangeSubscriber {
   private readonly subscriber: Redis;
@@ -55,6 +63,9 @@ export interface WorkerRuntime {
   registry: WorkerProcessorRegistry;
   workers: Map<QueueName, Worker<JobEnvelope>>;
   schedulers: Map<QueueName, Queue<JobEnvelope>>;
+  metricQueues: Map<QueueName, Queue<JobEnvelope>>;
+  metrics: WorkerMetrics;
+  db: AppDatabase | null;
   close: () => Promise<void>;
 }
 
@@ -67,6 +78,7 @@ export interface WorkerRuntimeOptions {
   providerAccountConfigRepository?: ProviderAccountConfigRepository;
   mediaFileResolver?: ProviderMediaFileResolver;
   settingsChangeSubscriber?: SettingsChangeSubscriber;
+  metrics?: WorkerMetrics;
 }
 
 export function createWorkerRuntime(options: WorkerRuntimeOptions): WorkerRuntime {
@@ -75,9 +87,11 @@ export function createWorkerRuntime(options: WorkerRuntimeOptions): WorkerRuntim
   });
   const db: AppDatabase | null =
     options.providerAttemptRepository || !options.databaseUrl ? null : createDatabase(options.databaseUrl);
-  const providerAttemptRepository =
-    options.providerAttemptRepository ??
-    (db ? new DatabaseProviderAttemptRepository(db) : undefined);
+  const metrics = options.metrics ?? createWorkerMetrics();
+  const providerAttemptRepository = new MetricsProviderAttemptRepository(
+    metrics,
+    options.providerAttemptRepository ?? (db ? new DatabaseProviderAttemptRepository(db) : undefined),
+  );
   const decryptor = createSecretDecryptor(
     process.env.APP_ENCRYPTION_KEY ?? "local-development-encryption-key-change-me",
     process.env.APP_ENCRYPTION_KEY_ID ?? "default",
@@ -108,7 +122,7 @@ export function createWorkerRuntime(options: WorkerRuntimeOptions): WorkerRuntim
           "Worker job lifecycle event",
         );
       }),
-    ...(providerAttemptRepository ? { providerAttemptRepository } : {}),
+    providerAttemptRepository,
     ...(providerAccountConfigRepository ? { providerAccountConfigRepository } : {}),
     ...(storageOrphanReconciler ? { storageOrphanReconciler } : {}),
     ...(mediaFileResolver ? { mediaFileResolver } : {}),
@@ -127,7 +141,8 @@ export function createWorkerRuntime(options: WorkerRuntimeOptions): WorkerRuntim
       },
     );
 
-    worker.on("completed", (job) => {
+    worker.on("completed", (job, returnValue) => {
+      recordJobCompletion(metrics, queue, job.data, returnValue);
       options.logger.info(
         createStructuredLog({
           level: "info",
@@ -147,6 +162,7 @@ export function createWorkerRuntime(options: WorkerRuntimeOptions): WorkerRuntim
     });
 
     worker.on("failed", (job, error) => {
+      recordJobFailure(metrics, queue, job);
       options.logger.error(
         createStructuredLog({
           level: "error",
@@ -205,12 +221,21 @@ export function createWorkerRuntime(options: WorkerRuntimeOptions): WorkerRuntim
     },
   );
 
+  const metricQueues = new Map<QueueName, Queue<JobEnvelope>>(
+    registry.queues.map((queue) => [queue, new Queue<JobEnvelope>(queue, { connection })]),
+  );
+  registerQueueDepthCollector(metrics, metricQueues);
+
   return {
     connection,
     registry,
     workers,
     schedulers,
+    metricQueues,
+    metrics,
+    db,
     close: async () => {
+      await Promise.all([...metricQueues.values()].map((queue) => queue.close()));
       await Promise.all([...workers.values()].map((worker) => worker.close()));
       await Promise.all([...schedulers.values()].map((scheduler) => scheduler.close()));
       await settingsChangeSubscriber?.close();

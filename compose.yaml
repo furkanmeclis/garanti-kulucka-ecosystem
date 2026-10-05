@@ -66,6 +66,13 @@ services:
       DATABASE_URL: postgres://garanti:garanti@postgres:5432/garanti
       REDIS_URL: redis://redis:6379
       APP_ENCRYPTION_KEY: local-dev-change-me-32-bytes-minimum
+      WORKER_HTTP_PORT: 3001
+      METRICS_ENABLED: "false"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/health/ready').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
     depends_on:
       postgres:
         condition: service_healthy
