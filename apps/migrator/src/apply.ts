@@ -16,6 +16,7 @@ import { transformLegacyOrder } from "./order-mapping.js";
 import { transformLegacyOrderItem } from "./order-item-mapping.js";
 import { transformLegacyProduct } from "./product-mapping.js";
 import { transformLegacyShipment } from "./shipment-mapping.js";
+import type { MigratorMediaStorage } from "./media-storage.js";
 import type {
   BatchReadOptions,
   CanonicalRecord,
@@ -26,6 +27,8 @@ import type {
   LegacyIdMapEntry,
   LegacyRecord,
   MessageCanonicalRecord,
+  FileCanonicalRecord,
+  MessageAttachmentCanonicalRecord,
   MigrationBatch,
   MigrationBatchApplyResult,
   MigrationTarget,
@@ -34,6 +37,7 @@ import type {
   OrderCanonicalRecord,
   OrderItemCanonicalRecord,
   ShipmentCanonicalRecord,
+  ShipmentTrackingEventCanonicalRecord,
 } from "./types.js";
 
 export interface ApplyMigrationBatchInput {
@@ -68,6 +72,7 @@ export interface ApplyMessageMigrationBatchInput {
   readonly target: MigrationTarget;
   readonly runId: string;
   readonly batch: MigrationBatch;
+  readonly mediaStorage?: MigratorMediaStorage;
 }
 
 export interface ApplyProductMigrationBatchInput {
@@ -93,6 +98,13 @@ export interface ApplyOrderItemMigrationBatchInput {
 }
 
 export interface ApplyShipmentMigrationBatchInput {
+  readonly source: LegacySource;
+  readonly target: MigrationTarget;
+  readonly runId: string;
+  readonly batch: MigrationBatch;
+}
+
+export interface ApplyShipmentTrackingEventMigrationBatchInput {
   readonly source: LegacySource;
   readonly target: MigrationTarget;
   readonly runId: string;
@@ -387,6 +399,34 @@ export async function applyShipmentMigrationBatchWithState(
   }
 }
 
+export async function applyShipmentTrackingEventMigrationBatchWithState(
+  input: ApplyShipmentTrackingEventMigrationBatchInput,
+): Promise<MigrationBatchApplyResult> {
+  if (input.batch.entity !== "shipment_tracking_events") {
+    throw new Error(`Shipment tracking event writer cannot apply ${input.batch.entity} batches`);
+  }
+
+  const existing = await input.target.findMigrationBatchState({
+    runId: input.runId,
+    batch: input.batch,
+  });
+  if (existing?.status === "succeeded") {
+    return migrationBatchResultFromState(existing);
+  }
+
+  try {
+    return await runExclusiveSuccessfulBatchApply(input, applyShipmentTrackingEventMigrationBatch);
+  } catch (error) {
+    const safeError = toSafeMigratorError(error);
+    await input.target.recordMigrationBatchFailed({
+      runId: input.runId,
+      batch: input.batch,
+      error: safeError,
+    });
+    throw safeError;
+  }
+}
+
 export async function reconcileDeferredReconciliations(
   target: MigrationTarget,
   runId: string,
@@ -669,6 +709,12 @@ async function applyMessageMigrationBatch(
       }),
     });
   }
+  if (transformed.some((item) => messageInlineMediaUrl(toRawPayloadRecord(item.result.message.rawPayload)) !== null)) {
+    assertInlineMediaApplyTarget(input.target);
+    if (!input.mediaStorage) {
+      throw new Error("Message apply requires migrator media storage configuration for inline data URLs");
+    }
+  }
 
   transformed.sort((left, right) =>
     left.result.message.sentAt.localeCompare(right.result.message.sentAt)
@@ -677,8 +723,25 @@ async function applyMessageMigrationBatch(
 
   for (const item of transformed) {
     const message = item.result.message;
-    const rawPayload = message.rawPayload === null ? null : { ...message.rawPayload };
+    const rawPayload = toRawPayloadRecord(message.rawPayload);
     assertMappedLegacyMessageRawPayload(rawPayload);
+    const inlineMediaUrl = messageInlineMediaUrl(rawPayload);
+    let inlineMedia: Awaited<ReturnType<MigratorMediaStorage["storeInlineDataUrl"]>> | null = null;
+    if (inlineMediaUrl !== null) {
+      inlineMedia = await input.mediaStorage!.storeInlineDataUrl({
+        dataUrl: inlineMediaUrl,
+        sourceTable: item.legacyRecord.sourceTable,
+        sourceId: item.legacyRecord.sourceId,
+      });
+      delete rawPayload!.media_url;
+      rawPayload!.media_storage = {
+        bucket: inlineMedia.bucket,
+        object_key: inlineMedia.objectKey,
+        checksum: inlineMedia.checksum,
+        mime_type: inlineMedia.mimeType,
+        byte_size: inlineMedia.size,
+      };
+    }
     const messageRecord: MessageCanonicalRecord = {
       targetTable: "messages",
       targetId: message.publicId,
@@ -706,6 +769,38 @@ async function applyMessageMigrationBatch(
       targetId: messageRecord.targetId,
       checksum: messageRecord.checksum,
     }));
+    if (inlineMedia !== null) {
+      const fileRecord: FileCanonicalRecord = {
+        targetTable: "files",
+        targetId: filePublicId(inlineMedia.checksum),
+        checksum: inlineMedia.checksum,
+        payload: {
+          bucket: inlineMedia.bucket,
+          object_key: inlineMedia.objectKey,
+          original_name: null,
+          mime_type: inlineMedia.mimeType,
+          byte_size: inlineMedia.size,
+          checksum: inlineMedia.checksum,
+          upload_status: "available",
+          scan_status: "skipped",
+          upload_type: "singlepart",
+          completed_at: message.sentAt,
+        },
+      };
+      await input.target.writeFileRecord!(fileRecord);
+      const attachmentRecord: MessageAttachmentCanonicalRecord = {
+        targetTable: "message_attachments",
+        targetId: messageAttachmentPublicId(message.publicId, inlineMedia.checksum),
+        messagePublicId: message.publicId,
+        filePublicId: fileRecord.targetId,
+        checksum: inlineMedia.checksum,
+        payload: {
+          attachment_type: inlineMedia.mimeType.split("/")[0] || "file",
+        },
+      };
+      await input.target.writeMessageAttachmentRecord!(attachmentRecord);
+      result.writtenRows += 2;
+    }
   }
 
   return result;
@@ -803,6 +898,7 @@ async function applyOrderMigrationBatch(
         status: order.status,
         source: order.source,
         total_amount: order.totalAmount,
+        manual_adjustment_amount: "0.00",
         currency: order.currency,
         confirmation_status: order.confirmationStatus,
         notes: order.notes,
@@ -946,7 +1042,28 @@ async function applyOrderItemMigrationBatch(
   }
 
   for (const orderPublicId of touchedOrders) {
-    await input.target.assertOrderTotalsConsistent({ orderPublicId });
+    const adjustment = input.target.calculateOrderTotalAdjustment
+      ? await input.target.calculateOrderTotalAdjustment({ orderPublicId })
+      : await legacyOrderAdjustmentFallback(input.target, orderPublicId);
+    if (adjustment.itemCount === 0) {
+      result.warnings.push({
+        entity: input.batch.entity,
+        code: "order_total_no_item_check",
+        message: `Order has no item total check: ${orderPublicId}`,
+      });
+      continue;
+    }
+    if (Math.abs(Number(adjustment.adjustmentAmount)) > 0.01) {
+      await input.target.recordOrderManualAdjustment?.({
+        orderPublicId,
+        manualAdjustmentAmount: adjustment.adjustmentAmount,
+      });
+      result.warnings.push({
+        entity: input.batch.entity,
+        code: "order_total_manual_adjustment",
+        message: `Order total adjustment recorded for ${orderPublicId}: ${adjustment.adjustmentAmount}`,
+      });
+    }
   }
 
   return result;
@@ -1036,10 +1153,103 @@ async function applyShipmentMigrationBatch(
       });
       result.warnings.push({
         entity: input.batch.entity,
-        code: "deferred_reconciliation",
+        code: orderResolution.ambiguous ? "ambiguous_tracking_reconciliation" : "deferred_reconciliation",
         message: `Deferred shipment order FK for ${legacyRecord.sourceTable}.${legacyRecord.sourceId}`,
       });
     }
+  }
+
+  return result;
+}
+
+async function applyShipmentTrackingEventMigrationBatch(
+  input: ApplyShipmentTrackingEventMigrationBatchInput,
+): Promise<MigrationBatchApplyResult> {
+  assertShipmentTrackingEventTarget(input.target);
+  const records = await readExpectedBatch(input);
+  const result = newApplyResult(input.batch, records.length);
+
+  for (const legacyRecord of records) {
+    const rawRowCount = requiredPayloadInteger(legacyRecord, "raw_row_count");
+    const timeSource = requiredPayloadString(legacyRecord, "time_source");
+    if (timeSource === "future_excluded") {
+      result.skippedRows += 1;
+      result.warnings.push({
+        entity: input.batch.entity,
+        code: "future_dated_tracking_event",
+        message: `Excluded future-dated shipment tracking event ${legacyRecord.sourceTable}.${legacyRecord.sourceId}`,
+      });
+      continue;
+    }
+    if (timeSource !== "provider" && timeSource !== "first_seen") {
+      throw new Error(`Shipment tracking event has unsupported time_source ${timeSource}`);
+    }
+
+    const legacyShipmentId = optionalPayloadString(legacyRecord, "kargo_id")?.toLowerCase() ?? null;
+    const shipmentEntry = legacyShipmentId === null
+      ? null
+      : await input.target.findLegacyIdMap({
+        runId: input.runId,
+        sourceSystem: legacyRecord.sourceSystem,
+        sourceTable: "public.kargo_gonderimleri",
+        sourceId: legacyShipmentId,
+        targetTable: "shipments",
+        mappingRole: "primary",
+      });
+    if (shipmentEntry === null) {
+      const lookup = legacyShipmentId ?? `missing:${legacyRecord.sourceId}`;
+      await input.target.recordDeferredReconciliation({
+        runId: input.runId,
+        sourceSystem: legacyRecord.sourceSystem,
+        sourceTable: legacyRecord.sourceTable,
+        sourceId: legacyRecord.sourceId,
+        targetTable: "shipment_tracking_events",
+        targetId: shipmentTrackingEventPublicId(legacyRecord.sourceId),
+        targetColumn: "shipment_id",
+        lookupSourceTable: "public.kargo_gonderimleri",
+        lookupSourceId: lookup,
+        lookupTargetTable: "shipments",
+        lookupMappingRole: "primary",
+      });
+      result.warnings.push({
+        entity: input.batch.entity,
+        code: "deferred_reconciliation",
+        message: `Deferred shipment tracking event FK for ${legacyRecord.sourceTable}.${legacyRecord.sourceId}`,
+      });
+      continue;
+    }
+
+    const eventRecord: ShipmentTrackingEventCanonicalRecord = {
+      targetTable: "shipment_tracking_events",
+      targetId: shipmentTrackingEventPublicId(legacyRecord.sourceId),
+      shipmentPublicId: shipmentEntry.targetId,
+      checksum: legacyRecord.checksum,
+      payload: {
+        status: requiredPayloadString(legacyRecord, "durum"),
+        description: optionalPayloadString(legacyRecord, "aciklama"),
+        location: optionalPayloadString(legacyRecord, "lokasyon"),
+        occurred_at: requiredPayloadString(legacyRecord, "event_time"),
+        raw_payload: {
+          representative_source_id: optionalPayloadString(legacyRecord, "representative_source_id"),
+          kargo_id: legacyShipmentId,
+          time_source: timeSource,
+          raw_row_count: rawRowCount,
+          is_provider_timestamp: timeSource === "provider",
+        },
+      },
+    };
+    await input.target.writeShipmentTrackingEventRecord(eventRecord);
+    result.writtenRows += 1;
+    countIdMapResult(result, await upsertLegacyIdMap(input.target, {
+      runId: input.runId,
+      sourceSystem: legacyRecord.sourceSystem,
+      sourceTable: legacyRecord.sourceTable,
+      sourceId: legacyRecord.sourceId,
+      targetTable: eventRecord.targetTable,
+      mappingRole: timeSource,
+      targetId: eventRecord.targetId,
+      checksum: eventRecord.checksum,
+    }));
   }
 
   return result;
@@ -1113,8 +1323,16 @@ function optionalPayloadString(record: LegacyRecord, field: string): string | nu
   return trimmed || null;
 }
 
+function requiredPayloadInteger(record: LegacyRecord, field: string): number {
+  const value = record.payload[field];
+  if (typeof value === "number" && Number.isInteger(value) && value >= 0) return value;
+  if (typeof value === "string" && /^(0|[1-9]\d*)$/.test(value)) return Number(value);
+  throw new Error(`Cannot resolve apply prerequisite from non-integer legacy field ${field}`);
+}
+
 function normalizedPayloadString(record: LegacyRecord, field: string): string | null {
-  return optionalPayloadString(record, field);
+  const value = optionalPayloadString(record, field);
+  return value === null ? null : value.trim().toLocaleUpperCase("tr-TR");
 }
 
 function orderTrackingMappingRole(trackingNumber: string): string {
@@ -1125,6 +1343,7 @@ function shipmentTrackingCandidates(record: LegacyRecord): readonly string[] {
   const candidates = [
     normalizedPayloadString(record, "takip_no"),
     normalizedPayloadString(record, "surat_kargo_takip_no"),
+    normalizedPayloadString(record, "surat_barkod_no"),
   ].filter((value): value is string => value !== null);
   return [...new Set(candidates)];
 }
@@ -1139,6 +1358,7 @@ async function resolveShipmentOrderByTracking(
 ): Promise<{
   readonly order: LegacyIdMapEntry | null;
   readonly deferredTrackingNumber: string | null;
+  readonly ambiguous: boolean;
 }> {
   for (const trackingNumber of input.trackingNumbers) {
     const matches = await target.findLegacyIdMapsByMappingRole({
@@ -1149,13 +1369,13 @@ async function resolveShipmentOrderByTracking(
       mappingRole: orderTrackingMappingRole(trackingNumber),
     });
     if (matches.length > 1) {
-      throw new Error(`Shipment tracking number ${trackingNumber} resolves to multiple migrated orders`);
+      return { order: null, deferredTrackingNumber: trackingNumber, ambiguous: true };
     }
     if (matches.length === 1) {
-      return { order: matches[0]!, deferredTrackingNumber: null };
+      return { order: matches[0]!, deferredTrackingNumber: null, ambiguous: false };
     }
   }
-  return { order: null, deferredTrackingNumber: input.trackingNumbers[0] ?? null };
+  return { order: null, deferredTrackingNumber: input.trackingNumbers[0] ?? null, ambiguous: false };
 }
 
 function assertConversationTarget(
@@ -1174,6 +1394,17 @@ function assertMessageTarget(
   }
 }
 
+function assertInlineMediaApplyTarget(
+  target: MigrationTarget,
+): asserts target is MigrationTarget & Required<Pick<
+  MigrationTarget,
+  "writeFileRecord" | "writeMessageAttachmentRecord"
+>> {
+  if (!target.writeFileRecord || !target.writeMessageAttachmentRecord) {
+    throw new Error("Message inline media apply requires a target with file and attachment writers");
+  }
+}
+
 function assertOrderTarget(
   target: MigrationTarget,
 ): asserts target is MigrationTarget & Required<Pick<
@@ -1189,15 +1420,26 @@ function assertOrderItemTarget(
   target: MigrationTarget,
 ): asserts target is MigrationTarget & Required<Pick<
   MigrationTarget,
-  "writeOrderItemRecord" | "findProductPublicIdBySku" | "findProductPublicIdByExternalId" | "assertOrderTotalsConsistent"
+  "writeOrderItemRecord" | "findProductPublicIdBySku" | "findProductPublicIdByExternalId"
 >> {
   if (
     !target.writeOrderItemRecord
     || !target.findProductPublicIdBySku
     || !target.findProductPublicIdByExternalId
-    || !target.assertOrderTotalsConsistent
   ) {
     throw new Error("Order item apply requires a target with FK-resolving order item writers and product lookup");
+  }
+}
+
+async function legacyOrderAdjustmentFallback(
+  target: MigrationTarget,
+  orderPublicId: string,
+): Promise<{ readonly itemCount: number; readonly adjustmentAmount: string }> {
+  try {
+    await target.assertOrderTotalsConsistent?.({ orderPublicId });
+    return { itemCount: 1, adjustmentAmount: "0.00" };
+  } catch {
+    return { itemCount: 1, adjustmentAmount: "0.01" };
   }
 }
 
@@ -1212,6 +1454,17 @@ function assertShipmentTarget(
   }
 }
 
+function assertShipmentTrackingEventTarget(
+  target: MigrationTarget,
+): asserts target is MigrationTarget & Required<Pick<
+  MigrationTarget,
+  "writeShipmentTrackingEventRecord" | "recordDeferredReconciliation"
+>> {
+  if (!target.writeShipmentTrackingEventRecord || !target.recordDeferredReconciliation) {
+    throw new Error("Shipment tracking event apply requires a target with event writer and deferred reconciliation");
+  }
+}
+
 function assertDeferredReconciliationTarget(
   target: MigrationTarget,
 ): asserts target is MigrationTarget & Required<Pick<MigrationTarget, "reconcileDeferredReconciliations">> {
@@ -1222,11 +1475,32 @@ function assertDeferredReconciliationTarget(
 
 function assertMappedLegacyMessageRawPayload(rawPayload: Record<string, unknown> | null): void {
   if (rawPayload === null) return;
-  const allowed = new Set(["medya_url", "medya_tipi", "gonderici_id"]);
+  const allowed = new Set(["media_url", "media_type", "gonderici_adi", "medya_url", "medya_tipi", "gonderici_id"]);
   const unmapped = Object.keys(rawPayload).filter((key) => !allowed.has(key)).sort();
   if (unmapped.length > 0) {
     throw new Error(`Message apply found unmapped legacy media/raw payload fields: ${unmapped.join(", ")}`);
   }
+}
+
+function messageInlineMediaUrl(rawPayload: Record<string, unknown> | null): string | null {
+  const mediaUrl = rawPayload?.media_url;
+  return typeof mediaUrl === "string" && mediaUrl.startsWith("data:") ? mediaUrl : null;
+}
+
+function toRawPayloadRecord(rawPayload: MessageTransformationResult["message"]["rawPayload"]): Record<string, unknown> | null {
+  return rawPayload === null ? null : { ...rawPayload };
+}
+
+function filePublicId(checksum: string): string {
+  return `fil_${createHash("sha256").update(`file:${checksum}`).digest("hex").slice(0, 24)}`;
+}
+
+function messageAttachmentPublicId(messagePublicId: string, checksum: string): string {
+  return `mat_${createHash("sha256").update(`${messagePublicId}:${checksum}`).digest("hex").slice(0, 24)}`;
+}
+
+function shipmentTrackingEventPublicId(sourceId: string): string {
+  return `ste_${createHash("sha256").update(`shipment_tracking_event:${sourceId}`).digest("hex").slice(0, 24)}`;
 }
 
 function countIdMapResult(

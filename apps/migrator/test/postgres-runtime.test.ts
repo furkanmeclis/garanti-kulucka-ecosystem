@@ -77,6 +77,7 @@ describe("PostgreSQL migration runtime", () => {
       order_items: { tableName: "public.siparis_kalemleri", idColumn: "id" },
       shipments: { tableName: "public.kargo_gonderimleri", idColumn: "id" },
       products: { tableName: "public.urunler", idColumn: "id" },
+      shipment_tracking_events: { tableName: "public.kargo_takip", idColumn: "id" },
     });
   });
 
@@ -167,6 +168,7 @@ describe("PostgreSQL migration runtime", () => {
       { entity: "orders", totalRows: 0, batches: 0 },
       { entity: "order_items", totalRows: 0, batches: 0 },
       { entity: "shipments", totalRows: 0, batches: 0 },
+      { entity: "shipment_tracking_events", totalRows: 0, batches: 0 },
     ]);
     expect(client.queries.filter((sql) => /select count\(\*\)/i.test(sql))).toEqual([
       'select count(*) as count from "public"."musteriler"',
@@ -176,7 +178,9 @@ describe("PostgreSQL migration runtime", () => {
       'select count(*) as count from "public"."siparisler"',
       'select count(*) as count from "public"."siparis_kalemleri"',
       'select count(*) as count from "public"."kargo_gonderimleri"',
+      expect.stringContaining('from "public"."kargo_takip"'),
     ]);
+    expect(client.queries.find((sql) => sql.includes('"public"."kargo_takip"'))).toContain("group_rollup as");
   });
 
   it("fails a dry-run closed when konusmalar lacks human_agent", async () => {

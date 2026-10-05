@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -45,14 +45,7 @@ describe("PostgreSQL full command apply E2E", () => {
       executeSql(container, "legacy_source", legacySchemaSql());
       executeSql(container, "legacy_source", legacyFixtureSql());
       executeSql(container, "postgres", "create database canonical_target");
-      for (const migration of [
-        "001_initial_canonical_schema.sql",
-        "002_add_migration_identity_targets.sql",
-        "003_add_migration_run_manifests.sql",
-        "004_add_woocommerce_provider.sql",
-        "005_add_migration_row_content_checksums.sql",
-        "006_add_migration_deferred_reconciliations.sql",
-      ]) {
+      for (const migration of await allCanonicalMigrations()) {
         executeSql(container, "canonical_target", await migrationSection(migration, "up"));
       }
       seedCanonicalPrerequisites(container);
@@ -343,4 +336,8 @@ function docker(args: string[], ignoreFailure = false, input?: string): string {
     if (ignoreFailure) return "";
     throw error;
   }
+}
+
+async function allCanonicalMigrations(): Promise<string[]> {
+  return (await readdir(migrationsDirectory)).filter((file) => file.endsWith(".sql")).sort();
 }

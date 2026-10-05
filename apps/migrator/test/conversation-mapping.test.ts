@@ -386,6 +386,8 @@ describe("transformLegacyMessage", () => {
     }), messageContext);
 
     expect(result.message.rawPayload).toEqual({
+      media_url: "https://cdn.example.test/a.jpg",
+      media_type: "image",
       medya_url: "https://cdn.example.test/a.jpg",
       medya_tipi: "image",
       gonderici_id: userId,
@@ -393,7 +395,7 @@ describe("transformLegacyMessage", () => {
     expect(result.message.is_read).toBe(true);
     expect(result).not.toHaveProperty("attachments");
     expect(transformLegacyMessage(message({ medya_tipi: "audio" }), messageContext).message.rawPayload)
-      .toEqual({ medya_tipi: "audio" });
+      .toEqual({ media_type: "audio", medya_tipi: "audio" });
   });
 
   it("keeps an empty body and rejects a null body", () => {
@@ -438,8 +440,14 @@ describe("transformLegacyMessage", () => {
     }
   });
 
-  it("fails closed on unknown payload fields such as media_url", () => {
-    expect(() => transformLegacyMessage(message({ media_url: "https://cdn.example.test/a.jpg" }), messageContext))
+  it("accepts media_url as preferred live media and still fails closed on unknown extras", () => {
+    const result = transformLegacyMessage(message({
+      media_url: "https://cdn.example.test/live.jpg",
+      medya_url: "https://cdn.example.test/old.jpg",
+    }), messageContext);
+    expect(result.message.rawPayload).toMatchObject({ media_url: "https://cdn.example.test/live.jpg" });
+    expect(result.warnings).toEqual([{ code: "media_field_conflict", fields: ["media_url", "medya_url"] }]);
+    expect(() => transformLegacyMessage(message({ unexpected_media: "https://cdn.example.test/a.jpg" }), messageContext))
       .toThrow("Invalid legacy message row: payload contains unknown fields");
   });
 });

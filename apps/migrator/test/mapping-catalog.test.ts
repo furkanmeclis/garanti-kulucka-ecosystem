@@ -19,6 +19,7 @@ describe("legacy mapping catalog", () => {
   const orderItemMapping = legacyMappingCatalog.tables[4]!;
   const shipmentMapping = legacyMappingCatalog.tables[5]!;
   const productMapping = legacyMappingCatalog.tables[6]!;
+  const shipmentTrackingEventMapping = legacyMappingCatalog.tables[7]!;
 
   it("accepts the exact real musteriler schema and declares all customer targets", () => {
     expect(() => validateLegacyTableColumns("public.musteriler", realMusterilerColumns(), customerMapping))
@@ -45,7 +46,7 @@ describe("legacy mapping catalog", () => {
       "guncelleme_tarihi",
       "username",
     ]);
-    expect(mappingCatalogVersion).toBe("p2-shipment-transform-v1");
+    expect(mappingCatalogVersion).toBe("p2-live-production-drift-v2");
   });
 
   it("declares konusmalar and mesajlar as direct dry-run tables after musteriler", () => {
@@ -57,12 +58,16 @@ describe("legacy mapping catalog", () => {
       ["public.siparis_kalemleri", "id"],
       ["public.kargo_gonderimleri", "id"],
       ["public.urunler", "id"],
+      ["public.kargo_takip", "id"],
     ]);
     expect(conversationMapping.targetEntities).toEqual([
       { entity: "conversations", mapping: "direct", readiness: "dry-run" },
     ]);
     expect(messageMapping.targetEntities).toEqual([
       { entity: "messages", mapping: "direct", readiness: "dry-run" },
+    ]);
+    expect(shipmentTrackingEventMapping.targetEntities).toEqual([
+      { entity: "shipment_tracking_events", mapping: "direct", readiness: "dry-run" },
     ]);
   });
 
@@ -108,7 +113,11 @@ describe("legacy mapping catalog", () => {
   it("accepts the exact real konusmalar schema and requires every column", () => {
     expect(() => validateLegacyTableColumns("public.konusmalar", realKonusmalarColumns(), conversationMapping))
       .not.toThrow();
-    expect(conversationMapping.columns).toEqual(realKonusmalarColumns().map(asRequiredContract));
+    expect(conversationMapping.columns).toEqual([
+      ...realKonusmalarColumns().slice(0, -1).map(asRequiredContract),
+      fullColumnContract("ig_login_type", "text", "text", true, false),
+      asRequiredContract(realKonusmalarColumns().at(-1)!),
+    ]);
   });
 
   it.each(["human_agent", "ig_account_id"])("rejects a konusmalar schema missing %s", (name) => {
@@ -122,13 +131,25 @@ describe("legacy mapping catalog", () => {
   it("accepts the exact real mesajlar schema and requires every column", () => {
     expect(() => validateLegacyTableColumns("public.mesajlar", realMesajlarColumns(), messageMapping))
       .not.toThrow();
-    expect(messageMapping.columns).toEqual(realMesajlarColumns().map(asRequiredContract));
+    expect(messageMapping.columns).toEqual([
+      ...realMesajlarColumns().slice(0, 5).map(asRequiredContract),
+      fullColumnContract("media_url", "text", "text", true, false),
+      fullColumnContract("media_type", "character varying", "varchar", true, false),
+      fullColumnContract("gonderici_adi", "character varying", "varchar", true, false),
+      ...realMesajlarColumns().slice(5).map(asRequiredContract),
+    ]);
   });
 
   it("accepts the exact real siparisler schema and requires every column", () => {
     expect(() => validateLegacyTableColumns("public.siparisler", realSiparislerColumns(), orderMapping))
       .not.toThrow();
-    expect(orderMapping.columns).toEqual(realSiparislerColumns().map(asRequiredContract));
+    expect(orderMapping.columns).toEqual([
+      ...realSiparislerColumns().slice(0, 10).map(asRequiredContract),
+      fullColumnContract("musteri_ulke", "character varying", "varchar", true, false),
+      ...realSiparislerColumns().slice(10).map((column) =>
+        column.name === "efatura_durumu" ? fullColumnContract("efatura_durumu", column.dataType, column.udtName, column.nullable, false) : asRequiredContract(column),
+      ),
+    ]);
   });
 
   it.each(["mukerrer", "kaynak"])("rejects a siparisler schema missing %s", (name) => {
@@ -194,6 +215,23 @@ describe("legacy mapping catalog", () => {
     expect(productMapping.columns).toEqual(realUrunlerColumns().map(asRequiredContract));
   });
 
+  it("accepts the real kargo_takip schema and rejects tracking-number-shaped drift", () => {
+    expect(() => validateLegacyTableColumns(
+      "public.kargo_takip",
+      realKargoTakipColumns(),
+      shipmentTrackingEventMapping,
+    )).not.toThrow();
+    expect(shipmentTrackingEventMapping.columns).toEqual(realKargoTakipColumns().map(asRequiredContract));
+    expect(() => validateLegacyTableColumns(
+      "public.kargo_takip",
+      [
+        ...realKargoTakipColumns(),
+        { name: "takip_no", ordinalPosition: 7, dataType: "character varying", udtName: "varchar", nullable: false },
+      ],
+      shipmentTrackingEventMapping,
+    )).toThrow("Legacy source schema mismatch for public.kargo_takip: unexpected columns [takip_no]");
+  });
+
   it("rejects a urunler schema missing kolaybi_product_id", () => {
     expect(() => validateLegacyTableColumns(
       "public.urunler",
@@ -212,24 +250,26 @@ describe("legacy mapping catalog", () => {
     )).toThrow("column id expected type integer/int4, received uuid/uuid");
   });
 
-  it("rejects media_url and media_type as unexpected mesajlar columns rather than aliases", () => {
-    const aliased = realMesajlarColumns().map((column) => {
-      if (column.name === "medya_url") return { ...column, name: "media_url" };
-      if (column.name === "medya_tipi") return { ...column, name: "media_type" };
-      return column;
-    });
-
-    expect(() => validateLegacyTableColumns("public.mesajlar", aliased, messageMapping)).toThrow(
-      "Legacy source schema mismatch for public.mesajlar: unexpected columns [media_type, media_url]",
-    );
+  it("accepts live media_url/media_type aliases while still requiring Turkish fallback columns", () => {
+    expect(() => validateLegacyTableColumns("public.mesajlar", [
+      ...realMesajlarColumns(),
+      { name: "media_url", ordinalPosition: 11, dataType: "text", udtName: "text", nullable: true },
+      { name: "media_type", ordinalPosition: 12, dataType: "character varying", udtName: "varchar", nullable: true },
+      { name: "gonderici_adi", ordinalPosition: 13, dataType: "character varying", udtName: "varchar", nullable: true },
+    ], messageMapping)).not.toThrow();
+    expect(() => validateLegacyTableColumns(
+      "public.mesajlar",
+      realMesajlarColumns().filter((column) => column.name !== "medya_url"),
+      messageMapping,
+    )).toThrow("Legacy source schema mismatch for public.mesajlar: missing required columns [medya_url]");
     expect(() => validateLegacyTableColumns(
       "public.mesajlar",
       [
         ...realMesajlarColumns(),
-        { name: "media_url", ordinalPosition: 11, dataType: "text", udtName: "text", nullable: true },
+        { name: "unexpected_media", ordinalPosition: 11, dataType: "text", udtName: "text", nullable: true },
       ],
       messageMapping,
-    )).toThrow("Legacy source schema mismatch for public.mesajlar: unexpected columns [media_url]");
+    )).toThrow("Legacy source schema mismatch for public.mesajlar: unexpected columns [unexpected_media]");
   });
 
   it("rejects a pre-username schema until a lossless row transform exists", () => {
@@ -249,6 +289,7 @@ describe("legacy mapping catalog", () => {
       "orders",
       "order_items",
       "shipments",
+      "shipment_tracking_events",
     ]);
   });
 
@@ -831,6 +872,17 @@ function realUrunlerColumns(): SourceColumnSnapshot[] {
   ]);
 }
 
+function realKargoTakipColumns(): SourceColumnSnapshot[] {
+  return inOrder([
+    ["id", "uuid", "uuid", false],
+    ["kargo_id", "uuid", "uuid", true],
+    ["durum", "character varying", "varchar", false],
+    ["aciklama", "text", "text", true],
+    ["lokasyon", "character varying", "varchar", true],
+    ["tarih", "timestamp with time zone", "timestamptz", true],
+  ]);
+}
+
 function inOrder(columns: [string, string, string, boolean][]): SourceColumnSnapshot[] {
   return columns.map(([name, dataType, udtName, nullable], index) => ({
     name,
@@ -935,4 +987,14 @@ function catalogWith(
 
 function columnContract(name: string, nullable: boolean, required: boolean) {
   return { name, dataType: "uuid", udtName: "uuid", nullable, required };
+}
+
+function fullColumnContract(
+  name: string,
+  dataType: string,
+  udtName: string,
+  nullable: boolean,
+  required: boolean,
+) {
+  return { name, dataType, udtName, nullable, required };
 }

@@ -11,6 +11,7 @@ import {
   type LegacyMappingCatalog,
 } from "./mapping-catalog.js";
 import { runMigration, type MigrationRunResult } from "./orchestrator.js";
+import { createMigratorMediaStorageFromEnv } from "./media-storage.js";
 import {
   withReadonlyRepeatableReadTransaction,
   type PostgresSourceClient,
@@ -37,6 +38,7 @@ export async function executePostgresMigration(
       types: createLegacyPostgresTypeOverrides(),
     });
     const targetDb = createDatabase(input.targetDatabaseUrl);
+    const mediaStorage = createMigratorMediaStorageFromEnv();
 
     try {
       return await withReadonlyRepeatableReadTransaction(sourceClient, async () => {
@@ -60,6 +62,7 @@ export async function executePostgresMigration(
           entities: dryRunMigrationEntities(legacyMappingCatalog),
           ...(input.conversationAccounts ? { conversationAccounts: input.conversationAccounts } : {}),
           ...(input.userPublicIds ? { userPublicIds: input.userPublicIds } : {}),
+          ...(mediaStorage ? { mediaStorage } : {}),
         });
       });
     } finally {

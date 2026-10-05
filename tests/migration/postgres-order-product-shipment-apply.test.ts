@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
@@ -31,7 +31,7 @@ const orderItemId = "8a100000-0000-4000-8000-000000000001";
 const shipmentId = "c1000000-0000-4000-8000-000000000001";
 
 describe("PostgreSQL product/order/order item/shipment apply", () => {
-  it("writes executable targets, records deferred optional FKs, reconciles idempotently, and fails total mismatches", async () => {
+  it("writes executable targets, records deferred optional FKs, reconciles idempotently, and records total adjustments", async () => {
     const container = `gk-order-ship-${randomUUID().slice(0, 8)}`;
     docker([
       "run",
@@ -51,14 +51,7 @@ describe("PostgreSQL product/order/order item/shipment apply", () => {
     let db: ReturnType<typeof createDatabase> | undefined;
     try {
       await waitForPostgres(container, "canonical_target");
-      for (const migration of [
-        "001_initial_canonical_schema.sql",
-        "002_add_migration_identity_targets.sql",
-        "003_add_migration_run_manifests.sql",
-        "004_add_woocommerce_provider.sql",
-        "005_add_migration_row_content_checksums.sql",
-        "006_add_migration_deferred_reconciliations.sql",
-      ]) {
+      for (const migration of await allCanonicalMigrations()) {
         executeSql(container, "canonical_target", await migrationSection(migration, "up"));
       }
       seedPrerequisites(container);
@@ -215,7 +208,16 @@ describe("PostgreSQL product/order/order item/shipment apply", () => {
         source: new MemorySource([orderItemRecord({ siparis_id: "6f1c2b3a-4d5e-4f60-8172-93a4b5c6d7e9" })]),
         target,
         batch: batch("order_items", 1, 0, 1),
-      })).rejects.toThrow("Order total mismatch");
+      })).resolves.toMatchObject({
+        writtenRows: 1,
+        idMapCreated: 1,
+        warnings: [expect.objectContaining({ code: "order_total_manual_adjustment" })],
+      });
+      expect(query(container, "canonical_target", `
+        select manual_adjustment_amount::text
+        from orders
+        where order_number = 'GK-BAD'
+      `)).toBe("78.00");
 
       await target.registerMigrationRun({ ...registration, runId: "p4_ambiguous_tracking" });
       seedAppliedCustomerMap(container, "p4_ambiguous_tracking");
@@ -243,7 +245,20 @@ describe("PostgreSQL product/order/order item/shipment apply", () => {
         source: new MemorySource([shipmentRecord("c1000000-0000-4000-8000-000000000003", { takip_no: "TRK-AMB" })]),
         target,
         batch: batch("shipments", 1, 0, 1),
-      })).rejects.toThrow("Shipment tracking number TRK-AMB resolves to multiple migrated orders");
+      })).resolves.toMatchObject({
+        writtenRows: 1,
+        warnings: [expect.objectContaining({ code: "ambiguous_tracking_reconciliation" })],
+      });
+      expect(query(container, "canonical_target", `
+        select count(*)
+        from migration_deferred_reconciliations
+        where run_id = 'p4_ambiguous_tracking'
+          and target_table = 'shipments'
+          and target_column = 'order_id'
+          and lookup_source_id = 'TRK-AMB'
+          and lookup_mapping_role = 'tracking_number:TRK-AMB'
+          and status = 'pending'
+      `)).toBe("1");
     } finally {
       await db?.destroy();
       docker(["rm", "--force", container], true);
@@ -543,4 +558,8 @@ function docker(args: string[], ignoreFailure = false, input?: string): string {
     if (ignoreFailure) return "";
     throw error;
   }
+}
+
+async function allCanonicalMigrations(): Promise<string[]> {
+  return (await readdir(migrationsDirectory)).filter((file) => file.endsWith(".sql")).sort();
 }

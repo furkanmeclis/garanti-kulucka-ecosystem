@@ -170,7 +170,7 @@ export async function runMigratorCommand(
       return;
     }
 
-    await dependencies.executeMigration({
+    commandMigration = await dependencies.executeMigration({
       mode: "dry-run",
       sourceDatabaseUrl,
       sourceSystem,
@@ -178,7 +178,10 @@ export async function runMigratorCommand(
       ...(conversationAccounts ? { conversationAccounts } : {}),
       ...(userPublicIds ? { userPublicIds } : {}),
     });
-    await writeMigratorCommandReport(options, createCommandReport(command, "passed", startedAt));
+    await writeMigratorCommandReport(
+      options,
+      createCommandReport(command, "passed", startedAt, undefined, { migration: commandMigration }),
+    );
   } catch (error) {
     const safeError = toSafeMigratorError(error);
     try {

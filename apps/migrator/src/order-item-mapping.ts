@@ -10,6 +10,7 @@ import type { LegacyRecord } from "./types.js";
 export const legacyOrderItemTable = "public.siparis_kalemleri";
 const legacyOrderItemColumns = catalogColumns(legacyOrderItemTable);
 const legacyOrderItemFields = Object.freeze(legacyOrderItemColumns.map((column) => column.name));
+const legacyOrderItemRequiredFields = Object.freeze(legacyOrderItemColumns.filter((column) => column.required).map((column) => column.name));
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const checksumPattern = /^sha256:[0-9a-f]{64}$/;
 const orderPublicIdPattern = /^ord_[0-9a-f]{24}$/;
@@ -167,10 +168,9 @@ function parseLegacyOrderItem(record: LegacyRecord, reject: LegacyRowRejection):
   const payload = inspectPayload(record.payload, reject);
 
   const keys = Object.keys(payload);
-  const missing = legacyOrderItemFields.filter((field) => !Object.hasOwn(payload, field));
+  const missing = legacyOrderItemRequiredFields.filter((field) => !Object.hasOwn(payload, field));
   if (missing.length > 0) reject(`payload is missing required fields [${missing.join(", ")}]`);
   if (keys.some((field) => !legacyOrderItemFields.includes(field))) reject("payload contains unknown fields");
-  if (keys.length !== legacyOrderItemFields.length) reject("payload field set is invalid");
 
   if (typeof record.checksum !== "string" || !checksumPattern.test(record.checksum)) {
     reject("source payload checksum is invalid");
@@ -230,7 +230,7 @@ function requiredName(value: unknown, field: string, reject: LegacyRowRejection)
 }
 
 function optionalTrimmedString(value: unknown, field: string, reject: LegacyRowRejection): string | null {
-  if (value === null) return null;
+  if (value === null || value === undefined) return null;
   if (typeof value !== "string") reject(`field ${field} must be a string or null`);
   const trimmed = value.trim();
   return trimmed || null;
@@ -244,7 +244,7 @@ function requiredPositiveInteger(value: unknown, field: string, reject: LegacyRo
     return value;
   }
   if (typeof value !== "string") reject(`field ${field} must be a positive integer`);
-  if (!/^(0|[1-9]\d*)$/.test(value)) reject(`field ${field} must be a positive integer`);
+  if (!/^(0|[1-9]\d*)(?:\.0+)?$/.test(value)) reject(`field ${field} must be a positive integer`);
   const parsed = Number(value);
   if (!Number.isSafeInteger(parsed) || parsed < 1 || parsed > postgresIntegerMax) {
     reject(`field ${field} must be a positive integer`);

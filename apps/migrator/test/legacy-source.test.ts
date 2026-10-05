@@ -194,6 +194,56 @@ describe("LegacyDatabaseSource", () => {
     ]);
   });
 
+  it("counts and reads shipment tracking event aggregate rows in SQL", async () => {
+    const db = new FakeDatabase(
+      [{ count: "3" }],
+      [{
+        id: "provider:c1000000-0000-4000-8000-000000000001:abc",
+        representative_source_id: "e1000000-0000-4000-8000-000000000001",
+        kargo_id: "c1000000-0000-4000-8000-000000000001",
+        durum: "Teslim edildi",
+        aciklama: null,
+        lokasyon: "Istanbul",
+        event_time: "2024-01-03 03:04:05+00",
+        time_source: "provider",
+        raw_row_count: 2,
+        is_future: false,
+      }],
+    );
+    const source = new LegacyDatabaseSource({
+      db,
+      sourceSystem: "legacy_postgres",
+      tables: { shipment_tracking_events: { tableName: "public.kargo_takip", idColumn: "id" } },
+    });
+
+    await expect(source.count("shipment_tracking_events")).resolves.toBe(3);
+    const rows = await source.readBatch("shipment_tracking_events", { limit: 1, offset: 2 });
+
+    expect(db.queries[0]?.sql).toContain("group_rollup as");
+    expect(db.queries[0]?.sql).toContain("date_trunc('second', tarih) = tarih");
+    expect(db.queries[0]?.sql).toContain("tarih > now() + interval '5 minutes'");
+    expect(db.queries[1]).toMatchObject({ parameters: [1, 2] });
+    expect(db.queries[1]?.sql).toContain("order by id asc limit $1 offset $2");
+    expect(rows).toEqual([{
+      sourceSystem: "legacy_postgres",
+      sourceTable: "public.kargo_takip",
+      sourceId: "provider:c1000000-0000-4000-8000-000000000001:abc",
+      payload: {
+        aciklama: null,
+        durum: "Teslim edildi",
+        event_time: "2024-01-03 03:04:05+00",
+        id: "provider:c1000000-0000-4000-8000-000000000001:abc",
+        is_future: false,
+        kargo_id: "c1000000-0000-4000-8000-000000000001",
+        lokasyon: "Istanbul",
+        raw_row_count: 2,
+        representative_source_id: "e1000000-0000-4000-8000-000000000001",
+        time_source: "provider",
+      },
+      checksum: expect.stringMatching(/^sha256:[a-f0-9]{64}$/),
+    }]);
+  });
+
   it("captures a deterministic table and column snapshot from information_schema", async () => {
     const db = new FakeDatabase([
       { column_name: "id", ordinal_position: 1, data_type: "bigint", udt_name: "int8", is_nullable: "NO" },
@@ -263,6 +313,7 @@ describe("LegacyDatabaseSource", () => {
         order_items: "public.siparis_kalemleri",
         shipments: "public.kargo_gonderimleri",
         products: "public.urunler",
+        shipment_tracking_events: "public.kargo_takip",
       },
       mappingCatalog: legacyMappingCatalog,
     });
@@ -275,6 +326,7 @@ describe("LegacyDatabaseSource", () => {
       "order_items",
       "shipments",
       "products",
+      "shipment_tracking_events",
     ]);
 
     expect(db.queries.map((query) => query.parameters)).toEqual([
@@ -285,6 +337,7 @@ describe("LegacyDatabaseSource", () => {
       ["public", "siparis_kalemleri"],
       ["public", "kargo_gonderimleri"],
       ["public", "urunler"],
+      ["public", "kargo_takip"],
     ]);
     expect(snapshots.map(({ entity, schema, table }) => ({ entity, schema, table }))).toEqual([
       { entity: "customers", schema: "public", table: "musteriler" },
@@ -294,6 +347,7 @@ describe("LegacyDatabaseSource", () => {
       { entity: "order_items", schema: "public", table: "siparis_kalemleri" },
       { entity: "shipments", schema: "public", table: "kargo_gonderimleri" },
       { entity: "products", schema: "public", table: "urunler" },
+      { entity: "shipment_tracking_events", schema: "public", table: "kargo_takip" },
     ]);
   });
 

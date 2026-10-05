@@ -8,6 +8,7 @@ import type { LegacyRecord } from "./types.js";
 
 export const legacyProductTable = "public.urunler";
 const legacyProductFields = catalogColumnNames(legacyProductTable);
+const legacyProductRequiredFields = catalogRequiredColumnNames(legacyProductTable);
 const checksumPattern = /^sha256:[0-9a-f]{64}$/;
 const postgresIntegerMax = 2_147_483_647;
 
@@ -95,10 +96,9 @@ function parseLegacyProduct(record: LegacyRecord, reject: LegacyRowRejection): P
   const payload = inspectPayload(record.payload, reject);
 
   const keys = Object.keys(payload);
-  const missing = legacyProductFields.filter((field) => !Object.hasOwn(payload, field));
+  const missing = legacyProductRequiredFields.filter((field) => !Object.hasOwn(payload, field));
   if (missing.length > 0) reject(`payload is missing required fields [${missing.join(", ")}]`);
   if (keys.some((field) => !legacyProductFields.includes(field))) reject("payload contains unknown fields");
-  if (keys.length !== legacyProductFields.length) reject("payload field set is invalid");
 
   if (typeof record.checksum !== "string" || !checksumPattern.test(record.checksum)) {
     reject("source payload checksum is invalid");
@@ -158,7 +158,7 @@ function requiredName(value: unknown, field: string, reject: LegacyRowRejection)
 }
 
 function optionalTrimmedString(value: unknown, field: string, reject: LegacyRowRejection): string | null {
-  if (value === null) return null;
+  if (value === null || value === undefined) return null;
   if (typeof value !== "string") reject(`field ${field} must be a string or null`);
   const trimmed = value.trim();
   return trimmed || null;
@@ -193,7 +193,7 @@ function formatTwoDecimal(raw: string, field: string, reject: LegacyRowRejection
 }
 
 function optionalNonNegativeInteger(value: unknown, field: string, reject: LegacyRowRejection): number | null {
-  if (value === null) return null;
+  if (value === null || value === undefined) return null;
   if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0 || value > postgresIntegerMax) {
     reject(`field ${field} must be a non-negative integer or null`);
   }
@@ -201,7 +201,7 @@ function optionalNonNegativeInteger(value: unknown, field: string, reject: Legac
 }
 
 function optionalBoolean(value: unknown, field: string, reject: LegacyRowRejection): boolean | null {
-  if (value === null) return null;
+  if (value === null || value === undefined) return null;
   if (typeof value !== "boolean") reject(`field ${field} must be a boolean or null`);
   return value;
 }
@@ -215,6 +215,12 @@ function catalogColumnNames(sourceTable: string): readonly string[] {
   const mapping = legacyMappingCatalog.tables.find((table) => table.sourceTable === sourceTable);
   if (!mapping) throw new Error(`Legacy mapping catalog does not declare ${sourceTable}`);
   return Object.freeze(mapping.columns.map((column) => column.name));
+}
+
+function catalogRequiredColumnNames(sourceTable: string): readonly string[] {
+  const mapping = legacyMappingCatalog.tables.find((table) => table.sourceTable === sourceTable);
+  if (!mapping) throw new Error(`Legacy mapping catalog does not declare ${sourceTable}`);
+  return Object.freeze(mapping.columns.filter((column) => column.required).map((column) => column.name));
 }
 
 class LegacyProductRowError extends Error {}

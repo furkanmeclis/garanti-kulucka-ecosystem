@@ -74,7 +74,9 @@ export class LegacyDatabaseSource implements LegacySource {
   async count(entity: MigrationEntity): Promise<number> {
     const table = this.resolveTable(entity);
     const result = await this.db.query<{ count: string | number | bigint }>(
-      `select count(*) as count from ${quoteQualifiedIdentifier(table.tableName)}`,
+      entity === "shipment_tracking_events"
+        ? shipmentTrackingEventAggregateCountSql(table)
+        : `select count(*) as count from ${quoteQualifiedIdentifier(table.tableName)}`,
     );
     const count = result.rows[0]?.count;
     const parsed = typeof count === "bigint" ? Number(count) : Number.parseInt(String(count ?? ""), 10);
@@ -98,6 +100,14 @@ export class LegacyDatabaseSource implements LegacySource {
     }
 
     const table = this.resolveTable(entity);
+    if (entity === "shipment_tracking_events") {
+      const result = await this.db.query(
+        shipmentTrackingEventAggregateReadSql(table),
+        [options.limit, options.offset ?? 0],
+      );
+      return result.rows.map((row) => this.toLegacyRecord(table, row));
+    }
+
     const tableName = quoteQualifiedIdentifier(table.tableName);
     const idColumn = quoteIdentifier(table.idColumn);
     const parameters: unknown[] = [options.limit];
@@ -283,6 +293,107 @@ function quoteQualifiedIdentifier(identifier: string): string {
 function quoteIdentifier(identifier: string): string {
   assertIdentifierPath(identifier);
   return `"${identifier.replaceAll('"', '""')}"`;
+}
+
+function shipmentTrackingEventAggregateCountSql(table: ResolvedLegacyTable): string {
+  return `select count(*) as count from (${shipmentTrackingEventAggregateSql(table)}) shipment_tracking_event_groups`;
+}
+
+function shipmentTrackingEventAggregateReadSql(table: ResolvedLegacyTable): string {
+  return `${shipmentTrackingEventAggregateSql(table)} order by id asc limit $1 offset $2`;
+}
+
+function shipmentTrackingEventAggregateSql(table: ResolvedLegacyTable): string {
+  const tableName = quoteQualifiedIdentifier(table.tableName);
+  return `
+with source_rows as (
+  select
+    id,
+    kargo_id,
+    durum,
+    aciklama,
+    lokasyon,
+    tarih,
+    date_trunc('second', tarih) = tarih as is_real_provider_time,
+    tarih > now() + interval '5 minutes' as is_future
+  from ${tableName}
+),
+valid_rows as (
+  select *
+  from source_rows
+  where not is_future
+),
+provider_events as (
+  select
+    'provider:' || coalesce(kargo_id::text, 'no-shipment') || ':' || md5(
+      concat_ws(chr(31), coalesce(kargo_id::text, ''), durum, coalesce(lokasyon, ''), coalesce(aciklama, ''), date_trunc('second', tarih)::text)
+    ) as id,
+    min(id::text) as representative_source_id,
+    kargo_id,
+    durum,
+    aciklama,
+    lokasyon,
+    date_trunc('second', tarih) as event_time,
+    'provider'::text as time_source,
+    count(*)::int as raw_row_count,
+    false as is_future
+  from valid_rows
+  where is_real_provider_time
+  group by kargo_id, durum, lokasyon, aciklama, date_trunc('second', tarih)
+),
+group_rollup as (
+  select
+    kargo_id,
+    durum,
+    aciklama,
+    lokasyon,
+    min(tarih) as first_seen_at,
+    min(id::text) as representative_source_id,
+    count(*)::int as raw_row_count,
+    bool_or(is_real_provider_time) as has_real_provider_time
+  from valid_rows
+  group by kargo_id, durum, lokasyon, aciklama
+),
+first_seen_events as (
+  select
+    'first_seen:' || coalesce(kargo_id::text, 'no-shipment') || ':' || md5(
+      concat_ws(chr(31), coalesce(kargo_id::text, ''), durum, coalesce(lokasyon, ''), coalesce(aciklama, ''))
+    ) as id,
+    representative_source_id,
+    kargo_id,
+    durum,
+    aciklama,
+    lokasyon,
+    first_seen_at as event_time,
+    'first_seen'::text as time_source,
+    raw_row_count,
+    false as is_future
+  from group_rollup
+  where not has_real_provider_time
+),
+future_rows as (
+  select
+    'future:' || id::text as id,
+    id::text as representative_source_id,
+    kargo_id,
+    durum,
+    aciklama,
+    lokasyon,
+    tarih as event_time,
+    'future_excluded'::text as time_source,
+    1::int as raw_row_count,
+    true as is_future
+  from source_rows
+  where is_future
+)
+select *
+from provider_events
+union all
+select *
+from first_seen_events
+union all
+select *
+from future_rows`;
 }
 
 function assertIdentifierPath(identifier: string): void {

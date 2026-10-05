@@ -133,6 +133,7 @@ describe("transformLegacyOrder", () => {
       customerCity: "İstanbul",
       customerDistrict: "Kadıköy",
       customerPostalCode: "34710",
+      customerCountry: null,
       externalOrderId: "kb-42",
       notes: "Kapıda bırakılsın",
       legacyTimestamps: {
@@ -196,10 +197,10 @@ describe("transformLegacyOrder", () => {
     },
   );
 
-  it("fails when musteri_id is missing from the payload or unresolved", () => {
-    expect(() => transformLegacyOrder(fixture({ musteri_id: null }), orderContext())).toThrow(
-      "Invalid legacy order row: field musteri_id is required",
-    );
+  it("creates a deterministic synthetic customer when musteri_id is null", () => {
+    const result = transformLegacyOrder(fixture({ musteri_id: null }), orderContext());
+    expect(result.order.customerPublicId).toMatch(/^cus_[0-9a-f]{24}$/);
+    expect(result.customerResolution).toEqual({ path: "synthetic", reason: "unmatched_phone" });
     expect(() => transformLegacyOrder(fixture(), orderContext({ customerPublicIds: new Map() }))).toThrow(
       "Invalid legacy order row: field musteri_id does not resolve to a migrated customer",
     );

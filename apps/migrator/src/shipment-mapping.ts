@@ -10,6 +10,7 @@ import type { LegacyRecord } from "./types.js";
 export const legacyShipmentTable = "public.kargo_gonderimleri";
 const legacyShipmentColumns = catalogColumns(legacyShipmentTable);
 const legacyShipmentFields = Object.freeze(legacyShipmentColumns.map((column) => column.name));
+const legacyShipmentRequiredFields = Object.freeze(legacyShipmentColumns.filter((column) => column.required).map((column) => column.name));
 const checksumPattern = /^sha256:[0-9a-f]{64}$/;
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const customerPublicIdPattern = /^cus_[0-9a-f]{24}$/;
@@ -53,6 +54,8 @@ export type ShipmentStatus =
 
 export interface ShipmentTransformContext {
   readonly customerPublicIds: ReadonlyMap<string, string>;
+  readonly orderPublicIdsByTracking?: ReadonlyMap<string, readonly string[]>;
+  readonly customerPublicIdsByOrderPublicId?: ReadonlyMap<string, string>;
 }
 
 export type ShipmentReconciliation = {
@@ -71,7 +74,7 @@ export interface LegacyShipmentDraft {
   readonly targetTable: "shipments";
   readonly publicId: string;
   readonly mappingRole: "primary";
-  readonly orderPublicId: null;
+  readonly orderPublicId: string | null;
   readonly customerPublicId: string | null;
   readonly provider: ShipmentProvider;
   readonly trackingNumber: string | null;
@@ -115,9 +118,14 @@ export function transformLegacyShipment(
   const { payload } = row;
 
   const reconciliation: ShipmentReconciliation[] = [];
+  const trackingCandidates = shipmentTrackingCandidates(payload, rejectRow);
+  const orderResolution = resolveShipmentOrder(trackingCandidates, context);
   let customerPublicId: string | null = null;
+  if (orderResolution.orderPublicId !== null) {
+    customerPublicId = context.customerPublicIdsByOrderPublicId?.get(orderResolution.orderPublicId) ?? null;
+  }
   const legacyCustomerId = optionalUuid(payload.musteri_id, "musteri_id", rejectRow);
-  if (legacyCustomerId !== null) {
+  if (customerPublicId === null && legacyCustomerId !== null) {
     const mappedCustomerId = context.customerPublicIds.get(legacyCustomerId);
     if (mappedCustomerId === undefined) {
       reconciliation.push(Object.freeze({ code: "unresolved_customer" as const, legacyCustomerId }));
@@ -134,7 +142,7 @@ export function transformLegacyShipment(
     targetTable: "shipments" as const,
     publicId: stablePublicId(row),
     mappingRole: "primary" as const,
-    orderPublicId: null,
+    orderPublicId: orderResolution.orderPublicId,
     customerPublicId,
     provider: requiredProvider(payload.kargo_firmasi, rejectRow),
     trackingNumber: firstNonblank([
@@ -174,10 +182,9 @@ function parseLegacyShipment(record: LegacyRecord, reject: LegacyRowRejection): 
   const payload = inspectPayload(record.payload, reject);
 
   const keys = Object.keys(payload);
-  const missing = legacyShipmentFields.filter((field) => !Object.hasOwn(payload, field));
+  const missing = legacyShipmentRequiredFields.filter((field) => !Object.hasOwn(payload, field));
   if (missing.length > 0) reject(`payload is missing required fields [${missing.join(", ")}]`);
   if (keys.some((field) => !legacyShipmentFields.includes(field))) reject("payload contains unknown fields");
-  if (keys.length !== legacyShipmentFields.length) reject("payload field set is invalid");
 
   if (typeof record.checksum !== "string" || !checksumPattern.test(record.checksum)) {
     reject("source payload checksum is invalid");
@@ -230,7 +237,7 @@ function requiredUuid(value: unknown, field: string, reject: LegacyRowRejection)
 }
 
 function optionalUuid(value: unknown, field: string, reject: LegacyRowRejection): string | null {
-  if (value === null) return null;
+  if (value === null || value === undefined) return null;
   if (typeof value !== "string" || !uuidPattern.test(value)) reject(`field ${field} must be a UUID or null`);
   return value.toLowerCase();
 }
@@ -243,7 +250,7 @@ function requiredName(value: unknown, field: string, reject: LegacyRowRejection)
 }
 
 function optionalTrimmedString(value: unknown, field: string, reject: LegacyRowRejection): string | null {
-  if (value === null) return null;
+  if (value === null || value === undefined) return null;
   if (typeof value !== "string") reject(`field ${field} must be a string or null`);
   const trimmed = value.trim();
   return trimmed || null;
@@ -265,6 +272,36 @@ function requiredStatus(value: unknown, reject: LegacyRowRejection): ShipmentSta
 
 function firstNonblank(values: readonly (string | null)[]): string | null {
   return values.find((value) => value !== null) ?? null;
+}
+
+export function normalizeShipmentTrackingNumber(value: string | null): string | null {
+  if (value === null) return null;
+  const normalized = value.trim().toLocaleUpperCase("tr-TR");
+  return normalized || null;
+}
+
+function shipmentTrackingCandidates(
+  payload: Record<string, unknown>,
+  reject: LegacyRowRejection,
+): readonly string[] {
+  const candidates = [
+    optionalTrimmedString(payload.takip_no, "takip_no", reject),
+    optionalTrimmedString(payload.surat_kargo_takip_no, "surat_kargo_takip_no", reject),
+    optionalTrimmedString(payload.surat_barkod_no, "surat_barkod_no", reject),
+  ].map(normalizeShipmentTrackingNumber).filter((value): value is string => value !== null);
+  return [...new Set(candidates)];
+}
+
+function resolveShipmentOrder(
+  candidates: readonly string[],
+  context: ShipmentTransformContext,
+): { readonly orderPublicId: string | null } {
+  for (const candidate of candidates) {
+    const matches = context.orderPublicIdsByTracking?.get(candidate) ?? [];
+    if (matches.length === 1) return { orderPublicId: matches[0]! };
+    if (matches.length > 1) return { orderPublicId: null };
+  }
+  return { orderPublicId: null };
 }
 
 function rawPayloadFromSource(
@@ -303,7 +340,7 @@ function rawValue(
 }
 
 function optionalInteger(value: unknown, field: string, reject: LegacyRowRejection): number | null {
-  if (value === null) return null;
+  if (value === null || value === undefined) return null;
   if (typeof value !== "number" || !Number.isSafeInteger(value)) {
     reject(`field ${field} must be an integer or null`);
   }
@@ -311,7 +348,7 @@ function optionalInteger(value: unknown, field: string, reject: LegacyRowRejecti
 }
 
 function optionalDecimal(value: unknown, field: string, reject: LegacyRowRejection): string | null {
-  if (value === null) return null;
+  if (value === null || value === undefined) return null;
   if (typeof value === "number") {
     if (!Number.isFinite(value)) reject(`field ${field} must be a decimal or null`);
     return value.toString();

@@ -15,6 +15,8 @@ import type {
   LegacyRecord,
   LegacySource,
   MessageCanonicalRecord,
+  FileCanonicalRecord,
+  MessageAttachmentCanonicalRecord,
   MigrationBatch,
   MigrationBatchState,
   MigrationBatchStateFailure,
@@ -139,7 +141,7 @@ describe("conversation and message apply", () => {
     expect(target.records).toHaveLength(2);
   });
 
-  it("fails closed on unmapped media aliases before writing", async () => {
+  it("fails closed on inline media when storage is not configured before writing", async () => {
     const target = new ConversationMemoryTarget();
     target.seedMap(
       "public.konusmalar",
@@ -152,11 +154,53 @@ describe("conversation and message apply", () => {
 
     await expect(applyMessageMigrationBatchWithState({
       runId: "run_bad_media",
-      source: new MemorySource([messageRecord(messageOneId, { media_url: "https://cdn.example.test/a.jpg" })]),
+      source: new MemorySource([messageRecord(messageOneId, { media_url: "data:image/png;base64,aGVsbG8=" })]),
       target,
       batch: batch("messages", 1),
-    })).rejects.toThrow("Invalid legacy message row: payload contains unknown fields");
+    })).rejects.toThrow("Message apply requires migrator media storage configuration for inline data URLs");
     expect(target.records).toEqual([]);
+  });
+
+  it("extracts inline media to files and message attachments through the storage port", async () => {
+    const target = new ConversationMemoryTarget();
+    target.seedMap(
+      "public.konusmalar",
+      conversationId,
+      "conversations",
+      "primary",
+      "conv_89abcdef0123456789abcdef",
+      "run_inline_media",
+    );
+    const storage = new FakeMediaStorage();
+
+    await expect(applyMessageMigrationBatchWithState({
+      runId: "run_inline_media",
+      source: new MemorySource([messageRecord(messageOneId, {
+        media_url: "data:image/png;base64,aGVsbG8=",
+        media_type: "image",
+        gonderici_adi: "Ayse",
+      })]),
+      target,
+      batch: batch("messages", 1),
+      mediaStorage: storage,
+    })).resolves.toMatchObject({ readRows: 1, writtenRows: 3, idMapCreated: 1 });
+
+    expect(storage.objects).toEqual([
+      expect.objectContaining({ checksum: "sha256:2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824" }),
+    ]);
+    expect(target.records.map((record) => record.targetTable).sort()).toEqual([
+      "files",
+      "message_attachments",
+      "messages",
+    ]);
+    expect(target.records.find((record) => record.targetTable === "messages")?.payload.raw_payload).toMatchObject({
+      media_storage: {
+        bucket: "migration-media",
+        checksum: "sha256:2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824",
+        mime_type: "image/png",
+        byte_size: 5,
+      },
+    });
   });
 });
 
@@ -253,6 +297,32 @@ class ConversationMemoryTarget implements MigrationTarget {
     return { status: "created", record };
   }
 
+  async writeFileRecord(input: FileCanonicalRecord): Promise<CanonicalWriteResult> {
+    const record = {
+      targetTable: input.targetTable,
+      targetId: input.targetId,
+      checksum: input.checksum,
+      payload: { ...input.payload },
+    };
+    this.upsertRecord(record);
+    return { status: "created", record };
+  }
+
+  async writeMessageAttachmentRecord(input: MessageAttachmentCanonicalRecord): Promise<CanonicalWriteResult> {
+    const record = {
+      targetTable: input.targetTable,
+      targetId: input.targetId,
+      checksum: input.checksum,
+      payload: {
+        ...input.payload,
+        message_id: input.messagePublicId,
+        file_id: input.filePublicId,
+      },
+    };
+    this.upsertRecord(record);
+    return { status: "created", record };
+  }
+
   async findLegacyIdMap(input: LegacyIdMapKey): Promise<LegacyIdMapEntry | null> {
     return this.idMaps.get(legacyIdMapKey(input)) ?? null;
   }
@@ -304,6 +374,29 @@ class ConversationMemoryTarget implements MigrationTarget {
     } else {
       this.records[index] = record;
     }
+  }
+}
+
+class FakeMediaStorage {
+  readonly objects: Array<{
+    readonly checksum: string;
+    readonly mimeType: string;
+    readonly size: number;
+    readonly bucket: string;
+    readonly objectKey: string;
+  }> = [];
+
+  async storeInlineDataUrl(input: { readonly dataUrl: string }) {
+    const bytes = Buffer.from(input.dataUrl.split(",")[1]!, "base64");
+    const object = {
+      checksum: "sha256:2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824",
+      mimeType: "image/png",
+      size: bytes.byteLength,
+      bucket: "migration-media",
+      objectKey: "legacy/hello.png",
+    };
+    this.objects.push(object);
+    return object;
   }
 }
 

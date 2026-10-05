@@ -64,8 +64,8 @@ describe("PostgreSQL migrator dry-run E2E", () => {
       expect(result.mode).toBe("dry-run");
       expect(result.batches).toEqual([]);
       expect(result.dryRunReport?.totals).toEqual({
-        plannedRows: 7,
-        plannedBatches: 7,
+        plannedRows: 8,
+        plannedBatches: 8,
         blockedRows: 0,
       });
       expect(result.plan.entities).toEqual([
@@ -76,6 +76,7 @@ describe("PostgreSQL migrator dry-run E2E", () => {
         { entity: "orders", totalRows: 1, batches: 1 },
         { entity: "order_items", totalRows: 1, batches: 1 },
         { entity: "shipments", totalRows: 1, batches: 1 },
+        { entity: "shipment_tracking_events", totalRows: 1, batches: 1 },
       ]);
       expect(result.dryRunReport?.customerTransform).toMatchObject({
         transformedRows: 1,
@@ -96,6 +97,7 @@ describe("PostgreSQL migrator dry-run E2E", () => {
       });
       expect(result.dryRunReport?.orderTransform).toEqual({
         transformedRows: 1,
+        customerResolutionByPhone: 1,
         unresolvedConversations: 0,
         unresolvedCreators: 0,
       });
@@ -105,15 +107,27 @@ describe("PostgreSQL migrator dry-run E2E", () => {
         unresolvedProducts: 0,
         skuProductMatches: 1,
         externalProductMatches: 0,
+        totalAdjustmentWarnings: 1,
+        totalAdjustmentAmount: "123.00",
       });
       expect(result.dryRunReport?.shipmentTransform).toEqual({
         transformedRows: 1,
         unresolvedCustomers: 0,
+        linkedOrdersByTracking: 1,
         pttShipments: 1,
         suratShipments: 0,
         manualShipments: 0,
       });
-      expect(result.sourceManifest.rowContentChecksums).toHaveLength(7);
+      expect(result.dryRunReport?.shipmentTrackingEventTransform).toEqual({
+        transformedRows: 1,
+        uniqueEvents: 1,
+        duplicateRows: 0,
+        futureDatedRows: 0,
+        providerTimeEvents: 1,
+        firstSeenEvents: 0,
+        unresolvedShipments: 0,
+      });
+      expect(result.sourceManifest.rowContentChecksums).toHaveLength(8);
       expect(result.sourceManifest.rowContentChecksums).toEqual(
         expect.arrayContaining([
           { entity: "customers", rows: 1, checksum: expect.stringMatching(/^sha256:[a-f0-9]{64}$/) },
@@ -123,6 +137,7 @@ describe("PostgreSQL migrator dry-run E2E", () => {
           { entity: "orders", rows: 1, checksum: expect.stringMatching(/^sha256:[a-f0-9]{64}$/) },
           { entity: "order_items", rows: 1, checksum: expect.stringMatching(/^sha256:[a-f0-9]{64}$/) },
           { entity: "shipments", rows: 1, checksum: expect.stringMatching(/^sha256:[a-f0-9]{64}$/) },
+          { entity: "shipment_tracking_events", rows: 1, checksum: expect.stringMatching(/^sha256:[a-f0-9]{64}$/) },
         ]),
       );
       expect(query(container, "garanti_kulucka", "select count(*) from public.musteriler")).toBe("1");
@@ -196,18 +211,20 @@ function legacyFixtureSql(): string {
     insert into public.konusmalar (
       id, musteri_id, kanal, kanal_konusma_id, atanan_kullanici_id, durum,
       son_mesaj_tarihi, okunmamis_sayisi, olusturma_tarihi, guncelleme_tarihi,
-      son_mesaj_text, son_mesaj_gonderici, ig_account_id, human_agent
+      son_mesaj_text, son_mesaj_gonderici, ig_account_id, ig_login_type, human_agent
     ) values (
       '${conversationId}', '${customerId}', 'panel', 'panel-thread-1', '${userId}', 'acik',
       '2024-01-02T04:04:05Z', 0, '2024-01-02T03:04:05Z', null,
-      'Merhaba', 'musteri', null, true
+      'Merhaba', 'musteri', null, 'business', true
     );
 
     insert into public.mesajlar (
-      id, konusma_id, gonderici_tipi, gonderici_id, icerik, medya_url, medya_tipi,
+      id, konusma_id, gonderici_tipi, gonderici_id, icerik,
+      media_url, media_type, gonderici_adi, medya_url, medya_tipi,
       kanal_mesaj_id, okundu, olusturma_tarihi
     ) values (
-      '${messageId}', '${conversationId}', 'musteri', null, 'Merhaba', null, null,
+      '${messageId}', '${conversationId}', 'musteri', null, 'Merhaba',
+      null, null, 'Ada Lovelace', null, null,
       'msg-legacy-1', true, '2024-01-02T04:05:05Z'
     );
 
@@ -221,7 +238,7 @@ function legacyFixtureSql(): string {
 
     insert into public.siparisler (
       id, musteri_id, olusturan_id, konusma_id, musteri_ad, musteri_telefon,
-      musteri_adres, musteri_il, musteri_ilce, musteri_posta_kodu, siparis_no,
+      musteri_adres, musteri_il, musteri_ilce, musteri_posta_kodu, musteri_ulke, siparis_no,
       siparis_tipi, durum, ara_toplam, kdv_toplam, kargo_ucreti, genel_toplam,
       kargo_takip_no, kargo_firmasi, teyit_durumu, teyit_tarihi, teyit_eden_id,
       notlar, iptal_nedeni, iade_nedeni, olusturma_tarihi, guncelleme_tarihi,
@@ -231,10 +248,10 @@ function legacyFixtureSql(): string {
       efatura_durumu, sevk_edilme_tarihi, durum_oncelik, mukerrer,
       teyit_arama_deneme, kaynak, mukerrer_ad, at_disi
     ) values (
-      '${orderId}', '${customerId}', '${userId}', '${conversationId}', 'Ada Lovelace',
-      '+90 555 000 00 00', 'Bagdat Caddesi 1', 'Istanbul', 'Kadikoy', '34710',
+      '${orderId}', null, '${userId}', '${conversationId}', 'Ada Lovelace',
+      '+90 555 000 00 00', 'Bagdat Caddesi 1', 'Istanbul', 'Kadikoy', '34710', 'TR',
       'GK-1001', 'normal', 'olusturuldu', 100.00, 18.00, 25.00, 143.00,
-      null, null, 'bekliyor', null, null, null, null, null,
+      'TRK-1', null, 'bekliyor', null, null, null, null, null,
       '2024-01-02T03:04:05Z', null, 'kb-order-1', null, null, null, null,
       null, null, null, false, null, null, null, null, null, null,
       false, 0, 'manuel', false, null
@@ -256,11 +273,22 @@ function legacyFixtureSql(): string {
       adet, kapida_odeme_tutari, kargo_icerigi, son_hareket, son_hareket_tarihi,
       surat_web_siparis_kodu, surat_kargo_takip_no, surat_hesap_tipi, surat_barkod_no
     ) values (
-      '${shipmentId}', '${customerId}', 'ptt', 'TRK-1', null, 'Ada Lovelace',
+      '${shipmentId}', null, 'ptt', 'TRK-1', null, 'Ada Lovelace',
       '+90 555 000 00 00', 'Bagdat Caddesi 1', 'Istanbul', 'Kadikoy', '34710',
       null, 1.5, null, 99.50, null, 'beklemede', null, null,
       '2024-01-02T03:04:05Z', null, null, null, null, null,
       1, null, null, null, null, null, null, null, null
+    );
+
+    insert into public.kargo_takip (
+      id, kargo_id, durum, aciklama, lokasyon, tarih
+    ) values (
+      'd1000000-0000-4000-8000-000000000001',
+      '${shipmentId}',
+      'Teslim edildi',
+      null,
+      'Istanbul',
+      '2024-01-03T03:04:05Z'
     );
   `;
 }

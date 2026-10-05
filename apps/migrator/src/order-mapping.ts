@@ -10,6 +10,7 @@ import type { LegacyRecord } from "./types.js";
 export const legacyOrderTable = "public.siparisler";
 const legacyOrderColumns = catalogColumns(legacyOrderTable);
 const legacyOrderFields = Object.freeze(legacyOrderColumns.map((column) => column.name));
+const legacyOrderRequiredFields = Object.freeze(legacyOrderColumns.filter((column) => column.required).map((column) => column.name));
 const mappedCatalogColumns = new Set<string>([
   "musteri_id",
   "olusturan_id",
@@ -20,6 +21,7 @@ const mappedCatalogColumns = new Set<string>([
   "musteri_il",
   "musteri_ilce",
   "musteri_posta_kodu",
+  "musteri_ulke",
   "siparis_no",
   "siparis_tipi",
   "durum",
@@ -93,6 +95,7 @@ export type OrderConfirmationStatus =
 
 export interface OrderTransformContext {
   readonly customerPublicIds: ReadonlyMap<string, string>;
+  readonly customerPublicIdsByPhone?: ReadonlyMap<string, readonly string[]>;
   readonly conversationPublicIds: ReadonlyMap<string, string>;
   readonly userPublicIds: ReadonlyMap<string, string>;
 }
@@ -130,6 +133,7 @@ export interface LegacyOrderDraft {
   readonly customerCity: string | null;
   readonly customerDistrict: string | null;
   readonly customerPostalCode: string | null;
+  readonly customerCountry: string | null;
   readonly externalOrderId: string | null;
   readonly notes: string | null;
   readonly legacyTimestamps: LegacyTimestamps;
@@ -144,7 +148,14 @@ export interface OrderTransformationResult {
   readonly sourcePayloadChecksum: SourcePayloadChecksum;
   readonly order: LegacyOrderDraft;
   readonly reconciliation: readonly OrderReconciliation[];
+  readonly customerResolution: OrderCustomerResolution;
 }
+
+export type OrderCustomerResolution =
+  | { readonly path: "musteri_id" }
+  | { readonly path: "phone"; readonly normalizedPhone: string }
+  | { readonly path: "synthetic"; readonly reason: "missing_phone" | "unmatched_phone" }
+  | { readonly path: "synthetic"; readonly reason: "ambiguous_phone"; readonly normalizedPhone: string; readonly matches: number };
 
 interface ParsedLegacyOrder {
   readonly sourcePayloadChecksum: SourcePayloadChecksum;
@@ -162,9 +173,8 @@ export function transformLegacyOrder(
   const row = parseLegacyOrder(record, rejectRow);
   const { payload } = row;
 
-  const legacyCustomerId = requiredUuid(payload.musteri_id, "musteri_id", rejectRow);
-  const customerPublicId = context.customerPublicIds.get(legacyCustomerId);
-  if (customerPublicId === undefined) rejectRow("field musteri_id does not resolve to a migrated customer");
+  const customerResolution = resolveOrderCustomer(row, payload, context, rejectRow);
+  const customerPublicId = customerResolution.customerPublicId;
   if (typeof customerPublicId !== "string" || !customerPublicIdPattern.test(customerPublicId)) {
     failContext("customer public id map contains an illegal public id");
   }
@@ -232,6 +242,7 @@ export function transformLegacyOrder(
     customerCity: optionalTrimmedString(payload.musteri_il, "musteri_il", rejectRow),
     customerDistrict: optionalTrimmedString(payload.musteri_ilce, "musteri_ilce", rejectRow),
     customerPostalCode: optionalTrimmedString(payload.musteri_posta_kodu, "musteri_posta_kodu", rejectRow),
+    customerCountry: optionalTrimmedString(payload.musteri_ulke, "musteri_ulke", rejectRow),
     externalOrderId: optionalTrimmedString(payload.kolaybi_siparis_id, "kolaybi_siparis_id", rejectRow),
     notes: optionalTrimmedString(payload.notlar, "notlar", rejectRow),
     legacyTimestamps: Object.freeze({
@@ -245,7 +256,44 @@ export function transformLegacyOrder(
     sourcePayloadChecksum: row.sourcePayloadChecksum,
     order,
     reconciliation: Object.freeze(reconciliation),
+    customerResolution: customerResolution.report,
   });
+}
+
+function resolveOrderCustomer(
+  row: ParsedLegacyOrder,
+  payload: Record<string, unknown>,
+  context: OrderTransformContext,
+  reject: LegacyRowRejection,
+): { readonly customerPublicId: string; readonly report: OrderCustomerResolution } {
+  const legacyCustomerId = optionalUuid(payload.musteri_id, "musteri_id", reject);
+  if (legacyCustomerId !== null) {
+    const customerPublicId = context.customerPublicIds.get(legacyCustomerId);
+    if (customerPublicId === undefined) reject("field musteri_id does not resolve to a migrated customer");
+    return { customerPublicId, report: { path: "musteri_id" } };
+  }
+
+  const normalizedPhone = normalizePhoneLast10(optionalTrimmedString(payload.musteri_telefon, "musteri_telefon", reject));
+  if (normalizedPhone === null) {
+    return {
+      customerPublicId: syntheticOrderCustomerPublicId(row),
+      report: { path: "synthetic", reason: "missing_phone" },
+    };
+  }
+  const matches = context.customerPublicIdsByPhone?.get(normalizedPhone) ?? [];
+  if (matches.length === 1) {
+    return { customerPublicId: matches[0]!, report: { path: "phone", normalizedPhone } };
+  }
+  if (matches.length > 1) {
+    return {
+      customerPublicId: syntheticOrderCustomerPublicId(row),
+      report: { path: "synthetic", reason: "ambiguous_phone", normalizedPhone, matches: matches.length },
+    };
+  }
+  return {
+    customerPublicId: syntheticOrderCustomerPublicId(row),
+    report: { path: "synthetic", reason: "unmatched_phone" },
+  };
 }
 
 function parseLegacyOrder(record: LegacyRecord, reject: LegacyRowRejection): ParsedLegacyOrder {
@@ -256,10 +304,9 @@ function parseLegacyOrder(record: LegacyRecord, reject: LegacyRowRejection): Par
   const payload = inspectPayload(record.payload, reject);
 
   const keys = Object.keys(payload);
-  const missing = legacyOrderFields.filter((field) => !Object.hasOwn(payload, field));
+  const missing = legacyOrderRequiredFields.filter((field) => !Object.hasOwn(payload, field));
   if (missing.length > 0) reject(`payload is missing required fields [${missing.join(", ")}]`);
   if (keys.some((field) => !legacyOrderFields.includes(field))) reject("payload contains unknown fields");
-  if (keys.length !== legacyOrderFields.length) reject("payload field set is invalid");
 
   if (typeof record.checksum !== "string" || !checksumPattern.test(record.checksum)) {
     reject("source payload checksum is invalid");
@@ -323,7 +370,7 @@ function requiredUuid(value: unknown, field: string, reject: LegacyRowRejection)
 }
 
 function optionalUuid(value: unknown, field: string, reject: LegacyRowRejection): string | null {
-  if (value === null) return null;
+  if (value === null || value === undefined || (typeof value === "string" && !value.trim())) return null;
   if (typeof value !== "string" || !uuidPattern.test(value)) reject(`field ${field} must be a UUID or null`);
   return value.toLowerCase();
 }
@@ -336,10 +383,17 @@ function requiredName(value: unknown, field: string, reject: LegacyRowRejection)
 }
 
 function optionalTrimmedString(value: unknown, field: string, reject: LegacyRowRejection): string | null {
-  if (value === null) return null;
+  if (value === null || value === undefined) return null;
   if (typeof value !== "string") reject(`field ${field} must be a string or null`);
   const trimmed = value.trim();
   return trimmed || null;
+}
+
+function normalizePhoneLast10(value: string | null): string | null {
+  if (value === null) return null;
+  const digits = value.replace(/\D/g, "");
+  if (digits.length < 10) return null;
+  return digits.slice(-10);
 }
 
 function moneyAmount(value: unknown, field: string, reject: LegacyRowRejection): string {
@@ -406,7 +460,7 @@ function remainderBoolean(
   column: LegacyColumnContract,
   reject: LegacyRowRejection,
 ): boolean | null {
-  if (value === null) {
+  if (value === null || value === undefined) {
     if (!column.nullable) reject(`field ${column.name} is required`);
     return null;
   }
@@ -423,7 +477,7 @@ function remainderInteger(
   max: number,
   reject: LegacyRowRejection,
 ): number | null {
-  if (value === null) {
+  if (value === null || value === undefined) {
     if (!column.nullable) reject(`field ${column.name} is required`);
     return null;
   }
@@ -436,6 +490,11 @@ function remainderInteger(
 function stablePublicId(row: ParsedLegacyOrder): string {
   const identity = [row.sourceSystem, row.sourceTable, row.sourceId, "primary"].join(":");
   return `ord_${createHash("sha256").update(identity).digest("hex").slice(0, 24)}`;
+}
+
+function syntheticOrderCustomerPublicId(row: ParsedLegacyOrder): string {
+  const identity = [row.sourceSystem, row.sourceTable, row.sourceId, "synthetic_from_order"].join(":");
+  return `cus_${createHash("sha256").update(identity).digest("hex").slice(0, 24)}`;
 }
 
 function catalogColumns(sourceTable: string): readonly LegacyColumnContract[] {

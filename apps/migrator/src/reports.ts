@@ -9,6 +9,7 @@ import type {
   OrderTransformSummary,
   ProductTransformSummary,
   ShipmentTransformSummary,
+  ShipmentTrackingEventTransformSummary,
   VerificationCheck,
   VerificationReport,
 } from "./types.js";
@@ -23,6 +24,7 @@ export function createDryRunReport(input: {
   readonly orderTransform?: OrderTransformSummary;
   readonly orderItemTransform?: OrderItemTransformSummary;
   readonly shipmentTransform?: ShipmentTransformSummary;
+  readonly shipmentTrackingEventTransform?: ShipmentTrackingEventTransformSummary;
   readonly now?: Date;
 }): DryRunReport {
   const warnings = input.warnings ?? [];
@@ -53,6 +55,7 @@ export function createDryRunReport(input: {
     ...(input.orderTransform ? { orderTransform: input.orderTransform } : {}),
     ...(input.orderItemTransform ? { orderItemTransform: input.orderItemTransform } : {}),
     ...(input.shipmentTransform ? { shipmentTransform: input.shipmentTransform } : {}),
+    ...(input.shipmentTrackingEventTransform ? { shipmentTrackingEventTransform: input.shipmentTrackingEventTransform } : {}),
     generatedAt: (input.now ?? new Date()).toISOString(),
   };
 }

@@ -456,7 +456,8 @@ Catalog gereksinimleri:
 - Message `konusma_id` zorunlu conversation map üzerinden çözülecek.
 - Legacy tarihleri korunacak; migration zamanı ile ezilmeyecek.
 - Message sırası kaynak `id ASC` ve hedef `sent_at, id` kontrolleriyle doğrulanacak.
-- `media_url/media_type` ile `medya_url/medya_tipi` drift’i introspection ile çözülecek.
+- `media_url/media_type` live production için birincil medya alanlarıdır; `medya_url/medya_tipi` yalnız fallback olarak okunur ve iki çiftte çakışan dolu değerler rapora uyarı olarak yazılır.
+- Inline `data:` medya PostgreSQL'e gömülmeyecek; dry-run MIME ve decoded byte toplamlarını raporlar, apply ise storage yapılandırması yoksa fail-closed durur.
 - Medya ve kaynakta bulunan provider/gönderici alanları veri kaybetmeden `raw_payload` veya açık canonical kolonlarda korunacak.
 - Bir source customer satırından customer, address ve birden fazla external identity üretilmesi `mapping_role` ile ayrı ayrı izlenecek.
 

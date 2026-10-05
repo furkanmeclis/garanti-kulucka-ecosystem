@@ -94,6 +94,9 @@ export interface ConversationTransformationResult {
 }
 
 export interface LegacyMessageRawPayload {
+  readonly media_url?: string;
+  readonly media_type?: string;
+  readonly gonderici_adi?: string;
   readonly medya_url?: string;
   readonly medya_tipi?: string;
   readonly gonderici_id?: string;
@@ -116,7 +119,11 @@ export interface LegacyMessageDraft {
 export interface MessageTransformationResult {
   readonly sourcePayloadChecksum: SourcePayloadChecksum;
   readonly message: LegacyMessageDraft;
+  readonly warnings: readonly MessageTransformWarning[];
 }
+
+export type MessageTransformWarning =
+  | { readonly code: "media_field_conflict"; readonly fields: readonly ["media_url", "medya_url"] | readonly ["media_type", "medya_tipi"] };
 
 interface ParsedLegacyRow {
   readonly sourcePayloadChecksum: SourcePayloadChecksum;
@@ -221,14 +228,29 @@ export function transformLegacyMessage(
   const sentAt = normalizeLegacyTimestamp(payload.olusturma_tarihi, "olusturma_tarihi", rejectRow);
   if (sentAt === null) rejectRow("field olusturma_tarihi is required");
 
-  const mediaUrl = optionalString(payload.medya_url, "medya_url", rejectRow);
-  const mediaType = optionalString(payload.medya_tipi, "medya_tipi", rejectRow);
+  const preferredMediaUrl = optionalString(payload.media_url, "media_url", rejectRow);
+  const fallbackMediaUrl = optionalString(payload.medya_url, "medya_url", rejectRow);
+  const preferredMediaType = optionalString(payload.media_type, "media_type", rejectRow);
+  const fallbackMediaType = optionalString(payload.medya_tipi, "medya_tipi", rejectRow);
+  const senderName = optionalString(payload.gonderici_adi, "gonderici_adi", rejectRow);
+  const mediaUrl = preferredMediaUrl ?? fallbackMediaUrl;
+  const mediaType = preferredMediaType ?? fallbackMediaType;
   const senderId = optionalUuid(payload.gonderici_id, "gonderici_id", rejectRow);
-  const rawPayload = mediaUrl === null && mediaType === null && senderId === null
+  const warnings: MessageTransformWarning[] = [];
+  if (preferredMediaUrl !== null && fallbackMediaUrl !== null && preferredMediaUrl !== fallbackMediaUrl) {
+    warnings.push(Object.freeze({ code: "media_field_conflict" as const, fields: ["media_url", "medya_url"] as const }));
+  }
+  if (preferredMediaType !== null && fallbackMediaType !== null && preferredMediaType !== fallbackMediaType) {
+    warnings.push(Object.freeze({ code: "media_field_conflict" as const, fields: ["media_type", "medya_tipi"] as const }));
+  }
+  const rawPayload = mediaUrl === null && mediaType === null && senderId === null && senderName === null
     ? null
     : Object.freeze({
-      ...(mediaUrl === null ? {} : { medya_url: mediaUrl }),
-      ...(mediaType === null ? {} : { medya_tipi: mediaType }),
+      ...(mediaUrl === null ? {} : { media_url: mediaUrl }),
+      ...(mediaType === null ? {} : { media_type: mediaType }),
+      ...(fallbackMediaUrl === null ? {} : { medya_url: fallbackMediaUrl }),
+      ...(fallbackMediaType === null ? {} : { medya_tipi: fallbackMediaType }),
+      ...(senderName === null ? {} : { gonderici_adi: senderName }),
       ...(senderId === null ? {} : { gonderici_id: senderId }),
     });
 
@@ -246,7 +268,7 @@ export function transformLegacyMessage(
     rawPayload,
   });
 
-  return Object.freeze({ sourcePayloadChecksum: row.sourcePayloadChecksum, message });
+  return Object.freeze({ sourcePayloadChecksum: row.sourcePayloadChecksum, message, warnings: Object.freeze(warnings) });
 }
 
 export function assertVerifiedConversationAccounts(
@@ -321,10 +343,10 @@ function parseLegacyRow(
   const payload = inspectPayload(record.payload, reject);
 
   const keys = Object.keys(payload);
-  const missing = fields.filter((field) => !Object.hasOwn(payload, field));
+  const requiredFields = catalogRequiredColumnNames(table);
+  const missing = requiredFields.filter((field) => !Object.hasOwn(payload, field));
   if (missing.length > 0) reject(`payload is missing required fields [${missing.join(", ")}]`);
   if (keys.some((field) => !fields.includes(field))) reject("payload contains unknown fields");
-  if (keys.length !== fields.length) reject("payload field set is invalid");
 
   if (typeof record.checksum !== "string" || !checksumPattern.test(record.checksum)) {
     reject("source payload checksum is invalid");
@@ -388,13 +410,13 @@ function requiredUuid(value: unknown, field: string, reject: LegacyRowRejection)
 }
 
 function optionalUuid(value: unknown, field: string, reject: LegacyRowRejection): string | null {
-  if (value === null) return null;
+  if (value === null || value === undefined) return null;
   if (typeof value !== "string" || !uuidPattern.test(value)) reject(`field ${field} must be a UUID or null`);
   return value.toLowerCase();
 }
 
 function optionalString(value: unknown, field: string, reject: LegacyRowRejection): string | null {
-  if (value === null) return null;
+  if (value === null || value === undefined) return null;
   if (typeof value !== "string") reject(`field ${field} must be a string or null`);
   return value;
 }
@@ -405,13 +427,13 @@ function optionalExternalId(value: unknown, field: string, reject: LegacyRowReje
 }
 
 function optionalBoolean(value: unknown, field: string, reject: LegacyRowRejection): boolean | null {
-  if (value === null) return null;
+  if (value === null || value === undefined) return null;
   if (typeof value !== "boolean") reject(`field ${field} must be a boolean or null`);
   return value;
 }
 
 function optionalCount(value: unknown, field: string, reject: LegacyRowRejection): number {
-  if (value === null) return 0;
+  if (value === null || value === undefined) return 0;
   if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
     reject(`field ${field} must be a non-negative integer or null`);
   }
@@ -427,6 +449,12 @@ function catalogColumnNames(sourceTable: string): readonly string[] {
   const mapping = legacyMappingCatalog.tables.find((table) => table.sourceTable === sourceTable);
   if (!mapping) throw new Error(`Legacy mapping catalog does not declare ${sourceTable}`);
   return Object.freeze(mapping.columns.map((column) => column.name));
+}
+
+function catalogRequiredColumnNames(sourceTable: string): readonly string[] {
+  const mapping = legacyMappingCatalog.tables.find((table) => table.sourceTable === sourceTable);
+  if (!mapping) throw new Error(`Legacy mapping catalog does not declare ${sourceTable}`);
+  return Object.freeze(mapping.columns.filter((column) => column.required).map((column) => column.name));
 }
 
 class LegacyRowError extends Error {}

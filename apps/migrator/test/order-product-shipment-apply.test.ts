@@ -4,6 +4,7 @@ import {
   applyOrderMigrationBatchWithState,
   applyProductMigrationBatchWithState,
   applyShipmentMigrationBatchWithState,
+  applyShipmentTrackingEventMigrationBatchWithState,
   reconcileDeferredReconciliations,
 } from "../src/apply.js";
 import { legacyIdMapKey } from "../src/id-map.js";
@@ -32,6 +33,7 @@ import type {
   OrderCanonicalRecord,
   OrderItemCanonicalRecord,
   ShipmentCanonicalRecord,
+  ShipmentTrackingEventCanonicalRecord,
   SourceTableSnapshot,
 } from "../src/types.js";
 
@@ -129,7 +131,7 @@ describe("product/order/order item/shipment apply", () => {
     });
   });
 
-  it("fails closed when a shipment tracking number maps to several orders", async () => {
+  it("defers ambiguous shipment tracking matches per row", async () => {
     const target = new ApplyMemoryTarget();
     target.seedMap("public.siparisler", orderId, "orders", "tracking_number:TRK-123", "ord_one");
     target.seedMap(
@@ -145,10 +147,66 @@ describe("product/order/order item/shipment apply", () => {
       source: new MemorySource([shipmentRecord()]),
       target,
       batch: batch("shipments", 1),
-    })).rejects.toThrow("Shipment tracking number TRK-123 resolves to multiple migrated orders");
+    })).resolves.toMatchObject({
+      writtenRows: 1,
+      warnings: [expect.objectContaining({ code: "ambiguous_tracking_reconciliation" })],
+    });
+    expect(target.deferred[0]).toMatchObject({
+      lookupSourceId: "TRK-123",
+      lookupMappingRole: "tracking_number:TRK-123",
+    });
   });
 
-  it("fails closed when required product FK resolution or item totals are wrong", async () => {
+  it("applies deduped shipment tracking events and skips future rows", async () => {
+    const target = new ApplyMemoryTarget();
+    target.seedMap("public.kargo_gonderimleri", shipmentId, "shipments", "primary", "shp_0123456789abcdef01234567");
+
+    const result = await applyShipmentTrackingEventMigrationBatchWithState({
+      runId,
+      source: new MemorySource([
+        shipmentTrackingEventRecord("provider:c1000000-0000-4000-8000-000000000001:one-real-time"),
+        shipmentTrackingEventRecord("first_seen:c1000000-0000-4000-8000-000000000001:ms-duplicates", {
+          time_source: "first_seen",
+          event_time: "2024-01-03T03:04:05.123Z",
+          raw_row_count: 3,
+        }),
+        shipmentTrackingEventRecord("future:e1000000-0000-4000-8000-000000000099", {
+          time_source: "future_excluded",
+          event_time: "2099-01-01T00:00:00.000Z",
+          is_future: true,
+        }),
+      ]),
+      target,
+      batch: batch("shipment_tracking_events", 3),
+    });
+
+    expect(result).toMatchObject({
+      writtenRows: 2,
+      skippedRows: 1,
+      idMapCreated: 2,
+      warnings: [expect.objectContaining({ code: "future_dated_tracking_event" })],
+    });
+    expect(target.records.filter((record) => record.targetTable === "shipment_tracking_events")).toEqual([
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          shipment_id: "shp_0123456789abcdef01234567",
+          raw_payload: expect.objectContaining({ time_source: "provider", is_provider_timestamp: true }),
+        }),
+      }),
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          shipment_id: "shp_0123456789abcdef01234567",
+          raw_payload: expect.objectContaining({
+            time_source: "first_seen",
+            raw_row_count: 3,
+            is_provider_timestamp: false,
+          }),
+        }),
+      }),
+    ]);
+  });
+
+  it("fails closed when required product FK resolution is missing and warns for total adjustments", async () => {
     const missingProductTarget = new ApplyMemoryTarget();
     missingProductTarget.seedMap(
       "public.siparisler",
@@ -182,7 +240,11 @@ describe("product/order/order item/shipment apply", () => {
       source: new MemorySource([orderItemRecord()]),
       target: mismatchTarget,
       batch: batch("order_items", 1),
-    })).rejects.toThrow("Order total mismatch for ord_0123456789abcdef01234567");
+    })).resolves.toMatchObject({
+      writtenRows: 1,
+      warnings: [expect.objectContaining({ code: "order_total_manual_adjustment" })],
+    });
+    expect(mismatchTarget.manualAdjustments.get("ord_0123456789abcdef01234567")).toBe("78.00");
   });
 });
 
@@ -209,6 +271,7 @@ class ApplyMemoryTarget implements MigrationTarget {
   private readonly orderTotals: Record<string, string>;
   readonly productsBySku = new Map<string, string>();
   readonly productsByExternalId = new Map<string, string>();
+  readonly manualAdjustments = new Map<string, string>();
   readonly records: CanonicalRecord[] = [];
   readonly deferred: DeferredReconciliationEntry[] = [];
 
@@ -287,6 +350,17 @@ class ApplyMemoryTarget implements MigrationTarget {
     return { status: "created", record };
   }
 
+  async writeShipmentTrackingEventRecord(input: ShipmentTrackingEventCanonicalRecord): Promise<CanonicalWriteResult> {
+    const record = {
+      targetTable: input.targetTable,
+      targetId: input.targetId,
+      checksum: input.checksum,
+      payload: { ...input.payload, shipment_id: input.shipmentPublicId },
+    };
+    this.upsertRecord(record);
+    return { status: "created", record };
+  }
+
   async findProductPublicIdBySku(sku: string): Promise<string | null> {
     return this.productsBySku.get(sku) ?? null;
   }
@@ -351,6 +425,28 @@ class ApplyMemoryTarget implements MigrationTarget {
     if (expected !== actual) {
       throw new Error(`Order total mismatch for ${input.orderPublicId}: order total ${expected} does not equal item total ${actual}`);
     }
+  }
+
+  async calculateOrderTotalAdjustment(input: { readonly orderPublicId: string }) {
+    const expected = Number(this.orderTotals[input.orderPublicId] ?? "21.00");
+    const actual = this.records
+      .filter((record) => record.targetTable === "order_items" && record.payload.order_id === input.orderPublicId)
+      .reduce((sum, record) => sum + Number(record.payload.total_amount), 0);
+    return {
+      itemCount: this.records.filter((record) =>
+        record.targetTable === "order_items" && record.payload.order_id === input.orderPublicId
+      ).length,
+      adjustmentAmount: (expected - actual).toFixed(2),
+    };
+  }
+
+  async recordOrderManualAdjustment(input: {
+    readonly orderPublicId: string;
+    readonly manualAdjustmentAmount: string;
+  }): Promise<void> {
+    const record = this.records.find((item) => item.targetTable === "orders" && item.targetId === input.orderPublicId);
+    if (record) record.payload.manual_adjustment_amount = input.manualAdjustmentAmount;
+    this.manualAdjustments.set(input.orderPublicId, input.manualAdjustmentAmount);
   }
 
   async findLegacyIdMap(input: LegacyIdMapKey): Promise<LegacyIdMapEntry | null> {
@@ -555,6 +651,23 @@ function shipmentRecord(overrides: Record<string, unknown> = {}): LegacyRecord {
     ...overrides,
   };
   return legacyRow("public.kargo_gonderimleri", shipmentId, payload);
+}
+
+function shipmentTrackingEventRecord(sourceId: string, overrides: Record<string, unknown> = {}): LegacyRecord {
+  const payload = {
+    id: sourceId,
+    representative_source_id: "e1000000-0000-4000-8000-000000000001",
+    kargo_id: shipmentId,
+    durum: "Teslim edildi",
+    aciklama: null,
+    lokasyon: "Istanbul",
+    event_time: "2024-01-03T03:04:05.000Z",
+    time_source: "provider",
+    raw_row_count: 1,
+    is_future: false,
+    ...overrides,
+  };
+  return legacyRow("public.kargo_takip", sourceId, payload);
 }
 
 function legacyRow(sourceTable: string, sourceId: string, payload: Record<string, unknown>): LegacyRecord {

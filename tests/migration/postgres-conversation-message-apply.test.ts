@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
@@ -10,6 +10,7 @@ import {
 import { calculateSourcePayloadChecksum } from "../../apps/migrator/src/legacy-source.js";
 import { DatabaseMigrationTarget } from "../../apps/migrator/src/target.js";
 import { createDatabase } from "../../packages/database/src/index.js";
+import type { InlineMediaObject, MigratorMediaStorage } from "../../apps/migrator/src/media-storage.js";
 import type {
   LegacyRecord,
   LegacySource,
@@ -26,6 +27,7 @@ const conversationOneId = "6f1c2b3a-4d5e-4f60-8172-93a4b5c6d7e8";
 const conversationTwoId = "7f1c2b3a-4d5e-4f60-8172-93a4b5c6d7e8";
 const messageOneId = "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d";
 const messageTwoId = "2a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d";
+const messageThreeId = "3a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d";
 
 describe("PostgreSQL conversation and message apply", () => {
   it("writes conversations/messages idempotently, resumes partial batches, resolves FKs, and preserves media/order", async () => {
@@ -48,13 +50,7 @@ describe("PostgreSQL conversation and message apply", () => {
     let db: ReturnType<typeof createDatabase> | undefined;
     try {
       await waitForPostgres(container, "canonical_target");
-      for (const migration of [
-        "001_initial_canonical_schema.sql",
-        "002_add_migration_identity_targets.sql",
-        "003_add_migration_run_manifests.sql",
-        "004_add_woocommerce_provider.sql",
-        "005_add_migration_row_content_checksums.sql",
-      ]) {
+      for (const migration of await allCanonicalMigrations()) {
         executeSql(container, "canonical_target", await migrationSection(migration, "up"));
       }
       seedPrerequisites(container);
@@ -70,11 +66,11 @@ describe("PostgreSQL conversation and message apply", () => {
           tables: [],
           rowCounts: [
             { entity: "conversations", rows: 2 },
-            { entity: "messages", rows: 2 },
+            { entity: "messages", rows: 3 },
           ],
           rowContentChecksums: [
             { entity: "conversations", rows: 2, checksum: "sha256:conversation-rows" },
-            { entity: "messages", rows: 2, checksum: "sha256:message-rows" },
+            { entity: "messages", rows: 3, checksum: "sha256:message-rows" },
           ],
           batchSize: 1,
           mappingCatalogVersion: "p4-conversation-message-test",
@@ -125,14 +121,22 @@ describe("PostgreSQL conversation and message apply", () => {
       const messageSource = new MemorySource([
         messageRecord(messageTwoId, { medya_url: "https://cdn.example.test/a.jpg", medya_tipi: "image" }),
         messageRecord(messageOneId),
+        messageRecord(messageThreeId, {
+          media_url: "data:image/png;base64,aGVsbG8=",
+          media_type: "image",
+          gonderici_adi: "Ada",
+        }),
       ]);
+      const mediaStorage = new FakeMediaStorage();
       await expect(applyMessageMigrationBatchWithState({
         runId,
         source: messageSource,
         target,
-        batch: batch("messages", 1, 0, 2),
-      })).resolves.toMatchObject({ writtenRows: 2, idMapCreated: 2 });
-      expect(targetCounts(container)).toBe("2:2:5");
+        batch: batch("messages", 1, 0, 3),
+        mediaStorage,
+      })).resolves.toMatchObject({ writtenRows: 5, idMapCreated: 3 });
+      expect(mediaStorage.uploads).toEqual([{ sourceTable: "public.mesajlar", sourceId: messageThreeId }]);
+      expect(targetCounts(container)).toBe("2:3:6");
 
       expect(query(container, "canonical_target", `
         select count(*)
@@ -149,13 +153,27 @@ describe("PostgreSQL conversation and message apply", () => {
         from messages m
         join legacy_id_map map on map.target_table = 'messages' and map.target_id = m.public_id
         where map.run_id = '${runId}'
-      `)).toBe(`${messageOneId},${messageTwoId}`);
+      `)).toBe(`${messageOneId},${messageTwoId},${messageThreeId}`);
       expect(query(container, "canonical_target", `
         select raw_payload->>'medya_url'
         from messages m
         join legacy_id_map map on map.target_id = m.public_id
         where map.run_id = '${runId}' and map.source_id = '${messageTwoId}'
       `)).toBe("https://cdn.example.test/a.jpg");
+      expect(query(container, "canonical_target", `
+        select concat_ws(':', f.bucket, f.object_key, f.mime_type, f.byte_size, f.checksum, f.upload_status, f.scan_status)
+        from message_attachments attachment
+        join files f on f.id = attachment.file_id
+        join messages m on m.id = attachment.message_id
+        join legacy_id_map map on map.target_id = m.public_id
+        where map.run_id = '${runId}' and map.source_id = '${messageThreeId}'
+      `)).toBe("migration-media:legacy/hello.png:image/png:5:sha256:inline-test:available:skipped");
+      expect(query(container, "canonical_target", `
+        select raw_payload->'media_storage'->>'checksum'
+        from messages m
+        join legacy_id_map map on map.target_id = m.public_id
+        where map.run_id = '${runId}' and map.source_id = '${messageThreeId}'
+      `)).toBe("sha256:inline-test");
 
       executeSql(container, "canonical_target", `
         update integration_accounts
@@ -194,6 +212,26 @@ class MemorySource implements LegacySource {
 
   async describeTables(entities: readonly MigrationEntity[]): Promise<SourceTableSnapshot[]> {
     return entities.map((entity) => ({ entity, schema: "public", table: entity, idColumn: "id", columns: [] }));
+  }
+}
+
+class FakeMediaStorage implements MigratorMediaStorage {
+  readonly uploads: Array<{ readonly sourceTable: string; readonly sourceId: string }> = [];
+
+  async storeInlineDataUrl(input: {
+    readonly dataUrl: string;
+    readonly sourceTable: string;
+    readonly sourceId: string;
+  }): Promise<InlineMediaObject> {
+    expect(input.dataUrl).toBe("data:image/png;base64,aGVsbG8=");
+    this.uploads.push({ sourceTable: input.sourceTable, sourceId: input.sourceId });
+    return {
+      checksum: "sha256:inline-test",
+      mimeType: "image/png",
+      size: 5,
+      bucket: "migration-media",
+      objectKey: "legacy/hello.png",
+    };
   }
 }
 
@@ -375,4 +413,8 @@ function docker(args: string[], ignoreFailure = false, input?: string): string {
     if (ignoreFailure) return "";
     throw error;
   }
+}
+
+async function allCanonicalMigrations(): Promise<string[]> {
+  return (await readdir(migrationsDirectory)).filter((file) => file.endsWith(".sql")).sort();
 }

@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { Client } from "pg";
 import { describe, expect, it } from "vitest";
@@ -48,13 +48,7 @@ describe("PostgreSQL customer fan-out apply", () => {
     try {
       await waitForPostgres(container, "canonical_target");
       executeSql(container, "postgres", "create database legacy_source");
-      for (const migration of [
-        "001_initial_canonical_schema.sql",
-        "002_add_migration_identity_targets.sql",
-        "003_add_migration_run_manifests.sql",
-        "004_add_woocommerce_provider.sql",
-        "005_add_migration_row_content_checksums.sql",
-      ]) {
+      for (const migration of await allCanonicalMigrations()) {
         executeSql(container, "canonical_target", await migrationSection(migration, "up"));
       }
       seedIntegrationAccounts(container);
@@ -400,4 +394,8 @@ function docker(args: string[], ignoreFailure = false, input?: string): string {
     if (ignoreFailure) return "";
     throw error;
   }
+}
+
+async function allCanonicalMigrations(): Promise<string[]> {
+  return (await readdir(migrationsDirectory)).filter((file) => file.endsWith(".sql")).sort();
 }

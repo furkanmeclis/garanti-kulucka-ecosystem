@@ -29,7 +29,10 @@ MIGRATION_USER_PUBLIC_IDS_FILE=/snapshots/user_public_ids.json
 ```
 
 - `SOURCE_DATABASE_URL` zorunludur. Source okumalari `REPEATABLE READ READ ONLY` transaction icinde yapilir.
-- `migrate --dry-run` source row count'larini okuyup batch planini kurar, sonra `public.musteriler`, `public.konusmalar`, `public.mesajlar`, `public.urunler` ve `public.siparisler` satirlarini canonical taslaklara donusturur. `public.siparis_kalemleri` ve `public.kargo_gonderimleri` satirlari yalniz sayilir ve kolon sozlesmesi dogrulanir. Target URL cozmez, target baglantisi acmaz ve veri yazmaz.
+- `migrate --dry-run` source row count'larini okuyup batch planini kurar, sonra `public.musteriler`, `public.konusmalar`, `public.mesajlar`, `public.urunler`, `public.siparisler`, `public.siparis_kalemleri`, `public.kargo_gonderimleri` ve `public.kargo_takip` satirlarini canonical taslaklara/rapor ozetlerine donusturur. Target URL cozmez, target baglantisi acmaz ve veri yazmaz.
+- Mesaj medyasi icin live `media_url`/`media_type` alanlari birincildir; eski `medya_url`/`medya_tipi` yalniz fallback'tir. Iki kaynakta farkli dolu deger varsa dry-run rapora conflict uyarisi yazar. Inline `data:` medya PostgreSQL'e yazilmaz; dry-run MIME ve decoded byte toplamlarini raporlar, apply storage yapilandirmasi olmadan fail-closed durur.
+- Apply inline medya icin S3 uyumlu Garage ayarlari ister: `MIGRATION_MEDIA_S3_ENDPOINT`, `MIGRATION_MEDIA_S3_ACCESS_KEY_ID`, `MIGRATION_MEDIA_S3_SECRET_ACCESS_KEY`, `MIGRATION_MEDIA_S3_BUCKET`; opsiyonel `MIGRATION_MEDIA_S3_REGION` ve `MIGRATION_MEDIA_S3_PREFIX`. Eski genel `S3_ENDPOINT`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_BUCKET_MEDIA`, `S3_REGION` de fallback olarak okunur.
+- Siparis toplaminda canonical order tutari otoritatiftir. VAT dahil kalem toplami ile fark varsa `orders.manual_adjustment_amount` alanina yazilir ve raporda uyari olarak sayilir; siparis kalemi olmayan siparisler ayri `ordersWithoutItems` sayacina girer.
 - Donusturulemeyen bir satir dry-run'i durdurur. Hata mesajina musteri bilgisi, mesaj metni veya kanal external id degerleri yazilmaz.
 - `MIGRATION_CONVERSATION_ACCOUNTS_FILE` opsiyoneldir. Dosya konusmalarin baglanacagi integration account listesini iceren bir JSON dizisidir:
 
@@ -51,10 +54,9 @@ MIGRATION_USER_PUBLIC_IDS_FILE=/snapshots/user_public_ids.json
 
 - Anahtarlar gecerli UUID, degerler bos olmayan string olmalidir. Eslesmeyen `atanan_kullanici_id` satiri durdurmaz; konusmanin atanan kullanicisi bos kalir ve raporda `unresolvedAssignedUsers` altinda sayilir.
 - Snapshot dosyalari okunamazsa, gecersiz JSON icerirse veya beklenen yapida degilse dry-run source okumadan once hata verir.
-- `migrate --apply` legacy alan ve iliski mapping katalogu tamamlanana kadar fail-closed durumdadir. Komut target URL okumadan ve target baglantisi acmadan hata verir.
-- Apply acildiginda `MIGRATION_RUN_ID` zorunlu olacak; sabit veya otomatik bir run kimligi kullanilmayacak.
+- `migrate --apply` manuel kapilarla korunur: `MIGRATION_APPLY_ENABLED=true`, gecerli backup evidence, source/target kimlik ayrimi, `MIGRATION_RUN_ID` ve approval objesi gereklidir.
 - Gelecekteki apply akisi source ve target icin farkli normalize edilmis PostgreSQL kimlikleri zorunlu kilacak.
 
 Target dogrulamasi ayri bir komuttur ve `TARGET_DATABASE_URL` ister. `DATABASE_URL` yalniz bu target dogrulamasi icin uyumluluk fallback'i olarak desteklenir.
 
-Rapor dosyasi `command`, `status`, zaman bilgileri ve hata mesajini icerir. Database URL veya provider secret degerleri rapora yazilmaz.
+Rapor dosyasi `command`, `status`, zaman bilgileri, hata mesajini ve dry-run/apply migration sonucunu icerir. Database URL veya provider secret degerleri rapora yazilmaz.

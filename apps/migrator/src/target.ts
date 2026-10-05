@@ -19,6 +19,8 @@ import type {
   LegacyIdMapRoleLookup,
   LegacyIdMapWrite,
   MessageCanonicalRecord,
+  FileCanonicalRecord,
+  MessageAttachmentCanonicalRecord,
   MigrationBatchState,
   MigrationBatchStateKey,
   MigrationBatchStateFailure,
@@ -35,12 +37,13 @@ import type {
   DeferredReconciliationResult,
   DeferredReconciliationWrite,
   ShipmentCanonicalRecord,
+  ShipmentTrackingEventCanonicalRecord,
   SourceDatabaseIdentity,
   SourceEntityRowCount,
   SourceTableSnapshot,
 } from "./types.js";
 
-const canonicalTargetTables = new Set<MigrationEntity>([
+const canonicalTargetTables = new Set<string>([
   "customers",
   "customer_external_identities",
   "customer_addresses",
@@ -55,6 +58,7 @@ const canonicalTargetTables = new Set<MigrationEntity>([
   "integration_settings",
   "webhook_subscriptions",
   "files",
+  "message_attachments",
   "settings",
 ]);
 
@@ -209,6 +213,41 @@ export class DatabaseMigrationTarget implements MigrationTarget {
     });
   }
 
+  async writeFileRecord(input: FileCanonicalRecord): Promise<CanonicalWriteResult> {
+    return this.writeResolvedRecord({
+      targetTable: input.targetTable,
+      targetId: input.targetId,
+      checksum: input.checksum,
+      payload: {
+        bucket: input.payload.bucket,
+        object_key: input.payload.object_key,
+        original_name: input.payload.original_name,
+        mime_type: input.payload.mime_type,
+        byte_size: input.payload.byte_size,
+        checksum: input.payload.checksum,
+        upload_status: input.payload.upload_status,
+        scan_status: input.payload.scan_status,
+        upload_type: input.payload.upload_type,
+        completed_at: input.payload.completed_at,
+      },
+    });
+  }
+
+  async writeMessageAttachmentRecord(input: MessageAttachmentCanonicalRecord): Promise<CanonicalWriteResult> {
+    const messageId = await this.findRequiredPublicId("messages", input.messagePublicId, "message");
+    const fileId = await this.findRequiredPublicId("files", input.filePublicId, "file");
+    return this.writeResolvedRecord({
+      targetTable: input.targetTable,
+      targetId: input.targetId,
+      checksum: input.checksum,
+      payload: {
+        message_id: messageId,
+        file_id: fileId,
+        attachment_type: input.payload.attachment_type,
+      },
+    });
+  }
+
   async writeOrderRecord(input: OrderCanonicalRecord): Promise<CanonicalWriteResult> {
     const customerId = await this.findRequiredPublicId("customers", input.customerPublicId, "customer");
     const conversationId = input.conversationPublicId === null
@@ -230,6 +269,7 @@ export class DatabaseMigrationTarget implements MigrationTarget {
         status: input.payload.status,
         source: input.payload.source,
         total_amount: input.payload.total_amount,
+        manual_adjustment_amount: input.payload.manual_adjustment_amount,
         currency: input.payload.currency,
         confirmation_status: input.payload.confirmation_status,
         notes: input.payload.notes,
@@ -286,6 +326,24 @@ export class DatabaseMigrationTarget implements MigrationTarget {
         shipped_at: input.payload.shipped_at,
         delivered_at: input.payload.delivered_at,
         raw_payload: input.payload.raw_payload === null ? null : jsonb(input.payload.raw_payload),
+      },
+    });
+  }
+
+  async writeShipmentTrackingEventRecord(input: ShipmentTrackingEventCanonicalRecord): Promise<CanonicalWriteResult> {
+    const shipmentId = await this.findRequiredPublicId("shipments", input.shipmentPublicId, "shipment");
+
+    return this.writeResolvedRecord({
+      targetTable: input.targetTable,
+      targetId: input.targetId,
+      checksum: input.checksum,
+      payload: {
+        shipment_id: shipmentId,
+        status: input.payload.status,
+        description: input.payload.description,
+        location: input.payload.location,
+        occurred_at: input.payload.occurred_at,
+        raw_payload: jsonb(input.payload.raw_payload),
       },
     });
   }
@@ -426,12 +484,16 @@ export class DatabaseMigrationTarget implements MigrationTarget {
     return { examined: rows.length, resolved, pending };
   }
 
-  async assertOrderTotalsConsistent(input: OrderTotalConsistencyCheck): Promise<void> {
+  async calculateOrderTotalAdjustment(input: OrderTotalConsistencyCheck): Promise<{
+    readonly itemCount: number;
+    readonly adjustmentAmount: string;
+  }> {
     const row = await this.db
       .selectFrom("orders")
       .leftJoin("order_items", "order_items.order_id", "orders.id")
       .select((eb) => [
         "orders.total_amount as order_total",
+        eb.fn.count("order_items.id").as("item_count"),
         eb.fn.coalesce(eb.fn.sum("order_items.total_amount"), sql<string>`0`).as("items_total"),
       ])
       .where("orders.public_id", "=", input.orderPublicId)
@@ -439,15 +501,35 @@ export class DatabaseMigrationTarget implements MigrationTarget {
       .groupBy("orders.total_amount")
       .executeTakeFirst();
     if (!row) throw new Error(`Cannot verify totals for missing order ${input.orderPublicId}`);
-    if (String(row.order_total) !== String(row.items_total)) {
-      throw new Error(
-        `Order total mismatch for ${input.orderPublicId}: order total ${row.order_total} does not equal item total ${row.items_total}`,
-      );
+    const itemCount = Number(row.item_count);
+    const adjustment = Number(row.order_total) - Number(row.items_total);
+    if (!Number.isFinite(itemCount) || !Number.isFinite(adjustment)) {
+      throw new Error(`Cannot verify totals for order ${input.orderPublicId}`);
+    }
+    return { itemCount, adjustmentAmount: adjustment.toFixed(2) };
+  }
+
+  async assertOrderTotalsConsistent(input: OrderTotalConsistencyCheck): Promise<void> {
+    const adjustment = await this.calculateOrderTotalAdjustment(input);
+    if (adjustment.itemCount === 0) return;
+    if (Math.abs(Number(adjustment.adjustmentAmount)) > 0.01) {
+      throw new Error(`Order total mismatch for ${input.orderPublicId}`);
     }
   }
 
+  async recordOrderManualAdjustment(input: {
+    readonly orderPublicId: string;
+    readonly manualAdjustmentAmount: string;
+  }): Promise<void> {
+    await this.db
+      .updateTable("orders")
+      .set({ manual_adjustment_amount: input.manualAdjustmentAmount, updated_at: new Date() })
+      .where("public_id", "=", input.orderPublicId)
+      .execute();
+  }
+
   private async findRequiredPublicId(
-    table: "customers" | "integration_accounts" | "conversations" | "orders" | "products" | "users",
+    table: "customers" | "integration_accounts" | "conversations" | "orders" | "products" | "users" | "messages" | "files" | "shipments",
     publicId: string,
     label: string,
   ): Promise<number> {

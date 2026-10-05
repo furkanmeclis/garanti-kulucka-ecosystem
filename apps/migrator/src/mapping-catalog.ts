@@ -25,7 +25,7 @@ export interface LegacyMappingCatalog {
   readonly tables: readonly LegacyTableMapping[];
 }
 
-export const mappingCatalogVersion = "p2-shipment-transform-v1";
+export const mappingCatalogVersion = "p2-live-production-drift-v2";
 
 const canonicalMigrationEntitySet = new Set<string>(canonicalMigrationEntities);
 const targetMappingValues = new Set<string>(["direct", "synthetic"]);
@@ -89,6 +89,7 @@ export const legacyMappingCatalog = createLegacyMappingCatalog({
         column("son_mesaj_text", "text", "text", true),
         column("son_mesaj_gonderici", "character varying", "varchar", true),
         column("ig_account_id", "text", "text", true),
+        column("ig_login_type", "text", "text", true, false),
         column("human_agent", "boolean", "bool", true),
       ],
     },
@@ -104,6 +105,11 @@ export const legacyMappingCatalog = createLegacyMappingCatalog({
         column("gonderici_tipi", "character varying", "varchar", false),
         column("gonderici_id", "uuid", "uuid", true),
         column("icerik", "text", "text", false),
+        // Live production stores canonical media in media_url/media_type. The older Turkish
+        // medya_url/medya_tipi columns remain mapped as fallback only and conflicts are reported.
+        column("media_url", "text", "text", true, false),
+        column("media_type", "character varying", "varchar", true, false),
+        column("gonderici_adi", "character varying", "varchar", true, false),
         column("medya_url", "text", "text", true),
         column("medya_tipi", "character varying", "varchar", true),
         column("kanal_mesaj_id", "character varying", "varchar", true),
@@ -128,6 +134,7 @@ export const legacyMappingCatalog = createLegacyMappingCatalog({
         column("musteri_il", "character varying", "varchar", true),
         column("musteri_ilce", "character varying", "varchar", true),
         column("musteri_posta_kodu", "character varying", "varchar", true),
+        column("musteri_ulke", "character varying", "varchar", true, false),
         column("siparis_no", "character varying", "varchar", true),
         column("siparis_tipi", "character varying", "varchar", true),
         column("durum", "character varying", "varchar", true),
@@ -157,7 +164,7 @@ export const legacyMappingCatalog = createLegacyMappingCatalog({
         column("kargo_son_hareket", "text", "text", true),
         column("kargo_son_hareket_tarihi", "timestamp with time zone", "timestamptz", true),
         column("kargoya_aktarilma_tarihi", "timestamp with time zone", "timestamptz", true),
-        column("efatura_durumu", "character varying", "varchar", true),
+        column("efatura_durumu", "character varying", "varchar", true, false),
         column("sevk_edilme_tarihi", "timestamp with time zone", "timestamptz", true),
         column("durum_oncelik", "smallint", "int2", true),
         column("mukerrer", "boolean", "bool", false),
@@ -251,6 +258,21 @@ export const legacyMappingCatalog = createLegacyMappingCatalog({
         column("olusturma_tarihi", "timestamp with time zone", "timestamptz", true),
         column("guncelleme_tarihi", "timestamp with time zone", "timestamptz", true),
         column("kolaybi_product_id", "text", "text", true),
+      ],
+    },
+    {
+      sourceTable: "public.kargo_takip",
+      idColumn: "id",
+      targetEntities: [
+        { entity: "shipment_tracking_events", mapping: "direct", readiness: "dry-run" },
+      ],
+      columns: [
+        column("id", "uuid", "uuid", false),
+        column("kargo_id", "uuid", "uuid", true),
+        column("durum", "character varying", "varchar", false),
+        column("aciklama", "text", "text", true),
+        column("lokasyon", "character varying", "varchar", true),
+        column("tarih", "timestamp with time zone", "timestamptz", true),
       ],
     },
   ],
@@ -437,6 +459,9 @@ export function validateLegacyTableColumns(
         tableName,
         `column ${expected.name} expected type ${expected.dataType}/${expected.udtName}, received ${actual.dataType}/${actual.udtName}`,
       );
+    }
+    if (!actual.nullable && expected.nullable) {
+      continue;
     }
     if (actual.nullable !== expected.nullable) {
       throw schemaMismatch(

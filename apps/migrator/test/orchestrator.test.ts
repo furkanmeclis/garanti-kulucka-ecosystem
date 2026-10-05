@@ -408,6 +408,7 @@ describe("migration orchestrator", () => {
       "orders",
       "order_items",
       "shipments",
+      "shipment_tracking_events",
     ]);
     expect(source.operations).toEqual([
       "describe",
@@ -418,6 +419,7 @@ describe("migration orchestrator", () => {
       "count:orders",
       "count:order_items",
       "count:shipments",
+      "count:shipment_tracking_events",
     ]);
   });
 
@@ -1290,6 +1292,52 @@ const legacyShipmentRows: LegacyRecord[] = [
   }),
 ];
 
+function legacyShipmentTrackingEventRow(id: string, overrides: Record<string, unknown> = {}): LegacyRecord {
+  const payload = {
+    id,
+    representative_source_id: "e1000000-0000-4000-8000-000000000001",
+    kargo_id: "c1000000-0000-4000-8000-000000000001",
+    durum: "Teslim edildi",
+    aciklama: null,
+    lokasyon: "İstanbul",
+    event_time: "2024-01-03T03:04:05.000Z",
+    time_source: "provider",
+    raw_row_count: 1,
+    is_future: false,
+    ...overrides,
+  };
+  return legacyRow("public.kargo_takip", id, payload);
+}
+
+const legacyShipmentTrackingEventRows: LegacyRecord[] = [
+  legacyShipmentTrackingEventRow("first_seen:c1000000-0000-4000-8000-000000000001:ms-duplicates", {
+    time_source: "first_seen",
+    event_time: "2024-01-03T03:04:05.123Z",
+    raw_row_count: 3,
+  }),
+  legacyShipmentTrackingEventRow("provider:c1000000-0000-4000-8000-000000000001:one-real-time", {
+    event_time: "2024-01-03T03:04:05.000Z",
+  }),
+  legacyShipmentTrackingEventRow("provider:c1000000-0000-4000-8000-000000000002:multi-real-time-1", {
+    kargo_id: "c1000000-0000-4000-8000-000000000002",
+    event_time: "2024-01-04T03:04:05.000Z",
+  }),
+  legacyShipmentTrackingEventRow("provider:c1000000-0000-4000-8000-000000000002:multi-real-time-2", {
+    kargo_id: "c1000000-0000-4000-8000-000000000002",
+    event_time: "2024-01-04T04:04:05.000Z",
+  }),
+  legacyShipmentTrackingEventRow("provider:ffffffff-ffff-4fff-8fff-ffffffffffff:unresolved", {
+    kargo_id: "ffffffff-ffff-4fff-8fff-ffffffffffff",
+    event_time: "2024-01-05T03:04:05.000Z",
+  }),
+  legacyShipmentTrackingEventRow("future:e1000000-0000-4000-8000-000000000099", {
+    kargo_id: "c1000000-0000-4000-8000-000000000001",
+    event_time: "2099-01-01T00:00:00.000Z",
+    time_source: "future_excluded",
+    is_future: true,
+  }),
+];
+
 function orderDryRun(source: LegacySource) {
   return runMigration({
     mode: "dry-run",
@@ -1358,6 +1406,7 @@ describe("order dry-run validation", () => {
     expect(result.dryRunReport?.customerTransform).toMatchObject({ transformedRows: 3 });
     expect(result.dryRunReport?.orderTransform).toEqual({
       transformedRows: 3,
+      customerResolutionById: 3,
       unresolvedConversations: 1,
       unresolvedCreators: 1,
     });
@@ -1388,12 +1437,46 @@ describe("shipment dry-run validation", () => {
     expect(result.dryRunReport?.shipmentTransform).toEqual({
       transformedRows: 3,
       unresolvedCustomers: 1,
+      unmatchedOrderTracking: 3,
       pttShipments: 1,
       suratShipments: 1,
       manualShipments: 1,
     });
     expect(result.dryRunReport?.totals).toEqual({ plannedRows: 6, plannedBatches: 4, blockedRows: 0 });
     expect(result.batches).toEqual([]);
+  });
+
+  it("reports source-side deduped shipment tracking events", async () => {
+    const source = new LegacyTableSource({
+      customers: legacyCustomerRows,
+      shipments: legacyShipmentRows,
+      shipment_tracking_events: legacyShipmentTrackingEventRows,
+    });
+
+    const result = await shipmentDryRun(source, ["customers", "shipments", "shipment_tracking_events"]);
+
+    expect(source.operations).toEqual([
+      "describe",
+      "count:customers",
+      "count:shipments",
+      "count:shipment_tracking_events",
+      "read:customers",
+      "read:customers",
+      "read:shipments",
+      "read:shipments",
+      "read:shipment_tracking_events",
+      "read:shipment_tracking_events",
+      "read:shipment_tracking_events",
+    ]);
+    expect(result.dryRunReport?.shipmentTrackingEventTransform).toEqual({
+      transformedRows: 8,
+      uniqueEvents: 5,
+      duplicateRows: 2,
+      futureDatedRows: 1,
+      providerTimeEvents: 4,
+      firstSeenEvents: 1,
+      unresolvedShipments: 1,
+    });
   });
 
   it("rejects shipments without customers before source access", async () => {
@@ -1505,6 +1588,7 @@ describe("order item dry-run validation", () => {
     });
     expect(result.dryRunReport?.orderTransform).toEqual({
       transformedRows: 3,
+      customerResolutionById: 3,
       unresolvedConversations: 1,
       unresolvedCreators: 1,
     });
@@ -1514,6 +1598,8 @@ describe("order item dry-run validation", () => {
       unresolvedProducts: 1,
       skuProductMatches: 1,
       externalProductMatches: 1,
+      totalAdjustmentWarnings: 3,
+      totalAdjustmentAmount: "369.00",
     });
     expect(result.dryRunReport?.totals).toEqual({ plannedRows: 11, plannedBatches: 7, blockedRows: 0 });
     expect(result.batches).toEqual([]);

@@ -38,6 +38,8 @@ garanti-migrator migrate --dry-run --report-file /secure/migration/dry-run-repor
 
 Review the dry-run report before continuing.
 
+The report includes the full secret-free migration result. Confirm inline media counts/decoded byte totals, customer resolution paths, shipment linkage counts, duplicate product warnings, and order total adjustment warnings before apply.
+
 ## 3. Apply
 
 Apply requires both gates:
@@ -46,6 +48,17 @@ Apply requires both gates:
 - `MIGRATION_BACKUP_EVIDENCE=/path/to/readable/backup-evidence.json`
 
 The command also refuses if the source and target database identities are the same. Gate failures occur before database connections are opened.
+
+If the dry-run report contains inline `data:` message media, apply also requires Garage/S3-compatible storage configuration:
+
+- `MIGRATION_MEDIA_S3_ENDPOINT`
+- `MIGRATION_MEDIA_S3_ACCESS_KEY_ID`
+- `MIGRATION_MEDIA_S3_SECRET_ACCESS_KEY`
+- `MIGRATION_MEDIA_S3_BUCKET`
+- optional `MIGRATION_MEDIA_S3_REGION`
+- optional `MIGRATION_MEDIA_S3_PREFIX`
+
+Missing storage configuration for a batch with inline media is fail-closed before that batch writes messages. The migrator uploads the decoded media, records a `files` row with checksum, size, MIME type, `upload_status=available`, and scan status, then links it through `message_attachments`.
 
 ```bash
 SOURCE_DATABASE_URL=postgres://... \
@@ -60,6 +73,8 @@ garanti-migrator migrate --apply --report-file /secure/migration/apply-report.js
 ```
 
 The apply command registers the run manifest, applies batches in dependency order, resumes completed batches by persisted state, runs deferred reconciliation, runs verification, and writes a secret-free operation report.
+
+Order totals are authoritative from the legacy order row. If VAT-inclusive item totals differ, apply stores the difference in `orders.manual_adjustment_amount` and reports a warning; this is not a deferred reconciliation item.
 
 ## 4. Verify
 
