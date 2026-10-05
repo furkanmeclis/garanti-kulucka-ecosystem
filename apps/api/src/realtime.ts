@@ -11,6 +11,8 @@ import { createClient, type RedisClientType } from "redis";
 import { Server } from "socket.io";
 import type { ApiConfig } from "./config.js";
 import { verifyAccessToken } from "./auth/tokens.js";
+import { AuthRepository } from "./auth/repository.js";
+import type { AppDatabase } from "@garanti-kulucka/database";
 
 export interface RealtimePublisher {
   publish: (room: RealtimeRoom, envelope: RealtimeEnvelope) => void;
@@ -30,6 +32,11 @@ export interface RealtimeHandle {
   io: Server;
   publisher: RealtimePublisher;
   close: () => Promise<void>;
+}
+
+export interface AttachRealtimeOptions {
+  db?: AppDatabase | null;
+  staleSessionSweepIntervalMs?: number;
 }
 
 export function createRealtimePublisher(io: Pick<Server, "emit" | "to">): RealtimePublisher {
@@ -57,7 +64,99 @@ export function createRealtimePublisher(io: Pick<Server, "emit" | "to">): Realti
   };
 }
 
-export async function attachRealtime(server: ServerType, config: ApiConfig): Promise<RealtimeHandle> {
+export async function authenticateRealtimeToken(token: string | null, config: ApiConfig, db?: AppDatabase | null) {
+  if (!token) {
+    throw new Error("unauthorized");
+  }
+
+  const claims = await verifyAccessToken(token, config);
+  if (!db) {
+    return claims;
+  }
+
+  const repository = new AuthRepository(db);
+  const [user, session] = await Promise.all([
+    repository.findUserByPublicId(claims.user_public_id),
+    repository.findSessionByPublicId(claims.session_public_id),
+  ]);
+
+  if (!user || !session || session.user_id !== user.id) {
+    throw new Error("unauthorized");
+  }
+
+  return claims;
+}
+
+export async function disconnectStaleRealtimeSessions(
+  io: Pick<Server, "sockets">,
+  db: AppDatabase,
+): Promise<number> {
+  const repository = new AuthRepository(db);
+  const sockets = Array.from(io.sockets.sockets.values());
+  let disconnected = 0;
+
+  await Promise.all(
+    sockets.map(async (socket) => {
+      const userPublicId = typeof socket.data.user_public_id === "string" ? socket.data.user_public_id : null;
+      const sessionPublicId = typeof socket.data.session_public_id === "string" ? socket.data.session_public_id : null;
+      if (!userPublicId || !sessionPublicId) {
+        socket.disconnect(true);
+        disconnected += 1;
+        return;
+      }
+
+      const [user, session] = await Promise.all([
+        repository.findUserByPublicId(userPublicId),
+        repository.findSessionByPublicId(sessionPublicId),
+      ]);
+      if (!user || !session || session.user_id !== user.id) {
+        socket.disconnect(true);
+        disconnected += 1;
+      }
+    }),
+  );
+
+  return disconnected;
+}
+
+export function handleRealtimeConnection(socket: {
+  id: string;
+  data: { user_public_id?: string };
+  join: (room: string) => void;
+  leave: (room: string) => void;
+  emit: (event: string, payload: unknown) => void;
+  on: (event: string, listener: (conversationPublicId: string) => void) => void;
+}) {
+  const userRoom = realtimeUserRoom(String(socket.data.user_public_id));
+  socket.join(userRoom);
+  socket.emit("presence.updated", {
+    event: "presence.updated",
+    id: socket.id,
+    occurred_at: new Date().toISOString(),
+    payload: {
+      user_public_id: socket.data.user_public_id,
+      status: "online",
+    },
+  });
+
+  socket.on("conversation.join", (conversationPublicId: string) => {
+    if (typeof conversationPublicId === "string" && conversationPublicId.length > 0) {
+      socket.join(realtimeConversationRoom(conversationPublicId));
+    }
+  });
+
+  socket.on("conversation.leave", (conversationPublicId: string) => {
+    if (typeof conversationPublicId === "string" && conversationPublicId.length > 0) {
+      socket.leave(realtimeConversationRoom(conversationPublicId));
+    }
+  });
+}
+
+export async function attachRealtime(
+  server: ServerType,
+  config: ApiConfig,
+  options: AttachRealtimeOptions = {},
+): Promise<RealtimeHandle> {
   const ioOptions = config.corsOrigin
     ? {
         cors: {
@@ -90,7 +189,7 @@ export async function attachRealtime(server: ServerType, config: ApiConfig): Pro
     }
 
     try {
-      const claims = await verifyAccessToken(token, config);
+      const claims = await authenticateRealtimeToken(token, config, options.db);
       socket.data.user_public_id = claims.user_public_id;
       socket.data.session_public_id = claims.session_public_id;
       socket.data.role = claims.role;
@@ -100,36 +199,23 @@ export async function attachRealtime(server: ServerType, config: ApiConfig): Pro
     }
   });
 
-  io.on("connection", (socket) => {
-    const userRoom = realtimeUserRoom(socket.data.user_public_id);
-    socket.join(userRoom);
-    socket.emit("presence.updated", {
-      event: "presence.updated",
-      id: socket.id,
-      occurred_at: new Date().toISOString(),
-      payload: {
-        user_public_id: socket.data.user_public_id,
-        status: "online",
-      },
-    });
+  io.on("connection", handleRealtimeConnection);
 
-    socket.on("conversation.join", (conversationPublicId: string) => {
-      if (typeof conversationPublicId === "string" && conversationPublicId.length > 0) {
-        socket.join(realtimeConversationRoom(conversationPublicId));
-      }
-    });
-
-    socket.on("conversation.leave", (conversationPublicId: string) => {
-      if (typeof conversationPublicId === "string" && conversationPublicId.length > 0) {
-        socket.leave(realtimeConversationRoom(conversationPublicId));
-      }
-    });
-  });
+  const staleSessionSweep =
+    options.db && options.staleSessionSweepIntervalMs !== 0
+      ? setInterval(() => {
+          void disconnectStaleRealtimeSessions(io, options.db as AppDatabase);
+        }, options.staleSessionSweepIntervalMs ?? 30_000)
+      : null;
+  staleSessionSweep?.unref?.();
 
   return {
     io,
     publisher: createRealtimePublisher(io),
     close: async () => {
+      if (staleSessionSweep) {
+        clearInterval(staleSessionSweep);
+      }
       await io.close();
       if (redisClient) {
         await redisClient.quit();

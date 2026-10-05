@@ -50,7 +50,7 @@ const server = serve({
   port,
 });
 
-const realtime = await attachRealtime(server, config);
+const realtime = await attachRealtime(server, config, { db: database.db });
 activeRealtimePublisher = realtime.publisher;
 
 async function shutdown(signal: NodeJS.Signals) {

@@ -40,6 +40,42 @@ const authMocks = vi.hoisted(() => {
       updated_at: new Date("2026-01-01T00:00:00.000Z"),
       role_name: "staff",
     },
+    calisanUser: {
+      id: 12,
+      public_id: "usr_calisan",
+      role_id: 3,
+      email: "calisan@example.com",
+      password_hash: "hash",
+      first_name: "Calisan",
+      last_name: "User",
+      phone: null,
+      is_active: true,
+      is_online: false,
+      last_seen_at: null,
+      sip_username: "agent-calisan",
+      sip_password_encrypted: "encrypted-calisan",
+      created_at: new Date("2026-01-01T00:00:00.000Z"),
+      updated_at: new Date("2026-01-01T00:00:00.000Z"),
+      role_name: "calisan",
+    },
+    cargoUser: {
+      id: 13,
+      public_id: "usr_kargo",
+      role_id: 4,
+      email: "kargo@example.com",
+      password_hash: "hash",
+      first_name: "Kargo",
+      last_name: "User",
+      phone: null,
+      is_active: true,
+      is_online: false,
+      last_seen_at: null,
+      sip_username: "agent-kargo",
+      sip_password_encrypted: "encrypted-kargo",
+      created_at: new Date("2026-01-01T00:00:00.000Z"),
+      updated_at: new Date("2026-01-01T00:00:00.000Z"),
+      role_name: "kargo_operatoru",
+    },
     validRefreshToken: "initial_refresh_token_000000",
     nextRefreshToken: "rotated_refresh_token_000000",
     revokedSessions: new Set<string>(),
@@ -56,6 +92,14 @@ const authMocks = vi.hoisted(() => {
 
       if (publicId === state.staffUser.public_id) {
         return state.staffUser;
+      }
+
+      if (publicId === state.calisanUser.public_id) {
+        return state.calisanUser;
+      }
+
+      if (publicId === state.cargoUser.public_id) {
+        return state.cargoUser;
       }
 
       return null;
@@ -84,6 +128,34 @@ const authMocks = vi.hoisted(() => {
           id: 101,
           public_id: "ses_staff",
           user_id: state.staffUser.id,
+          user_agent: null,
+          ip_address: null,
+          expires_at: new Date("2026-02-01T00:00:00.000Z"),
+          revoked_at: null,
+          created_at: new Date("2026-01-01T00:00:00.000Z"),
+          updated_at: new Date("2026-01-01T00:00:00.000Z"),
+        };
+      }
+
+      if (publicId === "ses_calisan") {
+        return {
+          id: 102,
+          public_id: "ses_calisan",
+          user_id: state.calisanUser.id,
+          user_agent: null,
+          ip_address: null,
+          expires_at: new Date("2026-02-01T00:00:00.000Z"),
+          revoked_at: null,
+          created_at: new Date("2026-01-01T00:00:00.000Z"),
+          updated_at: new Date("2026-01-01T00:00:00.000Z"),
+        };
+      }
+
+      if (publicId === "ses_kargo") {
+        return {
+          id: 103,
+          public_id: "ses_kargo",
+          user_id: state.cargoUser.id,
           user_agent: null,
           ip_address: null,
           expires_at: new Date("2026-02-01T00:00:00.000Z"),
@@ -133,6 +205,16 @@ const authMocks = vi.hoisted(() => {
         return state.staffUser;
       }
 
+      if (userPublicId === state.calisanUser.public_id) {
+        state.calisanUser.is_online = online;
+        return state.calisanUser;
+      }
+
+      if (userPublicId === state.cargoUser.public_id) {
+        state.cargoUser.is_online = online;
+        return state.cargoUser;
+      }
+
       return null;
     }),
   };
@@ -174,6 +256,44 @@ vi.mock("../src/auth/repository.js", () => ({
 vi.mock("../src/auth/crypto.js", () => ({
   createRefreshToken: authMocks.createRefreshToken,
   verifyPassword: authMocks.verifyPassword,
+}));
+
+vi.mock("../src/webphone/config.js", () => ({
+  WebphoneConfigRepository: vi.fn(function WebphoneConfigRepository() {
+    return {
+      getForUser: async (userPublicId: string) => {
+        const user =
+          userPublicId === authMocks.state.calisanUser.public_id
+            ? authMocks.state.calisanUser
+            : userPublicId === authMocks.state.cargoUser.public_id
+              ? authMocks.state.cargoUser
+              : authMocks.state.activeUser;
+        return {
+          user,
+          settings: {
+            "webphone.enabled": true,
+            "webphone.sip_websocket_url": "wss://sip.example.com/ws",
+            "webphone.sip_domain": "sip.example.com",
+            "webphone.ice_servers": [{ urls: "stun:stun.example.com:3478" }],
+          },
+        };
+      },
+      decryptSipPassword: () => "sip-client-secret",
+    };
+  }),
+  serializeWebphoneConfig: (record: {
+    user: { sip_username: string | null };
+    settings: Record<string, unknown>;
+  }) => ({
+    enabled: true,
+    sip_websocket_url: record.settings["webphone.sip_websocket_url"],
+    sip_domain: record.settings["webphone.sip_domain"],
+    sip_username: record.user.sip_username,
+    sip_password: "sip-client-secret",
+    ice_servers: record.settings["webphone.ice_servers"],
+    media_proxy_enabled: false,
+    transport: "direct_sip_over_webrtc",
+  }),
 }));
 
 const { createApp } = await import("../src/app.js");
@@ -299,6 +419,64 @@ describe("auth lifecycle", () => {
 
     const response = await createTestApp().request("/admin/settings", {
       headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "forbidden" },
+    });
+  });
+
+  it.each([
+    { role: "calisan", userPublicId: "usr_calisan", sessionPublicId: "ses_calisan", sipUsername: "agent-calisan" },
+    { role: "kargo_operatoru", userPublicId: "usr_kargo", sessionPublicId: "ses_kargo", sipUsername: "agent-kargo" },
+  ])("allows authenticated $role users to read webphone config", async ({ role, userPublicId, sessionPublicId, sipUsername }) => {
+    const token = await accessToken({ userPublicId, sessionPublicId, role });
+
+    const response = await createTestApp().request("/api/webphone/config", {
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    await expect(response.json()).resolves.toMatchObject({
+      enabled: true,
+      sip_websocket_url: "wss://sip.example.com/ws",
+      sip_domain: "sip.example.com",
+      sip_username: sipUsername,
+      sip_password: "sip-client-secret",
+      media_proxy_enabled: false,
+      transport: "direct_sip_over_webrtc",
+    });
+  });
+
+  it("denies anonymous webphone config reads", async () => {
+    const response = await createTestApp().request("/api/webphone/config");
+
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "unauthorized" },
+    });
+  });
+
+  it("keeps sip_config writes admin-only for non-admin users", async () => {
+    const token = await accessToken({
+      userPublicId: "usr_calisan",
+      sessionPublicId: "ses_calisan",
+      role: "calisan",
+    });
+
+    const response = await createTestApp().request("/admin/settings/sip_config", {
+      method: "PUT",
+      body: JSON.stringify({
+        value: { ws_url: "wss://sip.example.com/ws", domain: "sip.example.com" },
+        scope: "global",
+        is_secret: false,
+      }),
+      headers: {
+        authorization: `Bearer ${token}`,
+        "content-type": "application/json",
+      },
     });
 
     expect(response.status).toBe(403);

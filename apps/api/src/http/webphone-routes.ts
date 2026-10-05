@@ -36,6 +36,9 @@ export function createWebphoneRoutes() {
       return context.json({ error: { code: "not_found", message: "Webphone user config was not found" } }, 404);
     }
 
+    // SIP credentials reach every active user's browser for JsSIP (legacy parity); never let caches keep them.
+    context.header("Cache-Control", "no-store");
+    context.header("Pragma", "no-cache");
     return context.json(serializeWebphoneConfig(record, (encryptedValue) => repository.decryptSipPassword(encryptedValue)));
   });
 

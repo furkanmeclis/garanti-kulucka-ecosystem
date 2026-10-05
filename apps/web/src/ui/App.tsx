@@ -1414,7 +1414,10 @@ export function App() {
 
   const activeSettings = data.settings.filter((setting) => !setting.is_secret);
   const visibleNavigation = navigationItems.filter((item) => item.roles.includes(user?.role ?? "guest"));
-  const activeFlow = flowFromPath(location.pathname);
+  const requestedFlow = flowFromPath(location.pathname);
+  const activeFlow = visibleNavigation.some((item) => item.key === requestedFlow)
+    ? requestedFlow
+    : visibleNavigation[0]?.key ?? "inbox";
   const canTogglePresence = Boolean(user && user.role !== "admin");
   const netgsmSettings = netgsmSettingsFrom(activeSettings);
   const sipServerSettings = sipServerSettingsFrom(activeSettings, data.webphone);
