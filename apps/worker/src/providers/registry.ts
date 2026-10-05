@@ -37,7 +37,7 @@ export const providerAdapters: ProviderAdapterDefinition[] = [
     channels: ["accounting"],
     webhook_operations: [],
     delivery_operations: ["invoice.create"],
-    live_calls_enabled: false,
+    live_calls_enabled: true,
   },
   {
     provider: "meta",

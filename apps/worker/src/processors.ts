@@ -20,6 +20,7 @@ import { buildProviderDryRunRequest } from "./providers/dry-run-transport.js";
 import { providerTransportPolicyFor } from "./providers/transport-policy.js";
 import type { PttFetchTransport } from "./providers/ptt.js";
 import type { SuratFetchTransport } from "./providers/surat.js";
+import type { KolaybiFetchTransport } from "./providers/kolaybi.js";
 
 export type WorkerLifecycleEventName = "started" | "completed" | "failed";
 
@@ -101,6 +102,7 @@ export interface WorkerProcessorRegistryOptions {
   providerAccountConfigRepository?: ProviderAccountConfigRepository;
   pttTransport?: PttFetchTransport;
   suratTransport?: SuratFetchTransport;
+  kolaybiTransport?: KolaybiFetchTransport;
 }
 
 export const workerQueueNames: QueueName[] = [
@@ -234,6 +236,7 @@ function createProviderDeliveryProcessor(
   providerAccountConfigRepository?: ProviderAccountConfigRepository,
   pttTransport?: PttFetchTransport,
   suratTransport?: SuratFetchTransport,
+  kolaybiTransport?: KolaybiFetchTransport,
 ): QueueProcessor {
   return async (job) => {
     const envelope = assertJobMatchesQueue("provider-delivery", job);
@@ -248,6 +251,7 @@ function createProviderDeliveryProcessor(
           accountConfigRepository: providerAccountConfigRepository,
           ...(pttTransport ? { pttTransport } : {}),
           ...(suratTransport ? { suratTransport } : {}),
+          ...(kolaybiTransport ? { kolaybiTransport } : {}),
           ...providerFailureInputFromJob(job),
         });
       } else {
@@ -457,6 +461,8 @@ export function createWorkerProcessorRegistry(
     typeof options === "function" ? undefined : options.pttTransport;
   const suratTransport =
     typeof options === "function" ? undefined : options.suratTransport;
+  const kolaybiTransport =
+    typeof options === "function" ? undefined : options.kolaybiTransport;
   const processors = new Map<QueueName, QueueProcessor>([
     ["provider-webhooks", createProviderWebhookProcessor(providerAttemptRepository)],
     [
@@ -466,6 +472,7 @@ export function createWorkerProcessorRegistry(
         providerAccountConfigRepository,
         pttTransport,
         suratTransport,
+        kolaybiTransport,
       ),
     ],
     ["shipment-tracking", createShipmentTrackingProcessor()],
