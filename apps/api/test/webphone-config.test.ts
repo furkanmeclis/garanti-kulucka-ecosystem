@@ -28,4 +28,28 @@ describe("webphone config serialization", () => {
       transport: "direct_sip_over_webrtc",
     });
   });
+
+  it("keeps SIP/webphone config at the API settings boundary", () => {
+    const record: WebphoneConfigRecord = {
+      user: {
+        public_id: "usr_test",
+        sip_username: "agent100",
+        sip_password_encrypted: "encrypted",
+      },
+      settings: {
+        "webphone.enabled": true,
+        "webphone.sip_websocket_url": "wss://sip.example.com/ws",
+        "webphone.sip_domain": "sip.example.com",
+        "webphone.ice_servers": [{ urls: "stun:stun.example.com:3478" }],
+      },
+    };
+
+    const serialized = serializeWebphoneConfig(record, () => "sip-secret");
+
+    expect(serialized.media_proxy_enabled).toBe(false);
+    expect(serialized.transport).toBe("direct_sip_over_webrtc");
+    expect(serialized).not.toHaveProperty("media_proxy_url");
+    expect(serialized).not.toHaveProperty("rtp_proxy_url");
+    expect(serialized).not.toHaveProperty("worker_media");
+  });
 });

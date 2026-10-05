@@ -37,6 +37,8 @@ function providerPath(envelope: ProviderRequestEnvelope): string {
       return "/meta/messenger/messages";
     case "netgsm:sms.send":
       return "/netgsm/sms";
+    case "vapi:call.create":
+      return "/vapi/calls";
     case "sip:sip.config.sync":
       return "/sip/config/sync";
     case "meta:message.webhook":

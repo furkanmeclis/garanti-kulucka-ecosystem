@@ -99,6 +99,13 @@
       "fixture_file": "vapi/fixtures/call_webhook_minimal.json"
     },
     {
+      "provider": "vapi",
+      "operation": "call.create",
+      "direction": "outbound",
+      "status": "covered",
+      "fixture_file": "vapi/fixtures/call_create_minimal.json"
+    },
+    {
       "provider": "sip",
       "operation": "sip.config.sync",
       "direction": "outbound",

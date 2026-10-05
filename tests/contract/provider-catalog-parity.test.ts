@@ -39,7 +39,8 @@ describe("provider catalog parity", () => {
           provider === "whatsapp" ||
           provider === "instagram" ||
           provider === "messenger" ||
-          provider === "netgsm",
+          provider === "netgsm" ||
+          provider === "vapi",
       );
     }
   });

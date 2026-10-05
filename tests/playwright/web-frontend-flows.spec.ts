@@ -1265,7 +1265,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
             {
               provider: "vapi",
               channels: ["voice"],
-              supported_operations: ["call.webhook"],
+              supported_operations: ["call.webhook", "call.create"],
               contract_mode: "fixture_only",
               live_feature_flag_key: "providers.vapi.live_mode",
               live_call_permitted: false,

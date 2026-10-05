@@ -22,4 +22,9 @@ describe("API provider catalog", () => {
   it("keeps SIP scoped to config sync", () => {
     expect(getApiProviderCatalogItem("sip").supported_operations).toEqual(["sip.config.sync"]);
   });
+
+  it("keeps VAPI test calls out of the provider contract", () => {
+    expect(getApiProviderCatalogItem("vapi").supported_operations).toEqual(["call.webhook", "call.create"]);
+    expect(getApiProviderCatalogItem("vapi").supported_operations).not.toContain("call.test");
+  });
 });

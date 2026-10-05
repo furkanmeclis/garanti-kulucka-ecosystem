@@ -35,7 +35,7 @@ export const apiProviderCatalog: ApiProviderCatalogItem[] = [
   catalogItem("instagram", ["instagram"], ["message.webhook", "message.send"]),
   catalogItem("messenger", ["messenger"], ["message.webhook", "message.send"]),
   catalogItem("netgsm", ["sms"], ["sms.send"]),
-  catalogItem("vapi", ["voice"], ["call.webhook"]),
+  catalogItem("vapi", ["voice"], ["call.webhook", "call.create"]),
   catalogItem("sip", ["sip"], ["sip.config.sync"]),
 ];
 

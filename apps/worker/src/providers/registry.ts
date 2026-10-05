@@ -84,8 +84,8 @@ export const providerAdapters: ProviderAdapterDefinition[] = [
     display_name: "Vapi",
     channels: ["voice"],
     webhook_operations: ["call.webhook"],
-    delivery_operations: [],
-    live_calls_enabled: false,
+    delivery_operations: ["call.create"],
+    live_calls_enabled: true,
   },
   {
     provider: "sip",

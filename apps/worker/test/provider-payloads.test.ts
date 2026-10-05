@@ -57,6 +57,14 @@ describe("provider transport payload builder", () => {
       recipient_phone: "+905550000000",
       message: "Fixture SMS",
     });
+    expect(buildProviderTransportPayload(readFixture("vapi", "call_create_minimal.json")).body).toEqual({
+      customer_phone: "05550000000",
+      customer_name: "Fixture Customer",
+      cargo_provider: "PTT",
+      tracking_number: "PTT fixture tracking",
+      last_event_text: "Subede bekliyor",
+      idempotency_key: "vapi_call_fixture_001",
+    });
   });
 
   it("builds direct messaging send bodies from frozen fixtures", () => {

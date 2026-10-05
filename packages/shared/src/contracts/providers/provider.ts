@@ -20,6 +20,7 @@ export const providerOperationSchema = z.enum([
   "message.send",
   "message.webhook",
   "sms.send",
+  "call.create",
   "call.webhook",
   "sip.config.sync",
 ]);

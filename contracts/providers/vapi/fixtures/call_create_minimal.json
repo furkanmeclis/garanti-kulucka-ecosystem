@@ -1,0 +1,21 @@
+{
+  "request_id": "req_vapi_call_fixture_1",
+  "provider": "vapi",
+  "operation": "call.create",
+  "direction": "outbound",
+  "channel": "voice",
+  "account_public_id": "iac_vapi_fixture",
+  "occurred_at": "2026-09-27T00:00:00.000Z",
+  "payload": {
+    "idempotency_key": "vapi_call_fixture_001",
+    "customer_phone": "05550000000",
+    "customer_name": "Fixture Customer",
+    "cargo_provider": "PTT",
+    "tracking_number": "PTT fixture tracking",
+    "last_event_text": "Subede bekliyor"
+  },
+  "legacy_contract": {
+    "source": "legacy-vapi-kargo-call",
+    "fixture_name": "vapi_call_create_minimal"
+  }
+}

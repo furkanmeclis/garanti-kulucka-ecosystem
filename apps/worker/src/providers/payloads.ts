@@ -70,6 +70,15 @@ function buildBody(envelope: ProviderRequestEnvelope): Record<string, unknown> {
       };
     case "sms.send":
       return pick(payload, ["recipient_phone", "message", "idempotency_key"]);
+    case "call.create":
+      return pick(payload, [
+        "customer_phone",
+        "customer_name",
+        "cargo_provider",
+        "tracking_number",
+        "last_event_text",
+        "idempotency_key",
+      ]);
     case "call.webhook":
       return pick(payload, ["type", "call"]);
     case "sip.config.sync":
