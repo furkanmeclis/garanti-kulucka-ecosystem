@@ -2,6 +2,12 @@ import { createHash } from "node:crypto";
 import { upsertLegacyIdMap } from "./id-map.js";
 import { toSafeMigratorError } from "./errors.js";
 import {
+  transformLegacyConversation,
+  transformLegacyMessage,
+  type VerifiedConversationAccount,
+  type MessageTransformationResult,
+} from "./conversation-mapping.js";
+import {
   resolveCustomerExternalIdentities,
   transformLegacyCustomer,
   type VerifiedIntegrationAccount,
@@ -9,9 +15,11 @@ import {
 import type {
   BatchReadOptions,
   CanonicalRecord,
+  ConversationCanonicalRecord,
   CustomerAddressCanonicalRecord,
   CustomerExternalIdentityCanonicalRecord,
   LegacyRecord,
+  MessageCanonicalRecord,
   MigrationBatch,
   MigrationBatchApplyResult,
   MigrationTarget,
@@ -35,6 +43,22 @@ export interface ApplyCustomerMigrationBatchInput {
   readonly runId: string;
   readonly batch: MigrationBatch;
   readonly integrationAccounts: readonly VerifiedIntegrationAccount[];
+}
+
+export interface ApplyConversationMigrationBatchInput {
+  readonly source: LegacySource;
+  readonly target: MigrationTarget;
+  readonly runId: string;
+  readonly batch: MigrationBatch;
+  readonly integrationAccounts: readonly VerifiedConversationAccount[];
+  readonly userPublicIds?: ReadonlyMap<string, string>;
+}
+
+export interface ApplyMessageMigrationBatchInput {
+  readonly source: LegacySource;
+  readonly target: MigrationTarget;
+  readonly runId: string;
+  readonly batch: MigrationBatch;
 }
 
 export type LegacyRecordTransformer = (record: LegacyRecord) => CanonicalRecord | null;
@@ -146,6 +170,62 @@ export async function applyCustomerMigrationBatchWithState(
 
   try {
     return await runExclusiveSuccessfulBatchApply(input, applyCustomerMigrationBatch);
+  } catch (error) {
+    const safeError = toSafeMigratorError(error);
+    await input.target.recordMigrationBatchFailed({
+      runId: input.runId,
+      batch: input.batch,
+      error: safeError,
+    });
+    throw safeError;
+  }
+}
+
+export async function applyConversationMigrationBatchWithState(
+  input: ApplyConversationMigrationBatchInput,
+): Promise<MigrationBatchApplyResult> {
+  if (input.batch.entity !== "conversations") {
+    throw new Error(`Conversation writer cannot apply ${input.batch.entity} batches`);
+  }
+
+  const existing = await input.target.findMigrationBatchState({
+    runId: input.runId,
+    batch: input.batch,
+  });
+  if (existing?.status === "succeeded") {
+    return migrationBatchResultFromState(existing);
+  }
+
+  try {
+    return await runExclusiveSuccessfulBatchApply(input, applyConversationMigrationBatch);
+  } catch (error) {
+    const safeError = toSafeMigratorError(error);
+    await input.target.recordMigrationBatchFailed({
+      runId: input.runId,
+      batch: input.batch,
+      error: safeError,
+    });
+    throw safeError;
+  }
+}
+
+export async function applyMessageMigrationBatchWithState(
+  input: ApplyMessageMigrationBatchInput,
+): Promise<MigrationBatchApplyResult> {
+  if (input.batch.entity !== "messages") {
+    throw new Error(`Message writer cannot apply ${input.batch.entity} batches`);
+  }
+
+  const existing = await input.target.findMigrationBatchState({
+    runId: input.runId,
+    batch: input.batch,
+  });
+  if (existing?.status === "succeeded") {
+    return migrationBatchResultFromState(existing);
+  }
+
+  try {
+    return await runExclusiveSuccessfulBatchApply(input, applyMessageMigrationBatch);
   } catch (error) {
     const safeError = toSafeMigratorError(error);
     await input.target.recordMigrationBatchFailed({
@@ -339,6 +419,219 @@ function assertCustomerFanOutTarget(
 >> {
   if (!target.writeCustomerAddressRecord || !target.writeCustomerExternalIdentityRecord) {
     throw new Error("Customer fan-out apply requires a target with FK-resolving customer fan-out writers");
+  }
+}
+
+async function applyConversationMigrationBatch(
+  input: ApplyConversationMigrationBatchInput,
+): Promise<MigrationBatchApplyResult> {
+  assertConversationTarget(input.target);
+  const records = await readExpectedBatch(input);
+  const result = newApplyResult(input.batch, records.length);
+
+  for (const legacyRecord of records) {
+    const customerPublicIds = await resolveRequiredLegacyMap(input.target, {
+      runId: input.runId,
+      sourceSystem: legacyRecord.sourceSystem,
+      sourceTable: "public.musteriler",
+      sourceId: requiredPayloadString(legacyRecord, "musteri_id").toLowerCase(),
+      targetTable: "customers",
+      mappingRole: "primary",
+      errorLabel: "customer",
+    });
+    const conversationResult = transformLegacyConversation(legacyRecord, {
+      customerPublicIds: new Map([[requiredPayloadString(legacyRecord, "musteri_id").toLowerCase(), customerPublicIds]]),
+      userPublicIds: input.userPublicIds ?? new Map(),
+      accounts: input.integrationAccounts,
+    });
+    const conversation = conversationResult.conversation;
+    const conversationRecord: ConversationCanonicalRecord = {
+      targetTable: "conversations",
+      targetId: conversation.publicId,
+      customerPublicId: conversation.customerPublicId,
+      assignedUserPublicId: conversation.assignedUserPublicId,
+      integrationAccountPublicId: conversation.integrationAccountPublicId,
+      checksum: conversationResult.sourcePayloadChecksum,
+      payload: {
+        channel: conversation.channel,
+        external_thread_id: conversation.external_thread_id,
+        status: conversation.status,
+        is_in_pool: conversation.is_in_pool,
+        human_agent_enabled: conversation.human_agent_enabled,
+        unread_count: conversation.unread_count,
+        last_message_text: conversation.last_message_text,
+        last_message_sender_type: conversation.last_message_sender_type,
+        last_message_at: conversation.last_message_at,
+      },
+    };
+
+    await input.target.writeConversationRecord(conversationRecord);
+    result.writtenRows += 1;
+    countIdMapResult(result, await upsertLegacyIdMap(input.target, {
+      runId: input.runId,
+      sourceSystem: legacyRecord.sourceSystem,
+      sourceTable: legacyRecord.sourceTable,
+      sourceId: legacyRecord.sourceId,
+      targetTable: conversationRecord.targetTable,
+      mappingRole: conversation.mappingRole,
+      targetId: conversationRecord.targetId,
+      checksum: conversationRecord.checksum,
+    }));
+  }
+
+  return result;
+}
+
+async function applyMessageMigrationBatch(
+  input: ApplyMessageMigrationBatchInput,
+): Promise<MigrationBatchApplyResult> {
+  assertMessageTarget(input.target);
+  const records = await readExpectedBatch(input);
+  const result = newApplyResult(input.batch, records.length);
+  const transformed: {
+    readonly legacyRecord: LegacyRecord;
+    readonly result: MessageTransformationResult;
+  }[] = [];
+
+  for (const legacyRecord of records) {
+    const legacyConversationId = requiredPayloadString(legacyRecord, "konusma_id").toLowerCase();
+    const conversationPublicId = await resolveRequiredLegacyMap(input.target, {
+      runId: input.runId,
+      sourceSystem: legacyRecord.sourceSystem,
+      sourceTable: "public.konusmalar",
+      sourceId: legacyConversationId,
+      targetTable: "conversations",
+      mappingRole: "primary",
+      errorLabel: "conversation",
+    });
+    transformed.push({
+      legacyRecord,
+      result: transformLegacyMessage(legacyRecord, {
+        conversationPublicIds: new Map([[legacyConversationId, conversationPublicId]]),
+      }),
+    });
+  }
+
+  transformed.sort((left, right) =>
+    left.result.message.sentAt.localeCompare(right.result.message.sentAt)
+    || left.legacyRecord.sourceId.localeCompare(right.legacyRecord.sourceId),
+  );
+
+  for (const item of transformed) {
+    const message = item.result.message;
+    const rawPayload = message.rawPayload === null ? null : { ...message.rawPayload };
+    assertMappedLegacyMessageRawPayload(rawPayload);
+    const messageRecord: MessageCanonicalRecord = {
+      targetTable: "messages",
+      targetId: message.publicId,
+      conversationPublicId: message.conversationPublicId,
+      checksum: item.result.sourcePayloadChecksum,
+      payload: {
+        sender_type: message.sender_type,
+        body: message.body,
+        external_message_id: message.external_message_id,
+        is_read: message.is_read,
+        sent_at: message.sentAt,
+        raw_payload: rawPayload,
+      },
+    };
+
+    await input.target.writeMessageRecord(messageRecord);
+    result.writtenRows += 1;
+    countIdMapResult(result, await upsertLegacyIdMap(input.target, {
+      runId: input.runId,
+      sourceSystem: item.legacyRecord.sourceSystem,
+      sourceTable: item.legacyRecord.sourceTable,
+      sourceId: item.legacyRecord.sourceId,
+      targetTable: messageRecord.targetTable,
+      mappingRole: message.mappingRole,
+      targetId: messageRecord.targetId,
+      checksum: messageRecord.checksum,
+    }));
+  }
+
+  return result;
+}
+
+async function readExpectedBatch(input: ApplyMigrationBatchInput): Promise<LegacyRecord[]> {
+  const readOptions: BatchReadOptions = {
+    limit: input.batch.limit,
+    ...(input.batch.offset > 0 ? { offset: input.batch.offset } : {}),
+  };
+  const records = await input.source.readBatch(input.batch.entity, readOptions);
+  if (records.length !== input.batch.expectedRows) {
+    throw new Error(
+      `Migration batch short read for ${input.batch.entity} batch ${input.batch.batchNumber}: expected ${input.batch.expectedRows}, received ${records.length}`,
+    );
+  }
+  return records;
+}
+
+function newApplyResult(batch: MigrationBatch, readRows: number): MutableMigrationBatchApplyResult {
+  return {
+    entity: batch.entity,
+    batchNumber: batch.batchNumber,
+    readRows,
+    writtenRows: 0,
+    skippedRows: 0,
+    idMapCreated: 0,
+    idMapUpdated: 0,
+    idMapUnchanged: 0,
+    warnings: [],
+  };
+}
+
+async function resolveRequiredLegacyMap(
+  target: MigrationTarget,
+  input: {
+    readonly runId: string;
+    readonly sourceSystem: string;
+    readonly sourceTable: string;
+    readonly sourceId: string;
+    readonly targetTable: string;
+    readonly mappingRole: string;
+    readonly errorLabel: string;
+  },
+): Promise<string> {
+  const entry = await target.findLegacyIdMap(input);
+  if (!entry) {
+    throw new Error(
+      `Cannot resolve ${input.errorLabel} legacy id ${input.sourceTable}.${input.sourceId} from legacy_id_map`,
+    );
+  }
+  return entry.targetId;
+}
+
+function requiredPayloadString(record: LegacyRecord, field: string): string {
+  const value = record.payload[field];
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error(`Cannot resolve apply prerequisite from non-string legacy field ${field}`);
+  }
+  return value;
+}
+
+function assertConversationTarget(
+  target: MigrationTarget,
+): asserts target is MigrationTarget & Required<Pick<MigrationTarget, "writeConversationRecord">> {
+  if (!target.writeConversationRecord) {
+    throw new Error("Conversation apply requires a target with FK-resolving conversation writer");
+  }
+}
+
+function assertMessageTarget(
+  target: MigrationTarget,
+): asserts target is MigrationTarget & Required<Pick<MigrationTarget, "writeMessageRecord">> {
+  if (!target.writeMessageRecord) {
+    throw new Error("Message apply requires a target with FK-resolving message writer");
+  }
+}
+
+function assertMappedLegacyMessageRawPayload(rawPayload: Record<string, unknown> | null): void {
+  if (rawPayload === null) return;
+  const allowed = new Set(["medya_url", "medya_tipi", "gonderici_id"]);
+  const unmapped = Object.keys(rawPayload).filter((key) => !allowed.has(key)).sort();
+  if (unmapped.length > 0) {
+    throw new Error(`Message apply found unmapped legacy media/raw payload fields: ${unmapped.join(", ")}`);
   }
 }
 

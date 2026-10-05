@@ -10,11 +10,13 @@ import { assertMigrationRunId } from "./source-manifest.js";
 import type {
   CanonicalRecord,
   CanonicalWriteResult,
+  ConversationCanonicalRecord,
   CustomerAddressCanonicalRecord,
   CustomerExternalIdentityCanonicalRecord,
   LegacyIdMapEntry,
   LegacyIdMapKey,
   LegacyIdMapWrite,
+  MessageCanonicalRecord,
   MigrationBatchState,
   MigrationBatchStateKey,
   MigrationBatchStateFailure,
@@ -145,8 +147,61 @@ export class DatabaseMigrationTarget implements MigrationTarget {
     });
   }
 
+  async writeConversationRecord(input: ConversationCanonicalRecord): Promise<CanonicalWriteResult> {
+    const customerId = await this.findRequiredPublicId("customers", input.customerPublicId, "customer");
+    const assignedUserId = input.assignedUserPublicId === null
+      ? null
+      : await this.findRequiredPublicId("users", input.assignedUserPublicId, "assigned user");
+    const integrationAccountId = input.integrationAccountPublicId === null
+      ? null
+      : await this.findRequiredIntegrationAccountForChannel(input.integrationAccountPublicId, input.payload.channel);
+
+    return this.writeResolvedRecord({
+      targetTable: input.targetTable,
+      targetId: input.targetId,
+      checksum: input.checksum,
+      payload: {
+        customer_id: customerId,
+        assigned_user_id: assignedUserId,
+        integration_account_id: integrationAccountId,
+        channel: input.payload.channel,
+        external_thread_id: input.payload.external_thread_id,
+        status: input.payload.status,
+        is_in_pool: input.payload.is_in_pool,
+        human_agent_enabled: input.payload.human_agent_enabled,
+        unread_count: input.payload.unread_count,
+        last_message_text: input.payload.last_message_text,
+        last_message_sender_type: input.payload.last_message_sender_type,
+        last_message_at: input.payload.last_message_at,
+      },
+    });
+  }
+
+  async writeMessageRecord(input: MessageCanonicalRecord): Promise<CanonicalWriteResult> {
+    const conversationId = await this.findRequiredPublicId(
+      "conversations",
+      input.conversationPublicId,
+      "conversation",
+    );
+
+    return this.writeResolvedRecord({
+      targetTable: input.targetTable,
+      targetId: input.targetId,
+      checksum: input.checksum,
+      payload: {
+        conversation_id: conversationId,
+        sender_type: input.payload.sender_type,
+        body: input.payload.body,
+        external_message_id: input.payload.external_message_id,
+        is_read: input.payload.is_read,
+        sent_at: input.payload.sent_at,
+        raw_payload: input.payload.raw_payload === null ? null : jsonb(input.payload.raw_payload),
+      },
+    });
+  }
+
   private async findRequiredPublicId(
-    table: "customers" | "integration_accounts",
+    table: "customers" | "integration_accounts" | "conversations" | "users",
     publicId: string,
     label: string,
   ): Promise<number> {
@@ -158,9 +213,31 @@ export class DatabaseMigrationTarget implements MigrationTarget {
       .executeTakeFirst();
     const id = row?.id;
     if (typeof id !== "number") {
-      throw new Error(`Cannot resolve ${label} public id ${publicId} for customer fan-out write`);
+      throw new Error(`Cannot resolve ${label} public id ${publicId} for FK-resolving migration write`);
     }
     return id;
+  }
+
+  private async findRequiredIntegrationAccountForChannel(publicId: string, channel: string): Promise<number> {
+    if (channel !== "whatsapp" && channel !== "instagram" && channel !== "messenger") {
+      throw new Error(`Cannot attach ${channel} conversation to integration account ${publicId}`);
+    }
+
+    const row = await this.db
+      .selectFrom("integration_accounts as account")
+      .innerJoin("integration_providers as provider", "provider.id", "account.provider_id")
+      .select(["account.id as id", "provider.key as providerKey"])
+      .where("account.public_id", "=", publicId)
+      .executeTakeFirst();
+    if (!row || typeof row.id !== "number" || typeof row.providerKey !== "string") {
+      throw new Error(`Cannot resolve integration account public id ${publicId} for FK-resolving migration write`);
+    }
+    if (row.providerKey !== channel) {
+      throw new Error(
+        `Conversation channel ${channel} does not match integration account ${publicId} provider ${row.providerKey}`,
+      );
+    }
+    return row.id;
   }
 
   private async writeResolvedRecord(input: CanonicalRecord): Promise<CanonicalWriteResult> {

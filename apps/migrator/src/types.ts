@@ -115,6 +115,8 @@ export interface MigrationTarget {
   writeCanonicalRecord(input: CanonicalRecord): Promise<CanonicalWriteResult>;
   writeCustomerAddressRecord?(input: CustomerAddressCanonicalRecord): Promise<CanonicalWriteResult>;
   writeCustomerExternalIdentityRecord?(input: CustomerExternalIdentityCanonicalRecord): Promise<CanonicalWriteResult>;
+  writeConversationRecord?(input: ConversationCanonicalRecord): Promise<CanonicalWriteResult>;
+  writeMessageRecord?(input: MessageCanonicalRecord): Promise<CanonicalWriteResult>;
   findLegacyIdMap(input: LegacyIdMapKey): Promise<LegacyIdMapEntry | null>;
   upsertLegacyIdMap(input: LegacyIdMapWrite): Promise<LegacyIdMapEntry>;
   findMigrationBatchState(input: MigrationBatchStateKey): Promise<MigrationBatchState | null>;
@@ -150,6 +152,41 @@ export interface CustomerExternalIdentityCanonicalRecord {
     readonly metadata: Record<string, unknown>;
   };
   readonly checksum: string;
+}
+
+export interface ConversationCanonicalRecord {
+  readonly targetTable: "conversations";
+  readonly targetId: string;
+  readonly customerPublicId: string;
+  readonly assignedUserPublicId: string | null;
+  readonly integrationAccountPublicId: string | null;
+  readonly checksum: string;
+  readonly payload: {
+    readonly channel: string;
+    readonly external_thread_id: string | null;
+    readonly status: string;
+    readonly is_in_pool: boolean;
+    readonly human_agent_enabled: boolean;
+    readonly unread_count: number;
+    readonly last_message_text: string | null;
+    readonly last_message_sender_type: string | null;
+    readonly last_message_at: string | null;
+  };
+}
+
+export interface MessageCanonicalRecord {
+  readonly targetTable: "messages";
+  readonly targetId: string;
+  readonly conversationPublicId: string;
+  readonly checksum: string;
+  readonly payload: {
+    readonly sender_type: string;
+    readonly body: string;
+    readonly external_message_id: string | null;
+    readonly is_read: boolean;
+    readonly sent_at: string;
+    readonly raw_payload: Record<string, unknown> | null;
+  };
 }
 
 export interface MigrationRunRegistration {

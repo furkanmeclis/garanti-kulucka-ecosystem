@@ -33,6 +33,8 @@ const targetReadinessValues = new Set<string>(["dry-run", "apply-ready", "descri
 const applyPrerequisites: Partial<Record<MigrationEntity, readonly MigrationEntity[]>> = {
   // Customer drafts fan out into identity/address targets; apply stays closed until both are executable.
   customers: ["customer_external_identities", "customer_addresses"],
+  conversations: ["customers"],
+  messages: ["conversations"],
 };
 
 export const legacyMappingCatalog = createLegacyMappingCatalog({
@@ -357,7 +359,7 @@ export function assertApplyPrerequisites(
   for (const entity of entities) {
     for (const prerequisite of applyPrerequisites[entity] ?? []) {
       const prerequisiteReadiness = readiness.get(prerequisite);
-      if (prerequisiteReadiness === undefined || prerequisiteReadiness !== "apply-ready") {
+      if (prerequisiteReadiness === undefined || prerequisiteReadiness === "descriptive") {
         throw new Error(
           `Migration entity ${entity} cannot be applied while ${prerequisite} is ${prerequisiteReadiness ?? "undeclared"} in catalog`,
         );

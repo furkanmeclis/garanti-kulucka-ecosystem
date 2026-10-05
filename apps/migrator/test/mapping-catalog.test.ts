@@ -303,6 +303,23 @@ describe("legacy mapping catalog", () => {
     );
   });
 
+  it("declares conversation and message apply prerequisites in dependency order", () => {
+    expect(() => assertApplyPrerequisites(legacyMappingCatalog, ["conversations"])).not.toThrow();
+    expect(() => assertApplyPrerequisites(legacyMappingCatalog, ["messages"])).not.toThrow();
+    expect(() => assertApplyPrerequisites(createLegacyMappingCatalog({
+      ...legacyMappingCatalog,
+      tables: legacyMappingCatalog.tables.filter((table) => table.sourceTable !== "public.musteriler"),
+    }), ["conversations"])).toThrow(
+      "Migration entity conversations cannot be applied while customers is undeclared in catalog",
+    );
+    expect(() => assertApplyPrerequisites(createLegacyMappingCatalog({
+      ...legacyMappingCatalog,
+      tables: legacyMappingCatalog.tables.filter((table) => table.sourceTable !== "public.konusmalar"),
+    }), ["messages"])).toThrow(
+      "Migration entity messages cannot be applied while conversations is undeclared in catalog",
+    );
+  });
+
   it.each([
     ["source table", catalogWith({ sourceTable: "musteriler" }, { sourceTable: "public.musteriler" }),
       "duplicate source table public.musteriler"],
