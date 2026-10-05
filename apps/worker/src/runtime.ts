@@ -9,6 +9,11 @@ import {
   type WorkerProcessorRegistry,
 } from "./processors.js";
 import { DatabaseProviderAttemptRepository, type ProviderAttemptRepository } from "./providers/attempts.js";
+import {
+  DatabaseProviderAccountConfigRepository,
+  type ProviderAccountConfigRepository,
+} from "./providers/account-config.js";
+import { createSecretDecryptor } from "./providers/encryption.js";
 
 export interface WorkerRuntime {
   connection: Redis;
@@ -23,6 +28,7 @@ export interface WorkerRuntimeOptions {
   databaseUrl?: string | null;
   lifecycleRecorder?: WorkerLifecycleRecorder;
   providerAttemptRepository?: ProviderAttemptRepository;
+  providerAccountConfigRepository?: ProviderAccountConfigRepository;
 }
 
 export function createWorkerRuntime(options: WorkerRuntimeOptions): WorkerRuntime {
@@ -34,6 +40,13 @@ export function createWorkerRuntime(options: WorkerRuntimeOptions): WorkerRuntim
   const providerAttemptRepository =
     options.providerAttemptRepository ??
     (db ? new DatabaseProviderAttemptRepository(db) : undefined);
+  const decryptor = createSecretDecryptor(
+    process.env.APP_ENCRYPTION_KEY ?? "local-development-encryption-key-change-me",
+    process.env.APP_ENCRYPTION_KEY_ID ?? "default",
+  );
+  const providerAccountConfigRepository =
+    options.providerAccountConfigRepository ??
+    (db ? new DatabaseProviderAccountConfigRepository(db, decryptor) : undefined);
   const registry = createWorkerProcessorRegistry({
     lifecycleRecorder:
       options.lifecycleRecorder ??
@@ -41,6 +54,7 @@ export function createWorkerRuntime(options: WorkerRuntimeOptions): WorkerRuntim
         options.logger.info(event, "Worker job lifecycle event");
       }),
     ...(providerAttemptRepository ? { providerAttemptRepository } : {}),
+    ...(providerAccountConfigRepository ? { providerAccountConfigRepository } : {}),
   });
 
   const workers = new Map<QueueName, Worker<JobEnvelope>>();

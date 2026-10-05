@@ -31,7 +31,8 @@ describe("provider catalog parity", () => {
         ]),
       );
       expect(apiItem.contract_mode).toBe("fixture_only");
-      expect(workerAdapter?.live_calls_enabled).toBe(false);
+      expect(apiItem.live_call_permitted).toBe(false);
+      expect(workerAdapter?.live_calls_enabled).toBe(provider === "ptt");
     }
   });
 });

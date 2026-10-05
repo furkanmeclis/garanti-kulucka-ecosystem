@@ -53,10 +53,11 @@ function providerDeliveryJob(overrides: Record<string, unknown> = {}) {
           direction: "outbound",
           channel: "cargo",
           occurred_at: now,
-          payload: {
-            order_public_id: "ord_1",
-          },
+        payload: {
+          order_public_id: "ord_1",
+          idempotency_key: "shipment_1",
         },
+      },
       },
       ...overrides,
     },

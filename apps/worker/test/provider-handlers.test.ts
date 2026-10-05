@@ -7,7 +7,7 @@ import { findProviderAdapter, providerAdapters } from "../src/providers/registry
 const now = new Date().toISOString();
 
 describe("provider adapter registry", () => {
-  it("registers all provider boundaries as fixture-only adapters", () => {
+  it("registers provider boundaries and marks only PTT as live-capable", () => {
     expect(providerAdapters.map((adapter) => adapter.provider)).toEqual([
       "ptt",
       "surat",
@@ -20,7 +20,7 @@ describe("provider adapter registry", () => {
       "vapi",
       "sip",
     ]);
-    expect(providerAdapters.every((adapter) => adapter.live_calls_enabled === false)).toBe(true);
+    expect(providerAdapters.filter((adapter) => adapter.live_calls_enabled).map((adapter) => adapter.provider)).toEqual(["ptt"]);
   });
 
   it("models SIP as config sync rather than a live provider call", () => {

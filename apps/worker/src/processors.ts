@@ -9,12 +9,16 @@ import { validateJobEnvelope } from "./queues.js";
 import {
   createProviderFailureAttempt,
   handleProviderDeliveryJob,
+  handleProviderDeliveryJobWithTransport,
   handleProviderWebhookJob,
+  isProviderLiveTransportError,
 } from "./providers/handlers.js";
 import type { ProviderAttemptRepository } from "./providers/attempts.js";
+import type { ProviderAccountConfigRepository } from "./providers/account-config.js";
 import { assertProviderEnvelope } from "./providers/registry.js";
 import { buildProviderDryRunRequest } from "./providers/dry-run-transport.js";
 import { providerTransportPolicyFor } from "./providers/transport-policy.js";
+import type { PttFetchTransport } from "./providers/ptt.js";
 
 export type WorkerLifecycleEventName = "started" | "completed" | "failed";
 
@@ -93,6 +97,8 @@ export interface WorkerProcessorRegistry {
 export interface WorkerProcessorRegistryOptions {
   lifecycleRecorder?: WorkerLifecycleRecorder;
   providerAttemptRepository?: ProviderAttemptRepository;
+  providerAccountConfigRepository?: ProviderAccountConfigRepository;
+  pttTransport?: PttFetchTransport;
 }
 
 export const workerQueueNames: QueueName[] = [
@@ -223,6 +229,8 @@ function createProviderWebhookProcessor(
 
 function createProviderDeliveryProcessor(
   providerAttemptRepository?: ProviderAttemptRepository,
+  providerAccountConfigRepository?: ProviderAccountConfigRepository,
+  pttTransport?: PttFetchTransport,
 ): QueueProcessor {
   return async (job) => {
     const envelope = assertJobMatchesQueue("provider-delivery", job);
@@ -232,15 +240,27 @@ function createProviderDeliveryProcessor(
     );
     let result;
     try {
-      result = handleProviderDeliveryJob(envelope);
+      if (providerAccountConfigRepository) {
+        result = await handleProviderDeliveryJobWithTransport(envelope, {
+          accountConfigRepository: providerAccountConfigRepository,
+          ...(pttTransport ? { pttTransport } : {}),
+          ...providerFailureInputFromJob(job),
+        });
+      } else {
+        result = handleProviderDeliveryJob(envelope);
+      }
     } catch (error) {
-      await persistProviderFailureAttempt(
-        providerAttemptRepository,
-        requestEnvelope,
-        envelope,
-        job,
-        error,
-      );
+      if (providerAttemptRepository && isProviderLiveTransportError(error)) {
+        await providerAttemptRepository.persist(error.attempt);
+      } else {
+        await persistProviderFailureAttempt(
+          providerAttemptRepository,
+          requestEnvelope,
+          envelope,
+          job,
+          error,
+        );
+      }
       throw error;
     }
     await providerAttemptRepository?.persist(result.attempt);
@@ -427,9 +447,20 @@ export function createWorkerProcessorRegistry(
     typeof options === "function" ? options : options.lifecycleRecorder ?? (() => undefined);
   const providerAttemptRepository =
     typeof options === "function" ? undefined : options.providerAttemptRepository;
+  const providerAccountConfigRepository =
+    typeof options === "function" ? undefined : options.providerAccountConfigRepository;
+  const pttTransport =
+    typeof options === "function" ? undefined : options.pttTransport;
   const processors = new Map<QueueName, QueueProcessor>([
     ["provider-webhooks", createProviderWebhookProcessor(providerAttemptRepository)],
-    ["provider-delivery", createProviderDeliveryProcessor(providerAttemptRepository)],
+    [
+      "provider-delivery",
+      createProviderDeliveryProcessor(
+        providerAttemptRepository,
+        providerAccountConfigRepository,
+        pttTransport,
+      ),
+    ],
     ["shipment-tracking", createShipmentTrackingProcessor()],
     ["ai-replies", createAiReplyProcessor()],
     ["migration-reports", createMigrationReportProcessor()],

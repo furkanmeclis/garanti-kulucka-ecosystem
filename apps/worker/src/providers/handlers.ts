@@ -2,7 +2,6 @@ import {
   type JobEnvelope,
   type ProviderAttempt,
   type ProviderName,
-  type ProviderOperation,
   type ProviderRequestEnvelope,
   providerDeliveryJobPayloadSchema,
   providerAttemptSchema,
@@ -13,105 +12,52 @@ import { assertProviderEnvelope } from "./registry.js";
 import { buildProviderDryRunRequest } from "./dry-run-transport.js";
 import { buildProviderTransportPayload } from "./payloads.js";
 import { providerTransportPolicyFor } from "./transport-policy.js";
+import {
+  decideProviderRetry,
+  type ProviderFailureInput,
+  type ProviderRetryDecision,
+  type ProviderRetryReason,
+} from "./retry.js";
+import type { ProviderAccountConfigRepository } from "./account-config.js";
+import { PttLiveTransportError, sendPttLiveRequest, type PttFetchTransport } from "./ptt.js";
+
+export { decideProviderRetry, type ProviderFailureInput, type ProviderRetryDecision, type ProviderRetryReason };
 
 export interface ProviderJobHandlingResult {
   provider: ProviderName;
   request_id: string;
   queue: "provider-webhooks" | "provider-delivery";
-  status: "accepted_fixture";
-  live_call_performed: false;
+  status: "accepted_fixture" | "accepted_live";
+  live_call_performed: boolean;
   attempt: ProviderAttempt;
 }
 
-export interface ProviderFailureInput {
-  operation: ProviderOperation;
-  status_code?: number | null;
-  error_code?: string | null;
-  attempt_number: number;
-  max_attempts: number;
-  idempotency_key?: string | null;
+export interface ProviderDeliveryHandlerOptions {
+  accountConfigRepository?: ProviderAccountConfigRepository;
+  pttTransport?: PttFetchTransport;
+  attemptNumber?: number;
+  maxAttempts?: number;
+  now?: Date;
 }
 
-export type ProviderRetryDecision = Pick<
-  ProviderAttempt,
-  "status" | "retry_decision" | "next_retry_at"
-> & {
-  error_retryable: boolean;
-  reason: ProviderRetryReason;
-  attempts_remaining: number;
-  retry_delay_ms: number | null;
-};
-
-export type ProviderRetryReason =
-  | "retryable_status_code"
-  | "retryable_error_code"
-  | "missing_idempotency_key"
-  | "attempts_exhausted"
-  | "terminal_status_code"
-  | "terminal_error";
-
-const nonIdempotentOperations = new Set<ProviderOperation>([
-  "invoice.create",
-  "message.send",
-  "sms.send",
-]);
-
-function classifyProviderFailure(input: ProviderFailureInput): {
-  retryable: boolean;
-  reason: ProviderRetryReason;
-} {
-  if (
-    nonIdempotentOperations.has(input.operation) &&
-    (!input.idempotency_key || input.idempotency_key.trim().length === 0)
-  ) {
-    return { retryable: false, reason: "missing_idempotency_key" };
+function numericAccountSetting(
+  settings: Record<string, unknown>,
+  keys: string[],
+): number | null {
+  for (const key of keys) {
+    const value = settings[key];
+    if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+      return value;
+    }
+    if (typeof value === "string") {
+      const parsed = Number.parseInt(value, 10);
+      if (Number.isFinite(parsed) && parsed > 0) {
+        return parsed;
+      }
+    }
   }
 
-  if (input.status_code === 408 || input.status_code === 429) {
-    return { retryable: true, reason: "retryable_status_code" };
-  }
-
-  if (typeof input.status_code === "number" && input.status_code >= 500) {
-    return { retryable: true, reason: "retryable_status_code" };
-  }
-
-  if (input.error_code === "timeout" || input.error_code === "network_error") {
-    return { retryable: true, reason: "retryable_error_code" };
-  }
-
-  if (typeof input.status_code === "number") {
-    return { retryable: false, reason: "terminal_status_code" };
-  }
-
-  return { retryable: false, reason: "terminal_error" };
-}
-
-export function decideProviderRetry(input: ProviderFailureInput, now = new Date()): ProviderRetryDecision {
-  const { retryable, reason } = classifyProviderFailure(input);
-  const attemptsRemaining = input.attempt_number < input.max_attempts;
-
-  if (retryable && attemptsRemaining) {
-    const delayMs = Math.min(60_000, 2 ** Math.max(0, input.attempt_number - 1) * 2_000);
-    return {
-      status: "retryable_failure",
-      retry_decision: "retry",
-      next_retry_at: new Date(now.getTime() + delayMs).toISOString(),
-      error_retryable: true,
-      reason,
-      attempts_remaining: Math.max(0, input.max_attempts - input.attempt_number),
-      retry_delay_ms: delayMs,
-    };
-  }
-
-  return {
-    status: "terminal_failure",
-    retry_decision: "dead_letter",
-    next_retry_at: null,
-    error_retryable: retryable,
-    reason: retryable ? "attempts_exhausted" : reason,
-    attempts_remaining: Math.max(0, input.max_attempts - input.attempt_number),
-    retry_delay_ms: null,
-  };
+  return null;
 }
 
 export function createProviderFailureAttempt(
@@ -267,4 +213,71 @@ export function handleProviderDeliveryJob(job: JobEnvelope): ProviderJobHandling
     live_call_performed: false,
     attempt: createFixtureAttempt(payload.envelope, job, "provider-delivery"),
   };
+}
+
+export async function handleProviderDeliveryJobWithTransport(
+  job: JobEnvelope,
+  options: ProviderDeliveryHandlerOptions = {},
+): Promise<ProviderJobHandlingResult> {
+  if (job.queue !== "provider-delivery") {
+    throw new Error(`Delivery handler received unexpected queue: ${job.queue}`);
+  }
+
+  const payload = providerDeliveryJobPayloadSchema.parse(job.payload);
+  assertProviderEnvelope(payload.envelope, "delivery");
+
+  const accountConfig = await options.accountConfigRepository?.getAccountConfig(
+    payload.envelope.provider,
+    payload.envelope.account_public_id,
+  );
+  const policy = providerTransportPolicyFor(payload.envelope, {
+    liveModeEnabled: accountConfig?.live_mode ?? false,
+    timeoutMs: accountConfig
+      ? numericAccountSetting(accountConfig.settings, ["timeout_ms", "ptt.timeout_ms"])
+      : null,
+    maxAttempts: accountConfig
+      ? numericAccountSetting(accountConfig.settings, ["max_attempts", "ptt.max_attempts"])
+      : null,
+  });
+
+  if (
+    payload.envelope.provider !== "ptt" ||
+    !accountConfig ||
+    !policy.live_call_permitted
+  ) {
+    return handleProviderDeliveryJob(job);
+  }
+
+  const liveResult = await sendPttLiveRequest({
+    envelope: payload.envelope,
+    job,
+    accountConfig,
+    policy,
+    attemptNumber: options.attemptNumber ?? 1,
+    maxAttempts: options.maxAttempts ?? policy.max_attempts,
+    ...(options.pttTransport ? { transport: options.pttTransport } : {}),
+    ...(options.now ? { now: options.now } : {}),
+  });
+
+  providerResponseEnvelopeSchema.parse({
+    request_id: payload.envelope.request_id,
+    provider: payload.envelope.provider,
+    operation: payload.envelope.operation,
+    status: "accepted",
+    occurred_at: new Date().toISOString(),
+    payload: liveResult.response_payload,
+  });
+
+  return {
+    provider: payload.envelope.provider,
+    request_id: payload.envelope.request_id,
+    queue: "provider-delivery",
+    status: "accepted_live",
+    live_call_performed: true,
+    attempt: liveResult.attempt,
+  };
+}
+
+export function isProviderLiveTransportError(error: unknown): error is PttLiveTransportError {
+  return error instanceof PttLiveTransportError;
 }

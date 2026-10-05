@@ -11,7 +11,7 @@ export interface ProviderAdapterDefinition {
   channels: ProviderChannel[];
   webhook_operations: ProviderOperation[];
   delivery_operations: ProviderOperation[];
-  live_calls_enabled: false;
+  live_calls_enabled: boolean;
 }
 
 export const providerAdapters: ProviderAdapterDefinition[] = [
@@ -21,7 +21,7 @@ export const providerAdapters: ProviderAdapterDefinition[] = [
     channels: ["cargo"],
     webhook_operations: [],
     delivery_operations: ["shipment.create", "shipment.track"],
-    live_calls_enabled: false,
+    live_calls_enabled: true,
   },
   {
     provider: "surat",
