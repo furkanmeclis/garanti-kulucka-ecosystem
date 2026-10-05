@@ -22,6 +22,8 @@ import type { PttFetchTransport } from "./providers/ptt.js";
 import type { SuratFetchTransport } from "./providers/surat.js";
 import type { KolaybiFetchTransport } from "./providers/kolaybi.js";
 import type { WhatsappFetchTransport } from "./providers/whatsapp.js";
+import type { InstagramFetchTransport } from "./providers/instagram.js";
+import type { MessengerFetchTransport } from "./providers/messenger.js";
 
 export type WorkerLifecycleEventName = "started" | "completed" | "failed";
 
@@ -105,6 +107,8 @@ export interface WorkerProcessorRegistryOptions {
   suratTransport?: SuratFetchTransport;
   kolaybiTransport?: KolaybiFetchTransport;
   whatsappTransport?: WhatsappFetchTransport;
+  instagramTransport?: InstagramFetchTransport;
+  messengerTransport?: MessengerFetchTransport;
 }
 
 export const workerQueueNames: QueueName[] = [
@@ -240,6 +244,8 @@ function createProviderDeliveryProcessor(
   suratTransport?: SuratFetchTransport,
   kolaybiTransport?: KolaybiFetchTransport,
   whatsappTransport?: WhatsappFetchTransport,
+  instagramTransport?: InstagramFetchTransport,
+  messengerTransport?: MessengerFetchTransport,
 ): QueueProcessor {
   return async (job) => {
     const envelope = assertJobMatchesQueue("provider-delivery", job);
@@ -256,6 +262,8 @@ function createProviderDeliveryProcessor(
           ...(suratTransport ? { suratTransport } : {}),
           ...(kolaybiTransport ? { kolaybiTransport } : {}),
           ...(whatsappTransport ? { whatsappTransport } : {}),
+          ...(instagramTransport ? { instagramTransport } : {}),
+          ...(messengerTransport ? { messengerTransport } : {}),
           ...providerFailureInputFromJob(job),
         });
       } else {
@@ -469,6 +477,10 @@ export function createWorkerProcessorRegistry(
     typeof options === "function" ? undefined : options.kolaybiTransport;
   const whatsappTransport =
     typeof options === "function" ? undefined : options.whatsappTransport;
+  const instagramTransport =
+    typeof options === "function" ? undefined : options.instagramTransport;
+  const messengerTransport =
+    typeof options === "function" ? undefined : options.messengerTransport;
   const processors = new Map<QueueName, QueueProcessor>([
     ["provider-webhooks", createProviderWebhookProcessor(providerAttemptRepository)],
     [
@@ -480,6 +492,8 @@ export function createWorkerProcessorRegistry(
         suratTransport,
         kolaybiTransport,
         whatsappTransport,
+        instagramTransport,
+        messengerTransport,
       ),
     ],
     ["shipment-tracking", createShipmentTrackingProcessor()],

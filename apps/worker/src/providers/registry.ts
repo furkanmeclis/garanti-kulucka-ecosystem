@@ -61,7 +61,7 @@ export const providerAdapters: ProviderAdapterDefinition[] = [
     channels: ["instagram"],
     webhook_operations: ["message.webhook"],
     delivery_operations: ["message.send"],
-    live_calls_enabled: false,
+    live_calls_enabled: true,
   },
   {
     provider: "messenger",
@@ -69,7 +69,7 @@ export const providerAdapters: ProviderAdapterDefinition[] = [
     channels: ["messenger"],
     webhook_operations: ["message.webhook"],
     delivery_operations: ["message.send"],
-    live_calls_enabled: false,
+    live_calls_enabled: true,
   },
   {
     provider: "netgsm",

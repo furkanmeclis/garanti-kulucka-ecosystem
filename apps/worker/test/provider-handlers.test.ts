@@ -7,7 +7,7 @@ import { findProviderAdapter, providerAdapters } from "../src/providers/registry
 const now = new Date().toISOString();
 
 describe("provider adapter registry", () => {
-  it("registers provider boundaries and marks PTT, Sürat, KolayBi, and WhatsApp as live-capable", () => {
+  it("registers provider boundaries and marks live-capable providers", () => {
     expect(providerAdapters.map((adapter) => adapter.provider)).toEqual([
       "ptt",
       "surat",
@@ -20,7 +20,7 @@ describe("provider adapter registry", () => {
       "vapi",
       "sip",
     ]);
-    expect(providerAdapters.filter((adapter) => adapter.live_calls_enabled).map((adapter) => adapter.provider)).toEqual(["ptt", "surat", "kolaybi", "whatsapp"]);
+    expect(providerAdapters.filter((adapter) => adapter.live_calls_enabled).map((adapter) => adapter.provider)).toEqual(["ptt", "surat", "kolaybi", "whatsapp", "instagram", "messenger"]);
   });
 
   it("models SIP as config sync rather than a live provider call", () => {

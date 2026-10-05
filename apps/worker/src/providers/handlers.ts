@@ -24,6 +24,8 @@ import { PttLiveTransportError, sendPttLiveRequest, type PttFetchTransport } fro
 import { SuratLiveTransportError, sendSuratLiveRequest, type SuratFetchTransport } from "./surat.js";
 import { KolaybiLiveTransportError, sendKolaybiLiveRequest, type KolaybiFetchTransport } from "./kolaybi.js";
 import { WhatsappLiveTransportError, sendWhatsappLiveRequest, type WhatsappFetchTransport } from "./whatsapp.js";
+import { InstagramLiveTransportError, sendInstagramLiveRequest, type InstagramFetchTransport } from "./instagram.js";
+import { MessengerLiveTransportError, sendMessengerLiveRequest, type MessengerFetchTransport } from "./messenger.js";
 
 export { decideProviderRetry, type ProviderFailureInput, type ProviderRetryDecision, type ProviderRetryReason };
 
@@ -42,9 +44,29 @@ export interface ProviderDeliveryHandlerOptions {
   suratTransport?: SuratFetchTransport;
   kolaybiTransport?: KolaybiFetchTransport;
   whatsappTransport?: WhatsappFetchTransport;
+  instagramTransport?: InstagramFetchTransport;
+  messengerTransport?: MessengerFetchTransport;
   attemptNumber?: number;
   maxAttempts?: number;
   now?: Date;
+}
+
+function booleanSetting(settings: Record<string, unknown>, key: string): boolean | null {
+  const value = settings[key];
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    if (value.toLowerCase() === "true") return true;
+    if (value.toLowerCase() === "false") return false;
+  }
+  return null;
+}
+
+function liveModeEnabledFor(provider: ProviderName, accountConfig: { live_mode: boolean; settings: Record<string, unknown> }): boolean {
+  if (!accountConfig.live_mode) return false;
+  if (provider === "whatsapp" || provider === "instagram" || provider === "messenger") {
+    return booleanSetting(accountConfig.settings, `providers.${provider}.live_mode`) === true;
+  }
+  return true;
 }
 
 function numericAccountSetting(
@@ -238,7 +260,7 @@ export async function handleProviderDeliveryJobWithTransport(
     payload.envelope.account_public_id,
   );
   const policy = providerTransportPolicyFor(payload.envelope, {
-    liveModeEnabled: accountConfig?.live_mode ?? false,
+    liveModeEnabled: accountConfig ? liveModeEnabledFor(payload.envelope.provider, accountConfig) : false,
     timeoutMs: accountConfig
       ? numericAccountSetting(accountConfig.settings, ["timeout_ms", `${payload.envelope.provider}.timeout_ms`])
       : null,
@@ -298,7 +320,29 @@ export async function handleProviderDeliveryJobWithTransport(
               ...(options.whatsappTransport ? { transport: options.whatsappTransport } : {}),
               ...(options.now ? { now: options.now } : {}),
             })
-          : null;
+          : payload.envelope.provider === "instagram"
+            ? await sendInstagramLiveRequest({
+                envelope: payload.envelope,
+                job,
+                accountConfig,
+                policy,
+                attemptNumber: options.attemptNumber ?? 1,
+                maxAttempts: options.maxAttempts ?? policy.max_attempts,
+                ...(options.instagramTransport ? { transport: options.instagramTransport } : {}),
+                ...(options.now ? { now: options.now } : {}),
+              })
+            : payload.envelope.provider === "messenger"
+              ? await sendMessengerLiveRequest({
+                  envelope: payload.envelope,
+                  job,
+                  accountConfig,
+                  policy,
+                  attemptNumber: options.attemptNumber ?? 1,
+                  maxAttempts: options.maxAttempts ?? policy.max_attempts,
+                  ...(options.messengerTransport ? { transport: options.messengerTransport } : {}),
+                  ...(options.now ? { now: options.now } : {}),
+                })
+              : null;
 
   if (!liveResult) {
     return handleProviderDeliveryJob(job);
@@ -325,9 +369,11 @@ export async function handleProviderDeliveryJobWithTransport(
 
 export function isProviderLiveTransportError(
   error: unknown,
-): error is PttLiveTransportError | SuratLiveTransportError | KolaybiLiveTransportError | WhatsappLiveTransportError {
+): error is PttLiveTransportError | SuratLiveTransportError | KolaybiLiveTransportError | WhatsappLiveTransportError | InstagramLiveTransportError | MessengerLiveTransportError {
   return error instanceof PttLiveTransportError ||
     error instanceof SuratLiveTransportError ||
     error instanceof KolaybiLiveTransportError ||
-    error instanceof WhatsappLiveTransportError;
+    error instanceof WhatsappLiveTransportError ||
+    error instanceof InstagramLiveTransportError ||
+    error instanceof MessengerLiveTransportError;
 }

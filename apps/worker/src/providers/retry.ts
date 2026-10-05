@@ -57,6 +57,10 @@ function classifyProviderFailure(input: ProviderFailureInput): {
     return { retryable: true, reason: "retryable_error_code" };
   }
 
+  if (input.error_code === "graph_rate_limit") {
+    return { retryable: true, reason: "retryable_error_code" };
+  }
+
   if (typeof input.status_code === "number") {
     return { retryable: false, reason: "terminal_status_code" };
   }

@@ -3,6 +3,18 @@ import { providerAttemptCorrelationMetadata } from "./correlation.js";
 import { providerAttemptSchema } from "@garanti-kulucka/shared";
 import type { ProviderAccountConfig } from "./account-config.js";
 import { failureCode, failureMessage, fetchLiveHttpTransport } from "./live-http.js";
+import {
+  hasMetaGraphError,
+  isMetaRateLimitError,
+  isMetaTokenError,
+  isRecord,
+  metaGraphResponseMetadata,
+  parseMetaJson,
+  payloadString,
+  redactMetaHeaders,
+  stringSetting,
+  stringToken,
+} from "./meta-graph.js";
 import { decideProviderRetry, type ProviderRetryDecision } from "./retry.js";
 import type { LiveProviderTransportPolicy } from "./transport-policy.js";
 
@@ -51,36 +63,6 @@ export class WhatsappLiveTransportError extends Error {
 
 const defaultWhatsappApiUrl = "https://graph.facebook.com/v26.0";
 const mediaTypes = new Set(["image", "video", "audio", "document"]);
-
-function isRecord(input: unknown): input is Record<string, unknown> {
-  return !!input && typeof input === "object" && !Array.isArray(input);
-}
-
-function stringValue(input: unknown): string {
-  if (typeof input === "string") return input;
-  if (typeof input === "number" && Number.isFinite(input)) return String(input);
-  return "";
-}
-
-function stringSetting(settings: Record<string, unknown>, keys: string[], fallback = ""): string {
-  for (const key of keys) {
-    const value = stringValue(settings[key]);
-    if (value.length > 0) return value;
-  }
-  return fallback;
-}
-
-function stringToken(tokens: Record<string, unknown>, keys: string[], fallback = ""): string {
-  return stringSetting(tokens, keys, fallback);
-}
-
-function payloadString(payload: Record<string, unknown>, keys: string[], fallback = ""): string {
-  for (const key of keys) {
-    const value = stringValue(payload[key]);
-    if (value.length > 0) return value;
-  }
-  return fallback;
-}
 
 function apiBaseUrl(settings: Record<string, unknown>): string {
   return stringSetting(settings, ["api_url", "whatsapp.api_url", "WHATSAPP_API_URL"], defaultWhatsappApiUrl).replace(/\/+$/, "");
@@ -184,27 +166,12 @@ function createRequest(
 }
 
 function parseJson(body: string): Record<string, unknown> | null {
-  try {
-    const parsed: unknown = JSON.parse(body);
-    return isRecord(parsed) ? parsed : null;
-  } catch {
-    return null;
-  }
-}
-
-function metaErrorCode(parsed: Record<string, unknown> | null): number | null {
-  const error = isRecord(parsed?.error) ? parsed.error : null;
-  const parsedCode = Number(error?.code);
-  return Number.isFinite(parsedCode) ? parsedCode : null;
-}
-
-function hasMetaError(parsed: Record<string, unknown> | null): boolean {
-  return isRecord(parsed?.error);
+  return parseMetaJson(body);
 }
 
 function normalizeResponse(response: WhatsappTransportResponse): Record<string, unknown> | null {
   const parsed = parseJson(response.body);
-  if (!parsed || hasMetaError(parsed)) return null;
+  if (!parsed || hasMetaGraphError(parsed)) return null;
   if (!Array.isArray(parsed.messages)) return null;
   return {
     success: true,
@@ -214,11 +181,7 @@ function normalizeResponse(response: WhatsappTransportResponse): Record<string, 
 }
 
 function redactHeaders(headers: Record<string, string>): Record<string, string> {
-  return Object.fromEntries(
-    Object.entries(headers).map(([key, value]) =>
-      key.toLowerCase() === "authorization" ? [key, "[redacted]"] : [key, value],
-    ),
-  );
+  return redactMetaHeaders(headers);
 }
 
 function redactRequest(request: WhatsappTransportRequest): Record<string, unknown> {
@@ -245,24 +208,7 @@ function retryMetadata(decision: ProviderRetryDecision): Record<string, unknown>
 }
 
 function responseMetadata(response: WhatsappTransportResponse): Record<string, unknown> {
-  const parsed = parseJson(response.body);
-  const bodyPreview = isRecord(parsed?.error)
-    ? JSON.stringify({
-        ...parsed,
-        error: {
-          ...parsed.error,
-          message: "[redacted]",
-        },
-      }).slice(0, 800)
-    : response.body.slice(0, 800);
-  return {
-    live_call_performed: true,
-    accepted: response.status >= 200 && response.status < 300 && !hasMetaError(parsed),
-    status_code: response.status,
-    headers: response.headers,
-    body_bytes: Buffer.byteLength(response.body, "utf8"),
-    body_preview: bodyPreview,
-  };
+  return metaGraphResponseMetadata(response);
 }
 
 function retryDecision(input: WhatsappLiveAdapterInput, endedAt: Date, statusCode?: number | null, errorCode?: string): ProviderRetryDecision {
@@ -334,7 +280,7 @@ function throwFailure(
   input: WhatsappLiveAdapterInput,
   request: WhatsappTransportRequest,
   response: WhatsappTransportResponse,
-  errorCode: "provider_http_error" | "malformed_response" | "whatsapp_token_error",
+  errorCode: "provider_http_error" | "malformed_response" | "whatsapp_token_error" | "graph_rate_limit",
   message: string,
 ): never {
   const endedAt = input.now ? new Date(input.now) : new Date();
@@ -343,7 +289,7 @@ function throwFailure(
     input,
     endedAt,
     statusCode,
-    errorCode === "malformed_response" ? errorCode : undefined,
+    errorCode === "malformed_response" || errorCode === "graph_rate_limit" ? errorCode : undefined,
   );
   const attempt = createAttempt({
     envelope: input.envelope,
@@ -394,8 +340,11 @@ export async function sendWhatsappLiveRequest(input: WhatsappLiveAdapterInput): 
   }
 
   const parsed = parseJson(response.body);
-  if (response.status === 401 || metaErrorCode(parsed) === 190) {
+  if (isMetaTokenError(response, parsed)) {
     throwFailure(input, request, response, "whatsapp_token_error", "WhatsApp access token was rejected by Meta");
+  }
+  if (isMetaRateLimitError(response, parsed)) {
+    throwFailure(input, request, response, "graph_rate_limit", "WhatsApp Graph API rate limit was reached");
   }
   if (response.status === 429 || response.status >= 500 || response.status >= 400) {
     throwFailure(input, request, response, "provider_http_error", `WhatsApp returned HTTP ${response.status}`);
