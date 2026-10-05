@@ -323,6 +323,12 @@ export interface FilesTable extends BaseTable {
   mime_type: string | null;
   byte_size: number | null;
   checksum: string | null;
+  upload_status: "pending" | "available" | "abandoned";
+  scan_status: "pending" | "clean" | "infected" | "skipped";
+  upload_type: "singlepart" | "multipart";
+  multipart_upload_id: string | null;
+  completed_at: Timestamp | null;
+  abandoned_at: Timestamp | null;
   created_by_user_id: number | null;
 }
 

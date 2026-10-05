@@ -884,8 +884,8 @@ export function App() {
     const response = await files.createUpload({
       original_name: "kanit.txt",
       mime_type: "text/plain",
-      byte_size: 12,
-      checksum: "sha256:frontend-smoke",
+      byte_size: 11,
+      checksum: "niECqdXA95O1DqUepmPprCpbQW93H7pd34A88B3v5xU=",
     });
 
     if (response.upload.presigned_url) {

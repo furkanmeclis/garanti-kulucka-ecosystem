@@ -1,4 +1,13 @@
-import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import {
+  AbortMultipartUploadCommand,
+  CompleteMultipartUploadCommand,
+  CreateMultipartUploadCommand,
+  DeleteObjectCommand,
+  GetObjectCommand,
+  PutObjectCommand,
+  S3Client,
+  UploadPartCommand,
+} from "@aws-sdk/client-s3";
 import type { S3ClientConfig } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { assertSafeObjectKey } from "./object-key.js";
@@ -26,6 +35,47 @@ export interface UploadInstruction {
   headers: Record<string, string>;
   presigned_url: string | null;
   expires_at: string | null;
+}
+
+export interface MultipartUploadInstructionInput {
+  objectKey: string;
+  mimeType: string;
+  checksum: string;
+}
+
+export interface MultipartUploadInstruction {
+  method: "POST";
+  bucket: string;
+  object_key: string;
+  upload_id: string;
+}
+
+export interface MultipartPartInstructionInput {
+  objectKey: string;
+  uploadId: string;
+  partNumber: number;
+  checksum: string | null;
+}
+
+export interface MultipartPartInstruction {
+  method: "PUT";
+  bucket: string;
+  object_key: string;
+  upload_id: string;
+  part_number: number;
+  headers: Record<string, string>;
+  presigned_url: string | null;
+  expires_at: string | null;
+}
+
+export interface CompleteMultipartUploadInput {
+  objectKey: string;
+  uploadId: string;
+  parts: Array<{
+    partNumber: number;
+    etag: string;
+    checksumSHA256?: string | null;
+  }>;
 }
 
 export interface DownloadInstruction {
@@ -126,6 +176,89 @@ export class MediaStorageService {
       presigned_url: await getSignedUrl(this.client, command, { expiresIn }),
       expires_at: expiresAt,
     };
+  }
+
+  async createMultipartUploadInstruction(
+    input: MultipartUploadInstructionInput,
+  ): Promise<MultipartUploadInstruction> {
+    const objectKey = assertSafeObjectKey(input.objectKey);
+    const command = new CreateMultipartUploadCommand({
+      Bucket: this.bucket,
+      Key: objectKey,
+      ContentType: input.mimeType,
+      ChecksumAlgorithm: "SHA256",
+    });
+    const response = await this.client.send(command);
+
+    if (!response.UploadId) {
+      throw new Error("Garage did not return a multipart upload id");
+    }
+
+    return {
+      method: "POST",
+      bucket: this.bucket,
+      object_key: objectKey,
+      upload_id: response.UploadId,
+    };
+  }
+
+  async createMultipartPartInstruction(
+    input: MultipartPartInstructionInput,
+  ): Promise<MultipartPartInstruction> {
+    const objectKey = assertSafeObjectKey(input.objectKey);
+    const expiresIn = Math.max(60, Math.min(3600, this.config.uploadUrlExpiresSeconds));
+    const expiresAt = new Date(Date.now() + expiresIn * 1000).toISOString();
+    const headers: Record<string, string> = {};
+    if (input.checksum) {
+      headers["x-amz-checksum-sha256"] = input.checksum;
+    }
+    const command = new UploadPartCommand({
+      Bucket: this.bucket,
+      Key: objectKey,
+      UploadId: input.uploadId,
+      PartNumber: input.partNumber,
+      ChecksumSHA256: input.checksum ?? undefined,
+    });
+
+    return {
+      method: "PUT",
+      bucket: this.bucket,
+      object_key: objectKey,
+      upload_id: input.uploadId,
+      part_number: input.partNumber,
+      headers,
+      presigned_url: await getSignedUrl(this.client, command, { expiresIn }),
+      expires_at: expiresAt,
+    };
+  }
+
+  async completeMultipartUpload(input: CompleteMultipartUploadInput): Promise<void> {
+    const objectKey = assertSafeObjectKey(input.objectKey);
+    await this.client.send(
+      new CompleteMultipartUploadCommand({
+        Bucket: this.bucket,
+        Key: objectKey,
+        UploadId: input.uploadId,
+        MultipartUpload: {
+          Parts: input.parts.map((part) => ({
+            PartNumber: part.partNumber,
+            ETag: part.etag,
+            ChecksumSHA256: part.checksumSHA256 ?? undefined,
+          })),
+        },
+      }),
+    );
+  }
+
+  async abortMultipartUpload(objectKeyInput: string, uploadId: string): Promise<void> {
+    const objectKey = assertSafeObjectKey(objectKeyInput);
+    await this.client.send(
+      new AbortMultipartUploadCommand({
+        Bucket: this.bucket,
+        Key: objectKey,
+        UploadId: uploadId,
+      }),
+    );
   }
 
   async createDownloadInstruction(objectKeyInput: string): Promise<DownloadInstruction> {

@@ -12,6 +12,10 @@ export interface CreateFileInput {
   byteSize: number | null;
   checksum: string | null;
   createdByUserId: number | null;
+  uploadStatus?: "pending" | "available";
+  scanStatus?: "pending" | "skipped";
+  uploadType?: "singlepart" | "multipart";
+  multipartUploadId?: string | null;
 }
 
 export class FilesRepository {
@@ -34,10 +38,65 @@ export class FilesRepository {
         mime_type: input.mimeType,
         byte_size: input.byteSize,
         checksum: input.checksum,
+        upload_status: input.uploadStatus ?? "available",
+        scan_status: input.scanStatus ?? "skipped",
+        upload_type: input.uploadType ?? "singlepart",
+        multipart_upload_id: input.multipartUploadId ?? null,
+        completed_at: (input.uploadStatus ?? "available") === "available" ? new Date() : null,
         created_by_user_id: input.createdByUserId,
       })
       .returningAll()
       .executeTakeFirstOrThrow();
+  }
+
+  async attachMultipartUploadId(publicId: string, uploadId: string): Promise<FileRecord> {
+    return this.db
+      .updateTable("files")
+      .set({
+        multipart_upload_id: uploadId,
+        updated_at: new Date(),
+      })
+      .where("public_id", "=", publicId)
+      .where("upload_type", "=", "multipart")
+      .where("upload_status", "=", "pending")
+      .returningAll()
+      .executeTakeFirstOrThrow();
+  }
+
+  async markMultipartComplete(publicId: string, uploadId: string): Promise<FileRecord | null> {
+    return (
+      (await this.db
+        .updateTable("files")
+        .set({
+          upload_status: "available",
+          completed_at: new Date(),
+          updated_at: new Date(),
+        })
+        .where("public_id", "=", publicId)
+        .where("multipart_upload_id", "=", uploadId)
+        .where("upload_type", "=", "multipart")
+        .where("upload_status", "=", "pending")
+        .returningAll()
+        .executeTakeFirst()) ?? null
+    );
+  }
+
+  async markMultipartAbandoned(publicId: string, uploadId: string): Promise<FileRecord | null> {
+    return (
+      (await this.db
+        .updateTable("files")
+        .set({
+          upload_status: "abandoned",
+          abandoned_at: new Date(),
+          updated_at: new Date(),
+        })
+        .where("public_id", "=", publicId)
+        .where("multipart_upload_id", "=", uploadId)
+        .where("upload_type", "=", "multipart")
+        .where("upload_status", "=", "pending")
+        .returningAll()
+        .executeTakeFirst()) ?? null
+    );
   }
 
   async findByPublicId(publicId: string): Promise<FileRecord | null> {
@@ -58,6 +117,16 @@ export class FilesRepository {
         .selectAll("files")
         .where("files.public_id", "=", publicId)
         .where("message_attachments.id", "is", null)
+        .where((expression) =>
+          expression.or([
+            expression("files.upload_status", "=", "available"),
+            expression("files.upload_status", "=", "abandoned"),
+            expression.and([
+              expression("files.upload_status", "=", "pending"),
+              expression("files.created_at", "<", new Date(Date.now() - 24 * 60 * 60 * 1000)),
+            ]),
+          ]),
+        )
         .executeTakeFirst()) ?? null
     );
   }
@@ -69,6 +138,16 @@ export class FilesRepository {
       .leftJoin("message_attachments", "message_attachments.file_id", "files.id")
       .selectAll("files")
       .where("message_attachments.id", "is", null)
+      .where((expression) =>
+        expression.or([
+          expression("files.upload_status", "=", "available"),
+          expression("files.upload_status", "=", "abandoned"),
+          expression.and([
+            expression("files.upload_status", "=", "pending"),
+            expression("files.created_at", "<", new Date(Date.now() - 24 * 60 * 60 * 1000)),
+          ]),
+        ]),
+      )
       .orderBy("files.created_at", "asc")
       .limit(safeLimit)
       .execute();
@@ -80,6 +159,16 @@ export class FilesRepository {
       .leftJoin("message_attachments", "message_attachments.file_id", "files.id")
       .select((expression) => [expression.fn.countAll<number>().as("total_count")])
       .where("message_attachments.id", "is", null)
+      .where((expression) =>
+        expression.or([
+          expression("files.upload_status", "=", "available"),
+          expression("files.upload_status", "=", "abandoned"),
+          expression.and([
+            expression("files.upload_status", "=", "pending"),
+            expression("files.created_at", "<", new Date(Date.now() - 24 * 60 * 60 * 1000)),
+          ]),
+        ]),
+      )
       .executeTakeFirst();
 
     return Number(row?.total_count ?? 0);
@@ -95,6 +184,12 @@ export function serializeFile(file: FileRecord) {
     mime_type: file.mime_type,
     byte_size: file.byte_size === null ? null : Number(file.byte_size),
     checksum: file.checksum,
+    upload_status: file.upload_status,
+    scan_status: file.scan_status,
+    upload_type: file.upload_type,
+    multipart_upload_id: file.multipart_upload_id,
+    completed_at: file.completed_at,
+    abandoned_at: file.abandoned_at,
     created_at: file.created_at,
     updated_at: file.updated_at,
   };

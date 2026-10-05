@@ -760,6 +760,145 @@
         }
       }
     },
+    "/api/files/multipart-uploads": {
+      "post": {
+        "operationId": "createMultipartFileUpload",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateMultipartFileUploadRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Pending file metadata and Garage multipart upload id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileMultipartUpload"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/files/{file_public_id}/multipart-uploads/parts": {
+      "post": {
+        "operationId": "createMultipartFilePartUpload",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/FilePublicId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateMultipartPartUploadRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Presigned upload URL for one multipart part",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileMultipartPartUpload"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/files/{file_public_id}/multipart-uploads/complete": {
+      "post": {
+        "operationId": "completeMultipartFileUpload",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/FilePublicId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompleteMultipartFileUploadRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Available file metadata after Garage multipart completion",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "file"
+                  ],
+                  "properties": {
+                    "file": {
+                      "$ref": "#/components/schemas/File"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/files/{file_public_id}/multipart-uploads/abort": {
+      "post": {
+        "operationId": "abortMultipartFileUpload",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/FilePublicId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AbortMultipartFileUploadRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Abandoned file metadata after Garage multipart abort",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "file"
+                  ],
+                  "properties": {
+                    "file": {
+                      "$ref": "#/components/schemas/File"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/files/orphans": {
       "get": {
         "operationId": "listFileOrphans",
@@ -895,6 +1034,37 @@
             "$ref": "#/components/responses/Error"
           },
           "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/files/{file_public_id}/download": {
+      "get": {
+        "operationId": "createFileDownload",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/FilePublicId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "File metadata and presigned download instruction",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileDownload"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "423": {
             "$ref": "#/components/responses/Error"
           }
         }
@@ -3123,6 +3293,11 @@
       },
       "CreateFileUploadRequest": {
         "type": "object",
+        "required": [
+          "mime_type",
+          "byte_size",
+          "checksum"
+        ],
         "properties": {
           "original_name": {
             "type": [
@@ -3131,26 +3306,113 @@
             ]
           },
           "mime_type": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": "string"
           },
           "byte_size": {
-            "type": [
-              "integer",
-              "null"
+            "type": "integer",
+            "minimum": 1
+          },
+          "checksum": {
+            "type": "string",
+            "minLength": 44,
+            "maxLength": 44
+          }
+        }
+      },
+      "CreateMultipartFileUploadRequest": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/CreateFileUploadRequest"
+          },
+          {
+            "type": "object",
+            "required": [
+              "part_count"
             ],
-            "minimum": 0,
-            "maximum": 52428800
+            "properties": {
+              "part_count": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 10000
+              }
+            }
+          }
+        ]
+      },
+      "CreateMultipartPartUploadRequest": {
+        "type": "object",
+        "required": [
+          "part_number"
+        ],
+        "properties": {
+          "part_number": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10000
           },
           "checksum": {
             "type": [
               "string",
               "null"
             ],
-            "minLength": 16,
-            "maxLength": 128
+            "minLength": 44,
+            "maxLength": 44
+          }
+        }
+      },
+      "CompleteMultipartFileUploadRequest": {
+        "type": "object",
+        "required": [
+          "upload_id",
+          "parts"
+        ],
+        "properties": {
+          "upload_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "parts": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 10000,
+            "items": {
+              "type": "object",
+              "required": [
+                "part_number",
+                "etag"
+              ],
+              "properties": {
+                "part_number": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 10000
+                },
+                "etag": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "checksum": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "minLength": 44,
+                  "maxLength": 44
+                }
+              }
+            }
+          }
+        }
+      },
+      "AbortMultipartFileUploadRequest": {
+        "type": "object",
+        "required": [
+          "upload_id"
+        ],
+        "properties": {
+          "upload_id": {
+            "type": "string",
+            "minLength": 1
           }
         }
       },
@@ -3247,6 +3509,148 @@
               "method": {
                 "type": "string",
                 "const": "PUT"
+              },
+              "bucket": {
+                "type": "string"
+              },
+              "object_key": {
+                "type": "string"
+              },
+              "headers": {
+                "type": "object"
+              },
+              "presigned_url": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "expires_at": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              }
+            }
+          }
+        }
+      },
+      "FileMultipartUpload": {
+        "type": "object",
+        "required": [
+          "file",
+          "multipart"
+        ],
+        "properties": {
+          "file": {
+            "$ref": "#/components/schemas/File"
+          },
+          "multipart": {
+            "type": "object",
+            "required": [
+              "method",
+              "bucket",
+              "object_key",
+              "upload_id"
+            ],
+            "properties": {
+              "method": {
+                "type": "string",
+                "const": "POST"
+              },
+              "bucket": {
+                "type": "string"
+              },
+              "object_key": {
+                "type": "string"
+              },
+              "upload_id": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "FileMultipartPartUpload": {
+        "type": "object",
+        "required": [
+          "part"
+        ],
+        "properties": {
+          "part": {
+            "type": "object",
+            "required": [
+              "method",
+              "bucket",
+              "object_key",
+              "upload_id",
+              "part_number",
+              "headers",
+              "presigned_url",
+              "expires_at"
+            ],
+            "properties": {
+              "method": {
+                "type": "string",
+                "const": "PUT"
+              },
+              "bucket": {
+                "type": "string"
+              },
+              "object_key": {
+                "type": "string"
+              },
+              "upload_id": {
+                "type": "string"
+              },
+              "part_number": {
+                "type": "integer"
+              },
+              "headers": {
+                "type": "object"
+              },
+              "presigned_url": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "expires_at": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              }
+            }
+          }
+        }
+      },
+      "FileDownload": {
+        "type": "object",
+        "required": [
+          "file",
+          "download"
+        ],
+        "properties": {
+          "file": {
+            "$ref": "#/components/schemas/File"
+          },
+          "download": {
+            "type": "object",
+            "required": [
+              "method",
+              "bucket",
+              "object_key",
+              "headers",
+              "presigned_url",
+              "expires_at"
+            ],
+            "properties": {
+              "method": {
+                "type": "string",
+                "const": "GET"
               },
               "bucket": {
                 "type": "string"
@@ -3434,7 +3838,11 @@
           "public_id",
           "bucket",
           "object_key",
-          "created_at"
+          "upload_status",
+          "scan_status",
+          "upload_type",
+          "created_at",
+          "updated_at"
         ],
         "properties": {
           "public_id": {
@@ -3470,7 +3878,52 @@
               "null"
             ]
           },
+          "upload_status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "available",
+              "abandoned"
+            ]
+          },
+          "scan_status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "clean",
+              "infected",
+              "skipped"
+            ]
+          },
+          "upload_type": {
+            "type": "string",
+            "enum": [
+              "singlepart",
+              "multipart"
+            ]
+          },
+          "multipart_upload_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "completed_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "abandoned_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "created_at": {
+            "type": "string"
+          },
+          "updated_at": {
             "type": "string"
           }
         }

@@ -30,6 +30,17 @@ const operationsPolicySchema = z.object({
   orphan_cleanup_enabled: z.boolean(),
 });
 
+const storageUploadPolicySchema = z.object({
+  allowed_content_types: z.array(nonblankString).min(1),
+  max_upload_bytes: positiveInteger.max(5 * 1024 * 1024 * 1024),
+  require_sha256_checksum: z.boolean(),
+});
+
+const storageMalwareScanPolicySchema = z.object({
+  mode: z.enum(["skip", "manual"]),
+  allow_skipped_downloads: z.boolean(),
+});
+
 const providerLiveModeKeySchema = z.templateLiteral([
   "providers.",
   z.enum(["ptt", "surat", "kolaybi", "meta", "whatsapp", "instagram", "messenger", "netgsm", "vapi", "sip"]),
@@ -40,6 +51,8 @@ const literalGlobalSettingSchemas = {
   "netgsm_teyit_ayarlar": { schema: netgsmConfirmationSettingsSchema, secret: false },
   "sip_config": { schema: sipConfigSchema, secret: false },
   "operations.policy": { schema: operationsPolicySchema, secret: false },
+  "storage.upload_policy": { schema: storageUploadPolicySchema, secret: false },
+  "storage.malware_scan_policy": { schema: storageMalwareScanPolicySchema, secret: false },
   "webphone.enabled": { schema: z.boolean(), secret: false },
   "webphone.ice_servers": { schema: z.array(z.string().min(1)), secret: false },
   "webphone.sip_websocket_url": { schema: z.string(), secret: false },

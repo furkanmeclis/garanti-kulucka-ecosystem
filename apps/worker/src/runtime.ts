@@ -1,4 +1,4 @@
-import { Worker } from "bullmq";
+import { Queue, Worker } from "bullmq";
 import { createDatabase, type AppDatabase } from "@garanti-kulucka/database";
 import { Redis } from "ioredis";
 import type pino from "pino";
@@ -15,6 +15,7 @@ import {
   type WorkerLifecycleRecorder,
   type WorkerProcessorRegistry,
 } from "./processors.js";
+import { StorageOrphanReconciler } from "./storage-orphans.js";
 import { DatabaseProviderAttemptRepository, type ProviderAttemptRepository } from "./providers/attempts.js";
 import {
   DatabaseProviderAccountConfigRepository,
@@ -52,6 +53,7 @@ export interface WorkerRuntime {
   connection: Redis;
   registry: WorkerProcessorRegistry;
   workers: Map<QueueName, Worker<JobEnvelope>>;
+  schedulers: Map<QueueName, Queue<JobEnvelope>>;
   close: () => Promise<void>;
 }
 
@@ -81,6 +83,7 @@ export function createWorkerRuntime(options: WorkerRuntimeOptions): WorkerRuntim
   const providerAccountConfigRepository =
     options.providerAccountConfigRepository ??
     (db ? new DatabaseProviderAccountConfigRepository(db, decryptor) : undefined);
+  const storageOrphanReconciler = db ? new StorageOrphanReconciler(db) : undefined;
   const settingsChangeSubscriber =
     options.settingsChangeSubscriber ??
     (options.redisUrl ? new RedisSettingsChangeSubscriber(options.redisUrl) : undefined);
@@ -103,9 +106,11 @@ export function createWorkerRuntime(options: WorkerRuntimeOptions): WorkerRuntim
       }),
     ...(providerAttemptRepository ? { providerAttemptRepository } : {}),
     ...(providerAccountConfigRepository ? { providerAccountConfigRepository } : {}),
+    ...(storageOrphanReconciler ? { storageOrphanReconciler } : {}),
   });
 
   const workers = new Map<QueueName, Worker<JobEnvelope>>();
+  const schedulers = new Map<QueueName, Queue<JobEnvelope>>();
 
   for (const queue of registry.queues) {
     const worker = new Worker<JobEnvelope>(
@@ -172,12 +177,37 @@ export function createWorkerRuntime(options: WorkerRuntimeOptions): WorkerRuntim
     workers.set(queue, worker);
   }
 
+  const storageScheduler = new Queue<JobEnvelope>("storage-orphan-reconciliation", { connection });
+  schedulers.set("storage-orphan-reconciliation", storageScheduler);
+  void storageScheduler.add(
+    "storage.orphans.reconcile",
+    {
+      job_id: "storage_orphans_reconcile_scheduled",
+      queue: "storage-orphan-reconciliation",
+      name: "storage.orphans.reconcile",
+      payload: {
+        mode: process.env.STORAGE_ORPHAN_DELETE_ENABLED === "true" ? "apply" : "dry_run",
+        limit: Number.parseInt(process.env.STORAGE_ORPHAN_RECONCILIATION_LIMIT ?? "100", 10),
+      },
+      requested_at: new Date().toISOString(),
+      request_id: "storage_orphans_reconcile_scheduled",
+    },
+    {
+      jobId: "storage_orphans_reconcile_scheduled",
+      repeat: {
+        every: Number.parseInt(process.env.STORAGE_ORPHAN_RECONCILIATION_INTERVAL_MS ?? "86400000", 10),
+      },
+    },
+  );
+
   return {
     connection,
     registry,
     workers,
+    schedulers,
     close: async () => {
       await Promise.all([...workers.values()].map((worker) => worker.close()));
+      await Promise.all([...schedulers.values()].map((scheduler) => scheduler.close()));
       await settingsChangeSubscriber?.close();
       connection.disconnect();
       await db?.destroy();

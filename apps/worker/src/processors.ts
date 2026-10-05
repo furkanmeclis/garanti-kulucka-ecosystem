@@ -26,6 +26,8 @@ import type { InstagramFetchTransport } from "./providers/instagram.js";
 import type { MessengerFetchTransport } from "./providers/messenger.js";
 import type { NetgsmFetchTransport } from "./providers/netgsm.js";
 import type { VapiFetchTransport } from "./providers/vapi.js";
+import type { StorageOrphanReconciler } from "./storage-orphans.js";
+import type { StorageOrphanReconciliationResult } from "./storage-orphans.js";
 
 export type WorkerLifecycleEventName = "started" | "completed" | "failed";
 
@@ -95,6 +97,8 @@ export interface AiReplyProcessorResult {
   };
 }
 
+export type StorageOrphanReconciliationProcessorResult = StorageOrphanReconciliationResult;
+
 export interface WorkerProcessorRegistry {
   queues: readonly QueueName[];
   processors: ReadonlyMap<QueueName, QueueProcessor>;
@@ -113,6 +117,7 @@ export interface WorkerProcessorRegistryOptions {
   messengerTransport?: MessengerFetchTransport;
   netgsmTransport?: NetgsmFetchTransport;
   vapiTransport?: VapiFetchTransport;
+  storageOrphanReconciler?: StorageOrphanReconciler;
 }
 
 export const workerQueueNames: QueueName[] = [
@@ -121,6 +126,7 @@ export const workerQueueNames: QueueName[] = [
   "shipment-tracking",
   "ai-replies",
   "migration-reports",
+  "storage-orphan-reconciliation",
 ];
 
 function assertJobMatchesQueue(queue: QueueName, job: WorkerJob): JobEnvelope {
@@ -468,6 +474,32 @@ function createMigrationReportProcessor(): QueueProcessor {
   };
 }
 
+function createStorageOrphanReconciliationProcessor(
+  storageOrphanReconciler?: StorageOrphanReconciler,
+): QueueProcessor {
+  return async (job) => {
+    const envelope = assertJobMatchesQueue("storage-orphan-reconciliation", job);
+
+    if (envelope.name !== "storage.orphans.reconcile") {
+      throw new Error(`Unknown storage orphan reconciliation job name: ${envelope.name}`);
+    }
+
+    if (!storageOrphanReconciler) {
+      throw new Error("Storage orphan reconciliation requires a database-backed reconciler");
+    }
+
+    const payload = asRecord(envelope.payload, "Storage orphan reconciliation payload");
+    const mode = payload.mode === "apply" ? "apply" : "dry_run";
+    const limit = typeof payload.limit === "number" && Number.isFinite(payload.limit) ? payload.limit : 100;
+
+    return storageOrphanReconciler.reconcile({
+      mode,
+      limit,
+      deleteEnabled: process.env.STORAGE_ORPHAN_DELETE_ENABLED === "true",
+    });
+  };
+}
+
 export function createWorkerProcessorRegistry(
   options: WorkerLifecycleRecorder | WorkerProcessorRegistryOptions = {},
 ): WorkerProcessorRegistry {
@@ -493,6 +525,8 @@ export function createWorkerProcessorRegistry(
     typeof options === "function" ? undefined : options.netgsmTransport;
   const vapiTransport =
     typeof options === "function" ? undefined : options.vapiTransport;
+  const storageOrphanReconciler =
+    typeof options === "function" ? undefined : options.storageOrphanReconciler;
   const processors = new Map<QueueName, QueueProcessor>([
     ["provider-webhooks", createProviderWebhookProcessor(providerAttemptRepository)],
     [
@@ -513,6 +547,7 @@ export function createWorkerProcessorRegistry(
     ["shipment-tracking", createShipmentTrackingProcessor()],
     ["ai-replies", createAiReplyProcessor()],
     ["migration-reports", createMigrationReportProcessor()],
+    ["storage-orphan-reconciliation", createStorageOrphanReconciliationProcessor(storageOrphanReconciler)],
   ]);
 
   return {

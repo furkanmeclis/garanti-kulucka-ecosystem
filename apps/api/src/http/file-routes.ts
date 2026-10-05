@@ -5,15 +5,43 @@ import { authenticate, requireAdmin, requireDatabase } from "./middleware.js";
 import { FilesRepository, serializeFile } from "../files/repository.js";
 import { createMediaStorageFromEnv } from "../files/storage.js";
 import {
+  initialScanStatus,
+  isValidSha256Checksum,
+  loadStoragePolicies,
+  scanStatusAllowsDownload,
+} from "../files/policy.js";
+import {
   logOrphanCleanup,
   orphanCleanupRequestId,
 } from "../files/cleanup-observability.js";
 
 const createUploadSchema = z.object({
   original_name: z.string().min(1).max(255).nullable().default(null),
-  mime_type: z.string().min(1).max(255).nullable().default(null),
-  byte_size: z.number().int().min(0).max(50 * 1024 * 1024).nullable().default(null),
-  checksum: z.string().min(16).max(128).nullable().default(null),
+  mime_type: z.string().min(1).max(255),
+  byte_size: z.number().int().min(1),
+  checksum: z.string().min(44).max(44),
+});
+
+const createMultipartUploadSchema = createUploadSchema.extend({
+  part_count: z.number().int().min(1).max(10_000),
+});
+
+const multipartPartSchema = z.object({
+  part_number: z.number().int().min(1).max(10_000),
+  checksum: z.string().min(44).max(44).nullable().default(null),
+});
+
+const completeMultipartUploadSchema = z.object({
+  upload_id: z.string().min(1).max(1024),
+  parts: z.array(z.object({
+    part_number: z.number().int().min(1).max(10_000),
+    etag: z.string().min(1).max(512),
+    checksum: z.string().min(44).max(44).nullable().optional(),
+  })).min(1).max(10_000),
+});
+
+const abortMultipartUploadSchema = z.object({
+  upload_id: z.string().min(1).max(1024),
 });
 
 const orphanCleanupDryRunSchema = z.object({
@@ -44,6 +72,29 @@ function storageDeleteEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
   return env.STORAGE_ORPHAN_DELETE_ENABLED === "true";
 }
 
+function validateUploadPolicy(input: {
+  mimeType: string;
+  byteSize: number;
+  checksum: string;
+  allowedContentTypes: string[];
+  maxUploadBytes: number;
+  requireSha256Checksum: boolean;
+}): { code: string; message: string } | null {
+  if (!input.allowedContentTypes.includes(input.mimeType)) {
+    return { code: "content_type_not_allowed", message: "File content type is not allowed" };
+  }
+
+  if (input.byteSize > input.maxUploadBytes) {
+    return { code: "file_too_large", message: "File exceeds the configured upload size limit" };
+  }
+
+  if (input.requireSha256Checksum && !isValidSha256Checksum(input.checksum)) {
+    return { code: "checksum_required", message: "A base64 SHA-256 checksum is required" };
+  }
+
+  return null;
+}
+
 export function createFileRoutes() {
   const routes = new Hono<AppBindings>();
 
@@ -61,12 +112,23 @@ export function createFileRoutes() {
     }
 
     const storage = createMediaStorageFromEnv();
+    const policies = await loadStoragePolicies({ db, settingsCache: context.get("settingsCache") });
+    const policyError = validateUploadPolicy({
+      mimeType: payload.data.mime_type,
+      byteSize: payload.data.byte_size,
+      checksum: payload.data.checksum,
+      ...policies.upload,
+    });
+    if (policyError) {
+      return context.json({ error: policyError }, 400);
+    }
     const file = await new FilesRepository(db).createMediaFile({
       bucket: storage.bucket,
       originalName: payload.data.original_name,
       mimeType: payload.data.mime_type,
       byteSize: payload.data.byte_size,
       checksum: payload.data.checksum,
+      scanStatus: initialScanStatus(policies.malwareScan),
       createdByUserId: context.get("actorUserId"),
     });
 
@@ -82,6 +144,144 @@ export function createFileRoutes() {
       },
       201,
     );
+  });
+
+  routes.post("/multipart-uploads", async (context) => {
+    const payload = createMultipartUploadSchema.safeParse(await context.req.json());
+    if (!payload.success) {
+      return context.json({ error: { code: "invalid_request", message: "Invalid multipart upload payload" } }, 400);
+    }
+
+    const db = context.get("db");
+    if (!db) {
+      return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
+    }
+
+    const policies = await loadStoragePolicies({ db, settingsCache: context.get("settingsCache") });
+    const policyError = validateUploadPolicy({
+      mimeType: payload.data.mime_type,
+      byteSize: payload.data.byte_size,
+      checksum: payload.data.checksum,
+      ...policies.upload,
+    });
+    if (policyError) {
+      return context.json({ error: policyError }, 400);
+    }
+
+    const storage = createMediaStorageFromEnv();
+    const repository = new FilesRepository(db);
+    const pending = await repository.createMediaFile({
+      bucket: storage.bucket,
+      originalName: payload.data.original_name,
+      mimeType: payload.data.mime_type,
+      byteSize: payload.data.byte_size,
+      checksum: payload.data.checksum,
+      uploadStatus: "pending",
+      uploadType: "multipart",
+      scanStatus: initialScanStatus(policies.malwareScan),
+      createdByUserId: context.get("actorUserId"),
+    });
+    const multipart = await storage.createMultipartUploadInstruction({
+      objectKey: pending.object_key,
+      mimeType: payload.data.mime_type,
+      checksum: payload.data.checksum,
+    });
+    const file = await repository.attachMultipartUploadId(pending.public_id, multipart.upload_id);
+
+    return context.json({ file: serializeFile(file), multipart }, 201);
+  });
+
+  routes.post("/:file_public_id/multipart-uploads/parts", async (context) => {
+    const payload = multipartPartSchema.safeParse(await context.req.json());
+    if (!payload.success) {
+      return context.json({ error: { code: "invalid_request", message: "Invalid multipart part payload" } }, 400);
+    }
+
+    const db = context.get("db");
+    if (!db) {
+      return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
+    }
+
+    const file = await new FilesRepository(db).findByPublicId(context.req.param("file_public_id"));
+    if (!file || file.upload_type !== "multipart" || file.upload_status !== "pending" || !file.multipart_upload_id) {
+      return context.json({ error: { code: "not_found", message: "Pending multipart upload was not found" } }, 404);
+    }
+
+    if (payload.data.checksum !== null && !isValidSha256Checksum(payload.data.checksum)) {
+      return context.json({ error: { code: "invalid_checksum", message: "Part checksum must be base64 SHA-256" } }, 400);
+    }
+
+    const storage = createMediaStorageFromEnv();
+    return context.json({
+      part: await storage.createMultipartPartInstruction({
+        objectKey: file.object_key,
+        uploadId: file.multipart_upload_id,
+        partNumber: payload.data.part_number,
+        checksum: payload.data.checksum,
+      }),
+    });
+  });
+
+  routes.post("/:file_public_id/multipart-uploads/complete", async (context) => {
+    const payload = completeMultipartUploadSchema.safeParse(await context.req.json());
+    if (!payload.success) {
+      return context.json({ error: { code: "invalid_request", message: "Invalid multipart complete payload" } }, 400);
+    }
+
+    const db = context.get("db");
+    if (!db) {
+      return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
+    }
+
+    const repository = new FilesRepository(db);
+    const file = await repository.findByPublicId(context.req.param("file_public_id"));
+    if (!file || file.upload_type !== "multipart" || file.upload_status !== "pending" || file.multipart_upload_id !== payload.data.upload_id) {
+      return context.json({ error: { code: "not_found", message: "Pending multipart upload was not found" } }, 404);
+    }
+
+    const storage = createMediaStorageFromEnv();
+    await storage.completeMultipartUpload({
+      objectKey: file.object_key,
+      uploadId: payload.data.upload_id,
+      parts: payload.data.parts.map((part) => ({
+        partNumber: part.part_number,
+        etag: part.etag,
+        checksumSHA256: part.checksum ?? null,
+      })),
+    });
+    const available = await repository.markMultipartComplete(file.public_id, payload.data.upload_id);
+    if (!available) {
+      return context.json({ error: { code: "upload_state_conflict", message: "Multipart upload state changed before completion" } }, 409);
+    }
+
+    return context.json({ file: serializeFile(available) });
+  });
+
+  routes.post("/:file_public_id/multipart-uploads/abort", async (context) => {
+    const payload = abortMultipartUploadSchema.safeParse(await context.req.json());
+    if (!payload.success) {
+      return context.json({ error: { code: "invalid_request", message: "Invalid multipart abort payload" } }, 400);
+    }
+
+    const db = context.get("db");
+    if (!db) {
+      return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
+    }
+
+    const repository = new FilesRepository(db);
+    const file = await repository.findByPublicId(context.req.param("file_public_id"));
+    if (!file || file.upload_type !== "multipart" || file.upload_status !== "pending" || file.multipart_upload_id !== payload.data.upload_id) {
+      return context.json({ error: { code: "not_found", message: "Pending multipart upload was not found" } }, 404);
+    }
+
+    const storage = createMediaStorageFromEnv();
+    await storage.abortMultipartUpload(file.object_key, payload.data.upload_id);
+    const abandoned = await repository.markMultipartAbandoned(file.public_id, payload.data.upload_id);
+    if (!abandoned) {
+      return context.json({ error: { code: "upload_state_conflict", message: "Multipart upload state changed before abort" } }, 409);
+    }
+
+    return context.json({ file: serializeFile(abandoned) });
   });
 
   routes.get("/orphans", requireAdmin, async (context) => {
@@ -306,6 +506,13 @@ export function createFileRoutes() {
     const file = await new FilesRepository(db).findByPublicId(context.req.param("file_public_id"));
     if (!file) {
       return context.json({ error: { code: "not_found", message: "File was not found" } }, 404);
+    }
+    if (file.upload_status !== "available") {
+      return context.json({ error: { code: "file_not_available", message: "File upload is not available for download" } }, 409);
+    }
+    const policies = await loadStoragePolicies({ db, settingsCache: context.get("settingsCache") });
+    if (!scanStatusAllowsDownload(file.scan_status, policies.malwareScan)) {
+      return context.json({ error: { code: "file_scan_blocked", message: "File is not cleared for download" } }, 423);
     }
 
     const storage = createMediaStorageFromEnv();
