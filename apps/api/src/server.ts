@@ -3,6 +3,8 @@ import { createApp } from "./app.js";
 import { loadConfig } from "./config.js";
 import { createApiDatabase } from "./database.js";
 import { attachRealtime, noopRealtimePublisher, type RealtimePublisher } from "./realtime.js";
+import { SettingsCache } from "./settings/cache.js";
+import { RedisSettingsChangeBus, subscribeSettingsCacheInvalidation } from "./settings/change-bus.js";
 import {
   createBullMqProviderDeliveryQueuePublisher,
   createBullMqWebhookQueuePublisher,
@@ -17,6 +19,14 @@ const webhookQueuePublisher = config.redisUrl
 const providerDeliveryQueuePublisher = config.redisUrl
   ? createBullMqProviderDeliveryQueuePublisher(config.redisUrl)
   : undefined;
+const settingsCache = new SettingsCache();
+if (database.db) {
+  await settingsCache.hydrate(database.db);
+}
+const settingsChangeBus = config.redisUrl ? new RedisSettingsChangeBus(config.redisUrl) : undefined;
+if (settingsChangeBus) {
+  await subscribeSettingsCacheInvalidation(settingsCache, settingsChangeBus);
+}
 let activeRealtimePublisher: RealtimePublisher = noopRealtimePublisher;
 const realtimePublisher: RealtimePublisher = {
   publish: (room, envelope) => activeRealtimePublisher.publish(room, envelope),
@@ -31,6 +41,8 @@ const app = createApp({
   realtimePublisher,
   ...(webhookQueuePublisher ? { webhookQueuePublisher } : {}),
   ...(providerDeliveryQueuePublisher ? { providerDeliveryQueuePublisher } : {}),
+  settingsCache,
+  ...(settingsChangeBus ? { settingsChangePublisher: settingsChangeBus } : {}),
 });
 
 const server = serve({
@@ -44,6 +56,7 @@ activeRealtimePublisher = realtime.publisher;
 async function shutdown(signal: NodeJS.Signals) {
   console.log(`Received ${signal}, closing API server`);
   await realtime.close();
+  await settingsChangeBus?.close();
   await webhookQueuePublisher?.close?.();
   await providerDeliveryQueuePublisher?.close?.();
   await database.destroy();

@@ -191,6 +191,47 @@ describe("web API client boundary", () => {
     );
   });
 
+  it("maps admin setting versions and rollback to backend routes", async () => {
+    const requests: Request[] = [];
+    const client = createApiClient("http://localhost:3000", {
+      fetchImpl: async (input, init) => {
+        const request = new Request(input, init);
+        requests.push(request);
+        if (request.url.endsWith("/rollback")) {
+          return Response.json({
+            key: "operations.policy",
+            scope: "global",
+            value: { max_attempts: 3 },
+            is_secret: false,
+            updated_at: "2026-01-01T00:00:00.000Z",
+          });
+        }
+        return Response.json({
+          data: [
+            {
+              public_id: "sev_1",
+              key: "operations.policy",
+              scope: "global",
+              version: 1,
+              value: { max_attempts: 3 },
+              is_secret: false,
+              created_by_user_id: 1,
+              created_at: "2026-01-01T00:00:00.000Z",
+            },
+          ],
+        });
+      },
+    });
+
+    await client.admin.listSettingVersions("operations.policy");
+    await client.admin.rollbackSetting("operations.policy", 1);
+
+    expect(requests[0]?.url).toBe("http://localhost:3000/admin/settings/operations.policy/versions?scope=global");
+    expect(requests[1]?.method).toBe("POST");
+    expect(requests[1]?.url).toBe("http://localhost:3000/admin/settings/operations.policy/rollback");
+    await expect(requests[1]?.json()).resolves.toEqual({ version: 1, scope: "global" });
+  });
+
   it("maps provider attempt reads to backend routes", async () => {
     const requests: Request[] = [];
     const client = createApiClient("http://localhost:3000", {

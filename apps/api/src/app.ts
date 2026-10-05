@@ -16,6 +16,8 @@ import { createWebphoneRoutes } from "./http/webphone-routes.js";
 import type { ApiLogger, AppBindings } from "./http/types.js";
 import { noopRealtimePublisher, type RealtimePublisher } from "./realtime.js";
 import { createSecretEncryptor, type SecretEncryptor } from "./security/encryption.js";
+import type { SettingsCache } from "./settings/cache.js";
+import { noopSettingsChangePublisher, type SettingsChangePublisher } from "./settings/change-bus.js";
 import {
   noopProviderDeliveryQueuePublisher,
   type ProviderDeliveryQueuePublisher,
@@ -31,6 +33,8 @@ export interface CreateAppOptions {
   webhookQueuePublisher?: WebhookQueuePublisher;
   providerDeliveryQueuePublisher?: ProviderDeliveryQueuePublisher;
   realtimePublisher?: RealtimePublisher;
+  settingsCache?: SettingsCache | null;
+  settingsChangePublisher?: SettingsChangePublisher;
   logger?: ApiLogger;
 }
 
@@ -63,6 +67,8 @@ export function createApp(options: CreateAppOptions = {}) {
     context.set("logger", appLogger);
     context.set("realtimePublisher", options.realtimePublisher ?? noopRealtimePublisher);
     context.set("providerDeliveryQueuePublisher", options.providerDeliveryQueuePublisher ?? noopProviderDeliveryQueuePublisher);
+    context.set("settingsCache", options.settingsCache ?? null);
+    context.set("settingsChangePublisher", options.settingsChangePublisher ?? noopSettingsChangePublisher);
     await next();
   });
 

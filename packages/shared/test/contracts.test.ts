@@ -9,6 +9,8 @@ import {
   createStructuredLog,
   storageMetricContracts,
   storageMetricContractSchema,
+  validateGlobalSetting,
+  validateIntegrationSetting,
 } from "../src/index.js";
 
 describe("shared contracts", () => {
@@ -110,6 +112,21 @@ describe("shared contracts", () => {
       "garage_capacity_bytes",
       "garage_backup_age_seconds",
     ]);
+  });
+
+  it("validates known admin setting keys and rejects unknown keys", () => {
+    expect(validateGlobalSetting("providers.ptt.live_mode", false)).toEqual({
+      key: "providers.ptt.live_mode",
+      value: false,
+      is_secret: false,
+    });
+    expect(validateIntegrationSetting("api_key", "secret")).toEqual({
+      key: "api_key",
+      value: "secret",
+      is_secret: true,
+    });
+    expect(() => validateGlobalSetting("unknown.setting", true)).toThrow("Unknown admin setting key");
+    expect(() => validateIntegrationSetting("unknown.setting", true)).toThrow("Unknown integration setting key");
   });
 
   it("validates structured observability logs", () => {

@@ -2,7 +2,14 @@ import { Worker } from "bullmq";
 import { createDatabase, type AppDatabase } from "@garanti-kulucka/database";
 import { Redis } from "ioredis";
 import type pino from "pino";
-import { createStructuredLog, type JobEnvelope, type QueueName } from "@garanti-kulucka/shared";
+import {
+  createStructuredLog,
+  settingsChangedMessageSchema,
+  type JobEnvelope,
+  type QueueName,
+  type SettingsChangedMessage,
+} from "@garanti-kulucka/shared";
+import { bindProviderConfigInvalidation, type SettingsChangeSubscriber } from "./settings-invalidation.js";
 import {
   createWorkerProcessorRegistry,
   type WorkerLifecycleRecorder,
@@ -14,6 +21,32 @@ import {
   type ProviderAccountConfigRepository,
 } from "./providers/account-config.js";
 import { createSecretDecryptor } from "./providers/encryption.js";
+
+class RedisSettingsChangeSubscriber implements SettingsChangeSubscriber {
+  private readonly subscriber: Redis;
+
+  constructor(redisUrl: string) {
+    this.subscriber = new Redis(redisUrl, { maxRetriesPerRequest: null });
+  }
+
+  async subscribeSettingsChanged(handler: (message: SettingsChangedMessage) => void | Promise<void>): Promise<void> {
+    this.subscriber.on("message", (channel, raw) => {
+      if (channel !== "settings.changed") {
+        return;
+      }
+
+      const parsed = settingsChangedMessageSchema.safeParse(JSON.parse(raw));
+      if (parsed.success) {
+        void handler(parsed.data);
+      }
+    });
+    await this.subscriber.subscribe("settings.changed");
+  }
+
+  async close(): Promise<void> {
+    this.subscriber.disconnect();
+  }
+}
 
 export interface WorkerRuntime {
   connection: Redis;
@@ -29,6 +62,7 @@ export interface WorkerRuntimeOptions {
   lifecycleRecorder?: WorkerLifecycleRecorder;
   providerAttemptRepository?: ProviderAttemptRepository;
   providerAccountConfigRepository?: ProviderAccountConfigRepository;
+  settingsChangeSubscriber?: SettingsChangeSubscriber;
 }
 
 export function createWorkerRuntime(options: WorkerRuntimeOptions): WorkerRuntime {
@@ -47,6 +81,10 @@ export function createWorkerRuntime(options: WorkerRuntimeOptions): WorkerRuntim
   const providerAccountConfigRepository =
     options.providerAccountConfigRepository ??
     (db ? new DatabaseProviderAccountConfigRepository(db, decryptor) : undefined);
+  const settingsChangeSubscriber =
+    options.settingsChangeSubscriber ??
+    (options.redisUrl ? new RedisSettingsChangeSubscriber(options.redisUrl) : undefined);
+  void bindProviderConfigInvalidation(providerAccountConfigRepository, settingsChangeSubscriber);
   const registry = createWorkerProcessorRegistry({
     lifecycleRecorder:
       options.lifecycleRecorder ??
@@ -140,6 +178,7 @@ export function createWorkerRuntime(options: WorkerRuntimeOptions): WorkerRuntim
     workers,
     close: async () => {
       await Promise.all([...workers.values()].map((worker) => worker.close()));
+      await settingsChangeSubscriber?.close();
       connection.disconnect();
       await db?.destroy();
     },

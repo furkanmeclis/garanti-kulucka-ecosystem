@@ -37,12 +37,14 @@ export interface Database {
   integration_accounts: IntegrationAccountsTable;
   integration_tokens: IntegrationTokensTable;
   integration_settings: IntegrationSettingsTable;
+  integration_settings_versions: IntegrationSettingsVersionsTable;
   webhook_subscriptions: WebhookSubscriptionsTable;
   webhook_events: WebhookEventsTable;
   provider_attempts: ProviderAttemptsTable;
   files: FilesTable;
   audit_logs: AuditLogsTable;
   settings: SettingsTable;
+  settings_versions: SettingsVersionsTable;
   job_runs: JobRunsTable;
   migration_runs: MigrationRunsTable;
   migration_batches: MigrationBatchesTable;
@@ -263,6 +265,17 @@ export interface IntegrationSettingsTable extends BaseTable {
   is_secret: boolean;
 }
 
+export interface IntegrationSettingsVersionsTable {
+  id: Id;
+  public_id: string;
+  integration_settings_id: number;
+  version_number: number;
+  value: Json;
+  is_secret: boolean;
+  created_by_user_id: number | null;
+  created_at: Timestamp;
+}
+
 export interface WebhookSubscriptionsTable extends BaseTable {
   provider_id: number;
   account_id: number | null;
@@ -331,6 +344,17 @@ export interface SettingsTable extends BaseTable {
   value: Json;
   scope: string;
   is_secret: boolean;
+}
+
+export interface SettingsVersionsTable {
+  id: Id;
+  public_id: string;
+  settings_id: number;
+  version_number: number;
+  value: Json;
+  is_secret: boolean;
+  created_by_user_id: number | null;
+  created_at: Timestamp;
 }
 
 export interface JobRunsTable extends BaseTable {

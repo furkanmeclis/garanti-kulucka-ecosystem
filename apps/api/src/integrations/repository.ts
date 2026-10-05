@@ -596,6 +596,19 @@ export class IntegrationsRepository {
         )
         .returningAll()
         .executeTakeFirstOrThrow();
+      const version = await nextIntegrationSettingVersionNumber(transaction as AppDatabase, setting.id);
+
+      await transaction
+        .insertInto("integration_settings_versions")
+        .values({
+          public_id: newPublicId("isv"),
+          integration_settings_id: setting.id,
+          version_number: version,
+          value: auditIntegrationSettingValue(setting),
+          is_secret: setting.is_secret,
+          created_by_user_id: input.actorUserId,
+        })
+        .execute();
 
       await transaction
         .insertInto("audit_logs")
@@ -678,6 +691,18 @@ export class IntegrationsRepository {
       return token;
     });
   }
+}
+
+async function nextIntegrationSettingVersionNumber(db: AppDatabase, integrationSettingsId: number): Promise<number> {
+  const latest = await db
+    .selectFrom("integration_settings_versions")
+    .select("version_number")
+    .where("integration_settings_id", "=", integrationSettingsId)
+    .orderBy("version_number", "desc")
+    .limit(1)
+    .executeTakeFirst();
+
+  return (latest?.version_number ?? 0) + 1;
 }
 
 export function serializeProvider(provider: IntegrationProviderRecord) {

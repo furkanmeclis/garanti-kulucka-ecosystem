@@ -8,6 +8,17 @@ export interface AdminSetting {
   updated_at: string;
 }
 
+export interface AdminSettingVersion {
+  public_id: string;
+  key: string;
+  scope: string;
+  version: number;
+  value: unknown;
+  is_secret: boolean;
+  created_by_user_id: number | null;
+  created_at: string;
+}
+
 export interface AdminAuditLog {
   id: number;
   actor_user_id: number | null;
@@ -241,6 +252,18 @@ export function createAdminClient(http: BackendHttpClient) {
           value,
           scope,
           is_secret: isSecret,
+        },
+      }),
+    listSettingVersions: (key: string, scope = "global") =>
+      http.request<{ data: AdminSettingVersion[] }>(
+        `/admin/settings/${encodeURIComponent(key)}/versions?scope=${encodeURIComponent(scope)}`,
+      ),
+    rollbackSetting: (key: string, version: number, scope = "global") =>
+      http.request<AdminSetting>(`/admin/settings/${encodeURIComponent(key)}/rollback`, {
+        method: "POST",
+        body: {
+          version,
+          scope,
         },
       }),
     listIntegrationProviders: () =>

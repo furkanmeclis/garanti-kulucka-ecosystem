@@ -184,7 +184,9 @@
             "in": "query",
             "schema": {
               "type": "string",
-              "enum": ["unassigned"]
+              "enum": [
+                "unassigned"
+              ]
             }
           }
         ],
@@ -806,7 +808,10 @@
                 "type": "object",
                 "properties": {
                   "reason": {
-                    "type": ["string", "null"],
+                    "type": [
+                      "string",
+                      "null"
+                    ],
                     "minLength": 1,
                     "maxLength": 255,
                     "default": "admin_orphan_lifecycle_review"
@@ -850,10 +855,15 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["confirmation"],
+                "required": [
+                  "confirmation"
+                ],
                 "properties": {
                   "reason": {
-                    "type": ["string", "null"],
+                    "type": [
+                      "string",
+                      "null"
+                    ],
                     "minLength": 1,
                     "maxLength": 255,
                     "default": "admin_orphan_lifecycle_review"
@@ -1278,7 +1288,10 @@
             "required": true,
             "schema": {
               "type": "string",
-              "enum": ["ptt", "surat"]
+              "enum": [
+                "ptt",
+                "surat"
+              ]
             }
           }
         ],
@@ -1329,6 +1342,84 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/admin/settings/{key}/versions": {
+      "get": {
+        "operationId": "listSettingVersions",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "scope",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "default": "global"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Version history for an admin setting",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingVersionList"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/admin/settings/{key}/rollback": {
+      "post": {
+        "operationId": "rollbackSetting",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SettingRollbackRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Rolled back setting",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Setting"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
           }
         }
       }
@@ -1409,11 +1500,18 @@
     "schemas": {
       "HealthStatus": {
         "type": "object",
-        "required": ["status", "service", "timestamp"],
+        "required": [
+          "status",
+          "service",
+          "timestamp"
+        ],
         "properties": {
           "status": {
             "type": "string",
-            "enum": ["ok", "degraded"]
+            "enum": [
+              "ok",
+              "degraded"
+            ]
           },
           "service": {
             "type": "string"
@@ -1426,11 +1524,16 @@
             "type": "object",
             "additionalProperties": {
               "type": "object",
-              "required": ["status"],
+              "required": [
+                "status"
+              ],
               "properties": {
                 "status": {
                   "type": "string",
-                  "enum": ["ok", "degraded"]
+                  "enum": [
+                    "ok",
+                    "degraded"
+                  ]
                 },
                 "latency_ms": {
                   "type": "number",
@@ -1446,11 +1549,16 @@
       },
       "ErrorResponse": {
         "type": "object",
-        "required": ["error"],
+        "required": [
+          "error"
+        ],
         "properties": {
           "error": {
             "type": "object",
-            "required": ["code", "message"],
+            "required": [
+              "code",
+              "message"
+            ],
             "properties": {
               "code": {
                 "type": "string"
@@ -1464,7 +1572,9 @@
       },
       "OkStatus": {
         "type": "object",
-        "required": ["status"],
+        "required": [
+          "status"
+        ],
         "properties": {
           "status": {
             "type": "string",
@@ -1474,7 +1584,10 @@
       },
       "LoginRequest": {
         "type": "object",
-        "required": ["email", "password"],
+        "required": [
+          "email",
+          "password"
+        ],
         "properties": {
           "email": {
             "type": "string",
@@ -1487,7 +1600,9 @@
       },
       "RefreshRequest": {
         "type": "object",
-        "required": ["refresh_token"],
+        "required": [
+          "refresh_token"
+        ],
         "properties": {
           "refresh_token": {
             "type": "string",
@@ -1497,7 +1612,12 @@
       },
       "TokenPair": {
         "type": "object",
-        "required": ["access_token", "refresh_token", "token_type", "expires_in"],
+        "required": [
+          "access_token",
+          "refresh_token",
+          "token_type",
+          "expires_in"
+        ],
         "properties": {
           "access_token": {
             "type": "string"
@@ -1521,7 +1641,9 @@
           },
           {
             "type": "object",
-            "required": ["user"],
+            "required": [
+              "user"
+            ],
             "properties": {
               "user": {
                 "$ref": "#/components/schemas/AuthUser"
@@ -1532,7 +1654,12 @@
       },
       "AuthUser": {
         "type": "object",
-        "required": ["public_id", "email", "role", "permissions"],
+        "required": [
+          "public_id",
+          "email",
+          "role",
+          "permissions"
+        ],
         "properties": {
           "public_id": {
             "type": "string"
@@ -1542,10 +1669,16 @@
             "format": "email"
           },
           "first_name": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "last_name": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "role": {
             "type": "string"
@@ -1557,13 +1690,18 @@
             }
           },
           "sip_username": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
       "DataEnvelope": {
         "type": "object",
-        "required": ["data"],
+        "required": [
+          "data"
+        ],
         "properties": {
           "data": {
             "type": "array"
@@ -1606,7 +1744,10 @@
           },
           "channel_counts": {
             "type": "object",
-            "required": ["instagram", "facebook"],
+            "required": [
+              "instagram",
+              "facebook"
+            ],
             "properties": {
               "instagram": {
                 "type": "integer",
@@ -1620,7 +1761,10 @@
           },
           "status_counts": {
             "type": "object",
-            "required": ["open", "closed"],
+            "required": [
+              "open",
+              "closed"
+            ],
             "properties": {
               "open": {
                 "type": "integer",
@@ -1656,13 +1800,39 @@
           "updated_at"
         ],
         "properties": {
-          "public_id": { "type": "string" },
-          "full_name": { "type": "string" },
-          "phone": { "type": ["string", "null"] },
-          "email": { "type": ["string", "null"] },
-          "username": { "type": ["string", "null"] },
-          "notes": { "type": ["string", "null"] },
-          "updated_at": { "type": "string" }
+          "public_id": {
+            "type": "string"
+          },
+          "full_name": {
+            "type": "string"
+          },
+          "phone": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "username": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "notes": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "updated_at": {
+            "type": "string"
+          }
         }
       },
       "CustomerSummaryStats": {
@@ -1674,10 +1844,22 @@
           "with_notes_count"
         ],
         "properties": {
-          "total_count": { "type": "integer", "minimum": 0 },
-          "with_phone_count": { "type": "integer", "minimum": 0 },
-          "with_email_count": { "type": "integer", "minimum": 0 },
-          "with_notes_count": { "type": "integer", "minimum": 0 }
+          "total_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "with_phone_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "with_email_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "with_notes_count": {
+            "type": "integer",
+            "minimum": 0
+          }
         }
       },
       "OrderList": {
@@ -1731,7 +1913,10 @@
       },
       "ProviderDebugSummary": {
         "type": "object",
-        "required": ["providers", "cron"],
+        "required": [
+          "providers",
+          "cron"
+        ],
         "properties": {
           "providers": {
             "type": "array",
@@ -1795,7 +1980,10 @@
                 "type": "array",
                 "items": {
                   "type": "string",
-                  "enum": ["ptt", "surat"]
+                  "enum": [
+                    "ptt",
+                    "surat"
+                  ]
                 }
               },
               "operation": {
@@ -1833,7 +2021,9 @@
       },
       "ProviderCronTriggerRequest": {
         "type": "object",
-        "required": ["idempotency_key"],
+        "required": [
+          "idempotency_key"
+        ],
         "properties": {
           "idempotency_key": {
             "type": "string",
@@ -1843,10 +2033,17 @@
       },
       "InstagramPublishPreviewRequest": {
         "type": "object",
-        "required": ["image_url", "caption", "idempotency_key"],
+        "required": [
+          "image_url",
+          "caption",
+          "idempotency_key"
+        ],
         "properties": {
           "account_public_id": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "image_url": {
             "type": "string",
@@ -1865,7 +2062,10 @@
       },
       "WebphoneTestCallRequest": {
         "type": "object",
-        "required": ["customer_phone", "idempotency_key"],
+        "required": [
+          "customer_phone",
+          "idempotency_key"
+        ],
         "properties": {
           "customer_name": {
             "type": "string",
@@ -1919,7 +2119,10 @@
             "type": "string"
           },
           "account_public_id": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "request_id": {
             "type": "string"
@@ -1934,7 +2137,10 @@
             "type": "string"
           },
           "status_code": {
-            "type": ["integer", "null"]
+            "type": [
+              "integer",
+              "null"
+            ]
           },
           "duration_ms": {
             "type": "integer",
@@ -1944,20 +2150,32 @@
             "type": "string"
           },
           "next_retry_at": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "format": "date-time"
           },
           "idempotency_key": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "request_metadata": {},
           "provider_request_preview": {},
           "response_metadata": {},
           "error_code": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "error_message": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "started_at": {
             "type": "string",
@@ -1971,7 +2189,15 @@
       },
       "Conversation": {
         "type": "object",
-        "required": ["public_id", "channel", "status", "is_in_pool", "human_agent_enabled", "unread_count", "updated_at"],
+        "required": [
+          "public_id",
+          "channel",
+          "status",
+          "is_in_pool",
+          "human_agent_enabled",
+          "unread_count",
+          "updated_at"
+        ],
         "properties": {
           "public_id": {
             "type": "string"
@@ -1993,28 +2219,46 @@
             "minimum": 0
           },
           "last_message_text": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "last_message_sender_type": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "last_message_at": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "format": "date-time"
           },
           "customer": {
-            "type": ["object", "null"],
+            "type": [
+              "object",
+              "null"
+            ],
             "properties": {
               "full_name": {
                 "type": "string"
               },
               "phone": {
-                "type": ["string", "null"]
+                "type": [
+                  "string",
+                  "null"
+                ]
               }
             }
           },
           "assigned_user_email": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "updated_at": {
             "type": "string",
@@ -2024,7 +2268,13 @@
       },
       "CommentModerationSummary": {
         "type": "object",
-        "required": ["manual_queue", "automatic_queue", "answered", "instagram", "facebook"],
+        "required": [
+          "manual_queue",
+          "automatic_queue",
+          "answered",
+          "instagram",
+          "facebook"
+        ],
         "properties": {
           "manual_queue": {
             "type": "integer",
@@ -2050,7 +2300,13 @@
       },
       "BalanceSummary": {
         "type": "object",
-        "required": ["total_commission", "total_deduction", "pending_payment", "available_balance", "pending_request_count"],
+        "required": [
+          "total_commission",
+          "total_deduction",
+          "pending_payment",
+          "available_balance",
+          "pending_request_count"
+        ],
         "properties": {
           "total_commission": {
             "type": "number",
@@ -2076,23 +2332,42 @@
       },
       "Message": {
         "type": "object",
-        "required": ["public_id", "sender_type", "is_read", "sent_at"],
+        "required": [
+          "public_id",
+          "sender_type",
+          "is_read",
+          "sent_at"
+        ],
         "properties": {
           "public_id": {
             "type": "string"
           },
           "sender_type": {
             "type": "string",
-            "enum": ["customer", "user", "ai", "system"]
+            "enum": [
+              "customer",
+              "user",
+              "ai",
+              "system"
+            ]
           },
           "sender_name": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "body": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "external_message_id": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "is_read": {
             "type": "boolean"
@@ -2108,19 +2383,33 @@
         "properties": {
           "sender_type": {
             "type": "string",
-            "enum": ["customer", "user", "ai", "system"],
+            "enum": [
+              "customer",
+              "user",
+              "ai",
+              "system"
+            ],
             "default": "user"
           },
           "sender_name": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "default": null
           },
           "body": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "default": null
           },
           "external_message_id": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "default": null
           },
           "raw_payload": true
@@ -2150,14 +2439,23 @@
       },
       "CreateOrderRequest": {
         "type": "object",
-        "required": ["order_number", "total_amount"],
+        "required": [
+          "order_number",
+          "total_amount"
+        ],
         "properties": {
           "customer_public_id": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "default": null
           },
           "conversation_public_id": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "default": null
           },
           "order_number": {
@@ -2182,27 +2480,38 @@
             "default": "TRY"
           },
           "notes": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "default": null
           }
         }
       },
       "UpdateOrderStatusRequest": {
         "type": "object",
-        "required": ["status"],
+        "required": [
+          "status"
+        ],
         "properties": {
           "status": {
             "type": "string"
           },
           "notes": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "default": null
           }
         }
       },
       "CreatePaymentRequest": {
         "type": "object",
-        "required": ["amount", "idempotency_key"],
+        "required": [
+          "amount",
+          "idempotency_key"
+        ],
         "properties": {
           "amount": {
             "type": "string",
@@ -2272,7 +2581,14 @@
       },
       "Order": {
         "type": "object",
-        "required": ["public_id", "order_number", "status", "source", "total_amount", "currency"],
+        "required": [
+          "public_id",
+          "order_number",
+          "status",
+          "source",
+          "total_amount",
+          "currency"
+        ],
         "properties": {
           "public_id": {
             "type": "string"
@@ -2293,13 +2609,22 @@
             "type": "string"
           },
           "confirmation_status": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "notes": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "customer_full_name": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "created_at": {
             "type": "string"
@@ -2320,12 +2645,29 @@
           "currency"
         ],
         "properties": {
-          "total_count": { "type": "integer", "minimum": 0 },
-          "active_count": { "type": "integer", "minimum": 0 },
-          "delivered_count": { "type": "integer", "minimum": 0 },
-          "pending_confirmation_count": { "type": "integer", "minimum": 0 },
-          "total_revenue": { "type": "number", "minimum": 0 },
-          "currency": { "type": "string" }
+          "total_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "active_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "delivered_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "pending_confirmation_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "total_revenue": {
+            "type": "number",
+            "minimum": 0
+          },
+          "currency": {
+            "type": "string"
+          }
         }
       },
       "Product": {
@@ -2339,15 +2681,42 @@
           "updated_at"
         ],
         "properties": {
-          "public_id": { "type": "string" },
-          "sku": { "type": ["string", "null"] },
-          "name": { "type": "string" },
-          "category": { "type": ["string", "null"] },
-          "unit_price": { "type": "string" },
-          "stock_quantity": { "type": "integer" },
-          "is_active": { "type": "boolean" },
-          "external_product_id": { "type": ["string", "null"] },
-          "updated_at": { "type": "string" }
+          "public_id": {
+            "type": "string"
+          },
+          "sku": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "category": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "unit_price": {
+            "type": "string"
+          },
+          "stock_quantity": {
+            "type": "integer"
+          },
+          "is_active": {
+            "type": "boolean"
+          },
+          "external_product_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "updated_at": {
+            "type": "string"
+          }
         }
       },
       "ProductSummaryStats": {
@@ -2360,30 +2729,60 @@
           "category_counts"
         ],
         "properties": {
-          "total_count": { "type": "integer", "minimum": 0 },
-          "active_count": { "type": "integer", "minimum": 0 },
-          "critical_count": { "type": "integer", "minimum": 0 },
-          "critical_threshold": { "type": "integer", "minimum": 0 },
+          "total_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "active_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "critical_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "critical_threshold": {
+            "type": "integer",
+            "minimum": 0
+          },
           "category_counts": {
             "type": "object",
-            "required": ["incubator", "spare_part", "other"],
+            "required": [
+              "incubator",
+              "spare_part",
+              "other"
+            ],
             "properties": {
-              "incubator": { "type": "integer", "minimum": 0 },
-              "spare_part": { "type": "integer", "minimum": 0 },
-              "other": { "type": "integer", "minimum": 0 }
+              "incubator": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "spare_part": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "other": {
+                "type": "integer",
+                "minimum": 0
+              }
             }
           }
         }
       },
       "UpdateShipmentStatusRequest": {
         "type": "object",
-        "required": ["status"],
+        "required": [
+          "status"
+        ],
         "properties": {
           "status": {
             "type": "string"
           },
           "last_event_text": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "default": null
           },
           "raw_payload": true
@@ -2391,7 +2790,11 @@
       },
       "Shipment": {
         "type": "object",
-        "required": ["public_id", "provider", "status"],
+        "required": [
+          "public_id",
+          "provider",
+          "status"
+        ],
         "properties": {
           "public_id": {
             "type": "string"
@@ -2400,34 +2803,61 @@
             "type": "string"
           },
           "tracking_number": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "barcode_number": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "status": {
             "type": "string"
           },
           "recipient_name": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "recipient_phone": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "recipient_city": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "recipient_district": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "last_event_text": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "order_number": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "customer_full_name": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "updated_at": {
             "type": "string"
@@ -2436,7 +2866,10 @@
       },
       "SendSmsRequest": {
         "type": "object",
-        "required": ["recipient_phone", "message"],
+        "required": [
+          "recipient_phone",
+          "message"
+        ],
         "properties": {
           "recipient_phone": {
             "type": "string",
@@ -2480,7 +2913,10 @@
             "type": "string"
           },
           "job_id": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "queued": {
             "type": "boolean"
@@ -2526,40 +2962,102 @@
           },
           "provider_counts": {
             "type": "object",
-            "required": ["ptt", "surat", "other"],
+            "required": [
+              "ptt",
+              "surat",
+              "other"
+            ],
             "properties": {
-              "ptt": { "type": "integer", "minimum": 0 },
-              "surat": { "type": "integer", "minimum": 0 },
-              "other": { "type": "integer", "minimum": 0 }
+              "ptt": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "surat": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "other": {
+                "type": "integer",
+                "minimum": 0
+              }
             }
           },
           "exception_counts": {
             "type": "object",
-            "required": ["ptt_not_delivered", "surat_not_delivered", "tracking_missing"],
+            "required": [
+              "ptt_not_delivered",
+              "surat_not_delivered",
+              "tracking_missing"
+            ],
             "properties": {
-              "ptt_not_delivered": { "type": "integer", "minimum": 0 },
-              "surat_not_delivered": { "type": "integer", "minimum": 0 },
-              "tracking_missing": { "type": "integer", "minimum": 0 }
+              "ptt_not_delivered": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "surat_not_delivered": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "tracking_missing": {
+                "type": "integer",
+                "minimum": 0
+              }
             }
           }
         }
       },
       "ShipmentPipelineSummary": {
         "type": "object",
-        "required": ["counts", "rows"],
+        "required": [
+          "counts",
+          "rows"
+        ],
         "properties": {
           "counts": {
             "type": "object",
-            "required": ["all", "mesaj", "sms", "vapi", "teslim", "bekliyor", "isleniyor", "hata"],
+            "required": [
+              "all",
+              "mesaj",
+              "sms",
+              "vapi",
+              "teslim",
+              "bekliyor",
+              "isleniyor",
+              "hata"
+            ],
             "properties": {
-              "all": { "type": "integer", "minimum": 0 },
-              "mesaj": { "type": "integer", "minimum": 0 },
-              "sms": { "type": "integer", "minimum": 0 },
-              "vapi": { "type": "integer", "minimum": 0 },
-              "teslim": { "type": "integer", "minimum": 0 },
-              "bekliyor": { "type": "integer", "minimum": 0 },
-              "isleniyor": { "type": "integer", "minimum": 0 },
-              "hata": { "type": "integer", "minimum": 0 }
+              "all": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "mesaj": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "sms": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "vapi": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "teslim": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "bekliyor": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "isleniyor": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "hata": {
+                "type": "integer",
+                "minimum": 0
+              }
             }
           },
           "rows": {
@@ -2572,7 +3070,12 @@
       },
       "ShipmentPipelineRow": {
         "type": "object",
-        "required": ["shipment_public_id", "recipient_name", "step", "pipeline_status"],
+        "required": [
+          "shipment_public_id",
+          "recipient_name",
+          "step",
+          "pipeline_status"
+        ],
         "properties": {
           "shipment_public_id": {
             "type": "string"
@@ -2581,21 +3084,40 @@
             "type": "string"
           },
           "recipient_phone": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "tracking_number": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "barcode_number": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "step": {
             "type": "string",
-            "enum": ["mesaj", "sms", "vapi", "teslim"]
+            "enum": [
+              "mesaj",
+              "sms",
+              "vapi",
+              "teslim"
+            ]
           },
           "pipeline_status": {
             "type": "string",
-            "enum": ["bekliyor", "isleniyor", "hata", "teslim"]
+            "enum": [
+              "bekliyor",
+              "isleniyor",
+              "hata",
+              "teslim"
+            ]
           }
         }
       },
@@ -2603,18 +3125,30 @@
         "type": "object",
         "properties": {
           "original_name": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "mime_type": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "byte_size": {
-            "type": ["integer", "null"],
+            "type": [
+              "integer",
+              "null"
+            ],
             "minimum": 0,
             "maximum": 52428800
           },
           "checksum": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "minLength": 16,
             "maxLength": 128
           }
@@ -2637,30 +3171,78 @@
           "active_shipment_rate"
         ],
         "properties": {
-          "conversation_count": { "type": "integer", "minimum": 0 },
-          "order_count": { "type": "integer", "minimum": 0 },
-          "shipment_count": { "type": "integer", "minimum": 0 },
-          "total_revenue": { "type": "number", "minimum": 0 },
-          "currency": { "type": "string" },
-          "open_conversation_count": { "type": "integer", "minimum": 0 },
-          "pending_confirmation_count": { "type": "integer", "minimum": 0 },
-          "active_shipment_count": { "type": "integer", "minimum": 0 },
-          "delivered_shipment_count": { "type": "integer", "minimum": 0 },
-          "delivered_shipment_rate": { "type": "integer", "minimum": 0, "maximum": 100 },
-          "confirmation_rate": { "type": "integer", "minimum": 0, "maximum": 100 },
-          "active_shipment_rate": { "type": "integer", "minimum": 0, "maximum": 100 }
+          "conversation_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "order_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "shipment_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "total_revenue": {
+            "type": "number",
+            "minimum": 0
+          },
+          "currency": {
+            "type": "string"
+          },
+          "open_conversation_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "pending_confirmation_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "active_shipment_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "delivered_shipment_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "delivered_shipment_rate": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "confirmation_rate": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "active_shipment_rate": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          }
         }
       },
       "FileUpload": {
         "type": "object",
-        "required": ["file", "upload"],
+        "required": [
+          "file",
+          "upload"
+        ],
         "properties": {
           "file": {
             "$ref": "#/components/schemas/File"
           },
           "upload": {
             "type": "object",
-            "required": ["method", "bucket", "object_key", "headers", "presigned_url", "expires_at"],
+            "required": [
+              "method",
+              "bucket",
+              "object_key",
+              "headers",
+              "presigned_url",
+              "expires_at"
+            ],
             "properties": {
               "method": {
                 "type": "string",
@@ -2676,10 +3258,16 @@
                 "type": "object"
               },
               "presigned_url": {
-                "type": ["string", "null"]
+                "type": [
+                  "string",
+                  "null"
+                ]
               },
               "expires_at": {
-                "type": ["string", "null"],
+                "type": [
+                  "string",
+                  "null"
+                ],
                 "format": "date-time"
               }
             }
@@ -2693,11 +3281,15 @@
           },
           {
             "type": "object",
-            "required": ["summary"],
+            "required": [
+              "summary"
+            ],
             "properties": {
               "summary": {
                 "type": "object",
-                "required": ["total_count"],
+                "required": [
+                  "total_count"
+                ],
                 "properties": {
                   "total_count": {
                     "type": "integer",
@@ -2736,14 +3328,22 @@
             "type": "boolean"
           },
           "reason": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "file": {
             "$ref": "#/components/schemas/File"
           },
           "storage_action": {
             "type": "object",
-            "required": ["provider", "bucket", "object_key", "operation"],
+            "required": [
+              "provider",
+              "bucket",
+              "object_key",
+              "operation"
+            ],
             "properties": {
               "provider": {
                 "type": "string"
@@ -2789,14 +3389,23 @@
             "type": "boolean"
           },
           "reason": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "file": {
             "$ref": "#/components/schemas/File"
           },
           "storage_action": {
             "type": "object",
-            "required": ["provider", "bucket", "object_key", "operation", "deletion_performed"],
+            "required": [
+              "provider",
+              "bucket",
+              "object_key",
+              "operation",
+              "deletion_performed"
+            ],
             "properties": {
               "provider": {
                 "type": "string"
@@ -2821,7 +3430,12 @@
       },
       "File": {
         "type": "object",
-        "required": ["public_id", "bucket", "object_key", "created_at"],
+        "required": [
+          "public_id",
+          "bucket",
+          "object_key",
+          "created_at"
+        ],
         "properties": {
           "public_id": {
             "type": "string"
@@ -2833,16 +3447,28 @@
             "type": "string"
           },
           "original_name": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "mime_type": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "byte_size": {
-            "type": ["integer", "null"]
+            "type": [
+              "integer",
+              "null"
+            ]
           },
           "checksum": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "created_at": {
             "type": "string"
@@ -2851,22 +3477,39 @@
       },
       "WebphoneConfig": {
         "type": "object",
-        "required": ["enabled", "media_proxy_enabled", "transport", "ice_servers"],
+        "required": [
+          "enabled",
+          "media_proxy_enabled",
+          "transport",
+          "ice_servers"
+        ],
         "properties": {
           "enabled": {
             "type": "boolean"
           },
           "sip_websocket_url": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "sip_domain": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "sip_username": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "sip_password": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "ice_servers": {
             "type": "array"
@@ -2883,7 +3526,9 @@
       },
       "UpsertSettingRequest": {
         "type": "object",
-        "required": ["value"],
+        "required": [
+          "value"
+        ],
         "properties": {
           "value": true,
           "scope": {
@@ -2898,7 +3543,13 @@
       },
       "Setting": {
         "type": "object",
-        "required": ["key", "scope", "value", "is_secret", "updated_at"],
+        "required": [
+          "key",
+          "scope",
+          "value",
+          "is_secret",
+          "updated_at"
+        ],
         "properties": {
           "key": {
             "type": "string"
@@ -2917,7 +3568,10 @@
       },
       "UpsertIntegrationAccountRequest": {
         "type": "object",
-        "required": ["provider_key", "display_name"],
+        "required": [
+          "provider_key",
+          "display_name"
+        ],
         "properties": {
           "provider_key": {
             "type": "string"
@@ -2926,7 +3580,10 @@
             "type": "string"
           },
           "external_account_id": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "default": null
           },
           "metadata": {
@@ -2937,7 +3594,11 @@
       },
       "IntegrationAccount": {
         "type": "object",
-        "required": ["public_id", "provider_key", "display_name"],
+        "required": [
+          "public_id",
+          "provider_key",
+          "display_name"
+        ],
         "properties": {
           "public_id": {
             "type": "string"
@@ -2949,7 +3610,10 @@
             "type": "string"
           },
           "external_account_id": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "is_active": {
             "type": "boolean"
@@ -2961,7 +3625,11 @@
       },
       "IntegrationAccountSnapshot": {
         "type": "object",
-        "required": ["account", "settings", "tokens"],
+        "required": [
+          "account",
+          "settings",
+          "tokens"
+        ],
         "properties": {
           "account": {
             "$ref": "#/components/schemas/IntegrationAccount"
@@ -2976,7 +3644,13 @@
       },
       "InstagramAnalyticsSummary": {
         "type": "object",
-        "required": ["followers", "reach", "impressions", "profile_views", "engagement_rate"],
+        "required": [
+          "followers",
+          "reach",
+          "impressions",
+          "profile_views",
+          "engagement_rate"
+        ],
         "properties": {
           "followers": {
             "type": "integer",
@@ -3002,7 +3676,9 @@
       },
       "UpsertIntegrationSettingRequest": {
         "type": "object",
-        "required": ["value"],
+        "required": [
+          "value"
+        ],
         "properties": {
           "value": true,
           "is_secret": {
@@ -3020,11 +3696,16 @@
       },
       "UpsertIntegrationTokenRequest": {
         "type": "object",
-        "required": ["value"],
+        "required": [
+          "value"
+        ],
         "properties": {
           "value": true,
           "expires_at": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "format": "date-time",
             "default": null
           }
@@ -3032,14 +3713,92 @@
       },
       "IntegrationToken": {
         "type": "object",
-        "required": ["token_type", "value", "expires_at"],
+        "required": [
+          "token_type",
+          "value",
+          "expires_at"
+        ],
         "properties": {
           "token_type": {
             "type": "string"
           },
           "value": true,
           "expires_at": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "SettingVersion": {
+        "type": "object",
+        "required": [
+          "public_id",
+          "key",
+          "scope",
+          "version",
+          "value",
+          "is_secret",
+          "created_by_user_id",
+          "created_at"
+        ],
+        "properties": {
+          "public_id": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer"
+          },
+          "value": {},
+          "is_secret": {
+            "type": "boolean"
+          },
+          "created_by_user_id": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "SettingVersionList": {
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SettingVersion"
+            }
+          }
+        }
+      },
+      "SettingRollbackRequest": {
+        "type": "object",
+        "required": [
+          "version"
+        ],
+        "properties": {
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "scope": {
+            "type": "string",
+            "default": "global"
           }
         }
       }

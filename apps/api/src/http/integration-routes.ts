@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { z } from "zod";
+import { validateIntegrationSetting } from "@garanti-kulucka/shared";
 import type { AppBindings } from "./types.js";
 import { AuditRepository, parseAuditLimit, serializeAuditLog } from "../audit/repository.js";
 import { authenticate, requireAdmin, requireDatabase } from "./middleware.js";
@@ -250,6 +251,10 @@ export function createIntegrationRoutes() {
     if (!payload.success) {
       return context.json({ error: { code: "invalid_request", message: "Invalid integration setting payload" } }, 400);
     }
+    const validation = validateIntegrationSettingPayload(context.req.param("key"), payload.data.value);
+    if (!validation.success) {
+      return context.json({ error: { code: "invalid_setting", message: validation.message } }, 400);
+    }
 
     const db = context.get("db");
     if (!db) {
@@ -258,12 +263,18 @@ export function createIntegrationRoutes() {
 
     const setting = await new IntegrationsRepository(db, context.get("encryptor")).upsertSetting({
       accountPublicId: context.req.param("account_public_id"),
-      key: context.req.param("key"),
-      value: payload.data.value,
-      isSecret: payload.data.is_secret,
+      key: validation.data.key,
+      value: validation.data.value,
+      isSecret: validation.data.is_secret,
       actorUserId: context.get("actorUserId"),
       ipAddress: context.req.header("x-forwarded-for") ?? null,
       userAgent: context.req.header("user-agent") ?? null,
+    });
+    await context.get("settingsChangePublisher").publishSettingsChanged({
+      scope: `integration:${context.req.param("account_public_id")}`,
+      key: setting.key,
+      version: null,
+      source: "integration_settings",
     });
 
     return context.json(serializeIntegrationSetting(setting));
@@ -294,4 +305,15 @@ export function createIntegrationRoutes() {
   });
 
   return routes;
+}
+
+function validateIntegrationSettingPayload(key: string, value: unknown) {
+  try {
+    return { success: true as const, data: validateIntegrationSetting(key, value) };
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return { success: false as const, message: `Invalid value for integration setting key ${key}` };
+    }
+    return { success: false as const, message: error instanceof Error ? error.message : `Invalid integration setting key: ${key}` };
+  }
 }
