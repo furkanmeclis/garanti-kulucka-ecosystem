@@ -56,6 +56,22 @@ export interface FileOrphanCleanupDryRun {
   };
 }
 
+export interface FileOrphanCleanupApply {
+  mode: "apply";
+  request_id: string;
+  deletion_performed: true;
+  eligible_for_cleanup: boolean;
+  reason: string | null;
+  file: FileMetadata;
+  storage_action: FileOrphanCleanupDryRun["storage_action"] & {
+    deletion_performed: true;
+  };
+}
+
+export interface FileOrphanSummary {
+  total_count: number;
+}
+
 function orphanQuery(options: FileOrphanListOptions = {}) {
   const params = new URLSearchParams();
   if (typeof options.limit === "number") {
@@ -80,13 +96,29 @@ export function createFileClient(http: BackendHttpClient) {
         `/api/files/${encodeURIComponent(filePublicId)}/download`,
       ),
     listOrphanCandidates: (options?: FileOrphanListOptions) =>
-      http.request<{ data: FileMetadata[] }>(`/api/files/orphans${orphanQuery(options)}`),
+      http.request<{ data: FileMetadata[]; summary: FileOrphanSummary }>(
+        `/api/files/orphans${orphanQuery(options)}`,
+      ),
     createOrphanCleanupDryRun: (filePublicId: string, reason = "admin_orphan_lifecycle_review") =>
       http.request<FileOrphanCleanupDryRun>(
         `/api/files/${encodeURIComponent(filePublicId)}/orphan-cleanup-dry-run`,
         {
           method: "POST",
           body: { reason },
+        },
+      ),
+    createOrphanCleanupApply: (
+      filePublicId: string,
+      input: { confirmation: "delete_orphan_object"; reason?: string | null },
+    ) =>
+      http.request<FileOrphanCleanupApply>(
+        `/api/files/${encodeURIComponent(filePublicId)}/orphan-cleanup`,
+        {
+          method: "POST",
+          body: {
+            reason: input.reason ?? "admin_orphan_lifecycle_review",
+            confirmation: input.confirmation,
+          },
         },
       ),
   };

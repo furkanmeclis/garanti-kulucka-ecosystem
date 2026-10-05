@@ -11,6 +11,11 @@ export interface ListAuditLogsInput {
   limit: number;
 }
 
+export interface CountAuditLogsInput {
+  entityTypes: string[];
+  entityId: string | null;
+}
+
 export class AuditRepository {
   constructor(private readonly db: AppDatabase) {}
 
@@ -28,6 +33,20 @@ export class AuditRepository {
     }
 
     return query.execute();
+  }
+
+  async count(input: CountAuditLogsInput): Promise<number> {
+    let query = this.db
+      .selectFrom("audit_logs")
+      .select((expression) => [expression.fn.countAll<number>().as("total_count")])
+      .where("entity_type", "in", input.entityTypes);
+
+    if (input.entityId) {
+      query = query.where("entity_id", "=", input.entityId);
+    }
+
+    const row = await query.executeTakeFirst();
+    return Number(row?.total_count ?? 0);
   }
 }
 

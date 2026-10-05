@@ -16,6 +16,10 @@ const orphanCleanupDryRunSchema = z.object({
   reason: z.string().min(1).max(255).nullable().default("admin_orphan_lifecycle_review"),
 });
 
+const orphanCleanupApplySchema = orphanCleanupDryRunSchema.extend({
+  confirmation: z.literal("delete_orphan_object"),
+});
+
 async function readOptionalJsonBody(context: { req: { header: (name: string) => string | undefined; json: () => Promise<unknown> } }) {
   const contentLength = context.req.header("content-length");
   if (contentLength === "0") {
@@ -30,6 +34,10 @@ async function readOptionalJsonBody(context: { req: { header: (name: string) => 
     }
     throw new Error("invalid_json");
   }
+}
+
+function storageDeleteEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.STORAGE_ORPHAN_DELETE_ENABLED === "true";
 }
 
 export function createFileRoutes() {
@@ -80,8 +88,12 @@ export function createFileRoutes() {
 
     const parsedLimit = Number(context.req.query("limit") ?? 20);
     const limit = Number.isFinite(parsedLimit) ? parsedLimit : 20;
-    const files = await new FilesRepository(db).listOrphanCandidates(limit);
-    return context.json({ data: files.map(serializeFile) });
+    const repository = new FilesRepository(db);
+    const [files, totalCount] = await Promise.all([
+      repository.listOrphanCandidates(limit),
+      repository.countOrphanCandidates(),
+    ]);
+    return context.json({ data: files.map(serializeFile), summary: { total_count: totalCount } });
   });
 
   routes.post("/:file_public_id/orphan-cleanup-dry-run", requireAdmin, async (context) => {
@@ -125,6 +137,70 @@ export function createFileRoutes() {
         object_key: file.object_key,
         operation: "delete_object",
       },
+    });
+  });
+
+  routes.post("/:file_public_id/orphan-cleanup", requireAdmin, async (context) => {
+    let body: unknown;
+    try {
+      body = await readOptionalJsonBody(context);
+    } catch {
+      return context.json({ error: { code: "invalid_request", message: "Invalid orphan cleanup payload" } }, 400);
+    }
+
+    const payload = orphanCleanupApplySchema.safeParse(body);
+    if (!payload.success) {
+      return context.json({ error: { code: "invalid_request", message: "Invalid orphan cleanup payload" } }, 400);
+    }
+
+    if (!storageDeleteEnabled()) {
+      return context.json(
+        {
+          error: {
+            code: "storage_operation_disabled",
+            message: "Orphan cleanup delete is disabled. Run dry-run and enable STORAGE_ORPHAN_DELETE_ENABLED for controlled production apply.",
+          },
+        },
+        409,
+      );
+    }
+
+    const db = context.get("db");
+    if (!db) {
+      return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
+    }
+
+    const filePublicId = context.req.param("file_public_id");
+    if (!filePublicId) {
+      return context.json({ error: { code: "invalid_request", message: "File public id is required" } }, 400);
+    }
+
+    const file = await new FilesRepository(db).findOrphanCandidateByPublicId(filePublicId);
+    if (!file) {
+      return context.json({ error: { code: "not_found", message: "Orphan file candidate was not found" } }, 404);
+    }
+
+    const storage = createMediaStorageFromEnv();
+    if (file.bucket !== storage.bucket) {
+      return context.json(
+        {
+          error: {
+            code: "storage_bucket_mismatch",
+            message: "File bucket does not match configured media storage bucket",
+          },
+        },
+        409,
+      );
+    }
+
+    return context.json({
+      mode: "apply",
+      request_id: `orphan_cleanup_${file.public_id}`,
+      deletion_performed: true,
+      eligible_for_cleanup: true,
+      reason: payload.data.reason,
+      file: serializeFile(file),
+      storage_action: await storage.deleteObject(file.object_key),
     });
   });
 

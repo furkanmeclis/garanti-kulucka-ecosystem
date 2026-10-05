@@ -101,4 +101,26 @@ describe("file API client", () => {
 
     expect(requests[0]?.url).toBe("http://localhost:3000/api/files/orphans?limit=10");
   });
+
+  it("maps controlled orphan cleanup applies to the backend route", async () => {
+    const requests: Request[] = [];
+    const http = createBackendHttpClient({
+      baseUrl: "http://localhost:3000",
+      fetchImpl: async (input, init) => {
+        requests.push(new Request(input, init));
+        return Response.json({});
+      },
+    });
+
+    await createFileClient(http).createOrphanCleanupApply("fil_test", {
+      confirmation: "delete_orphan_object",
+      reason: "approved-production-lifecycle",
+    });
+
+    expect(requests[0]?.url).toBe("http://localhost:3000/api/files/fil_test/orphan-cleanup");
+    await expect(requests[0]?.json()).resolves.toEqual({
+      reason: "approved-production-lifecycle",
+      confirmation: "delete_orphan_object",
+    });
+  });
 });

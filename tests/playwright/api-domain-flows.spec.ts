@@ -502,6 +502,18 @@ class FixtureQuery {
       );
     }
 
+    if (this.table === "files" && this.aggregateCounts.size > 0) {
+      const orphanFiles = files.filter((file) => file.public_id === "fil_orphan");
+      return Object.fromEntries(
+        [...this.aggregateCounts.entries()].map(([alias, column]) => [
+          alias,
+          column === "*"
+            ? orphanFiles.length
+            : orphanFiles.filter((file) => Boolean(file[column as keyof typeof file])).length,
+        ]),
+      );
+    }
+
     switch (this.table) {
       case "users":
         return user;
@@ -1489,6 +1501,9 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
 
     expect(fileOrphansResponse.status()).toBe(200);
     expect(await fileOrphansResponse.json()).toMatchObject({
+      summary: {
+        total_count: 1,
+      },
       data: [
         {
           public_id: "fil_orphan",
@@ -1518,6 +1533,18 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
         bucket: "media",
         object_key: "uploads/orphan-proof.txt",
         operation: "delete_object",
+      },
+    });
+    const orphanCleanupApplyDisabledResponse = await api.client.post("/api/files/fil_orphan/orphan-cleanup", {
+      data: {
+        reason: "playwright-orphan-apply",
+        confirmation: "delete_orphan_object",
+      },
+    });
+    expect(orphanCleanupApplyDisabledResponse.status()).toBe(409);
+    expect(await orphanCleanupApplyDisabledResponse.json()).toMatchObject({
+      error: {
+        code: "storage_operation_disabled",
       },
     });
     const malformedOrphanCleanupDryRunResponse = await api.client.post("/api/files/fil_orphan/orphan-cleanup-dry-run", {

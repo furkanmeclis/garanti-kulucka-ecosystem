@@ -1,4 +1,4 @@
-import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import type { S3ClientConfig } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { assertSafeObjectKey } from "./object-key.js";
@@ -35,6 +35,14 @@ export interface DownloadInstruction {
   headers: Record<string, string>;
   presigned_url: string | null;
   expires_at: string | null;
+}
+
+export interface DeleteObjectResult {
+  provider: "garage";
+  bucket: string;
+  object_key: string;
+  operation: "delete_object";
+  deletion_performed: true;
 }
 
 function parseUploadUrlExpiresSeconds(input: string | undefined): number {
@@ -136,6 +144,24 @@ export class MediaStorageService {
       headers: {},
       presigned_url: await getSignedUrl(this.client, command, { expiresIn }),
       expires_at: expiresAt,
+    };
+  }
+
+  async deleteObject(objectKeyInput: string): Promise<DeleteObjectResult> {
+    const objectKey = assertSafeObjectKey(objectKeyInput);
+    await this.client.send(
+      new DeleteObjectCommand({
+        Bucket: this.bucket,
+        Key: objectKey,
+      }),
+    );
+
+    return {
+      provider: "garage",
+      bucket: this.bucket,
+      object_key: objectKey,
+      operation: "delete_object",
+      deletion_performed: true,
     };
   }
 }

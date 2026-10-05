@@ -79,11 +79,14 @@ interface DashboardData {
   settings: AdminSetting[];
   integrationAccounts: IntegrationAccount[];
   settingsAudit: AdminAuditLog[];
+  settingsAuditSummary: { total_count: number };
   integrationAudit: AdminAuditLog[];
+  integrationAuditSummary: { total_count: number };
   providerCatalog: ProviderCatalogItem[];
   providerAttempts: ProviderAttemptViewModel[];
   providerDebugSummary: ProviderDebugSummary;
   fileOrphans: FileMetadata[];
+  fileOrphanSummary: { total_count: number };
   instagramAnalytics: BackendInstagramAnalyticsSummary;
   conversationSummary: ConversationSummaryStats;
   customerSummary: CustomerSummaryStats;
@@ -564,11 +567,14 @@ export function App() {
     settings: [],
     integrationAccounts: [],
     settingsAudit: [],
+    settingsAuditSummary: { total_count: 0 },
     integrationAudit: [],
+    integrationAuditSummary: { total_count: 0 },
     providerCatalog: [],
     providerAttempts: [],
     providerDebugSummary: defaultProviderDebugSummary,
     fileOrphans: [],
+    fileOrphanSummary: { total_count: 0 },
     instagramAnalytics: defaultInstagramAnalyticsSummary,
     conversationSummary: defaultConversationSummary,
     customerSummary: defaultCustomerSummary,
@@ -759,7 +765,15 @@ export function App() {
           admin.listIntegrationAudit({ limit: 10 }),
           files.listOrphanCandidates({ limit: 10 }),
         ])
-      : [{ data: [] }, { data: [] }, { data: [] }, defaultProviderDebugSummary, { data: [] }, { data: [] }, { data: [] }];
+      : [
+          { data: [] },
+          { data: [] },
+          { data: [] },
+          defaultProviderDebugSummary,
+          { data: [], summary: { total_count: 0 } },
+          { data: [], summary: { total_count: 0 } },
+          { data: [], summary: { total_count: 0 } },
+        ];
     const firstConversation = conversations.data[0]?.public_id;
     const messages = firstConversation
       ? await domain.listMessages(firstConversation, 50)
@@ -779,11 +793,14 @@ export function App() {
       settings: settings.data,
       integrationAccounts: integrationAccounts.data,
       settingsAudit: settingsAudit.data,
+      settingsAuditSummary: settingsAudit.summary ?? { total_count: settingsAudit.data.length },
       integrationAudit: integrationAudit.data,
+      integrationAuditSummary: integrationAudit.summary ?? { total_count: integrationAudit.data.length },
       providerCatalog: providerCatalog.data,
       providerAttempts: providerAttempts.data.map(toProviderAttemptViewModel),
       providerDebugSummary,
       fileOrphans: fileOrphans.data,
+      fileOrphanSummary: fileOrphans.summary ?? { total_count: fileOrphans.data.length },
       instagramAnalytics,
       conversationSummary,
       customerSummary,
@@ -833,11 +850,14 @@ export function App() {
         settings: [],
         integrationAccounts: [],
         settingsAudit: [],
+        settingsAuditSummary: { total_count: 0 },
         integrationAudit: [],
+        integrationAuditSummary: { total_count: 0 },
         providerCatalog: [],
         providerAttempts: [],
         providerDebugSummary: defaultProviderDebugSummary,
         fileOrphans: [],
+        fileOrphanSummary: { total_count: 0 },
         instagramAnalytics: defaultInstagramAnalyticsSummary,
         conversationSummary: defaultConversationSummary,
         customerSummary: defaultCustomerSummary,
@@ -1458,6 +1478,10 @@ export function App() {
   const providerDebugSummaries = new Map(data.providerDebugSummary.providers.map((summary) => [summary.provider_key, summary]));
   const pttProviderDebug = providerDebugSummaries.get("ptt") ?? emptyProviderDebug("ptt");
   const suratProviderDebug = providerDebugSummaries.get("surat") ?? emptyProviderDebug("surat");
+  const providerAttemptTotal = data.providerDebugSummary.providers.reduce(
+    (total, summary) => total + summary.total_attempts,
+    0,
+  );
   const pttProviderAttempts = data.providerAttempts.filter((attempt) => attempt.provider_key === "ptt");
   const suratProviderAttempts = data.providerAttempts.filter((attempt) => attempt.provider_key === "surat");
   const latestSuratAttempt = suratProviderAttempts[0] ?? null;
@@ -2072,7 +2096,7 @@ export function App() {
             <DetailPanel title="Ayar Denetim Kayıtları" testId="settings-audit-detail">
               <DataRows
                 rows={[
-                  ["Kayıt", String(data.settingsAudit.length), "settings audit API"],
+                  ["Kayıt", String(data.settingsAuditSummary.total_count), "settings audit summary"],
                   [
                     "Son işlem",
                     latestSettingsAudit ? `${latestSettingsAudit.action} / ${latestSettingsAudit.entity_type}` : "denetim yok",
@@ -2155,7 +2179,7 @@ export function App() {
             <DetailPanel title="Provider Deneme Kayıtları" testId="provider-attempts-detail">
               <DataRows
                 rows={[
-                  ["Kayıt", String(data.providerAttempts.length), "provider attempts API"],
+                  ["Kayıt", String(providerAttemptTotal), "provider debug summary API"],
                   [
                     "Son deneme",
                     selectedProviderAttempt
@@ -2203,7 +2227,7 @@ export function App() {
             <DetailPanel title="Entegrasyon Denetim Kayıtları" testId="integration-audit-detail">
               <DataRows
                 rows={[
-                  ["Kayıt", String(data.integrationAudit.length), "integration audit API"],
+                  ["Kayıt", String(data.integrationAuditSummary.total_count), "integration audit summary"],
                   [
                     "Son işlem",
                     latestIntegrationAudit
@@ -2690,7 +2714,7 @@ export function App() {
                 </button>
                 <DataRows
                   rows={[
-                    ["Aday", String(data.fileOrphans.length), "files orphan report"],
+                    ["Aday", String(data.fileOrphanSummary.total_count), "files orphan summary"],
                     ...data.fileOrphans.map((file) => [
                       file.original_name ?? file.public_id,
                       file.object_key,

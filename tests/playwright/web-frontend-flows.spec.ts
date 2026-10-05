@@ -1010,6 +1010,9 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
               created_at: "2026-01-01T00:06:00.000Z",
             },
           ],
+          summary: {
+            total_count: 12,
+          },
         }),
       });
       return;
@@ -1173,6 +1176,9 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
               created_at: "2026-01-01T00:07:00.000Z",
             },
           ],
+          summary: {
+            total_count: 8,
+          },
         }),
       });
       return;
@@ -1787,6 +1793,9 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
               updated_at: "2026-01-01T00:01:00.000Z",
             },
           ],
+          summary: {
+            total_count: 4,
+          },
         }),
       });
       return;
@@ -2196,6 +2205,9 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("instagram-publish-preview")).toContainText("2200 karakter");
     await expect(page.getByTestId("instagram-publish-preview")).toContainText("taslak");
     await expect(page.getByTestId("provider-attempts-detail")).toContainText("Provider Deneme Kayıtları");
+    await expect(page.getByTestId("provider-attempts-detail")).toContainText("Kayıt");
+    await expect(page.getByTestId("provider-attempts-detail")).toContainText("13");
+    await expect(page.getByTestId("provider-attempts-detail")).toContainText("provider debug summary API");
     await expect(page.getByTestId("provider-attempts-detail")).toContainText("instagram / message.send");
     await expect(page.getByTestId("provider-attempts-detail")).toContainText("failed");
     await expect(page.getByTestId("provider-attempts-detail")).toContainText("429");
@@ -2235,6 +2247,8 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("provider-catalog-detail")).toContainText("netgsm");
     await expect(page.getByTestId("provider-catalog-detail")).toContainText("sip");
     await expect(page.getByTestId("integration-audit-detail")).toContainText("Entegrasyon Denetim Kayıtları");
+    await expect(page.getByTestId("integration-audit-detail")).toContainText("8");
+    await expect(page.getByTestId("integration-audit-detail")).toContainText("integration audit summary");
     await expect(page.getByTestId("integration-audit-detail")).toContainText("integration_token_update / integration_tokens");
     await expect(page.getByTestId("integration-audit-detail")).toContainText("iac_instagram/access_token");
     await expect(page.getByTestId("integration-audit-detail")).toContainText("[redacted]");
@@ -2454,6 +2468,8 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("operation-policy-detail")).toContainText("queue concurrency 6");
     await expect(page.getByTestId("operation-policy-detail")).toContainText("120 gün / orphan cleanup açık");
     await expect(page.getByTestId("settings-audit-detail")).toContainText("Ayar Denetim Kayıtları");
+    await expect(page.getByTestId("settings-audit-detail")).toContainText("12");
+    await expect(page.getByTestId("settings-audit-detail")).toContainText("settings audit summary");
     await expect(page.getByTestId("settings-audit-detail")).toContainText("settings_change / settings");
     await expect(page.getByTestId("settings-audit-detail")).toContainText("providers.ptt.live_mode");
     await expect(page.getByTestId("settings-audit-detail")).toContainText("[redacted]");
@@ -2463,6 +2479,8 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("admin-flow")).toContainText("false");
     await page.getByRole("link", { name: /dosya/i }).click();
     await expect(page.getByTestId("file-orphans-detail")).toContainText("Orphan Dosya Adayları");
+    await expect(page.getByTestId("file-orphans-detail")).toContainText("4");
+    await expect(page.getByTestId("file-orphans-detail")).toContainText("files orphan summary");
     await expect(page.getByTestId("file-orphans-detail")).toContainText("orphan-proof.txt");
     await expect(page.getByTestId("file-orphans-detail")).toContainText("uploads/orphan-proof.txt");
     await expect(page.getByTestId("file-orphans-detail")).toContainText("42 byte");

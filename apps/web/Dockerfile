@@ -1,9 +1,11 @@
-FROM node:22.20.0-bookworm-slim AS deps
+FROM node:22.23.3-bookworm-slim AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY apps/web/package.json apps/web/package.json
 COPY packages/shared/package.json packages/shared/package.json
-RUN npm ci
+RUN --mount=type=cache,target=/root/.npm \
+  npm ci --prefer-offline --no-audit --no-fund --fetch-retries=2 --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=60000 \
+  || npm ci --offline --no-audit --no-fund
 
 FROM deps AS build
 COPY tsconfig.base.json ./

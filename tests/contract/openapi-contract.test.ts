@@ -44,6 +44,7 @@ const expectedOperations = new Map<string, string[]>([
   ["/api/files/uploads", ["post"]],
   ["/api/files/orphans", ["get"]],
   ["/api/files/{file_public_id}/orphan-cleanup-dry-run", ["post"]],
+  ["/api/files/{file_public_id}/orphan-cleanup", ["post"]],
   ["/api/files/{file_public_id}", ["get"]],
   ["/api/webphone/config", ["get"]],
   ["/api/webphone/test-call", ["post"]],

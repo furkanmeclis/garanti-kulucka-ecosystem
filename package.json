@@ -23,7 +23,7 @@
     "db:migrate:up": "npm run migrate:up -w @garanti-kulucka/database",
     "db:migrate:down": "npm run migrate:down -w @garanti-kulucka/database",
     "compose:config": "docker compose config -q",
-    "docker:build": "sh -c 'tmp_docker_config=$(mktemp -d); DOCKER_CONFIG=\"$tmp_docker_config\" docker build -f apps/api/Dockerfile -t garanti-kulucka-api:local . && DOCKER_CONFIG=\"$tmp_docker_config\" docker build -f apps/worker/Dockerfile -t garanti-kulucka-worker:local . && DOCKER_CONFIG=\"$tmp_docker_config\" docker build -f apps/migrator/Dockerfile -t garanti-kulucka-migrator:local . && DOCKER_CONFIG=\"$tmp_docker_config\" docker build -f apps/web/Dockerfile -t garanti-kulucka-web:local .'",
+    "docker:build": "sh tools/docker-build-local.sh",
     "lint": "npm run lint --workspaces --if-present",
     "verify:structure": "node tools/verify-repo-structure.mjs",
     "provider:coverage": "node tools/provider-coverage-report.mjs",

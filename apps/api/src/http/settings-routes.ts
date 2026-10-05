@@ -33,12 +33,17 @@ export function createSettingsRoutes() {
       return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
     }
 
-    const logs = await new AuditRepository(db).list({
+    const repository = new AuditRepository(db);
+    const input = {
       entityTypes: ["settings"],
       entityId: context.req.query("entity_id") ?? null,
       limit: parseAuditLimit(context.req.query("limit")),
-    });
-    return context.json({ data: logs.map(serializeAuditLog) });
+    };
+    const [logs, totalCount] = await Promise.all([
+      repository.list(input),
+      repository.count({ entityTypes: input.entityTypes, entityId: input.entityId }),
+    ]);
+    return context.json({ data: logs.map(serializeAuditLog), summary: { total_count: totalCount } });
   });
 
   routes.put("/:key", async (context) => {

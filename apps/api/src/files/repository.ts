@@ -73,6 +73,17 @@ export class FilesRepository {
       .limit(safeLimit)
       .execute();
   }
+
+  async countOrphanCandidates(): Promise<number> {
+    const row = await this.db
+      .selectFrom("files")
+      .leftJoin("message_attachments", "message_attachments.file_id", "files.id")
+      .select((expression) => [expression.fn.countAll<number>().as("total_count")])
+      .where("message_attachments.id", "is", null)
+      .executeTakeFirst();
+
+    return Number(row?.total_count ?? 0);
+  }
 }
 
 export function serializeFile(file: FileRecord) {

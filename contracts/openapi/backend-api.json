@@ -48,6 +48,16 @@
                 }
               }
             }
+          },
+          "503": {
+            "description": "API dependencies are degraded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthStatus"
+                }
+              }
+            }
           }
         }
       }
@@ -826,6 +836,60 @@
         }
       }
     },
+    "/api/files/{file_public_id}/orphan-cleanup": {
+      "post": {
+        "operationId": "createFileOrphanCleanupApply",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/FilePublicId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["confirmation"],
+                "properties": {
+                  "reason": {
+                    "type": ["string", "null"],
+                    "minLength": 1,
+                    "maxLength": 255,
+                    "default": "admin_orphan_lifecycle_review"
+                  },
+                  "confirmation": {
+                    "type": "string",
+                    "const": "delete_orphan_object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Admin-only controlled orphan object deletion when production apply is explicitly enabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileOrphanCleanupApply"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/api/files/{file_public_id}": {
       "get": {
         "operationId": "getFile",
@@ -1349,7 +1413,7 @@
         "properties": {
           "status": {
             "type": "string",
-            "const": "ok"
+            "enum": ["ok", "degraded"]
           },
           "service": {
             "type": "string"
@@ -1357,6 +1421,26 @@
           "timestamp": {
             "type": "string",
             "format": "date-time"
+          },
+          "dependencies": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "required": ["status"],
+              "properties": {
+                "status": {
+                  "type": "string",
+                  "enum": ["ok", "degraded"]
+                },
+                "latency_ms": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "error": {
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       },
@@ -2606,6 +2690,22 @@
         "allOf": [
           {
             "$ref": "#/components/schemas/DataEnvelope"
+          },
+          {
+            "type": "object",
+            "required": ["summary"],
+            "properties": {
+              "summary": {
+                "type": "object",
+                "required": ["total_count"],
+                "properties": {
+                  "total_count": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                }
+              }
+            }
           }
         ]
       },
@@ -2657,6 +2757,63 @@
               "operation": {
                 "type": "string",
                 "const": "delete_object"
+              }
+            }
+          }
+        }
+      },
+      "FileOrphanCleanupApply": {
+        "type": "object",
+        "required": [
+          "mode",
+          "request_id",
+          "deletion_performed",
+          "eligible_for_cleanup",
+          "reason",
+          "file",
+          "storage_action"
+        ],
+        "properties": {
+          "mode": {
+            "type": "string",
+            "const": "apply"
+          },
+          "request_id": {
+            "type": "string"
+          },
+          "deletion_performed": {
+            "type": "boolean",
+            "const": true
+          },
+          "eligible_for_cleanup": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": ["string", "null"]
+          },
+          "file": {
+            "$ref": "#/components/schemas/File"
+          },
+          "storage_action": {
+            "type": "object",
+            "required": ["provider", "bucket", "object_key", "operation", "deletion_performed"],
+            "properties": {
+              "provider": {
+                "type": "string"
+              },
+              "bucket": {
+                "type": "string"
+              },
+              "object_key": {
+                "type": "string"
+              },
+              "operation": {
+                "type": "string",
+                "const": "delete_object"
+              },
+              "deletion_performed": {
+                "type": "boolean",
+                "const": true
               }
             }
           }

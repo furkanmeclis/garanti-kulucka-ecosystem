@@ -89,17 +89,40 @@ export function createApp(options: CreateAppOptions = {}) {
 
   app.get("/health/ready", async (context) => {
     const db = context.get("db");
-    if (db) {
-      await db.selectFrom("roles").select("id").limit(1).execute();
+    const startedAt = performance.now();
+    const dependencies: Record<string, { status: "ok" | "degraded"; latency_ms?: number; error?: string }> = {};
+
+    if (!db) {
+      dependencies.database = {
+        status: "degraded",
+        error: "not_configured",
+      };
+    } else {
+      try {
+        await db.selectFrom("roles").select("id").limit(1).execute();
+        dependencies.database = {
+          status: "ok",
+          latency_ms: Math.round(performance.now() - startedAt),
+        };
+      } catch (error) {
+        dependencies.database = {
+          status: "degraded",
+          latency_ms: Math.round(performance.now() - startedAt),
+          error: error instanceof Error ? error.message : "unknown_error",
+        };
+      }
     }
 
+    const status = Object.values(dependencies).some((dependency) => dependency.status === "degraded") ? "degraded" : "ok";
+
     const payload = healthStatusSchema.parse({
-      status: "ok",
+      status,
       service: "api",
       timestamp: new Date().toISOString(),
+      dependencies,
     });
 
-    return context.json(payload);
+    return context.json(payload, status === "ok" ? 200 : 503);
   });
 
   app.route("/auth", createAuthRoutes());

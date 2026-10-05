@@ -1,4 +1,4 @@
-FROM node:22.20.0-bookworm-slim AS deps
+FROM node:22.23.3-bookworm-slim AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY apps/api/package.json apps/api/package.json
@@ -7,7 +7,9 @@ COPY apps/worker/package.json apps/worker/package.json
 COPY apps/migrator/package.json apps/migrator/package.json
 COPY packages/shared/package.json packages/shared/package.json
 COPY packages/database/package.json packages/database/package.json
-RUN npm ci
+RUN --mount=type=cache,target=/root/.npm \
+  npm ci --prefer-offline --no-audit --no-fund --fetch-retries=2 --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=60000 \
+  || npm ci --offline --no-audit --no-fund
 
 FROM deps AS build
 COPY tsconfig.base.json ./
@@ -18,7 +20,7 @@ RUN npm run build -w @garanti-kulucka/shared \
   && npm run build -w @garanti-kulucka/database \
   && npm run build -w @garanti-kulucka/worker
 
-FROM node:22.20.0-bookworm-slim AS runtime
+FROM node:22.23.3-bookworm-slim AS runtime
 ENV NODE_ENV=production
 WORKDIR /app
 RUN groupadd --system app && useradd --system --gid app app

@@ -21,6 +21,10 @@ export interface AdminAuditLog {
   created_at: string;
 }
 
+export interface AdminAuditSummary {
+  total_count: number;
+}
+
 export interface IntegrationProvider {
   key: string;
   name: string;
@@ -227,7 +231,9 @@ export function createAdminClient(http: BackendHttpClient) {
     listSettings: (scope = "global") =>
       http.request<{ data: AdminSetting[] }>(`/admin/settings?scope=${encodeURIComponent(scope)}`),
     listSettingsAudit: (options?: AuditListOptions) =>
-      http.request<{ data: AdminAuditLog[] }>(`/admin/settings/audit${auditQuery(options)}`),
+      http.request<{ data: AdminAuditLog[]; summary: AdminAuditSummary }>(
+        `/admin/settings/audit${auditQuery(options)}`,
+      ),
     upsertSetting: (key: string, value: unknown, isSecret = false, scope = "global") =>
       http.request<AdminSetting>(`/admin/settings/${encodeURIComponent(key)}`, {
         method: "PUT",
@@ -244,7 +250,9 @@ export function createAdminClient(http: BackendHttpClient) {
     listIntegrationAccounts: () =>
       http.request<{ data: IntegrationAccount[] }>("/admin/integrations/accounts"),
     listIntegrationAudit: (options?: AuditListOptions) =>
-      http.request<{ data: AdminAuditLog[] }>(`/admin/integrations/audit${auditQuery(options)}`),
+      http.request<{ data: AdminAuditLog[]; summary: AdminAuditSummary }>(
+        `/admin/integrations/audit${auditQuery(options)}`,
+      ),
     listProviderAttempts: (options?: ProviderAttemptListOptions) =>
       http.request<{ data: ProviderAttempt[] }>(
         `/admin/integrations/provider-attempts${providerAttemptQuery(options)}`,
