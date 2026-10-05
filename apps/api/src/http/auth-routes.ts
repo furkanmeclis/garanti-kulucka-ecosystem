@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import type { AppBindings } from "./types.js";
 import { authenticate, requireDatabase } from "./middleware.js";
+import { clientIp, rateLimit } from "./rate-limit.js";
 import { createRefreshToken, verifyPassword } from "../auth/crypto.js";
 import { AuthRepository, serializeAuthUser } from "../auth/repository.js";
 import { signAccessToken } from "../auth/tokens.js";
@@ -28,7 +29,16 @@ function daysFromNow(days: number): Date {
 export function createAuthRoutes() {
   const routes = new Hono<AppBindings>();
 
-  routes.post("/login", requireDatabase, async (context) => {
+  routes.post(
+    "/login",
+    rateLimit({
+      namespace: "auth:login",
+      limit: 10,
+      windowMs: 60_000,
+      key: (context) => clientIp(context),
+    }),
+    requireDatabase,
+    async (context) => {
     const payload = loginRequestSchema.safeParse(await context.req.json());
     if (!payload.success) {
       return context.json({ error: { code: "invalid_request", message: "Invalid login payload" } }, 400);
@@ -85,9 +95,19 @@ export function createAuthRoutes() {
       expires_in: context.get("config").accessTokenTtlSeconds,
       user: serializeAuthUser({ ...user, is_online: true }, await repository.listUserPermissions(user.id)),
     });
-  });
+    },
+  );
 
-  routes.post("/refresh", requireDatabase, async (context) => {
+  routes.post(
+    "/refresh",
+    rateLimit({
+      namespace: "auth:refresh",
+      limit: 30,
+      windowMs: 60_000,
+      key: (context) => clientIp(context),
+    }),
+    requireDatabase,
+    async (context) => {
     const payload = refreshRequestSchema.safeParse(await context.req.json());
     if (!payload.success) {
       return context.json({ error: { code: "invalid_request", message: "Invalid refresh payload" } }, 400);
@@ -125,7 +145,8 @@ export function createAuthRoutes() {
       token_type: "Bearer",
       expires_in: context.get("config").accessTokenTtlSeconds,
     });
-  });
+    },
+  );
 
   routes.post("/logout", authenticate, async (context) => {
     const auth = context.get("auth");

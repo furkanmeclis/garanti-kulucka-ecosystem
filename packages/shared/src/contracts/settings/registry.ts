@@ -64,6 +64,9 @@ const literalGlobalSettingSchemas = {
 const integrationSettingSchemas = {
   "webhook.enabled": { schema: z.boolean(), secret: false },
   "webhook.verify_token": { schema: nonblankString, secret: true },
+  "webhook.app_secret": { schema: nonblankString, secret: true },
+  "webhook.shared_token": { schema: nonblankString, secret: true },
+  "webhook.signature_mode": { schema: z.enum(["off", "report_only", "enforce"]), secret: false },
   "api_url": { schema: urlString, secret: false },
   "api_key": { schema: nonblankString, secret: true },
   "channel": { schema: nonblankString, secret: false },

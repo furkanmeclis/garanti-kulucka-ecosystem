@@ -13,6 +13,7 @@ import { createIntegrationRoutes } from "./http/integration-routes.js";
 import { createSettingsRoutes } from "./http/settings-routes.js";
 import { createWebhookRoutes } from "./http/webhook-routes.js";
 import { createWebphoneRoutes } from "./http/webphone-routes.js";
+import { createRateLimitStore, type RateLimitStore } from "./http/rate-limit.js";
 import type { ApiLogger, AppBindings } from "./http/types.js";
 import { noopRealtimePublisher, type RealtimePublisher } from "./realtime.js";
 import { createSecretEncryptor, type SecretEncryptor } from "./security/encryption.js";
@@ -35,6 +36,7 @@ export interface CreateAppOptions {
   realtimePublisher?: RealtimePublisher;
   settingsCache?: SettingsCache | null;
   settingsChangePublisher?: SettingsChangePublisher;
+  rateLimitStore?: RateLimitStore;
   logger?: ApiLogger;
 }
 
@@ -43,6 +45,7 @@ export function createApp(options: CreateAppOptions = {}) {
   const appLogger = options.logger ?? logger;
   const encryptor =
     options.encryptor ?? createSecretEncryptor(config.encryptionKey, config.encryptionKeyId);
+  const rateLimitStore = options.rateLimitStore ?? createRateLimitStore(config);
   const app = new Hono<AppBindings>();
 
   if (config.corsOrigin) {
@@ -69,6 +72,7 @@ export function createApp(options: CreateAppOptions = {}) {
     context.set("providerDeliveryQueuePublisher", options.providerDeliveryQueuePublisher ?? noopProviderDeliveryQueuePublisher);
     context.set("settingsCache", options.settingsCache ?? null);
     context.set("settingsChangePublisher", options.settingsChangePublisher ?? noopSettingsChangePublisher);
+    context.set("rateLimitStore", rateLimitStore);
     await next();
   });
 

@@ -52,10 +52,23 @@ export function inferEventType(body: unknown): string {
 }
 
 export function inferExternalEventId(body: unknown): string | null {
+  const type = pickFirstString(readPath(body, ["type"]), readPath(body, ["event_type"]));
+  const callId = pickFirstString(
+    readPath(body, ["call", "id"]),
+    readPath(body, ["call_id"]),
+    readPath(body, ["message", "call", "id"]),
+  );
+  if (type && callId) {
+    return `${type}:${callId}`;
+  }
+
   return pickFirstString(
     readPath(body, ["event_id"]),
     readPath(body, ["id"]),
     readPath(body, ["message", "id"]),
+    readPath(body, ["message", "mid"]),
+    readPath(body, ["entry", "0", "messaging", "0", "message", "mid"]),
+    readPath(body, ["entry", "0", "changes", "0", "value", "messages", "0", "id"]),
     readPath(body, ["entry", "0", "id"]),
   );
 }

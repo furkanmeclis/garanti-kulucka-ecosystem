@@ -39,6 +39,11 @@ export interface WebhookEventRepository {
     callbackPath: string;
   }) => Promise<WebhookResolution>;
   storeReceivedEvent: (input: StoreWebhookEventInput) => Promise<StoredWebhookEvent>;
+  findReceivedEventByExternalId: (input: {
+    provider: ProviderName;
+    accountPublicId: string | null;
+    externalEventId: string;
+  }) => Promise<StoredWebhookEvent | null>;
 }
 
 export class DatabaseWebhookEventRepository implements WebhookEventRepository {
@@ -148,5 +153,42 @@ export class DatabaseWebhookEventRepository implements WebhookEventRepository {
         status: event.status,
       };
     });
+  }
+
+  async findReceivedEventByExternalId(input: {
+    provider: ProviderName;
+    accountPublicId: string | null;
+    externalEventId: string;
+  }): Promise<StoredWebhookEvent | null> {
+    const event = await this.db
+      .selectFrom("webhook_events")
+      .innerJoin("integration_providers", "integration_providers.id", "webhook_events.provider_id")
+      .leftJoin("integration_accounts", "integration_accounts.id", "webhook_events.account_id")
+      .selectAll("webhook_events")
+      .select([
+        "integration_providers.key as provider_key",
+        "integration_accounts.public_id as account_public_id",
+      ])
+      .where("integration_providers.key", "=", input.provider)
+      .where("webhook_events.external_event_id", "=", input.externalEventId)
+      .$if(input.accountPublicId === null, (builder) => builder.where("webhook_events.account_id", "is", null))
+      .$if(input.accountPublicId !== null, (builder) =>
+        builder.where("integration_accounts.public_id", "=", input.accountPublicId as string),
+      )
+      .orderBy("webhook_events.received_at", "asc")
+      .executeTakeFirst();
+
+    return event
+      ? {
+          id: event.id,
+          public_id: event.public_id,
+          provider_key: event.provider_key as ProviderName,
+          account_public_id: event.account_public_id,
+          event_type: event.event_type,
+          external_event_id: event.external_event_id,
+          payload_hash: event.payload_hash,
+          status: event.status,
+        }
+      : null;
   }
 }

@@ -1431,6 +1431,23 @@
         }
       }
     },
+    "/admin/integrations/provider-catalog": {
+      "get": {
+        "operationId": "listProviderCatalog",
+        "responses": {
+          "200": {
+            "description": "Provider live-gate catalog rows",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderCatalogList"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/admin/integrations/provider-debug-summary": {
       "get": {
         "operationId": "getProviderDebugSummary",
@@ -2075,6 +2092,13 @@
         ]
       },
       "ProviderAttemptList": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/DataEnvelope"
+          }
+        ]
+      },
+      "ProviderCatalogList": {
         "allOf": [
           {
             "$ref": "#/components/schemas/DataEnvelope"

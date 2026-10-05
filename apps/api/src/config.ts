@@ -7,6 +7,7 @@ export interface ApiConfig {
   refreshTokenTtlDays: number;
   redisUrl: string | null;
   corsOrigin: string | null;
+  webhookRateLimitPerMinute?: number;
 }
 
 function numberFromEnv(name: string, fallback: number): number {
@@ -36,5 +37,6 @@ export function loadConfig(): ApiConfig {
     refreshTokenTtlDays: numberFromEnv("REFRESH_TOKEN_TTL_DAYS", 30),
     redisUrl: process.env.REDIS_URL ?? null,
     corsOrigin: process.env.CORS_ORIGIN ?? null,
+    webhookRateLimitPerMinute: numberFromEnv("WEBHOOK_RATE_LIMIT_PER_MINUTE", 600),
   };
 }

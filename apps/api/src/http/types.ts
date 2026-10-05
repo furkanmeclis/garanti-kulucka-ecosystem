@@ -6,6 +6,7 @@ import type { RealtimePublisher } from "../realtime.js";
 import type { ProviderDeliveryQueuePublisher } from "../webhooks/queue-publisher.js";
 import type { SettingsCache } from "../settings/cache.js";
 import type { SettingsChangePublisher } from "../settings/change-bus.js";
+import type { RateLimitStore } from "./rate-limit.js";
 
 export interface ApiLogger {
   info(payload: Record<string, unknown>, message?: string): void;
@@ -26,5 +27,6 @@ export interface AppBindings {
     providerDeliveryQueuePublisher: ProviderDeliveryQueuePublisher;
     settingsCache: SettingsCache | null;
     settingsChangePublisher: SettingsChangePublisher;
+    rateLimitStore: RateLimitStore;
   };
 }

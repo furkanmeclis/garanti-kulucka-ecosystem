@@ -125,6 +125,16 @@ describe("shared contracts", () => {
       value: "secret",
       is_secret: true,
     });
+    expect(validateIntegrationSetting("webhook.signature_mode", "report_only")).toEqual({
+      key: "webhook.signature_mode",
+      value: "report_only",
+      is_secret: false,
+    });
+    expect(validateIntegrationSetting("webhook.app_secret", "secret")).toEqual({
+      key: "webhook.app_secret",
+      value: "secret",
+      is_secret: true,
+    });
     expect(() => validateGlobalSetting("unknown.setting", true)).toThrow("Unknown admin setting key");
     expect(() => validateIntegrationSetting("unknown.setting", true)).toThrow("Unknown integration setting key");
   });

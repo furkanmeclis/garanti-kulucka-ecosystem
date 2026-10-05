@@ -366,6 +366,40 @@ describe("auth lifecycle", () => {
     expect(authMocks.repository.rotateRefreshToken).toHaveBeenCalledTimes(2);
   });
 
+  it("rate limits repeated login attempts with Retry-After", async () => {
+    const app = createTestApp();
+
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      const response = await app.request("/auth/login", {
+        method: "POST",
+        body: JSON.stringify({ email: "admin@example.com", password: "correct-password" }),
+        headers: {
+          "content-type": "application/json",
+          "x-forwarded-for": "203.0.113.10",
+        },
+      });
+      expect(response.status).toBe(200);
+    }
+
+    const limited = await app.request("/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ email: "admin@example.com", password: "correct-password" }),
+      headers: {
+        "content-type": "application/json",
+        "x-forwarded-for": "203.0.113.10",
+      },
+    });
+
+    expect(limited.status).toBe(429);
+    expect(limited.headers.get("retry-after")).toMatch(/^\d+$/);
+    await expect(limited.json()).resolves.toEqual({
+      error: {
+        code: "rate_limited",
+        message: "Too many requests",
+      },
+    });
+  });
+
   it("revokes the session on logout and rejects the same access token afterward", async () => {
     const app = createTestApp();
     const token = await accessToken({

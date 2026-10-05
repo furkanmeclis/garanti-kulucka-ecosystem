@@ -17,6 +17,7 @@ import {
   serializeProvider,
 } from "../integrations/repository.js";
 import { apiProviderCatalog } from "../providers/catalog.js";
+import { isAllowedOutboundUserUrl } from "../security/url-policy.js";
 
 const metadataSchema = z.record(z.string(), z.unknown()).default({});
 
@@ -164,6 +165,9 @@ export function createIntegrationRoutes() {
     const payload = instagramPublishPreviewSchema.safeParse(await context.req.json());
     if (!payload.success) {
       return context.json({ error: { code: "invalid_request", message: "Invalid Instagram publish preview payload" } }, 400);
+    }
+    if (!isAllowedOutboundUserUrl(payload.data.image_url)) {
+      return context.json({ error: { code: "invalid_request", message: "Instagram image URL is not allowed" } }, 400);
     }
 
     const db = context.get("db");

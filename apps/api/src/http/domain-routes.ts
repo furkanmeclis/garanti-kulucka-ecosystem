@@ -80,8 +80,24 @@ function canReadCustomers(role: string | undefined) {
   return role === "admin" || role === "owner" || role === "calisan";
 }
 
+function canReadConversations(role: string | undefined) {
+  return role === "admin" || role === "owner" || role === "calisan";
+}
+
 function canReadCommentModeration(role: string | undefined) {
   return role === "admin" || role === "owner" || role === "calisan";
+}
+
+function canReadInventory(role: string | undefined) {
+  return role === "admin" || role === "owner" || role === "calisan";
+}
+
+function canReadOrders(role: string | undefined) {
+  return role === "admin" || role === "owner" || role === "calisan" || role === "kargo_operatoru";
+}
+
+function canReadShipments(role: string | undefined) {
+  return role === "admin" || role === "owner" || role === "calisan" || role === "kargo_operatoru";
 }
 
 function canReadBalanceSummary(role: string | undefined) {
@@ -118,6 +134,10 @@ export function createDomainRoutes() {
   routes.use("*", requireDatabase, authenticate);
 
   routes.get("/conversations", async (context) => {
+    if (!canReadConversations(context.get("auth")?.role)) {
+      return context.json({ error: { code: "forbidden", message: "Conversation access is not allowed" } }, 403);
+    }
+
     const db = context.get("db");
     if (!db) {
       return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
@@ -140,6 +160,10 @@ export function createDomainRoutes() {
   });
 
   routes.get("/conversations/summary", async (context) => {
+    if (!canReadConversations(context.get("auth")?.role)) {
+      return context.json({ error: { code: "forbidden", message: "Conversation access is not allowed" } }, 403);
+    }
+
     const db = context.get("db");
     if (!db) {
       return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
@@ -201,6 +225,10 @@ export function createDomainRoutes() {
   });
 
   routes.get("/conversations/:conversation_public_id/messages", async (context) => {
+    if (!canReadConversations(context.get("auth")?.role)) {
+      return context.json({ error: { code: "forbidden", message: "Conversation access is not allowed" } }, 403);
+    }
+
     const db = context.get("db");
     if (!db) {
       return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
@@ -243,6 +271,10 @@ export function createDomainRoutes() {
   });
 
   routes.post("/conversations/:conversation_public_id/messages", async (context) => {
+    if (!canReadConversations(context.get("auth")?.role)) {
+      return context.json({ error: { code: "forbidden", message: "Conversation access is not allowed" } }, 403);
+    }
+
     const payload = createMessageSchema.safeParse(await context.req.json());
     if (!payload.success) {
       return context.json({ error: { code: "invalid_request", message: "Invalid message payload" } }, 400);
@@ -336,6 +368,10 @@ export function createDomainRoutes() {
   });
 
   routes.patch("/conversations/:conversation_public_id/state", async (context) => {
+    if (!canReadConversations(context.get("auth")?.role)) {
+      return context.json({ error: { code: "forbidden", message: "Conversation access is not allowed" } }, 403);
+    }
+
     const payload = updateConversationStateSchema.safeParse(await context.req.json());
     if (!payload.success) {
       return context.json({ error: { code: "invalid_request", message: "Invalid conversation state payload" } }, 400);
@@ -379,6 +415,10 @@ export function createDomainRoutes() {
   });
 
   routes.get("/orders", async (context) => {
+    if (!canReadOrders(context.get("auth")?.role)) {
+      return context.json({ error: { code: "forbidden", message: "Order access is not allowed" } }, 403);
+    }
+
     const db = context.get("db");
     if (!db) {
       return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
@@ -396,6 +436,10 @@ export function createDomainRoutes() {
   });
 
   routes.get("/orders/summary", async (context) => {
+    if (!canReadOrders(context.get("auth")?.role)) {
+      return context.json({ error: { code: "forbidden", message: "Order access is not allowed" } }, 403);
+    }
+
     const db = context.get("db");
     if (!db) {
       return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
@@ -420,6 +464,10 @@ export function createDomainRoutes() {
   });
 
   routes.get("/products/summary", async (context) => {
+    if (!canReadInventory(context.get("auth")?.role)) {
+      return context.json({ error: { code: "forbidden", message: "Inventory access is not allowed" } }, 403);
+    }
+
     const db = context.get("db");
     if (!db) {
       return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
@@ -430,6 +478,10 @@ export function createDomainRoutes() {
   });
 
   routes.get("/products", async (context) => {
+    if (!canReadInventory(context.get("auth")?.role)) {
+      return context.json({ error: { code: "forbidden", message: "Inventory access is not allowed" } }, 403);
+    }
+
     const db = context.get("db");
     if (!db) {
       return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
@@ -440,6 +492,10 @@ export function createDomainRoutes() {
   });
 
   routes.post("/orders", async (context) => {
+    if (!canReadOrders(context.get("auth")?.role)) {
+      return context.json({ error: { code: "forbidden", message: "Order access is not allowed" } }, 403);
+    }
+
     const payload = createOrderSchema.safeParse(await context.req.json());
     if (!payload.success) {
       return context.json({ error: { code: "invalid_request", message: "Invalid order payload" } }, 400);
@@ -466,6 +522,10 @@ export function createDomainRoutes() {
   });
 
   routes.patch("/orders/:order_public_id/status", async (context) => {
+    if (!canReadOrders(context.get("auth")?.role)) {
+      return context.json({ error: { code: "forbidden", message: "Order access is not allowed" } }, 403);
+    }
+
     const payload = updateOrderStatusSchema.safeParse(await context.req.json());
     if (!payload.success) {
       return context.json({ error: { code: "invalid_request", message: "Invalid order status payload" } }, 400);
@@ -541,6 +601,10 @@ export function createDomainRoutes() {
   });
 
   routes.get("/shipments", async (context) => {
+    if (!canReadShipments(context.get("auth")?.role)) {
+      return context.json({ error: { code: "forbidden", message: "Shipment access is not allowed" } }, 403);
+    }
+
     const db = context.get("db");
     if (!db) {
       return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
@@ -567,6 +631,10 @@ export function createDomainRoutes() {
   });
 
   routes.get("/shipments/summary", async (context) => {
+    if (!canReadShipments(context.get("auth")?.role)) {
+      return context.json({ error: { code: "forbidden", message: "Shipment access is not allowed" } }, 403);
+    }
+
     const db = context.get("db");
     if (!db) {
       return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
@@ -591,6 +659,10 @@ export function createDomainRoutes() {
   });
 
   routes.patch("/shipments/:shipment_public_id/status", async (context) => {
+    if (!canReadShipments(context.get("auth")?.role)) {
+      return context.json({ error: { code: "forbidden", message: "Shipment access is not allowed" } }, 403);
+    }
+
     const payload = updateShipmentStatusSchema.safeParse(await context.req.json());
     if (!payload.success) {
       return context.json({ error: { code: "invalid_request", message: "Invalid shipment status payload" } }, 400);
