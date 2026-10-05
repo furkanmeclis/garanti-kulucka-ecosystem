@@ -1154,6 +1154,28 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
       is_in_pool: false,
       assigned_user_email: "admin@example.com",
     });
+    const expectedConversationEnvelope = expect.objectContaining({
+      event: "conversation.updated",
+      payload: {
+        conversation_public_id: conversation.public_id,
+        status: "open",
+        unread_count: 0,
+        is_in_pool: false,
+        human_agent_enabled: true,
+      },
+    });
+    expect(api.publishedRealtime).toEqual(
+      expect.arrayContaining([
+        {
+          room: `conversation:${conversation.public_id}`,
+          envelope: expectedConversationEnvelope,
+        },
+        {
+          room: "broadcast",
+          envelope: expectedConversationEnvelope,
+        },
+      ]),
+    );
 
     const cancelledOrderResponse = await api.client.patch(
       "/api/orders/ord_playwright/status",

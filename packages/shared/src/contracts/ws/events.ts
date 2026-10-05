@@ -5,6 +5,7 @@ const publicIdSchema = z.string().min(1).regex(/^[a-z]{3}_[A-Za-z0-9_-]+$/);
 export const realtimeEventNameSchema = z.enum([
   "conversation.created",
   "conversation.assigned",
+  "conversation.updated",
   "message.created",
   "message.read",
   "order.created",
@@ -32,6 +33,14 @@ export const conversationCreatedPayloadSchema = z.object({
 export const conversationAssignedPayloadSchema = z.object({
   conversation_public_id: publicIdSchema,
   assigned_user_public_id: publicIdSchema.nullable(),
+});
+
+export const conversationUpdatedPayloadSchema = z.object({
+  conversation_public_id: publicIdSchema,
+  status: z.string().min(1),
+  unread_count: z.number().int().min(0),
+  is_in_pool: z.boolean(),
+  human_agent_enabled: z.boolean(),
 });
 
 export const messageCreatedPayloadSchema = z.object({
@@ -70,6 +79,7 @@ export const settingsChangedPayloadSchema = z.object({
 export const realtimePayloadSchemaByEvent = {
   "conversation.created": conversationCreatedPayloadSchema,
   "conversation.assigned": conversationAssignedPayloadSchema,
+  "conversation.updated": conversationUpdatedPayloadSchema,
   "message.created": messageCreatedPayloadSchema,
   "message.read": messageReadPayloadSchema,
   "order.created": orderChangedPayloadSchema,

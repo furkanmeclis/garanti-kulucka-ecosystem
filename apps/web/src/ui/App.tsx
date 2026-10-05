@@ -7,6 +7,7 @@ import {
   Bot,
   Bug,
   CheckCircle,
+  CheckCheck,
   FileUp,
   FileText,
   Headphones,
@@ -17,6 +18,8 @@ import {
   Package,
   Phone,
   Settings,
+  Search,
+  Send,
   Shield,
   ShoppingCart,
   Trash2,
@@ -253,6 +256,13 @@ function readStoredToken() {
 
 function formatMoney(value: number, currency: string) {
   return `${value.toFixed(2)} ${currency}`;
+}
+
+function formatDate(value: string) {
+  return new Date(value).toLocaleTimeString("tr-TR", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function formatPercent(numerator: number, denominator: number) {
@@ -610,6 +620,8 @@ export function App() {
   const [selectedShipmentId, setSelectedShipmentId] = useState<string | null>(null);
   const [conversationChannelFilter, setConversationChannelFilter] = useState("all");
   const [conversationStatusFilter, setConversationStatusFilter] = useState("all");
+  const [conversationSearch, setConversationSearch] = useState("");
+  const [messageDraft, setMessageDraft] = useState("");
   const [orderFilter, setOrderFilter] = useState("all");
   const [shipmentFilter, setShipmentFilter] = useState("all");
   const [shipmentPipelineFilter, setShipmentPipelineFilter] = useState<ShipmentPipelineFilter>("all");
@@ -677,12 +689,24 @@ export function App() {
         }
       })();
     });
+    const offConversationUpdated = realtime.on("conversation.updated", (envelope) => {
+      const conversationPublicId = String(envelope.payload.conversation_public_id ?? "");
+      if (!conversationPublicId) return;
+
+      void (async () => {
+        await refreshConversations();
+        if (selectedConversationIdRef.current === conversationPublicId) {
+          setStatus("Konuşma durumu Socket.IO üzerinden yenilendi");
+        }
+      })();
+    });
 
     realtime.connect();
     setRealtimeClient(realtime);
 
     return () => {
       offMessageCreated();
+      offConversationUpdated();
       realtime.disconnect();
       setRealtimeClient((current) => (current === realtime ? null : current));
     };
@@ -926,16 +950,18 @@ export function App() {
 
   async function handleSendMessage() {
     const conversationId = selectedConversation?.public_id ?? data.conversations[0]?.public_id;
-    if (!conversationId) return;
+    const body = messageDraft.trim();
+    if (!conversationId || !body) return;
 
     setStatus("Mesaj backend API üzerinden gönderiliyor");
     const message = await domain.createMessage(conversationId, {
       sender_type: "user",
       sender_name: user?.email ?? "Admin",
-      body: "Backend UI yaniti",
+      body,
       external_message_id: null,
       raw_payload: null,
     });
+    setMessageDraft("");
     setData((current) => ({
       ...current,
       messages: [
@@ -944,6 +970,7 @@ export function App() {
       ],
     }));
     await refreshConversations();
+    await refreshMessages(conversationId);
     setStatus("Mesaj backend API üzerinden gönderildi");
   }
 
@@ -1458,7 +1485,17 @@ export function App() {
   const visibleConversations = data.conversations.filter((conversation) => {
     const channelMatches = conversationMatchesChannelFilter(conversation, conversationChannelFilter);
     const statusMatches = conversationStatusFilter === "all" || conversation.status === conversationStatusFilter;
-    return channelMatches && statusMatches;
+    const normalizedSearch = conversationSearch.trim().toLocaleLowerCase("tr-TR");
+    const searchMatches =
+      !normalizedSearch ||
+      [
+        conversation.customer?.full_name,
+        conversation.customer?.phone,
+        conversation.last_message_text,
+        conversation.channel,
+        conversation.assigned_user_email,
+      ].some((value) => value?.toLocaleLowerCase("tr-TR").includes(normalizedSearch));
+    return channelMatches && statusMatches && searchMatches;
   });
   const selectedConversation =
     visibleConversations.find((conversation) => conversation.public_id === selectedConversationId) ?? visibleConversations[0] ?? null;
@@ -1590,68 +1627,167 @@ export function App() {
 
         {activeFlow === "inbox" && (
           <FlowPanel title="Mesajlar" icon={<MessageCircle size={18} />} testId="inbox-flow">
-            <div className="metrics-grid">
-              <Metric title="Okunmamış" value={String(unreadConversationCount)} />
-              <Metric title="Havuz" value={String(poolConversationCount)} />
-              <Metric title="Human Agent" value={String(humanAgentConversationCount)} />
-              <Metric title="Instagram" value={String(instagramConversationCount)} />
-              <Metric title="Facebook" value={String(facebookConversationCount)} />
-            </div>
-            <div className="detail-actions" data-testid="conversation-filter-bar">
-              {conversationChannelFilters.map(({ value, label }) => (
-                <button
-                  className={cx("secondary-action", conversationChannelFilter === value && "selected")}
-                  data-testid={`conversation-channel-filter-${value}`}
-                  key={value}
-                  type="button"
-                  onClick={() => void handleApplyConversationFilters(value, conversationStatusFilter)}
-                >
-                  {label}
-                </button>
-              ))}
-              {conversationStatusFilters.map(({ value, label }) => (
-                <button
-                  className={cx("secondary-action", conversationStatusFilter === value && "selected")}
-                  data-testid={`conversation-status-filter-${value}`}
-                  key={value}
-                  type="button"
-                  onClick={() => void handleApplyConversationFilters(conversationChannelFilter, value)}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            <DetailPanel title="Konuşma Filtreleri" testId="conversation-filter-summary">
-              <DataRows
-                rows={[
-                  ["Kaynak", "conversations API", "legacy kanal/durum filtreleri"],
-                  ["Aktif kanal", conversationChannelFilter, `${visibleConversations.length} konuşma`],
-                  ["Aktif durum", conversationStatusFilter, "Supabase channel yok"],
-                  ["Havuz", String(poolConversationCount), "backend is_in_pool"],
-                  ["Human agent", String(humanAgentConversationCount), "backend human_agent_enabled"],
-                ]}
-              />
-            </DetailPanel>
-            <div className="split-grid">
-              <List title="Konuşmalar" testId="conversation-list">
-                {visibleConversations.map((conversation) => (
-                  <li key={conversation.public_id}>
-                    <button
-                      className={cx("conversation-button", selectedConversation?.public_id === conversation.public_id && "selected")}
-                      type="button"
-                      onClick={() => void handleSelectConversation(conversation.public_id)}
+            <div className="messages-layout">
+              <aside className="messages-sidebar" data-testid="conversation-filter-summary">
+                <div className="messages-toolbar" data-testid="conversation-filter-bar">
+                  <label className="messages-select-label">
+                    <span>Kanal</span>
+                    <select
+                      className="inline-input"
+                      data-testid="channel-filter"
+                      value={conversationChannelFilter}
+                      onChange={(event) => void handleApplyConversationFilters(event.target.value, conversationStatusFilter)}
                     >
-                      <strong>{conversation.customer?.full_name ?? conversation.public_id}</strong>
-                      <span>{conversation.last_message_text ?? "Mesaj yok"}</span>
-                      <span>
-                        {conversation.channel} / {conversation.status} / okunmamış {conversation.unread_count}
-                      </span>
+                      {conversationChannelFilters.map(({ value, label }) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="messages-select-label">
+                    <span>Durum</span>
+                    <select
+                      className="inline-input"
+                      data-testid="status-filter"
+                      value={conversationStatusFilter}
+                      onChange={(event) => void handleApplyConversationFilters(conversationChannelFilter, event.target.value)}
+                    >
+                      {conversationStatusFilters.map(({ value, label }) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <div className="detail-actions compact" aria-hidden="true">
+                  {conversationChannelFilters.map(({ value, label }) => (
+                    <button
+                      className={cx("secondary-action", conversationChannelFilter === value && "selected")}
+                      data-testid={`conversation-channel-filter-${value}`}
+                      key={value}
+                      type="button"
+                      onClick={() => void handleApplyConversationFilters(value, conversationStatusFilter)}
+                    >
+                      {label}
                     </button>
-                  </li>
-                ))}
-              </List>
-              <div className="message-thread">
-                <h2>Mesaj akışı</h2>
+                  ))}
+                  {conversationStatusFilters.map(({ value, label }) => (
+                    <button
+                      className={cx("secondary-action", conversationStatusFilter === value && "selected")}
+                      data-testid={`conversation-status-filter-${value}`}
+                      key={value}
+                      type="button"
+                      onClick={() => void handleApplyConversationFilters(conversationChannelFilter, value)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <label className="messages-search">
+                  <Search size={16} aria-hidden="true" />
+                  <input
+                    data-testid="conversation-search"
+                    value={conversationSearch}
+                    onChange={(event) => setConversationSearch(event.target.value)}
+                    placeholder="Konuşma ara"
+                    type="search"
+                  />
+                </label>
+                <div className="messages-counts">
+                  <span>Okunmamış {unreadConversationCount}</span>
+                  <span>Havuz {poolConversationCount}</span>
+                  <span>Human Agent {humanAgentConversationCount}</span>
+                  <span>legacy kanal/durum filtreleri</span>
+                  <span>backend is_in_pool</span>
+                  <span>backend human_agent_enabled</span>
+                  <span>Aktif kanal {conversationChannelFilter}</span>
+                  <span>Aktif durum {conversationStatusFilter}</span>
+                </div>
+                <List title="Konuşmalar" testId="conversation-list">
+                  {visibleConversations.map((conversation) => (
+                    <li key={conversation.public_id}>
+                      <button
+                        className={cx("conversation-button", selectedConversation?.public_id === conversation.public_id && "selected")}
+                        data-channel={conversation.channel}
+                        data-testid="conversation-row"
+                        type="button"
+                        onClick={() => void handleSelectConversation(conversation.public_id)}
+                      >
+                        <span className="conversation-row-top">
+                          <strong>{conversation.customer?.full_name ?? conversation.public_id}</strong>
+                          <em>{conversation.channel}</em>
+                        </span>
+                        <span>{conversation.last_message_text ?? "Mesaj yok"}</span>
+                        <span>
+                          {conversation.status} / okunmamış {conversation.unread_count}
+                          {conversation.is_in_pool ? " / havuzda" : ""}
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </List>
+              </aside>
+
+              <section className="message-thread">
+                <header className="message-thread-header">
+                  <div>
+                    <h2>{selectedConversation?.customer?.full_name ?? "Konuşma seçin"}</h2>
+                    <span>{selectedConversation?.channel ?? "Kanal yok"}</span>
+                  </div>
+                  {selectedConversation && selectedConversation.unread_count > 0 && (
+                    <button
+                      className="secondary-action icon-action"
+                      data-testid="mark-read-button"
+                      type="button"
+                      onClick={() => void handleUpdateConversationState({ unread_count: 0 })}
+                    >
+                      <CheckCheck size={16} aria-hidden="true" />
+                      <span>Okundu yap</span>
+                    </button>
+                  )}
+                </header>
+                <div className="message-scroll-area" data-testid="message-scroll-area">
+                  {data.messages.map((message) => {
+                    const mine = message.sender_type === "user" || message.sender_type === "ai";
+                    return (
+                      <article className={cx("message-bubble", mine && "mine")} key={message.public_id}>
+                        <strong>{message.sender_name ?? (mine ? "Temsilci" : "Müşteri")}</strong>
+                        <span>{message.body ?? "Boş mesaj"}</span>
+                        <small>{formatDate(message.sent_at)}</small>
+                      </article>
+                    );
+                  })}
+                </div>
+                <div className="message-composer" data-testid="message-composer">
+                  <textarea
+                    data-testid="message-input"
+                    disabled={!selectedConversation}
+                    onChange={(event) => setMessageDraft(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" && !event.shiftKey) {
+                        event.preventDefault();
+                        void handleSendMessage();
+                      }
+                    }}
+                    placeholder="Mesajınızı yazın..."
+                    value={messageDraft}
+                  />
+                  <button
+                    className="primary-action icon-action"
+                    data-testid="message-send-button"
+                    disabled={!selectedConversation || !messageDraft.trim()}
+                    type="button"
+                    onClick={() => void handleSendMessage()}
+                  >
+                    <Send size={16} aria-hidden="true" />
+                    <span>Cevap gönder</span>
+                  </button>
+                </div>
+              </section>
+
+              <aside className="messages-detail">
                 {selectedConversation && (
                   <DetailPanel title="Konuşma Detayı" testId="conversation-detail">
                     <DataRows
@@ -1664,13 +1800,7 @@ export function App() {
                     <div className="detail-actions" data-testid="conversation-state-actions">
                       <button
                         className="secondary-action"
-                        type="button"
-                        onClick={() => void handleUpdateConversationState({ unread_count: 0 })}
-                      >
-                        Okundu yap
-                      </button>
-                      <button
-                        className="secondary-action"
+                        data-testid="human-agent-toggle"
                         type="button"
                         onClick={() =>
                           void handleUpdateConversationState({
@@ -1682,12 +1812,13 @@ export function App() {
                       </button>
                       <button
                         className="secondary-action"
+                        data-testid="pool-toggle"
                         type="button"
                         onClick={() =>
                           void handleUpdateConversationState(
                             selectedConversation.is_in_pool
                               ? { assign_to_me: true, is_in_pool: false }
-                              : { assign_to_me: false, is_in_pool: true }
+                              : { assign_to_me: false, is_in_pool: true },
                           )
                         }
                       >
@@ -1703,18 +1834,8 @@ export function App() {
                     </button>
                   </DetailPanel>
                 )}
-                {data.messages.map((message) => (
-                  <article key={message.public_id}>
-                    <strong>{message.sender_name ?? message.sender_type}</strong>
-                    <span>{message.body ?? "Boş mesaj"}</span>
-                  </article>
-                ))}
-                <button className="primary-action" type="button" onClick={handleSendMessage}>
-                  Cevap gönder
-                </button>
-              </div>
+              </aside>
             </div>
-            <Metric title="Okunmamış" value={String(unreadConversationCount)} />
           </FlowPanel>
         )}
 

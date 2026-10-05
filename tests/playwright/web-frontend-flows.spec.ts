@@ -407,13 +407,19 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
 
     if (url.pathname === "/api/conversations/cnv_playwright/messages") {
       if (route.request().method() === "POST") {
+        const payload = JSON.parse(route.request().postData() ?? "{}") as {
+          body?: string | null;
+          sender_type?: string;
+        };
+        expect(payload.sender_type).toBe("user");
+        expect(payload.body).toBe("Backend UI yaniti");
         await route.fulfill({
           contentType: "application/json",
           body: JSON.stringify({
             public_id: "msg_playwright_reply",
             sender_type: "user",
             sender_name: "admin@example.com",
-            body: "Backend UI yaniti",
+            body: payload.body,
             external_message_id: null,
             is_read: true,
             sent_at: "2026-01-01T00:01:00.000Z",
@@ -2038,6 +2044,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByText("Yeni mesaj Socket.IO üzerinden alındı")).toBeVisible();
     await page.getByRole("button", { name: /playwright customer/i }).click();
     await expect(page.getByTestId("conversation-detail")).toContainText("open");
+    await page.getByTestId("message-input").fill("Backend UI yaniti");
     await page.getByRole("button", { name: /cevap gönder/i }).click();
     await expect(page.getByTestId("inbox-flow")).toContainText("Backend UI yaniti");
     await page.goto(`${app.url}/mesajlar`);

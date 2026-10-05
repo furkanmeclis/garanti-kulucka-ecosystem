@@ -21,6 +21,22 @@ const envelope: RealtimeEnvelope = {
 describe("realtime boundary", () => {
   it("validates event payloads by event name", () => {
     expect(parseRealtimeEnvelope(envelope)).toEqual(envelope);
+    expect(
+      parseRealtimeEnvelope({
+        event: "conversation.updated",
+        id: "evt_conversation",
+        occurred_at: "2026-01-01T00:00:00.000Z",
+        payload: {
+          conversation_public_id: "cnv_test",
+          status: "open",
+          unread_count: 0,
+          is_in_pool: false,
+          human_agent_enabled: true,
+        },
+      }),
+    ).toMatchObject({
+      event: "conversation.updated",
+    });
     expect(() =>
       parseRealtimeEnvelope({
         ...envelope,

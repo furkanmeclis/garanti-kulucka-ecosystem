@@ -359,6 +359,21 @@ export function createDomainRoutes() {
       ...(payload.data.is_in_pool !== undefined ? { isInPool: payload.data.is_in_pool } : {}),
       ...(payload.data.assign_to_me !== undefined ? { assignedUserId: payload.data.assign_to_me ? actorUserId : null } : {}),
     });
+    const conversationUpdatedEnvelope = {
+      event: "conversation.updated",
+      id: `evt_${conversation.public_id}_${Date.now()}`,
+      occurred_at: new Date().toISOString(),
+      payload: {
+        conversation_public_id: conversation.public_id,
+        status: conversation.status,
+        unread_count: Number(conversation.unread_count),
+        is_in_pool: conversation.is_in_pool,
+        human_agent_enabled: conversation.human_agent_enabled,
+      },
+    } as const;
+    const realtimePublisher = context.get("realtimePublisher");
+    realtimePublisher.publishToConversation(conversation.public_id, conversationUpdatedEnvelope);
+    realtimePublisher.broadcast(conversationUpdatedEnvelope);
 
     return context.json(serializeConversation(conversation));
   });
