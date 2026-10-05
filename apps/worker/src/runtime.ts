@@ -31,6 +31,7 @@ import {
   registerQueueDepthCollector,
   type WorkerMetrics,
 } from "./observability.js";
+import { drainWorkers, type DrainWorkersResult } from "./shutdown.js";
 
 class RedisSettingsChangeSubscriber implements SettingsChangeSubscriber {
   private readonly subscriber: Redis;
@@ -66,7 +67,8 @@ export interface WorkerRuntime {
   metricQueues: Map<QueueName, Queue<JobEnvelope>>;
   metrics: WorkerMetrics;
   db: AppDatabase | null;
-  close: () => Promise<void>;
+  /** Pauses all workers, waits for active jobs up to the shutdown timeout, then releases connections. */
+  close: () => Promise<DrainWorkersResult>;
 }
 
 export interface WorkerRuntimeOptions {
@@ -79,6 +81,8 @@ export interface WorkerRuntimeOptions {
   mediaFileResolver?: ProviderMediaFileResolver;
   settingsChangeSubscriber?: SettingsChangeSubscriber;
   metrics?: WorkerMetrics;
+  concurrency?: number;
+  shutdownTimeoutMs?: number;
 }
 
 export function createWorkerRuntime(options: WorkerRuntimeOptions): WorkerRuntime {
@@ -137,7 +141,7 @@ export function createWorkerRuntime(options: WorkerRuntimeOptions): WorkerRuntim
       async (job) => registry.dispatch(queue, job),
       {
         connection,
-        concurrency: Number.parseInt(process.env.WORKER_CONCURRENCY ?? "5", 10),
+        concurrency: options.concurrency ?? 5,
       },
     );
 
@@ -235,12 +239,13 @@ export function createWorkerRuntime(options: WorkerRuntimeOptions): WorkerRuntim
     metrics,
     db,
     close: async () => {
+      const result = await drainWorkers(workers.values(), options.shutdownTimeoutMs ?? 30_000);
       await Promise.all([...metricQueues.values()].map((queue) => queue.close()));
-      await Promise.all([...workers.values()].map((worker) => worker.close()));
       await Promise.all([...schedulers.values()].map((scheduler) => scheduler.close()));
       await settingsChangeSubscriber?.close();
       connection.disconnect();
       await db?.destroy();
+      return result;
     },
   };
 }

@@ -31,6 +31,8 @@ export const noopRealtimePublisher: RealtimePublisher = {
 export interface RealtimeHandle {
   io: Server;
   publisher: RealtimePublisher;
+  /** Refuses new handshakes and disconnects current clients so they reconnect to another instance. */
+  drain: () => void;
   close: () => Promise<void>;
 }
 
@@ -175,7 +177,14 @@ export async function attachRealtime(
     io.adapter(createAdapter(redisClient));
   }
 
+  let draining = false;
+
   io.use(async (socket, next) => {
+    if (draining) {
+      next(new Error("server_draining"));
+      return;
+    }
+
     const token =
       typeof socket.handshake.auth.token === "string"
         ? socket.handshake.auth.token
@@ -212,6 +221,10 @@ export async function attachRealtime(
   return {
     io,
     publisher: createRealtimePublisher(io),
+    drain: () => {
+      draining = true;
+      io.disconnectSockets(true);
+    },
     close: async () => {
       if (staleSessionSweep) {
         clearInterval(staleSessionSweep);

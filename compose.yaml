@@ -44,8 +44,11 @@ services:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
+    stop_grace_period: 30s
     environment:
+      APP_ENV: local
       PORT: 3000
+      API_SHUTDOWN_TIMEOUT_MS: 25000
       DATABASE_URL: postgres://garanti:garanti@postgres:5432/garanti
       REDIS_URL: redis://redis:6379
       APP_ENCRYPTION_KEY: local-dev-change-me-32-bytes-minimum
@@ -62,7 +65,10 @@ services:
     build:
       context: .
       dockerfile: apps/worker/Dockerfile
+    stop_grace_period: 45s
     environment:
+      APP_ENV: local
+      WORKER_SHUTDOWN_TIMEOUT_MS: 40000
       DATABASE_URL: postgres://garanti:garanti@postgres:5432/garanti
       REDIS_URL: redis://redis:6379
       APP_ENCRYPTION_KEY: local-dev-change-me-32-bytes-minimum
@@ -94,6 +100,7 @@ services:
       context: .
       dockerfile: apps/migrator/Dockerfile
     environment:
+      APP_ENV: local
       DATABASE_URL: postgres://garanti:garanti@postgres:5432/garanti
       SOURCE_DATABASE_URL: ${SOURCE_DATABASE_URL:-postgres://garanti:garanti@postgres:5432/garanti}
     depends_on:

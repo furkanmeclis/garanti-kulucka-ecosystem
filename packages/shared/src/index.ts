@@ -9,3 +9,4 @@ export * from "./contracts/ws/events.js";
 export * from "./observability/metrics.js";
 export * from "./observability/redaction.js";
 export * from "./observability/structured-log.js";
+export * from "./config/service-env.js";

@@ -27,6 +27,8 @@ RUN groupadd --system app && useradd --system --gid app app
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=build /app/apps/migrator/package.json ./apps/migrator/package.json
 COPY --from=build /app/apps/migrator/dist ./apps/migrator/dist
+COPY --from=build /app/packages/shared/package.json ./packages/shared/package.json
+COPY --from=build /app/packages/shared/dist ./packages/shared/dist
 COPY --from=build /app/packages/database/package.json ./packages/database/package.json
 COPY --from=build /app/packages/database/dist ./packages/database/dist
 COPY --from=build /app/packages/database/migrations ./packages/database/migrations

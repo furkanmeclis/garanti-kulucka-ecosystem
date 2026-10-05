@@ -1,9 +1,29 @@
 import pino from "pino";
-import { createStructuredLog } from "@garanti-kulucka/shared";
+import { createStructuredLog, ServiceConfigError, validateServiceEnv } from "@garanti-kulucka/shared";
 import { parseMigratorCliCommand, runMigratorCommand } from "./commands.js";
 import { createMigratorFailureLogPayload } from "./logging.js";
 
 const logger = pino({ name: "migrator" });
+
+try {
+  validateServiceEnv("migrator", process.env);
+} catch (error) {
+  if (error instanceof ServiceConfigError) {
+    logger.error(
+      createStructuredLog({
+        level: "error",
+        service: "migrator",
+        event: "migrator.config_invalid",
+        msg: "Migrator configuration is invalid",
+        context: { app_env: error.appEnv, issues: error.issues },
+      }),
+      error.message,
+    );
+    process.exit(78);
+  }
+  throw error;
+}
+
 const { command, options } = parseMigratorCliCommand(process.argv.slice(2));
 
 logger.info(
