@@ -13,12 +13,12 @@ export interface NetgsmTransportResponse {
 }
 
 export interface NetgsmTransportRequest {
-  method: "POST";
+  method: "POST" | "GET";
   url: string;
   headers: Record<string, string>;
   body: string;
   timeout_ms: number;
-  netgsm_endpoint: "sms.send.xml";
+  netgsm_endpoint: "sms.send.xml" | "voicesms.send" | "voicesms.report";
 }
 
 export type NetgsmFetchTransport = (request: NetgsmTransportRequest) => Promise<NetgsmTransportResponse>;
@@ -313,7 +313,7 @@ function createAttempt(input: {
       queue: input.job.queue,
       channel: input.envelope.channel,
       live_call_performed: true,
-      transport: "netgsm-sms-xml",
+      transport: input.request.netgsm_endpoint === "sms.send.xml" ? "netgsm-sms-xml" : "netgsm-voicesms",
       request: redactRequest(input.request),
       ...(input.retry ? { retry: input.retry } : {}),
     },
@@ -361,6 +361,9 @@ function throwFailure(
 
 export async function sendNetgsmLiveRequest(input: NetgsmLiveAdapterInput): Promise<NetgsmLiveAdapterResult> {
   const startedAt = input.now ?? new Date();
+  if (input.envelope.operation === "call.confirmation.create" || input.envelope.operation === "call.confirmation.status") {
+    return sendNetgsmConfirmationCall(input, startedAt);
+  }
   if (input.envelope.operation !== "sms.send") {
     throw new Error(`Unsupported NetGSM operation: ${input.envelope.operation}`);
   }
@@ -427,4 +430,273 @@ export async function sendNetgsmLiveRequest(input: NetgsmLiveAdapterInput): Prom
 
   const message = terminalErrorMessages[parsed.code] ?? `Bilinmeyen NetGSM hata kodu: ${parsed.code}`;
   throwFailure(input, startedAt, request, response, "netgsm_error_code", message, parsed);
+}
+
+// ─── Order confirmation call (legacy "siparis teyit arama" IVR over /voicesms) ───
+
+const defaultTeyitAudioId = "172812485";
+const defaultIptalAudioId = "149477742";
+const defaultAppUrl = "https://panel.garantikulucka.com";
+const confirmationErrorMessages: Record<string, string> = {
+  "30": "Gecersiz kullanici adi/sifre veya API erisim izni yok",
+  "40": "Ses dosyasi bulunamadi",
+  "45": "Telefon numarasi bulunamadi",
+  "70": "Parametre hatasi",
+};
+const reportErrorMessages: Record<string, string> = {
+  "30": "Gecersiz kullanici adi/sifre veya API erisim izni yok",
+  "40": "Kayit bulunamadi",
+  "60": "Marka kodu gecersiz",
+  "70": "Hatali sorgulama / parametre hatasi",
+  "80": "Sistem hatasi / sinir asimi",
+};
+const callStatusMap: Record<string, string> = {
+  "0": "araniyor",
+  "1": "cevaplandi",
+  "2": "cevaplanmadi",
+  "3": "ulasilamadi",
+  "6": "gecersiz_numara",
+  "7": "mesgul",
+};
+
+function voiceCredentials(accountConfig: ProviderAccountConfig): { apiUrl: string; usercode: string; password: string } {
+  const { settings, tokens } = accountConfig;
+  const sms = credentials(accountConfig);
+  // Legacy resolveTeyitVoiceCredentials: teyit voice account, else NETGSM_VOICE_* -> NETGSM_SMS_* -> NETGSM_*.
+  const voiceUsercodeKeys = ["teyit_voice_usercode", "voice_usercode", "NETGSM_VOICE_USERCODE"];
+  const voicePasswordKeys = ["teyit_voice_password", "voice_password", "NETGSM_VOICE_PASSWORD"];
+  return {
+    apiUrl: sms.apiUrl,
+    usercode: stringToken(tokens, voiceUsercodeKeys, stringSetting(settings, voiceUsercodeKeys, sms.usercode)),
+    password: stringToken(tokens, voicePasswordKeys, stringSetting(settings, voicePasswordKeys, sms.password)),
+  };
+}
+
+function settingWithEmptyOverride(settings: Record<string, unknown>, key: string, fallback: string): string {
+  const value = settings[key];
+  if (typeof value === "string") return value.trim();
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  return fallback;
+}
+
+function zonedParts(date: Date, timeZone: string): { day: string; month: string; year: string; hour: string; minute: string } {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const part = (type: string) => parts.find((item) => item.type === type)?.value ?? "";
+  return { day: part("day"), month: part("month"), year: part("year"), hour: part("hour"), minute: part("minute") };
+}
+
+/** Legacy formatDateDDMMYYYY (ddMMyyyy) in the configured business time zone. */
+export function netgsmVoiceDate(date: Date, timeZone = "Europe/Istanbul"): string {
+  const { day, month, year } = zonedParts(date, timeZone);
+  return `${day}${month}${year}`;
+}
+
+/** Legacy formatTimeHHMM (HHmm) in the configured business time zone. */
+export function netgsmVoiceTime(date: Date, addMinutes = 0, timeZone = "Europe/Istanbul"): string {
+  const { hour, minute } = zonedParts(new Date(date.getTime() + addMinutes * 60_000), timeZone);
+  return `${hour}${minute}`;
+}
+
+function confirmationCallRequest(input: NetgsmLiveAdapterInput, now: Date): NetgsmTransportRequest {
+  const { settings } = input.accountConfig;
+  const payload = input.envelope.payload;
+  const creds = voiceCredentials(input.accountConfig);
+  const phone = cleanPhone(payloadString(payload, ["telefon", "phone", "customer_phone", "recipient_phone"]));
+  if (!creds.usercode || !creds.password) throw new Error("NetGSM voice credentials are missing");
+  if (!phone) throw new Error("NetGSM confirmation call phone is missing");
+
+  const timeZone = stringSetting(settings, ["timezone", "netgsm.timezone"], "Europe/Istanbul");
+  const stop = new Date(now.getTime() + 21 * 60 * 60 * 1000);
+  const teyitAudioId = settingWithEmptyOverride(settings, "teyit_audio_id", defaultTeyitAudioId);
+  const iptalAudioId = settingWithEmptyOverride(settings, "iptal_audio_id", defaultIptalAudioId);
+  const bodyContent = teyitAudioId
+    ? `<audioid>${teyitAudioId}</audioid>`
+    : `<text>${escapeXml(
+        "Sayın müşterimiz, Garanti Kuluçkadan vermiş olduğunuz kuluçka makinası siparişiniz en kısa sürede kargoya verilecektir. " +
+          "Siparişi siz vermediyseniz ya da yanlışlık olduğunu düşünüyorsanız, iptal etmek için 9'u tuşlayabilirsiniz. Teşekkürler.",
+      )}</text>`;
+  const keyContent = iptalAudioId
+    ? `<audioid>${iptalAudioId}</audioid>`
+    : `<text>${escapeXml("Siparişiniz iptal isteği olarak kaydedilmiştir. Teşekkür ederiz.")}</text>`;
+  const appUrl = stringSetting(settings, ["app_url", "APP_URL"], defaultAppUrl).replace(/\/+$/, "");
+  const webhookUrl = stringSetting(settings, ["ivr_webhook_url", "voice_webhook_url"], `${appUrl}/api/netgsm/webhook/sesli-mesaj`);
+
+  const xmlBody = `<?xml version='1.0' encoding='UTF-8'?>
+<mainbody>
+  <header>
+    <usercode>${creds.usercode}</usercode>
+    <password>${creds.password}</password>
+    <startdate>${netgsmVoiceDate(now, timeZone)}</startdate>
+    <starttime>${netgsmVoiceTime(now, 1, timeZone)}</starttime>
+    <stopdate>${netgsmVoiceDate(stop, timeZone)}</stopdate>
+    <stoptime>${netgsmVoiceTime(stop, 0, timeZone)}</stoptime>
+    <key>1</key>
+    <ringtime>25</ringtime>
+    <url>${webhookUrl}</url>
+  </header>
+  <body>
+    ${bodyContent}
+    <no>${phone}</no>
+    <keys>
+      <keydetail>
+        <keyinfo>9</keyinfo>
+        ${keyContent}
+      </keydetail>
+    </keys>
+  </body>
+</mainbody>`;
+
+  return {
+    method: "POST",
+    url: `${creds.apiUrl}/voicesms/send`,
+    headers: { "Content-Type": "text/xml; charset=utf-8" },
+    body: xmlBody,
+    timeout_ms: input.policy.timeout_ms,
+    netgsm_endpoint: "voicesms.send",
+  };
+}
+
+function confirmationStatusRequest(input: NetgsmLiveAdapterInput): NetgsmTransportRequest {
+  const creds = voiceCredentials(input.accountConfig);
+  const bulkId = payloadString(input.envelope.payload, ["bulk_id", "ivr_bulk_id", "bulkid"]);
+  if (!creds.usercode || !creds.password) throw new Error("NetGSM voice credentials are missing");
+  if (!bulkId) throw new Error("NetGSM confirmation call bulk id is missing");
+  const url = new URL(`${creds.apiUrl}/voicesms/report`);
+  url.searchParams.append("usercode", creds.usercode);
+  url.searchParams.append("password", creds.password);
+  url.searchParams.append("type", "1");
+  url.searchParams.append("bulkid", bulkId);
+  return {
+    method: "GET",
+    url: url.toString(),
+    headers: {},
+    body: "",
+    timeout_ms: input.policy.timeout_ms,
+    netgsm_endpoint: "voicesms.report",
+  };
+}
+
+/** Legacy /api/netgsm/siparis-arama/durum report parsing: telefon|durum|operator|dinleme|basilan_tus. */
+export function parseNetgsmConfirmationReport(body: string): Record<string, unknown> {
+  const trimmed = body.trim();
+  if (trimmed === "50") {
+    return { call_status: "araniyor", pressed_key: null, listen_seconds: 0, confirmation_outcome: null, report_ready: false, netgsm_code: "50" };
+  }
+  if (reportErrorMessages[trimmed]) {
+    return {
+      call_status: "araniyor",
+      pressed_key: null,
+      listen_seconds: 0,
+      confirmation_outcome: null,
+      report_ready: false,
+      netgsm_code: trimmed,
+      message: reportErrorMessages[trimmed],
+    };
+  }
+  const lines = trimmed.replace(/<br\s*\/?>/gi, "\n").split("\n").filter((line) => line.trim());
+  const first = lines[0];
+  if (!first) {
+    return { call_status: "araniyor", pressed_key: null, listen_seconds: 0, confirmation_outcome: null, report_ready: false, netgsm_code: null };
+  }
+  const fields = first.split("|").map((field) => field.trim());
+  const callStatus = callStatusMap[fields[1] ?? ""] ?? "araniyor";
+  const pressedKey = fields[4] ?? "";
+  const listenSeconds = Number.parseInt(fields[3] ?? "0", 10) || 0;
+  let outcome: string | null = null;
+  if (callStatus === "cevaplandi") outcome = pressedKey === "9" ? "iptal_istegi" : "teyit_edildi";
+  else if (callStatus === "gecersiz_numara") outcome = "gecersiz_numara";
+  else if (["cevaplanmadi", "ulasilamadi", "mesgul"].includes(callStatus)) outcome = "ulasilamadi";
+  return {
+    call_status: callStatus,
+    pressed_key: pressedKey || null,
+    listen_seconds: listenSeconds,
+    confirmation_outcome: outcome,
+    report_ready: callStatus !== "araniyor",
+    netgsm_code: null,
+  };
+}
+
+async function sendNetgsmConfirmationCall(input: NetgsmLiveAdapterInput, startedAt: Date): Promise<NetgsmLiveAdapterResult> {
+  const isStatus = input.envelope.operation === "call.confirmation.status";
+  const request = isStatus ? confirmationStatusRequest(input) : confirmationCallRequest(input, startedAt);
+  const transport = input.transport ?? defaultNetgsmFetchTransport;
+  let response: NetgsmTransportResponse;
+  try {
+    response = await transport(request);
+  } catch (error) {
+    const endedAt = input.now ? new Date(input.now) : new Date();
+    const decision = retryDecision(input, endedAt, null, failureCode(error));
+    throw new NetgsmLiveTransportError(
+      failureMessage(error, "NetGSM transport failed"),
+      createAttempt({
+        envelope: input.envelope,
+        job: input.job,
+        startedAt,
+        endedAt,
+        statusCode: null,
+        status: decision.status,
+        retryDecision: decision.retry_decision,
+        nextRetryAt: decision.next_retry_at,
+        request,
+        response: { live_call_performed: true, accepted: false },
+        error: { code: failureCode(error), message: failureMessage(error, "NetGSM transport failed") },
+        retry: retryMetadata(decision),
+      }),
+    );
+  }
+
+  const parsed = isStatus ? null : parseResponse(response.body);
+  if (response.status >= 400) {
+    throwFailure(input, startedAt, request, response, "provider_http_error", `NetGSM returned HTTP ${response.status}`, parsed);
+  }
+
+  let responsePayload: Record<string, unknown>;
+  if (isStatus) {
+    responsePayload = {
+      success: true,
+      bulk_id: payloadString(input.envelope.payload, ["bulk_id", "ivr_bulk_id", "bulkid"]),
+      ...parseNetgsmConfirmationReport(response.body),
+    };
+  } else {
+    if (!parsed) {
+      throwFailure(input, startedAt, request, response, "malformed_response", "NetGSM response could not be normalized", parsed);
+    }
+    if (!successCodes.has(parsed.code)) {
+      const message = confirmationErrorMessages[parsed.code] ?? `Bilinmeyen hata kodu: ${parsed.code}`;
+      throwFailure(input, startedAt, request, response, "netgsm_error_code", message, parsed);
+    }
+    responsePayload = {
+      success: true,
+      call_started: true,
+      bulkId: parsed.jobId,
+      netgsm_code: parsed.code,
+      ivr_arama_durumu: "araniyor",
+    };
+  }
+
+  const endedAt = input.now ? new Date(input.now) : new Date();
+  return {
+    response_payload: responsePayload,
+    attempt: createAttempt({
+      envelope: input.envelope,
+      job: input.job,
+      startedAt,
+      endedAt,
+      statusCode: response.status,
+      status: "success",
+      retryDecision: "none",
+      nextRetryAt: null,
+      request,
+      response: responseMetadata(response, parsed),
+      error: null,
+    }),
+  };
 }

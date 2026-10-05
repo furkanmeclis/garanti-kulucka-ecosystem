@@ -29,6 +29,22 @@ function providerPath(envelope: ProviderRequestEnvelope): string {
       return "/surat/shipments/track";
     case "kolaybi:invoice.create":
       return "/kolaybi/invoices";
+    case "kolaybi:invoice.get":
+      return "/kolaybi/invoices/show";
+    case "kolaybi:invoice.e_document.create":
+      return "/kolaybi/invoices/e-document/create";
+    case "kolaybi:invoice.e_document.cancel":
+      return "/kolaybi/invoices/e-document/cancel";
+    case "kolaybi:contact.find":
+      return "/kolaybi/associates/find";
+    case "kolaybi:contact.create":
+      return "/kolaybi/associates";
+    case "kolaybi:product.list":
+      return "/kolaybi/products";
+    case "netgsm:call.confirmation.create":
+      return "/netgsm/voicesms/send";
+    case "netgsm:call.confirmation.status":
+      return "/netgsm/voicesms/report";
     case "whatsapp:message.send":
       return "/meta/whatsapp/messages";
     case "instagram:message.send":

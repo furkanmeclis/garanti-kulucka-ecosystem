@@ -29,7 +29,15 @@ function catalogItem(
 export const apiProviderCatalog: ApiProviderCatalogItem[] = [
   catalogItem("ptt", ["cargo"], ["shipment.create", "shipment.track"]),
   catalogItem("surat", ["cargo"], ["shipment.create", "shipment.track"]),
-  catalogItem("kolaybi", ["accounting"], ["invoice.create"]),
+  catalogItem("kolaybi", ["accounting"], [
+    "invoice.create",
+    "invoice.get",
+    "invoice.e_document.create",
+    "invoice.e_document.cancel",
+    "contact.find",
+    "contact.create",
+    "product.list",
+  ]),
   catalogItem("meta", ["whatsapp", "instagram", "messenger"], ["message.webhook"]),
   catalogItem("whatsapp", ["whatsapp"], ["message.webhook", "message.send"]),
   catalogItem("instagram", ["instagram"], [
@@ -42,7 +50,7 @@ export const apiProviderCatalog: ApiProviderCatalogItem[] = [
     "comment.delete",
   ]),
   catalogItem("messenger", ["messenger"], ["message.webhook", "message.send"]),
-  catalogItem("netgsm", ["sms"], ["sms.send"]),
+  catalogItem("netgsm", ["sms", "voice"], ["sms.send", "call.confirmation.create", "call.confirmation.status"]),
   catalogItem("vapi", ["voice"], ["call.webhook", "call.create"]),
   catalogItem("sip", ["sip"], ["sip.config.sync"]),
 ];

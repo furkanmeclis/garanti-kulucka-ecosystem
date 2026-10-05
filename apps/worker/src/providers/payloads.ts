@@ -61,6 +61,22 @@ function buildBody(envelope: ProviderRequestEnvelope): Record<string, unknown> {
       return pick(payload, ["tracking_number"]);
     case "invoice.create":
       return pick(payload, ["order_public_id", "currency", "total_amount", "idempotency_key"]);
+    case "invoice.get":
+      return pick(payload, ["invoice_id", "document_id"]);
+    case "invoice.e_document.create":
+      return pick(payload, ["document_id", "invoice_id", "idempotency_key"]);
+    case "invoice.e_document.cancel":
+      return pick(payload, ["document_id", "invoice_id", "cancel_date", "cancel_time", "idempotency_key"]);
+    case "contact.find":
+      return pick(payload, ["identity_no", "email", "phone", "musteri_telefon"]);
+    case "contact.create":
+      return pick(payload, ["order_public_id", "musteri_ad", "name", "surname", "idempotency_key"]);
+    case "product.list":
+      return pick(payload, ["per_page", "max_pages"]);
+    case "call.confirmation.create":
+      return pick(payload, ["order_public_id", "telefon", "phone", "idempotency_key"]);
+    case "call.confirmation.status":
+      return pick(payload, ["order_public_id", "bulk_id", "ivr_bulk_id"]);
     case "message.send":
       return pick(payload, [
         "conversation_public_id",

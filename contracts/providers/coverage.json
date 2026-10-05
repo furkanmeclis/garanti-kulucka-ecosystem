@@ -146,6 +146,62 @@
       "direction": "outbound",
       "status": "covered",
       "fixture_file": "sip/fixtures/config_sync_minimal.json"
+    },
+    {
+      "provider": "kolaybi",
+      "operation": "invoice.e_document.create",
+      "direction": "outbound",
+      "status": "covered",
+      "fixture_file": "kolaybi/fixtures/e_document_create_minimal.json"
+    },
+    {
+      "provider": "kolaybi",
+      "operation": "invoice.e_document.cancel",
+      "direction": "outbound",
+      "status": "covered",
+      "fixture_file": "kolaybi/fixtures/e_document_cancel_minimal.json"
+    },
+    {
+      "provider": "kolaybi",
+      "operation": "invoice.get",
+      "direction": "outbound",
+      "status": "covered",
+      "fixture_file": "kolaybi/fixtures/invoice_get_minimal.json"
+    },
+    {
+      "provider": "kolaybi",
+      "operation": "contact.find",
+      "direction": "outbound",
+      "status": "covered",
+      "fixture_file": "kolaybi/fixtures/contact_find_minimal.json"
+    },
+    {
+      "provider": "kolaybi",
+      "operation": "contact.create",
+      "direction": "outbound",
+      "status": "covered",
+      "fixture_file": "kolaybi/fixtures/contact_create_minimal.json"
+    },
+    {
+      "provider": "kolaybi",
+      "operation": "product.list",
+      "direction": "outbound",
+      "status": "covered",
+      "fixture_file": "kolaybi/fixtures/product_list_minimal.json"
+    },
+    {
+      "provider": "netgsm",
+      "operation": "call.confirmation.create",
+      "direction": "outbound",
+      "status": "covered",
+      "fixture_file": "netgsm/fixtures/call_confirmation_create_minimal.json"
+    },
+    {
+      "provider": "netgsm",
+      "operation": "call.confirmation.status",
+      "direction": "outbound",
+      "status": "covered",
+      "fixture_file": "netgsm/fixtures/call_confirmation_status_minimal.json"
     }
   ]
 }

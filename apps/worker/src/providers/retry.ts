@@ -29,7 +29,11 @@ export type ProviderRetryReason =
 
 const nonIdempotentOperations = new Set<ProviderOperation>([
   "invoice.create",
+  "invoice.e_document.create",
+  "invoice.e_document.cancel",
+  "contact.create",
   "call.create",
+  "call.confirmation.create",
   "message.send",
   "shipment.create",
   "sms.send",

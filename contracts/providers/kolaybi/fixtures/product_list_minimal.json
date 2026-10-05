@@ -1,0 +1,15 @@
+{
+  "request_id": "req_kolaybi_product_list_fixture_1",
+  "provider": "kolaybi",
+  "operation": "product.list",
+  "direction": "outbound",
+  "channel": "accounting",
+  "occurred_at": "2026-10-05T00:00:00.000Z",
+  "payload": {
+    "per_page": 200
+  },
+  "legacy_contract": {
+    "source": "server.js GET /api/kolaybi/urunler",
+    "fixture_name": "kolaybi_product_list_minimal"
+  }
+}

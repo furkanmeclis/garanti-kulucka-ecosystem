@@ -2,16 +2,49 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "NetGSM provider request envelope",
   "type": "object",
-  "required": ["request_id", "provider", "operation", "direction", "channel", "occurred_at", "payload"],
+  "required": [
+    "request_id",
+    "provider",
+    "operation",
+    "direction",
+    "channel",
+    "occurred_at",
+    "payload"
+  ],
   "properties": {
-    "request_id": { "type": "string", "minLength": 1 },
-    "provider": { "const": "netgsm" },
-    "operation": { "const": "sms.send" },
-    "direction": { "const": "outbound" },
-    "channel": { "const": "sms" },
-    "occurred_at": { "type": "string", "format": "date-time" },
-    "payload": { "type": "object" },
-    "legacy_contract": { "type": "object" }
+    "request_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "provider": {
+      "const": "netgsm"
+    },
+    "operation": {
+      "enum": [
+        "sms.send",
+        "call.confirmation.create",
+        "call.confirmation.status"
+      ]
+    },
+    "direction": {
+      "const": "outbound"
+    },
+    "channel": {
+      "enum": [
+        "sms",
+        "voice"
+      ]
+    },
+    "occurred_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "payload": {
+      "type": "object"
+    },
+    "legacy_contract": {
+      "type": "object"
+    }
   },
   "additionalProperties": false
 }

@@ -1,0 +1,17 @@
+{
+  "request_id": "req_kolaybi_e_document_cancel_fixture_1",
+  "provider": "kolaybi",
+  "operation": "invoice.e_document.cancel",
+  "direction": "outbound",
+  "channel": "accounting",
+  "occurred_at": "2026-10-05T00:00:00.000Z",
+  "payload": {
+    "document_id": "42",
+    "cancel_date": "2026-10-05 10:00:00",
+    "idempotency_key": "e-document-cancel-42"
+  },
+  "legacy_contract": {
+    "source": "server.js POST /api/kolaybi/e-fatura/iptal",
+    "fixture_name": "kolaybi_e_document_cancel_minimal"
+  }
+}

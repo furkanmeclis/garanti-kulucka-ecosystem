@@ -36,7 +36,15 @@ export const providerAdapters: ProviderAdapterDefinition[] = [
     display_name: "KolayBi",
     channels: ["accounting"],
     webhook_operations: [],
-    delivery_operations: ["invoice.create"],
+    delivery_operations: [
+      "invoice.create",
+      "invoice.get",
+      "invoice.e_document.create",
+      "invoice.e_document.cancel",
+      "contact.find",
+      "contact.create",
+      "product.list",
+    ],
     live_calls_enabled: true,
   },
   {
@@ -81,9 +89,9 @@ export const providerAdapters: ProviderAdapterDefinition[] = [
   {
     provider: "netgsm",
     display_name: "NetGSM",
-    channels: ["sms"],
+    channels: ["sms", "voice"],
     webhook_operations: [],
-    delivery_operations: ["sms.send"],
+    delivery_operations: ["sms.send", "call.confirmation.create", "call.confirmation.status"],
     live_calls_enabled: true,
   },
   {

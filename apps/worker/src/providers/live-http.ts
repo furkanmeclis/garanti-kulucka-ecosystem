@@ -22,7 +22,10 @@ export async function fetchLiveHttpTransport(
     const response = await fetch(request.url, {
       method: request.method,
       headers: request.headers,
-      ...(request.body === null || (request.body === "" && (request.method === "GET" || request.method === "DELETE"))
+      ...(request.body === null ||
+      request.method === "GET" ||
+      request.method === "HEAD" ||
+      (request.body === "" && request.method === "DELETE")
         ? {}
         : { body: request.body }),
       signal: controller.signal,

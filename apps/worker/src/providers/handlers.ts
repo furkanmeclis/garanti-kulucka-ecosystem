@@ -2,6 +2,7 @@ import {
   type JobEnvelope,
   type ProviderAttempt,
   type ProviderName,
+  type ProviderOperation,
   type ProviderRequestEnvelope,
   providerDeliveryJobPayloadSchema,
   providerAttemptSchema,
@@ -73,9 +74,32 @@ function booleanSetting(settings: Record<string, unknown>, key: string): boolean
   return null;
 }
 
-function liveModeEnabledFor(provider: ProviderName, accountConfig: { live_mode: boolean; settings: Record<string, unknown> }): boolean {
+// P7 follow-up operations ported from legacy server.js require the explicit
+// providers.<provider>.live_mode opt-in in addition to the account live_mode flag.
+const explicitOptInOperations = new Set<ProviderOperation>([
+  "invoice.get",
+  "invoice.e_document.create",
+  "invoice.e_document.cancel",
+  "contact.find",
+  "contact.create",
+  "product.list",
+  "call.confirmation.create",
+  "call.confirmation.status",
+]);
+
+function liveModeEnabledFor(
+  provider: ProviderName,
+  operation: ProviderOperation,
+  accountConfig: { live_mode: boolean; settings: Record<string, unknown> },
+): boolean {
   if (!accountConfig.live_mode) return false;
-  if (provider === "whatsapp" || provider === "instagram" || provider === "messenger" || provider === "vapi") {
+  if (
+    provider === "whatsapp" ||
+    provider === "instagram" ||
+    provider === "messenger" ||
+    provider === "vapi" ||
+    explicitOptInOperations.has(operation)
+  ) {
     return booleanSetting(accountConfig.settings, `providers.${provider}.live_mode`) === true;
   }
   return true;
@@ -272,7 +296,7 @@ export async function handleProviderDeliveryJobWithTransport(
     payload.envelope.account_public_id,
   );
   const policy = providerTransportPolicyFor(payload.envelope, {
-    liveModeEnabled: accountConfig ? liveModeEnabledFor(payload.envelope.provider, accountConfig) : false,
+    liveModeEnabled: accountConfig ? liveModeEnabledFor(payload.envelope.provider, payload.envelope.operation, accountConfig) : false,
     timeoutMs: accountConfig
       ? numericAccountSetting(accountConfig.settings, ["timeout_ms", `${payload.envelope.provider}.timeout_ms`])
       : null,
