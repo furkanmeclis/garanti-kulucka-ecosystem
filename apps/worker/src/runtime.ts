@@ -16,6 +16,7 @@ import {
   type WorkerProcessorRegistry,
 } from "./processors.js";
 import { StorageOrphanReconciler } from "./storage-orphans.js";
+import { S3ProviderMediaFileResolver, type ProviderMediaFileResolver } from "./providers/media-files.js";
 import { DatabaseProviderAttemptRepository, type ProviderAttemptRepository } from "./providers/attempts.js";
 import {
   DatabaseProviderAccountConfigRepository,
@@ -64,6 +65,7 @@ export interface WorkerRuntimeOptions {
   lifecycleRecorder?: WorkerLifecycleRecorder;
   providerAttemptRepository?: ProviderAttemptRepository;
   providerAccountConfigRepository?: ProviderAccountConfigRepository;
+  mediaFileResolver?: ProviderMediaFileResolver;
   settingsChangeSubscriber?: SettingsChangeSubscriber;
 }
 
@@ -84,6 +86,8 @@ export function createWorkerRuntime(options: WorkerRuntimeOptions): WorkerRuntim
     options.providerAccountConfigRepository ??
     (db ? new DatabaseProviderAccountConfigRepository(db, decryptor) : undefined);
   const storageOrphanReconciler = db ? new StorageOrphanReconciler(db) : undefined;
+  const mediaFileResolver =
+    options.mediaFileResolver ?? (db ? new S3ProviderMediaFileResolver(db) : undefined);
   const settingsChangeSubscriber =
     options.settingsChangeSubscriber ??
     (options.redisUrl ? new RedisSettingsChangeSubscriber(options.redisUrl) : undefined);
@@ -107,6 +111,7 @@ export function createWorkerRuntime(options: WorkerRuntimeOptions): WorkerRuntim
     ...(providerAttemptRepository ? { providerAttemptRepository } : {}),
     ...(providerAccountConfigRepository ? { providerAccountConfigRepository } : {}),
     ...(storageOrphanReconciler ? { storageOrphanReconciler } : {}),
+    ...(mediaFileResolver ? { mediaFileResolver } : {}),
   });
 
   const workers = new Map<QueueName, Worker<JobEnvelope>>();

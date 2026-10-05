@@ -33,6 +33,9 @@ const nonIdempotentOperations = new Set<ProviderOperation>([
   "message.send",
   "shipment.create",
   "sms.send",
+  "media.publish",
+  "comment.reply",
+  "comment.private_reply",
 ]);
 
 function classifyProviderFailure(input: ProviderFailureInput): {

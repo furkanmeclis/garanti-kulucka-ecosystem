@@ -1,0 +1,18 @@
+{
+  "request_id": "req_instagram_media_publish_minimal",
+  "provider": "instagram",
+  "operation": "media.publish",
+  "direction": "outbound",
+  "channel": "instagram",
+  "account_public_id": "iac_instagram_demo",
+  "occurred_at": "2026-01-01T00:00:00.000Z",
+  "payload": {
+    "image_url": "https://cdn.example.test/media/post.jpg",
+    "caption": "Yeni urunumuz stokta.",
+    "idempotency_key": "ig_publish_demo_001"
+  },
+  "legacy_contract": {
+    "source": "legacy server.js POST /api/instagram/publish/photo (/{ig_user_id}/media then /media_publish)",
+    "fixture_name": "media_publish_minimal"
+  }
+}

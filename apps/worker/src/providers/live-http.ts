@@ -8,7 +8,7 @@ export interface LiveHttpTransportRequest {
   method: string;
   url: string;
   headers: Record<string, string>;
-  body: string;
+  body: string | FormData | null;
   timeout_ms: number;
 }
 
@@ -22,7 +22,9 @@ export async function fetchLiveHttpTransport(
     const response = await fetch(request.url, {
       method: request.method,
       headers: request.headers,
-      body: request.body,
+      ...(request.body === null || (request.body === "" && (request.method === "GET" || request.method === "DELETE"))
+        ? {}
+        : { body: request.body }),
       signal: controller.signal,
     });
     return {

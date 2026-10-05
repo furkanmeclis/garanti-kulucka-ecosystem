@@ -71,6 +71,41 @@
       "fixture_file": "instagram/fixtures/message_send_minimal.json"
     },
     {
+      "provider": "instagram",
+      "operation": "media.publish",
+      "direction": "outbound",
+      "status": "covered",
+      "fixture_file": "instagram/fixtures/media_publish_minimal.json"
+    },
+    {
+      "provider": "instagram",
+      "operation": "comment.reply",
+      "direction": "outbound",
+      "status": "covered",
+      "fixture_file": "instagram/fixtures/comment_reply_minimal.json"
+    },
+    {
+      "provider": "instagram",
+      "operation": "comment.private_reply",
+      "direction": "outbound",
+      "status": "covered",
+      "fixture_file": "instagram/fixtures/comment_private_reply_minimal.json"
+    },
+    {
+      "provider": "instagram",
+      "operation": "comment.hide",
+      "direction": "outbound",
+      "status": "covered",
+      "fixture_file": "instagram/fixtures/comment_hide_minimal.json"
+    },
+    {
+      "provider": "instagram",
+      "operation": "comment.delete",
+      "direction": "outbound",
+      "status": "covered",
+      "fixture_file": "instagram/fixtures/comment_delete_minimal.json"
+    },
+    {
       "provider": "messenger",
       "operation": "message.webhook",
       "direction": "inbound",

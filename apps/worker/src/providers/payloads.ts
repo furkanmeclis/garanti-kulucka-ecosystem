@@ -62,7 +62,13 @@ function buildBody(envelope: ProviderRequestEnvelope): Record<string, unknown> {
     case "invoice.create":
       return pick(payload, ["order_public_id", "currency", "total_amount", "idempotency_key"]);
     case "message.send":
-      return pick(payload, ["conversation_public_id", "recipient_id", "message", "idempotency_key"]);
+      return pick(payload, [
+        "conversation_public_id",
+        "recipient_id",
+        "message",
+        "attachment",
+        "idempotency_key",
+      ]);
     case "message.webhook":
       return {
         object: payload.object,
@@ -83,6 +89,14 @@ function buildBody(envelope: ProviderRequestEnvelope): Record<string, unknown> {
       return pick(payload, ["type", "call"]);
     case "sip.config.sync":
       return pick(payload, ["user_public_id", "sip_username", "password_state"]);
+    case "media.publish":
+      return pick(payload, ["media_type", "image_url", "video_url", "caption", "idempotency_key"]);
+    case "comment.reply":
+    case "comment.private_reply":
+      return pick(payload, ["comment_id", "message", "idempotency_key"]);
+    case "comment.hide":
+    case "comment.delete":
+      return pick(payload, ["comment_id"]);
   }
 }
 

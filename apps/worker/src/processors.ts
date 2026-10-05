@@ -23,6 +23,8 @@ import type { SuratFetchTransport } from "./providers/surat.js";
 import type { KolaybiFetchTransport } from "./providers/kolaybi.js";
 import type { WhatsappFetchTransport } from "./providers/whatsapp.js";
 import type { InstagramFetchTransport } from "./providers/instagram.js";
+import type { InstagramGraphFetchTransport } from "./providers/instagram-graph.js";
+import type { ProviderMediaFileResolver } from "./providers/media-files.js";
 import type { MessengerFetchTransport } from "./providers/messenger.js";
 import type { NetgsmFetchTransport } from "./providers/netgsm.js";
 import type { VapiFetchTransport } from "./providers/vapi.js";
@@ -114,6 +116,8 @@ export interface WorkerProcessorRegistryOptions {
   kolaybiTransport?: KolaybiFetchTransport;
   whatsappTransport?: WhatsappFetchTransport;
   instagramTransport?: InstagramFetchTransport;
+  instagramGraphTransport?: InstagramGraphFetchTransport;
+  mediaFileResolver?: ProviderMediaFileResolver;
   messengerTransport?: MessengerFetchTransport;
   netgsmTransport?: NetgsmFetchTransport;
   vapiTransport?: VapiFetchTransport;
@@ -258,6 +262,10 @@ function createProviderDeliveryProcessor(
   messengerTransport?: MessengerFetchTransport,
   netgsmTransport?: NetgsmFetchTransport,
   vapiTransport?: VapiFetchTransport,
+  extras: {
+    instagramGraphTransport?: InstagramGraphFetchTransport;
+    mediaFileResolver?: ProviderMediaFileResolver;
+  } = {},
 ): QueueProcessor {
   return async (job) => {
     const envelope = assertJobMatchesQueue("provider-delivery", job);
@@ -278,6 +286,8 @@ function createProviderDeliveryProcessor(
           ...(messengerTransport ? { messengerTransport } : {}),
           ...(netgsmTransport ? { netgsmTransport } : {}),
           ...(vapiTransport ? { vapiTransport } : {}),
+          ...(extras.instagramGraphTransport ? { instagramGraphTransport: extras.instagramGraphTransport } : {}),
+          ...(extras.mediaFileResolver ? { mediaFileResolver: extras.mediaFileResolver } : {}),
           ...providerFailureInputFromJob(job),
         });
       } else {
@@ -527,6 +537,10 @@ export function createWorkerProcessorRegistry(
     typeof options === "function" ? undefined : options.vapiTransport;
   const storageOrphanReconciler =
     typeof options === "function" ? undefined : options.storageOrphanReconciler;
+  const instagramGraphTransport =
+    typeof options === "function" ? undefined : options.instagramGraphTransport;
+  const mediaFileResolver =
+    typeof options === "function" ? undefined : options.mediaFileResolver;
   const processors = new Map<QueueName, QueueProcessor>([
     ["provider-webhooks", createProviderWebhookProcessor(providerAttemptRepository)],
     [
@@ -542,6 +556,10 @@ export function createWorkerProcessorRegistry(
         messengerTransport,
         netgsmTransport,
         vapiTransport,
+        {
+          ...(instagramGraphTransport ? { instagramGraphTransport } : {}),
+          ...(mediaFileResolver ? { mediaFileResolver } : {}),
+        },
       ),
     ],
     ["shipment-tracking", createShipmentTrackingProcessor()],

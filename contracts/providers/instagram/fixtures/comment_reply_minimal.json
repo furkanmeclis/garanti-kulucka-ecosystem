@@ -1,0 +1,18 @@
+{
+  "request_id": "req_instagram_comment_reply_minimal",
+  "provider": "instagram",
+  "operation": "comment.reply",
+  "direction": "outbound",
+  "channel": "instagram",
+  "account_public_id": "iac_instagram_demo",
+  "occurred_at": "2026-01-01T00:00:00.000Z",
+  "payload": {
+    "comment_id": "17890000000000001",
+    "message": "Ilginiz icin tesekkurler!",
+    "idempotency_key": "ig_comment_reply_demo_001"
+  },
+  "legacy_contract": {
+    "source": "legacy routes/commentAiRouter.js publicReply (/{comment_id}/replies)",
+    "fixture_name": "comment_reply_minimal"
+  }
+}

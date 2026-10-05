@@ -23,6 +23,11 @@ export const providerOperationSchema = z.enum([
   "call.create",
   "call.webhook",
   "sip.config.sync",
+  "media.publish",
+  "comment.reply",
+  "comment.private_reply",
+  "comment.hide",
+  "comment.delete",
 ]);
 
 export const providerDirectionSchema = z.enum(["inbound", "outbound"]);

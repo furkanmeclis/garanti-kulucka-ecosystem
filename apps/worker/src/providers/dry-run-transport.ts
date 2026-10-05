@@ -35,6 +35,16 @@ function providerPath(envelope: ProviderRequestEnvelope): string {
       return "/meta/instagram/messages";
     case "messenger:message.send":
       return "/meta/messenger/messages";
+    case "instagram:media.publish":
+      return "/meta/instagram/media_publish";
+    case "instagram:comment.reply":
+      return "/meta/instagram/comments/replies";
+    case "instagram:comment.private_reply":
+      return "/meta/instagram/comments/private_replies";
+    case "instagram:comment.hide":
+      return "/meta/instagram/comments/hide";
+    case "instagram:comment.delete":
+      return "/meta/instagram/comments/delete";
     case "netgsm:sms.send":
       return "/netgsm/sms";
     case "vapi:call.create":

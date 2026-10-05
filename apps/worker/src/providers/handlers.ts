@@ -25,6 +25,12 @@ import { SuratLiveTransportError, sendSuratLiveRequest, type SuratFetchTransport
 import { KolaybiLiveTransportError, sendKolaybiLiveRequest, type KolaybiFetchTransport } from "./kolaybi.js";
 import { WhatsappLiveTransportError, sendWhatsappLiveRequest, type WhatsappFetchTransport } from "./whatsapp.js";
 import { InstagramLiveTransportError, sendInstagramLiveRequest, type InstagramFetchTransport } from "./instagram.js";
+import {
+  isInstagramGraphOperation,
+  sendInstagramGraphLiveRequest,
+  type InstagramGraphFetchTransport,
+} from "./instagram-graph.js";
+import type { ProviderMediaFileResolver } from "./media-files.js";
 import { MessengerLiveTransportError, sendMessengerLiveRequest, type MessengerFetchTransport } from "./messenger.js";
 import { NetgsmLiveTransportError, sendNetgsmLiveRequest, type NetgsmFetchTransport } from "./netgsm.js";
 import { VapiLiveTransportError, sendVapiLiveRequest, type VapiFetchTransport } from "./vapi.js";
@@ -47,6 +53,8 @@ export interface ProviderDeliveryHandlerOptions {
   kolaybiTransport?: KolaybiFetchTransport;
   whatsappTransport?: WhatsappFetchTransport;
   instagramTransport?: InstagramFetchTransport;
+  instagramGraphTransport?: InstagramGraphFetchTransport;
+  mediaFileResolver?: ProviderMediaFileResolver;
   messengerTransport?: MessengerFetchTransport;
   netgsmTransport?: NetgsmFetchTransport;
   vapiTransport?: VapiFetchTransport;
@@ -322,8 +330,20 @@ export async function handleProviderDeliveryJobWithTransport(
               attemptNumber: options.attemptNumber ?? 1,
               maxAttempts: options.maxAttempts ?? policy.max_attempts,
               ...(options.whatsappTransport ? { transport: options.whatsappTransport } : {}),
+              ...(options.mediaFileResolver ? { mediaFileResolver: options.mediaFileResolver } : {}),
               ...(options.now ? { now: options.now } : {}),
             })
+          : payload.envelope.provider === "instagram" && isInstagramGraphOperation(payload.envelope.operation)
+            ? await sendInstagramGraphLiveRequest({
+                envelope: payload.envelope,
+                job,
+                accountConfig,
+                policy,
+                attemptNumber: options.attemptNumber ?? 1,
+                maxAttempts: options.maxAttempts ?? policy.max_attempts,
+                ...(options.instagramGraphTransport ? { transport: options.instagramGraphTransport } : {}),
+                ...(options.now ? { now: options.now } : {}),
+              })
           : payload.envelope.provider === "instagram"
             ? await sendInstagramLiveRequest({
                 envelope: payload.envelope,

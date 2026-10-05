@@ -1,0 +1,16 @@
+{
+  "request_id": "req_instagram_comment_delete_minimal",
+  "provider": "instagram",
+  "operation": "comment.delete",
+  "direction": "outbound",
+  "channel": "instagram",
+  "account_public_id": "iac_instagram_demo",
+  "occurred_at": "2026-01-01T00:00:00.000Z",
+  "payload": {
+    "comment_id": "17890000000000001"
+  },
+  "legacy_contract": {
+    "source": "legacy routes/commentAiRouter.js deleteComment",
+    "fixture_name": "comment_delete_minimal"
+  }
+}

@@ -6,7 +6,17 @@
   "properties": {
     "request_id": { "type": "string", "minLength": 1 },
     "provider": { "enum": ["meta", "whatsapp", "instagram", "messenger"] },
-    "operation": { "enum": ["message.webhook", "message.send"] },
+    "operation": {
+      "enum": [
+        "message.webhook",
+        "message.send",
+        "media.publish",
+        "comment.reply",
+        "comment.private_reply",
+        "comment.hide",
+        "comment.delete"
+      ]
+    },
     "direction": { "enum": ["inbound", "outbound"] },
     "channel": { "enum": ["whatsapp", "instagram", "messenger"] },
     "occurred_at": { "type": "string", "format": "date-time" },

@@ -60,7 +60,14 @@ export const providerAdapters: ProviderAdapterDefinition[] = [
     display_name: "Instagram Graph API",
     channels: ["instagram"],
     webhook_operations: ["message.webhook"],
-    delivery_operations: ["message.send"],
+    delivery_operations: [
+      "message.send",
+      "media.publish",
+      "comment.reply",
+      "comment.private_reply",
+      "comment.hide",
+      "comment.delete",
+    ],
     live_calls_enabled: true,
   },
   {
