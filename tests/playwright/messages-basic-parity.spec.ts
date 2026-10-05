@@ -126,6 +126,7 @@ test("calisan Mesajlar temel parity actions go through backend API and Socket.IO
             external_message_id: null,
             is_read: true,
             sent_at: "2026-01-01T00:02:00.000Z",
+            attachments: [],
           }),
         });
         return;
@@ -251,6 +252,324 @@ test("calisan Mesajlar temel parity actions go through backend API and Socket.IO
       last_message_at: realtimeDelivered ? "2026-01-01T00:03:00.000Z" : "2026-01-01T00:00:00.000Z",
       customer: { full_name: "Slice Müşteri", phone: "5550000000" },
       assigned_user_email: conversationAssignedUserEmail,
+      notes: null,
+      updated_at: "2026-01-01T00:04:00.000Z",
+    };
+  }
+});
+
+test("calisan Mesajlar medya kısayol notlar actions use backend API", async ({ page }) => {
+  const app = await startWebApp();
+  const user = loginUser({ role: "calisan", email: "calisan@example.com", permissions: [] });
+  const messages: Array<ReturnType<typeof messageRow>> = [
+    messageRow("msg_slice_1", "customer", "Slice Müşteri", "Merhaba"),
+  ];
+  const shortcuts: Array<{
+    public_id: string;
+    code: string;
+    message: string | null;
+    type: "default" | "custom";
+    is_active: boolean;
+    sort_order: number;
+    attachments: Array<{
+      file_public_id: string;
+      attachment_type: "image" | "video" | "document" | "file";
+      original_name: string | null;
+      mime_type: string | null;
+      byte_size: number | null;
+    }>;
+    updated_at: string;
+  }> = [];
+  let fileCounter = 0;
+  let conversationNote: string | null = null;
+  let customerNote: string | null = null;
+  const createdUploads: Array<{ original_name: string; checksum: string }> = [];
+  const messagePosts: unknown[] = [];
+
+  await installRealtimeShim(page);
+
+  await page.route(`${backendBaseUrl}/**`, async (route) => {
+    const url = new URL(route.request().url());
+
+    if (url.pathname === "/auth/login") {
+      await route.fulfill({ contentType: "application/json", body: JSON.stringify(loginBody(user)) });
+      return;
+    }
+    if (url.pathname === "/auth/me") {
+      await route.fulfill({ contentType: "application/json", body: JSON.stringify(user) });
+      return;
+    }
+    if (url.pathname.startsWith("/__upload/")) {
+      await route.fulfill({ contentType: "application/json", body: JSON.stringify({ ok: true }) });
+      return;
+    }
+
+    if (url.pathname === "/api/conversations") {
+      await route.fulfill({ contentType: "application/json", body: JSON.stringify({ data: [conversationRow()] }) });
+      return;
+    }
+    if (url.pathname === "/api/conversations/summary") {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          total_count: 1,
+          unread_count: 0,
+          pool_count: 0,
+          human_agent_count: 1,
+          channel_counts: { instagram: 1, facebook: 0 },
+          status_counts: { open: 1, closed: 0 },
+        }),
+      });
+      return;
+    }
+    if (url.pathname === "/api/customers") {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          data: [
+            {
+              public_id: "cus_media",
+              full_name: "Slice Müşteri",
+              phone: "5550000000",
+              email: null,
+              username: null,
+              notes: customerNote,
+              updated_at: "2026-01-01T00:06:00.000Z",
+            },
+          ],
+        }),
+      });
+      return;
+    }
+    if (url.pathname === "/api/conversations/cnv_media/messages") {
+      if (route.request().method() === "POST") {
+        const payload = JSON.parse(route.request().postData() ?? "{}") as {
+          body?: string | null;
+          attachments?: Array<{ file_public_id: string; attachment_type: string }>;
+        };
+        messagePosts.push(payload);
+        const message = {
+          ...messageRow(`msg_media_${messages.length}`, "user", user.email, payload.body ?? "Medya", "2026-01-01T00:05:00.000Z"),
+          attachments: (payload.attachments ?? []).map((attachment) => ({
+            file_public_id: attachment.file_public_id,
+            attachment_type: attachment.attachment_type,
+            original_name: attachment.file_public_id.includes("pdf") ? "kilavuz.pdf" : "civciv.png",
+            mime_type: attachment.attachment_type === "document" ? "application/pdf" : "image/png",
+            byte_size: 12,
+          })),
+        };
+        messages.push(message);
+        await route.fulfill({ contentType: "application/json", status: 201, body: JSON.stringify(message) });
+        return;
+      }
+      await route.fulfill({ contentType: "application/json", body: JSON.stringify({ data: messages }) });
+      return;
+    }
+    if (url.pathname === "/api/conversations/cnv_media/notes") {
+      const payload = JSON.parse(route.request().postData() ?? "{}") as { notes?: string | null };
+      conversationNote = payload.notes ?? null;
+      await route.fulfill({ contentType: "application/json", body: JSON.stringify(conversationRow()) });
+      return;
+    }
+    if (url.pathname === "/api/conversations/cnv_media/customer-notes") {
+      const payload = JSON.parse(route.request().postData() ?? "{}") as { notes?: string | null };
+      customerNote = payload.notes ?? null;
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          public_id: "cus_media",
+          full_name: "Slice Müşteri",
+          phone: "5550000000",
+          email: null,
+          username: null,
+          notes: customerNote,
+          updated_at: "2026-01-01T00:06:00.000Z",
+        }),
+      });
+      return;
+    }
+    if (url.pathname === "/api/files/uploads") {
+      const payload = JSON.parse(route.request().postData() ?? "{}") as { original_name: string; checksum: string; mime_type: string };
+      createdUploads.push(payload);
+      fileCounter += 1;
+      const publicId = payload.mime_type === "application/pdf" ? `fil_pdf_${fileCounter}` : `fil_img_${fileCounter}`;
+      await route.fulfill({
+        contentType: "application/json",
+        status: 201,
+        body: JSON.stringify({
+          file: fileMetadata(publicId, payload.original_name, payload.mime_type),
+          upload: {
+            method: "PUT",
+            bucket: "garage-media",
+            object_key: publicId,
+            headers: { "content-type": payload.mime_type },
+            presigned_url: `${backendBaseUrl}/__upload/${publicId}`,
+            expires_at: "2026-01-01T01:00:00.000Z",
+          },
+        }),
+      });
+      return;
+    }
+    if (url.pathname === "/api/message-shortcuts") {
+      if (route.request().method() === "POST") {
+        const payload = JSON.parse(route.request().postData() ?? "{}") as {
+          code: string;
+          message?: string | null;
+          attachments?: typeof shortcuts[number]["attachments"];
+        };
+        const shortcut = {
+          public_id: "msc_media",
+          code: payload.code,
+          message: payload.message ?? null,
+          type: "custom" as const,
+          is_active: true,
+          sort_order: 999,
+          attachments: payload.attachments ?? [],
+          updated_at: "2026-01-01T00:07:00.000Z",
+        };
+        shortcuts.unshift(shortcut);
+        await route.fulfill({ contentType: "application/json", status: 201, body: JSON.stringify(shortcut) });
+        return;
+      }
+      await route.fulfill({ contentType: "application/json", body: JSON.stringify({ data: shortcuts }) });
+      return;
+    }
+    if (url.pathname === "/api/message-shortcuts/msc_media") {
+      const shortcut = shortcuts[0];
+      if (route.request().method() === "PATCH") {
+        const payload = JSON.parse(route.request().postData() ?? "{}") as { message?: string | null };
+        shortcuts[0] = { ...shortcut, message: payload.message ?? shortcut.message };
+        await route.fulfill({ contentType: "application/json", body: JSON.stringify(shortcuts[0]) });
+        return;
+      }
+      if (route.request().method() === "DELETE") {
+        shortcuts.shift();
+        await route.fulfill({ contentType: "application/json", body: JSON.stringify(shortcut) });
+        return;
+      }
+    }
+    if (url.pathname === "/api/files/fil_pdf_2/download" || url.pathname === "/api/files/fil_pdf_1/download") {
+      const filePublicId = url.pathname.split("/")[3];
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          file: fileMetadata(filePublicId, "kilavuz.pdf", "application/pdf"),
+          download: {
+            method: "GET",
+            bucket: "garage-media",
+            object_key: filePublicId,
+            headers: {},
+            presigned_url: `${backendBaseUrl}/__upload/download-${filePublicId}`,
+            expires_at: "2026-01-01T01:00:00.000Z",
+          },
+        }),
+      });
+      return;
+    }
+    if (url.pathname === "/api/ai/reply-suggestion") {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          provider: "openai",
+          operation: "messages.reply_suggestion",
+          dry_run: true,
+          live_call_permitted: false,
+          conversation_public_id: "cnv_media",
+          suggestion: "AI dry-run önerisi",
+        }),
+      });
+      return;
+    }
+
+    const fallback = fallbackResponse(url.pathname);
+    if (fallback !== undefined) {
+      await route.fulfill({ contentType: "application/json", body: JSON.stringify(fallback) });
+      return;
+    }
+    await route.fulfill({ status: 404, body: "not found" });
+  });
+
+  try {
+    await page.goto(`${app.url}/giris`);
+    await page.getByRole("button", { name: /giriş yap/i }).click();
+    await expect(page.getByTestId("inbox-flow")).toContainText("Slice Müşteri");
+
+    await page.getByTestId("message-media-input").setInputFiles({
+      name: "civciv.png",
+      mimeType: "image/png",
+      buffer: Buffer.from("png"),
+    });
+    await expect(page.getByTestId("pending-attachments")).toContainText("civciv.png");
+    await page.getByTestId("message-input").fill("Görsel ektedir");
+    await page.getByTestId("message-send-button").click();
+    await expect(page.getByTestId("message-scroll-area")).toContainText("Görsel ektedir");
+
+    await page.getByTestId("message-pdf-input").setInputFiles({
+      name: "kilavuz.pdf",
+      mimeType: "application/pdf",
+      buffer: Buffer.from("%PDF-1.4"),
+    });
+    await page.getByTestId("message-input").fill("PDF ektedir");
+    await page.getByTestId("message-send-button").click();
+    await expect(page.getByTestId("message-attachments")).toContainText("PDF");
+    expect(messagePosts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ attachments: [expect.objectContaining({ attachment_type: "image" })] }),
+        expect.objectContaining({ attachments: [expect.objectContaining({ attachment_type: "document" })] }),
+      ]),
+    );
+    expect(createdUploads.every((upload) => /^[A-Za-z0-9+/]{43}=$/.test(upload.checksum))).toBe(true);
+
+    await page.getByTestId("shortcut-menu-button").click();
+    await page.getByTestId("shortcut-code-input").fill("pdf");
+    await page.getByTestId("shortcut-message-input").fill("Kılavuz hazır");
+    await page.getByTestId("shortcut-media-input").setInputFiles({
+      name: "kilavuz.pdf",
+      mimeType: "application/pdf",
+      buffer: Buffer.from("%PDF-1.4 shortcut"),
+    });
+    await page.getByTestId("shortcut-save-button").click();
+    await expect(page.getByTestId("shortcut-popover")).toContainText("/pdf");
+    await page.getByTestId("shortcut-row").first().click();
+    await expect(page.getByTestId("pending-attachments")).toContainText("kilavuz.pdf");
+    await page.getByTestId("shortcut-menu-button").click();
+    await page.getByTestId("shortcut-edit-button").click();
+    await page.getByTestId("shortcut-message-input").fill("Güncel kılavuz");
+    await page.getByTestId("shortcut-save-button").click();
+    await expect(page.getByTestId("shortcut-popover")).toContainText("Güncel kılavuz");
+    await page.getByTestId("shortcut-download-button").click();
+    await expect(page.getByText("Kısayol medyası indiriliyor")).toBeVisible();
+    await page.getByTestId("shortcut-delete-button").click();
+    await expect(page.getByTestId("shortcut-popover")).not.toContainText("/pdf");
+
+    await page.getByTestId("conversation-note-input").fill("Konuşma reload notu");
+    await expect.poll(() => conversationNote).toBe("Konuşma reload notu");
+    await page.getByTestId("customer-note-input").fill("Müşteri reload notu");
+    await expect.poll(() => customerNote).toBe("Müşteri reload notu");
+    await page.reload();
+    await expect(page.getByTestId("conversation-note-input")).toHaveValue("Konuşma reload notu");
+    await expect(page.getByTestId("customer-note-input")).toHaveValue("Müşteri reload notu");
+
+    await page.getByTestId("ai-suggestion-button").click();
+    await expect(page.getByTestId("ai-suggestion")).toContainText("AI dry-run önerisi");
+  } finally {
+    await closeWebApp(app.server);
+  }
+
+  function conversationRow() {
+    return {
+      public_id: "cnv_media",
+      channel: "instagram",
+      status: "open",
+      is_in_pool: false,
+      human_agent_enabled: true,
+      unread_count: 0,
+      last_message_text: messages.at(-1)?.body ?? "Merhaba",
+      last_message_sender_type: messages.at(-1)?.sender_type ?? "customer",
+      last_message_at: "2026-01-01T00:00:00.000Z",
+      customer: { full_name: "Slice Müşteri", phone: "5550000000" },
+      assigned_user_email: "calisan@example.com",
+      notes: conversationNote,
       updated_at: "2026-01-01T00:04:00.000Z",
     };
   }
@@ -269,6 +588,7 @@ function facebookRow() {
     last_message_at: "2026-01-01T00:01:00.000Z",
     customer: { full_name: "Facebook Slice", phone: "5552222222" },
     assigned_user_email: "calisan@example.com",
+    notes: null,
     updated_at: "2026-01-01T00:01:00.000Z",
   };
 }
@@ -282,12 +602,28 @@ function messageRow(public_id: string, sender_type: string, sender_name: string,
     external_message_id: null,
     is_read: sender_type !== "customer",
     sent_at,
+    attachments: [],
   };
 }
 
 function fallbackResponse(pathname: string) {
   const emptyData = { data: [] };
-  if (pathname === "/api/customers") return emptyData;
+  if (pathname === "/api/customers") {
+    return {
+      data: [
+        {
+          public_id: "cus_media",
+          full_name: "Slice Müşteri",
+          phone: "5550000000",
+          email: null,
+          username: null,
+          notes: null,
+          updated_at: "2026-01-01T00:00:00.000Z",
+        },
+      ],
+    };
+  }
+  if (pathname === "/api/message-shortcuts") return emptyData;
   if (pathname === "/api/customers/summary") return { total_count: 0, with_phone_count: 0, with_email_count: 0, with_notes_count: 0 };
   if (pathname === "/api/comments/moderation-summary") return { manual_queue: 0, automatic_queue: 0, answered: 0, instagram: 0, facebook: 0 };
   if (pathname === "/api/balances/summary") return { total_commission: 0, total_deduction: 0, pending_payment: 0, available_balance: 0, pending_request_count: 0 };
@@ -301,6 +637,26 @@ function fallbackResponse(pathname: string) {
   if (pathname === "/api/reports/summary") return { conversation_count: 0, order_count: 0, shipment_count: 0, total_revenue: 0, currency: "TRY", open_conversation_count: 0, pending_confirmation_count: 0, active_shipment_count: 0, delivered_shipment_count: 0, delivered_shipment_rate: 0, confirmation_rate: 0, active_shipment_rate: 0 };
   if (pathname === "/api/webphone/config") return { enabled: false, sip_username: null, sip_password_configured: false, ws_url: null, domain: null, stun: null };
   return undefined;
+}
+
+function fileMetadata(public_id: string, original_name: string, mime_type: string) {
+  return {
+    public_id,
+    bucket: "garage-media",
+    object_key: public_id,
+    original_name,
+    mime_type,
+    byte_size: 12,
+    checksum: "niECqdXA95O1DqUepmPprCpbQW93H7pd34A88B3v5xU=",
+    upload_status: "available",
+    scan_status: "skipped",
+    upload_type: "singlepart",
+    multipart_upload_id: null,
+    completed_at: "2026-01-01T00:00:00.000Z",
+    abandoned_at: null,
+    created_at: "2026-01-01T00:00:00.000Z",
+    updated_at: "2026-01-01T00:00:00.000Z",
+  };
 }
 
 async function installRealtimeShim(page: Page) {

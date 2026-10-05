@@ -15,6 +15,7 @@ export interface ConversationSummary {
     phone: string | null;
   } | null;
   assigned_user_email: string | null;
+  notes: string | null;
   updated_at: string;
 }
 
@@ -36,6 +37,35 @@ export interface MessageSummary {
   external_message_id: string | null;
   is_read: boolean;
   sent_at: string;
+  attachments: MessageAttachmentSummary[];
+}
+
+export interface MessageAttachmentSummary {
+  file_public_id: string;
+  attachment_type: "image" | "video" | "document" | "file";
+  original_name: string | null;
+  mime_type: string | null;
+  byte_size: number | null;
+}
+
+export interface MessageShortcutSummary {
+  public_id: string;
+  code: string;
+  message: string | null;
+  type: "default" | "custom";
+  is_active: boolean;
+  sort_order: number;
+  attachments: MessageAttachmentSummary[];
+  updated_at: string;
+}
+
+export interface AiReplySuggestionResult {
+  provider: "openai";
+  operation: "messages.reply_suggestion";
+  dry_run: true;
+  live_call_permitted: false;
+  conversation_public_id: string;
+  suggestion: string;
 }
 
 export interface OrderSummary {
@@ -266,6 +296,10 @@ export function createDomainClient(http: BackendHttpClient) {
         body: string | null;
         external_message_id?: string | null;
         raw_payload?: unknown | null;
+        attachments?: Array<{
+          file_public_id: string;
+          attachment_type: "image" | "video" | "document" | "file";
+        }>;
       },
     ) =>
       http.request<MessageSummary>(
@@ -275,6 +309,69 @@ export function createDomainClient(http: BackendHttpClient) {
           body: input,
         },
       ),
+    updateConversationNotes: (conversationPublicId: string, notes: string | null) =>
+      http.request<ConversationSummary>(
+        `/api/conversations/${encodeURIComponent(conversationPublicId)}/notes`,
+        {
+          method: "PATCH",
+          body: { notes },
+        },
+      ),
+    updateCustomerNotes: (conversationPublicId: string, notes: string | null) =>
+      http.request<CustomerSummary>(
+        `/api/conversations/${encodeURIComponent(conversationPublicId)}/customer-notes`,
+        {
+          method: "PATCH",
+          body: { notes },
+        },
+      ),
+    listMessageShortcuts: () =>
+      http.request<{ data: MessageShortcutSummary[] }>("/api/message-shortcuts"),
+    createMessageShortcut: (input: {
+      code: string;
+      message?: string | null;
+      type?: "default" | "custom";
+      is_active?: boolean;
+      sort_order?: number;
+      attachments?: Array<{
+        file_public_id: string;
+        attachment_type: "image" | "video" | "document" | "file";
+      }>;
+    }) =>
+      http.request<MessageShortcutSummary>("/api/message-shortcuts", {
+        method: "POST",
+        body: input,
+      }),
+    updateMessageShortcut: (
+      shortcutPublicId: string,
+      input: {
+        code?: string;
+        message?: string | null;
+        is_active?: boolean;
+        sort_order?: number;
+        attachments?: Array<{
+          file_public_id: string;
+          attachment_type: "image" | "video" | "document" | "file";
+        }>;
+      },
+    ) =>
+      http.request<MessageShortcutSummary>(
+        `/api/message-shortcuts/${encodeURIComponent(shortcutPublicId)}`,
+        {
+          method: "PATCH",
+          body: input,
+        },
+      ),
+    deleteMessageShortcut: (shortcutPublicId: string) =>
+      http.request<MessageShortcutSummary>(
+        `/api/message-shortcuts/${encodeURIComponent(shortcutPublicId)}`,
+        { method: "DELETE" },
+      ),
+    createAiReplySuggestion: (conversationPublicId: string) =>
+      http.request<AiReplySuggestionResult>("/api/ai/reply-suggestion", {
+        method: "POST",
+        body: { conversation_public_id: conversationPublicId },
+      }),
     updateConversationState: (
       conversationPublicId: string,
       input: {

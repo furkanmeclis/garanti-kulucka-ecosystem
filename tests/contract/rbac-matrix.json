@@ -54,5 +54,12 @@
   "GET /admin/integrations/provider-attempts": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "deny", "admin": "allow" },
   "GET /admin/integrations/provider-debug-summary": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "deny", "admin": "allow" },
   "POST /admin/integrations/provider-cron-triggers/{provider_key}": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "deny", "admin": "allow" },
-  "POST /admin/integrations/instagram-publish-previews": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "deny", "admin": "allow" }
+  "POST /admin/integrations/instagram-publish-previews": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "deny", "admin": "allow" },
+  "GET /api/message-shortcuts": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "allow", "admin": "allow" },
+  "POST /api/message-shortcuts": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "allow", "admin": "allow" },
+  "PATCH /api/message-shortcuts/{shortcut_public_id}": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "allow", "admin": "allow" },
+  "DELETE /api/message-shortcuts/{shortcut_public_id}": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "allow", "admin": "allow" },
+  "PATCH /api/conversations/{conversation_public_id}/notes": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "allow", "admin": "allow" },
+  "PATCH /api/conversations/{conversation_public_id}/customer-notes": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "allow", "admin": "allow" },
+  "POST /api/ai/reply-suggestion": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "allow", "admin": "allow" }
 }

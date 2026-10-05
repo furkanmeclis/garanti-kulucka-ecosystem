@@ -328,6 +328,191 @@
         }
       }
     },
+    "/api/conversations/{conversation_public_id}/notes": {
+      "patch": {
+        "operationId": "updateConversationNotes",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ConversationPublicId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateNoteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated conversation note",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Conversation"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/conversations/{conversation_public_id}/customer-notes": {
+      "patch": {
+        "operationId": "updateConversationCustomerNotes",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ConversationPublicId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateNoteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated customer note",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Customer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/message-shortcuts": {
+      "get": {
+        "operationId": "listMessageShortcuts",
+        "responses": {
+          "200": {
+            "description": "Message shortcuts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageShortcutList"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createMessageShortcut",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateMessageShortcutRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created message shortcut",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageShortcut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/message-shortcuts/{shortcut_public_id}": {
+      "patch": {
+        "operationId": "updateMessageShortcut",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ShortcutPublicId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMessageShortcutRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated message shortcut",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageShortcut"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteMessageShortcut",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ShortcutPublicId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deleted message shortcut",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageShortcut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ai/reply-suggestion": {
+      "post": {
+        "operationId": "createAiReplySuggestion",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiReplySuggestionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Dry-run AI reply suggestion boundary",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiReplySuggestionResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/customers": {
       "get": {
         "operationId": "listCustomers",
@@ -1747,6 +1932,14 @@
           "type": "string"
         }
       },
+      "ShortcutPublicId": {
+        "name": "shortcut_public_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
       "AccountPublicId": {
         "name": "account_public_id",
         "in": "path",
@@ -2574,6 +2767,12 @@
               "null"
             ]
           },
+          "notes": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "updated_at": {
             "type": "string",
             "format": "date-time"
@@ -2650,7 +2849,8 @@
           "public_id",
           "sender_type",
           "is_read",
-          "sent_at"
+          "sent_at",
+          "attachments"
         ],
         "properties": {
           "public_id": {
@@ -2689,6 +2889,54 @@
           "sent_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MessageAttachment"
+            }
+          }
+        }
+      },
+      "MessageAttachment": {
+        "type": "object",
+        "required": [
+          "file_public_id",
+          "attachment_type",
+          "original_name",
+          "mime_type",
+          "byte_size"
+        ],
+        "properties": {
+          "file_public_id": {
+            "type": "string"
+          },
+          "attachment_type": {
+            "type": "string",
+            "enum": [
+              "image",
+              "video",
+              "document",
+              "file"
+            ]
+          },
+          "original_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "mime_type": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "byte_size": {
+            "type": [
+              "integer",
+              "null"
+            ]
           }
         }
       },
@@ -2726,7 +2974,36 @@
             ],
             "default": null
           },
-          "raw_payload": true
+          "raw_payload": true,
+          "attachments": {
+            "type": "array",
+            "maxItems": 10,
+            "items": {
+              "$ref": "#/components/schemas/MessageAttachmentInput"
+            },
+            "default": []
+          }
+        }
+      },
+      "MessageAttachmentInput": {
+        "type": "object",
+        "required": [
+          "file_public_id",
+          "attachment_type"
+        ],
+        "properties": {
+          "file_public_id": {
+            "type": "string"
+          },
+          "attachment_type": {
+            "type": "string",
+            "enum": [
+              "image",
+              "video",
+              "document",
+              "file"
+            ]
+          }
         }
       },
       "UpdateConversationStateRequest": {
@@ -2750,6 +3027,182 @@
           }
         },
         "minProperties": 1
+      },
+      "UpdateNoteRequest": {
+        "type": "object",
+        "required": [
+          "notes"
+        ],
+        "properties": {
+          "notes": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 10000
+          }
+        }
+      },
+      "MessageShortcut": {
+        "type": "object",
+        "required": [
+          "public_id",
+          "code",
+          "type",
+          "is_active",
+          "sort_order",
+          "attachments",
+          "updated_at"
+        ],
+        "properties": {
+          "public_id": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "default",
+              "custom"
+            ]
+          },
+          "is_active": {
+            "type": "boolean"
+          },
+          "sort_order": {
+            "type": "integer"
+          },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MessageAttachment"
+            }
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "MessageShortcutList": {
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MessageShortcut"
+            }
+          }
+        }
+      },
+      "CreateMessageShortcutRequest": {
+        "type": "object",
+        "required": [
+          "code"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "message": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 10000
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "default",
+              "custom"
+            ],
+            "default": "custom"
+          },
+          "is_active": {
+            "type": "boolean",
+            "default": true
+          },
+          "sort_order": {
+            "type": "integer",
+            "default": 999
+          },
+          "attachments": {
+            "type": "array",
+            "maxItems": 10,
+            "items": {
+              "$ref": "#/components/schemas/MessageAttachmentInput"
+            },
+            "default": []
+          }
+        }
+      },
+      "UpdateMessageShortcutRequest": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/CreateMessageShortcutRequest"
+          }
+        ],
+        "minProperties": 1
+      },
+      "AiReplySuggestionRequest": {
+        "type": "object",
+        "required": [
+          "conversation_public_id"
+        ],
+        "properties": {
+          "conversation_public_id": {
+            "type": "string"
+          }
+        }
+      },
+      "AiReplySuggestionResponse": {
+        "type": "object",
+        "required": [
+          "provider",
+          "operation",
+          "dry_run",
+          "live_call_permitted",
+          "conversation_public_id",
+          "suggestion"
+        ],
+        "properties": {
+          "provider": {
+            "type": "string",
+            "const": "openai"
+          },
+          "operation": {
+            "type": "string",
+            "const": "messages.reply_suggestion"
+          },
+          "dry_run": {
+            "type": "boolean",
+            "const": true
+          },
+          "live_call_permitted": {
+            "type": "boolean",
+            "const": false
+          },
+          "conversation_public_id": {
+            "type": "string"
+          },
+          "suggestion": {
+            "type": "string"
+          }
+        }
       },
       "CreateOrderRequest": {
         "type": "object",

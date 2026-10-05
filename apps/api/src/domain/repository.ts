@@ -3,6 +3,10 @@ import type { Selectable } from "kysely";
 import type {
   ConversationsTable,
   CustomersTable,
+  FilesTable,
+  MessageAttachmentsTable,
+  MessageShortcutAttachmentsTable,
+  MessageShortcutsTable,
   MessagesTable,
   OrdersTable,
   ProductsTable,
@@ -19,6 +23,25 @@ export type ConversationRecord = Selectable<ConversationsTable> & {
 
 export type CustomerRecord = Selectable<CustomersTable>;
 export type MessageRecord = Selectable<MessagesTable>;
+export type MessageAttachmentRecord = Selectable<MessageAttachmentsTable> & {
+  file_public_id: string;
+  original_name: string | null;
+  mime_type: string | null;
+  byte_size: number | null;
+};
+export type MessageWithAttachmentsRecord = MessageRecord & {
+  attachments: MessageAttachmentRecord[];
+};
+export type MessageShortcutRecord = Selectable<MessageShortcutsTable> & {
+  attachments: MessageShortcutAttachmentRecord[];
+};
+export type MessageShortcutAttachmentRecord = Selectable<MessageShortcutAttachmentsTable> & {
+  file_public_id: string;
+  original_name: string | null;
+  mime_type: string | null;
+  byte_size: number | null;
+};
+type ShortcutTableRecord = Selectable<MessageShortcutsTable>;
 export type OrderRecord = Selectable<OrdersTable> & {
   customer_full_name: string | null;
   created_by_user_public_id: string | null;
@@ -49,6 +72,12 @@ export interface CreateMessageInput {
   body: string | null;
   externalMessageId: string | null;
   rawPayload: unknown | null;
+  attachments?: MessageAttachmentInput[];
+}
+
+export interface MessageAttachmentInput {
+  filePublicId: string;
+  attachmentType: "image" | "video" | "document" | "file";
 }
 
 export interface UpdateConversationStateInput {
@@ -58,6 +87,35 @@ export interface UpdateConversationStateInput {
   humanAgentEnabled?: boolean;
   isInPool?: boolean;
   assignedUserId?: number | null;
+}
+
+export interface UpdateConversationNotesInput {
+  conversationPublicId: string;
+  notes: string | null;
+}
+
+export interface UpdateCustomerNotesInput {
+  conversationPublicId: string;
+  notes: string | null;
+}
+
+export interface CreateMessageShortcutInput {
+  code: string;
+  message: string | null;
+  type?: "default" | "custom";
+  isActive?: boolean;
+  sortOrder?: number;
+  createdByUserId?: number | null;
+  attachments?: MessageAttachmentInput[];
+}
+
+export interface UpdateMessageShortcutInput {
+  shortcutPublicId: string;
+  code?: string;
+  message?: string | null;
+  isActive?: boolean;
+  sortOrder?: number;
+  attachments?: MessageAttachmentInput[];
 }
 
 export interface ConversationSummaryRecord {
@@ -268,6 +326,55 @@ function pipelineStatusFromShipment(shipment: ShipmentRecord): ShipmentPipelineS
 export class DomainRepository {
   constructor(private readonly db: AppDatabase) {}
 
+  private async findAvailableFilesByPublicIds(
+    db: AppDatabase,
+    filePublicIds: string[],
+  ): Promise<Array<Selectable<FilesTable>>> {
+    if (filePublicIds.length === 0) return [];
+    return db
+      .selectFrom("files")
+      .selectAll()
+      .where("public_id", "in", filePublicIds)
+      .where("upload_status", "=", "available")
+      .where("scan_status", "!=", "infected")
+      .execute();
+  }
+
+  private async listMessageAttachmentsByMessageIds(messageIds: number[]): Promise<MessageAttachmentRecord[]> {
+    if (messageIds.length === 0) return [];
+    return this.db
+      .selectFrom("message_attachments")
+      .innerJoin("files", "files.id", "message_attachments.file_id")
+      .selectAll("message_attachments")
+      .select([
+        "files.public_id as file_public_id",
+        "files.original_name as original_name",
+        "files.mime_type as mime_type",
+        "files.byte_size as byte_size",
+      ])
+      .where("message_attachments.message_id", "in", messageIds)
+      .orderBy("message_attachments.created_at", "asc")
+      .execute();
+  }
+
+  private async listShortcutAttachmentsByShortcutIds(shortcutIds: number[]): Promise<MessageShortcutAttachmentRecord[]> {
+    if (shortcutIds.length === 0) return [];
+    return this.db
+      .selectFrom("message_shortcut_attachments")
+      .innerJoin("files", "files.id", "message_shortcut_attachments.file_id")
+      .selectAll("message_shortcut_attachments")
+      .select([
+        "files.public_id as file_public_id",
+        "files.original_name as original_name",
+        "files.mime_type as mime_type",
+        "files.byte_size as byte_size",
+      ])
+      .where("message_shortcut_attachments.shortcut_id", "in", shortcutIds)
+      .orderBy("message_shortcut_attachments.sort_order", "asc")
+      .orderBy("message_shortcut_attachments.created_at", "asc")
+      .execute();
+  }
+
   private async getConversationByPublicId(db: AppDatabase, conversationPublicId: string): Promise<ConversationRecord | null> {
     const conversation = await db
       .selectFrom("conversations")
@@ -367,7 +474,7 @@ export class DomainRepository {
     );
   }
 
-  async listMessages(conversationPublicId: string, limit: number): Promise<MessageRecord[]> {
+  async listMessages(conversationPublicId: string, limit: number): Promise<MessageWithAttachmentsRecord[]> {
     const conversation = await this.db
       .selectFrom("conversations")
       .select("id")
@@ -378,13 +485,25 @@ export class DomainRepository {
       return [];
     }
 
-    return this.db
+    const messages = await this.db
       .selectFrom("messages")
       .selectAll()
       .where("conversation_id", "=", conversation.id)
       .orderBy("sent_at", "asc")
       .limit(limit)
       .execute();
+    const attachments = await this.listMessageAttachmentsByMessageIds(messages.map((message) => message.id));
+    const attachmentsByMessageId = new Map<number, MessageAttachmentRecord[]>();
+    for (const attachment of attachments) {
+      const list = attachmentsByMessageId.get(attachment.message_id) ?? [];
+      list.push(attachment);
+      attachmentsByMessageId.set(attachment.message_id, list);
+    }
+
+    return messages.map((message) => ({
+      ...message,
+      attachments: attachmentsByMessageId.get(message.id) ?? [],
+    }));
   }
 
   async listCustomers(limit: number): Promise<CustomerRecord[]> {
@@ -416,7 +535,7 @@ export class DomainRepository {
     };
   }
 
-  async createMessage(input: CreateMessageInput): Promise<MessageRecord> {
+  async createMessage(input: CreateMessageInput): Promise<MessageWithAttachmentsRecord> {
     return this.db.transaction().execute(async (transaction) => {
       const conversation = await transaction
         .selectFrom("conversations")
@@ -427,6 +546,16 @@ export class DomainRepository {
       if (!conversation) {
         throw new Error(`Unknown conversation: ${input.conversationPublicId}`);
       }
+
+      const attachmentInputs = input.attachments ?? [];
+      const files = await this.findAvailableFilesByPublicIds(
+        transaction as AppDatabase,
+        attachmentInputs.map((attachment) => attachment.filePublicId),
+      );
+      if (files.length !== attachmentInputs.length) {
+        throw new Error("One or more attachment files are unavailable");
+      }
+      const filesByPublicId = new Map(files.map((file) => [file.public_id, file]));
 
       const message = await transaction
         .insertInto("messages")
@@ -444,10 +573,28 @@ export class DomainRepository {
         .returningAll()
         .executeTakeFirstOrThrow();
 
+      if (attachmentInputs.length > 0) {
+        await transaction
+          .insertInto("message_attachments")
+          .values(attachmentInputs.map((attachment) => {
+            const file = filesByPublicId.get(attachment.filePublicId);
+            if (!file) {
+              throw new Error("One or more attachment files are unavailable");
+            }
+            return {
+              public_id: newPublicId("mat"),
+              message_id: message.id,
+              file_id: file.id,
+              attachment_type: attachment.attachmentType,
+            };
+          }))
+          .execute();
+      }
+
       await transaction
         .updateTable("conversations")
         .set({
-          last_message_text: input.body,
+          last_message_text: input.body ?? (attachmentInputs.length > 0 ? "[Medya]" : null),
           last_message_sender_type: input.senderType,
           last_message_at: message.sent_at,
           unread_count: input.senderType === "customer" ? 1 : 0,
@@ -456,7 +603,255 @@ export class DomainRepository {
         .where("id", "=", conversation.id)
         .execute();
 
-      return message;
+      return {
+        ...message,
+        attachments: attachmentInputs.map((attachment) => {
+          const file = filesByPublicId.get(attachment.filePublicId);
+          if (!file) {
+            throw new Error("One or more attachment files are unavailable");
+          }
+          return {
+            id: 0,
+            public_id: "",
+            message_id: message.id,
+            file_id: file.id,
+            attachment_type: attachment.attachmentType,
+            created_at: message.created_at,
+            updated_at: message.updated_at,
+            file_public_id: file.public_id,
+            original_name: file.original_name,
+            mime_type: file.mime_type,
+            byte_size: file.byte_size,
+          };
+        }),
+      };
+    });
+  }
+
+  async updateConversationNotes(input: UpdateConversationNotesInput): Promise<ConversationRecord> {
+    await this.db
+      .updateTable("conversations")
+      .set({
+        notes: input.notes,
+        updated_at: new Date(),
+      })
+      .where("public_id", "=", input.conversationPublicId)
+      .execute();
+
+    const conversation = await this.getConversationByPublicId(this.db, input.conversationPublicId);
+    if (!conversation) {
+      throw new Error(`Unknown conversation: ${input.conversationPublicId}`);
+    }
+    return conversation;
+  }
+
+  async updateCustomerNotes(input: UpdateCustomerNotesInput): Promise<CustomerRecord> {
+    return this.db.transaction().execute(async (transaction) => {
+      const conversation = await transaction
+        .selectFrom("conversations")
+        .select("customer_id")
+        .where("public_id", "=", input.conversationPublicId)
+        .executeTakeFirst();
+      if (!conversation?.customer_id) {
+        throw new Error(`Conversation has no customer: ${input.conversationPublicId}`);
+      }
+      return transaction
+        .updateTable("customers")
+        .set({
+          notes: input.notes,
+          updated_at: new Date(),
+        })
+        .where("id", "=", conversation.customer_id)
+        .returningAll()
+        .executeTakeFirstOrThrow();
+    });
+  }
+
+  async listMessageShortcuts(): Promise<MessageShortcutRecord[]> {
+    const shortcuts = await this.db
+      .selectFrom("message_shortcuts")
+      .selectAll()
+      .orderBy("is_active", "desc")
+      .orderBy("sort_order", "asc")
+      .orderBy("created_at", "asc")
+      .execute();
+    const attachments = await this.listShortcutAttachmentsByShortcutIds(shortcuts.map((shortcut) => shortcut.id));
+    const attachmentsByShortcutId = new Map<number, MessageShortcutAttachmentRecord[]>();
+    for (const attachment of attachments) {
+      const list = attachmentsByShortcutId.get(attachment.shortcut_id) ?? [];
+      list.push(attachment);
+      attachmentsByShortcutId.set(attachment.shortcut_id, list);
+    }
+    return shortcuts.map((shortcut) => ({
+      ...shortcut,
+      attachments: attachmentsByShortcutId.get(shortcut.id) ?? [],
+    }));
+  }
+
+  async createMessageShortcut(input: CreateMessageShortcutInput): Promise<MessageShortcutRecord> {
+    return this.db.transaction().execute(async (transaction) => {
+      const attachmentInputs = input.attachments ?? [];
+      const files = await this.findAvailableFilesByPublicIds(
+        transaction as AppDatabase,
+        attachmentInputs.map((attachment) => attachment.filePublicId),
+      );
+      if (files.length !== attachmentInputs.length) {
+        throw new Error("One or more shortcut files are unavailable");
+      }
+      const filesByPublicId = new Map(files.map((file) => [file.public_id, file]));
+      const shortcut = await transaction
+        .insertInto("message_shortcuts")
+        .values({
+          public_id: newPublicId("msc"),
+          code: input.code,
+          message: input.message,
+          type: input.type ?? "custom",
+          is_active: input.isActive ?? true,
+          sort_order: input.sortOrder ?? 999,
+          created_by_user_id: input.createdByUserId ?? null,
+        })
+        .returningAll()
+        .executeTakeFirstOrThrow();
+      if (attachmentInputs.length > 0) {
+        await transaction
+          .insertInto("message_shortcut_attachments")
+          .values(attachmentInputs.map((attachment, index) => {
+            const file = filesByPublicId.get(attachment.filePublicId);
+            if (!file) {
+              throw new Error("One or more shortcut files are unavailable");
+            }
+            return {
+              public_id: newPublicId("msa"),
+              shortcut_id: shortcut.id,
+              file_id: file.id,
+              attachment_type: attachment.attachmentType,
+              sort_order: index,
+            };
+          }))
+          .execute();
+      }
+      return {
+        ...shortcut,
+        attachments: attachmentInputs.map((attachment, index) => {
+          const file = filesByPublicId.get(attachment.filePublicId);
+          if (!file) {
+            throw new Error("One or more shortcut files are unavailable");
+          }
+          return {
+            id: 0,
+            public_id: "",
+            shortcut_id: shortcut.id,
+            file_id: file.id,
+            attachment_type: attachment.attachmentType,
+            sort_order: index,
+            created_at: shortcut.created_at,
+            updated_at: shortcut.updated_at,
+            file_public_id: file.public_id,
+            original_name: file.original_name,
+            mime_type: file.mime_type,
+            byte_size: file.byte_size,
+          };
+        }),
+      };
+    });
+  }
+
+  async updateMessageShortcut(input: UpdateMessageShortcutInput): Promise<MessageShortcutRecord> {
+    return this.db.transaction().execute(async (transaction) => {
+      const shortcut = await transaction
+        .selectFrom("message_shortcuts")
+        .selectAll()
+        .where("public_id", "=", input.shortcutPublicId)
+        .executeTakeFirst();
+      if (!shortcut) {
+        throw new Error(`Unknown message shortcut: ${input.shortcutPublicId}`);
+      }
+      await transaction
+        .updateTable("message_shortcuts")
+        .set({
+          ...(input.code !== undefined ? { code: input.code } : {}),
+          ...(input.message !== undefined ? { message: input.message } : {}),
+          ...(input.isActive !== undefined ? { is_active: input.isActive } : {}),
+          ...(input.sortOrder !== undefined ? { sort_order: input.sortOrder } : {}),
+          updated_at: new Date(),
+        })
+        .where("id", "=", shortcut.id)
+        .execute();
+      if (input.attachments !== undefined) {
+        const files = await this.findAvailableFilesByPublicIds(
+          transaction as AppDatabase,
+          input.attachments.map((attachment) => attachment.filePublicId),
+        );
+        if (files.length !== input.attachments.length) {
+          throw new Error("One or more shortcut files are unavailable");
+        }
+        const filesByPublicId = new Map(files.map((file) => [file.public_id, file]));
+        await transaction
+          .deleteFrom("message_shortcut_attachments")
+          .where("shortcut_id", "=", shortcut.id)
+          .execute();
+        if (input.attachments.length > 0) {
+          await transaction
+            .insertInto("message_shortcut_attachments")
+            .values(input.attachments.map((attachment, index) => {
+              const file = filesByPublicId.get(attachment.filePublicId);
+              if (!file) {
+                throw new Error("One or more shortcut files are unavailable");
+              }
+              return {
+                public_id: newPublicId("msa"),
+                shortcut_id: shortcut.id,
+                file_id: file.id,
+                attachment_type: attachment.attachmentType,
+                sort_order: index,
+              };
+            }))
+            .execute();
+        }
+      }
+      const updated = await transaction
+        .selectFrom("message_shortcuts")
+        .selectAll()
+        .where("id", "=", shortcut.id)
+        .executeTakeFirstOrThrow();
+      const attachments = await transaction
+        .selectFrom("message_shortcut_attachments")
+        .innerJoin("files", "files.id", "message_shortcut_attachments.file_id")
+        .selectAll("message_shortcut_attachments")
+        .select([
+          "files.public_id as file_public_id",
+          "files.original_name as original_name",
+          "files.mime_type as mime_type",
+          "files.byte_size as byte_size",
+        ])
+        .where("message_shortcut_attachments.shortcut_id", "=", shortcut.id)
+        .orderBy("message_shortcut_attachments.sort_order", "asc")
+        .execute();
+      return {
+        ...updated,
+        attachments,
+      };
+    });
+  }
+
+  async deleteMessageShortcut(shortcutPublicId: string): Promise<MessageShortcutRecord> {
+    return this.db.transaction().execute(async (transaction) => {
+      const shortcut = await transaction
+        .selectFrom("message_shortcuts")
+        .selectAll()
+        .where("public_id", "=", shortcutPublicId)
+        .executeTakeFirst();
+      if (!shortcut) {
+        throw new Error(`Unknown message shortcut: ${shortcutPublicId}`);
+      }
+      await transaction
+        .deleteFrom("message_shortcuts")
+        .where("id", "=", shortcut.id)
+        .execute();
+      return {
+        ...shortcut,
+        attachments: [],
+      };
     });
   }
 
@@ -987,6 +1382,7 @@ export function serializeConversation(conversation: ConversationRecord) {
         }
       : null,
     assigned_user_email: conversation.assigned_user_email,
+    notes: conversation.notes,
     updated_at: conversation.updated_at,
   };
 }
@@ -1011,7 +1407,7 @@ export function serializeCustomerSummary(summary: CustomerSummaryRecord) {
   return summary;
 }
 
-export function serializeMessage(message: MessageRecord) {
+export function serializeMessage(message: MessageRecord | MessageWithAttachmentsRecord) {
   return {
     public_id: message.public_id,
     sender_type: message.sender_type,
@@ -1020,6 +1416,40 @@ export function serializeMessage(message: MessageRecord) {
     external_message_id: message.external_message_id,
     is_read: message.is_read,
     sent_at: message.sent_at,
+    attachments: "attachments" in message
+      ? message.attachments.map(serializeMessageAttachment)
+      : [],
+  };
+}
+
+export function serializeMessageAttachment(attachment: MessageAttachmentRecord) {
+  return {
+    file_public_id: attachment.file_public_id,
+    attachment_type: attachment.attachment_type,
+    original_name: attachment.original_name,
+    mime_type: attachment.mime_type,
+    byte_size: attachment.byte_size === null ? null : Number(attachment.byte_size),
+  };
+}
+
+export function serializeMessageShortcut(shortcut: MessageShortcutRecord | ShortcutTableRecord) {
+  return {
+    public_id: shortcut.public_id,
+    code: shortcut.code,
+    message: shortcut.message,
+    type: shortcut.type,
+    is_active: shortcut.is_active,
+    sort_order: Number(shortcut.sort_order),
+    attachments: "attachments" in shortcut
+      ? shortcut.attachments.map((attachment) => ({
+          file_public_id: attachment.file_public_id,
+          attachment_type: attachment.attachment_type,
+          original_name: attachment.original_name,
+          mime_type: attachment.mime_type,
+          byte_size: attachment.byte_size === null ? null : Number(attachment.byte_size),
+        }))
+      : [],
+    updated_at: shortcut.updated_at,
   };
 }
 

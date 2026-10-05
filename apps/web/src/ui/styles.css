@@ -379,12 +379,30 @@ nav {
 
 .message-composer {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   gap: 10px;
   align-items: end;
 }
 
-.message-composer textarea {
+.hidden-file-input {
+  display: none;
+}
+
+.message-composer-main {
+  position: relative;
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.message-composer-tools {
+  display: flex;
+  gap: 6px;
+}
+
+.message-composer textarea,
+.shortcut-form textarea,
+.note-editor textarea {
   min-width: 0;
   min-height: 54px;
   max-height: 160px;
@@ -394,6 +412,145 @@ nav {
   padding: 10px 12px;
   color: #e2e8f0;
   background: #0f172a;
+}
+
+.shortcut-form textarea,
+.note-editor textarea {
+  width: 100%;
+  min-height: 64px;
+}
+
+.icon-only {
+  width: 40px;
+  padding: 0;
+}
+
+.attachment-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.attachment-strip span,
+.message-attachments span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 4px 8px;
+  color: #cbd5e1;
+  background: #111827;
+  font-size: 12px;
+}
+
+.attachment-strip button {
+  display: inline-flex;
+  border: 0;
+  padding: 0;
+  color: #94a3b8;
+  background: transparent;
+  cursor: pointer;
+}
+
+.message-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.shortcut-popover {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 10px);
+  z-index: 20;
+  display: grid;
+  gap: 10px;
+  width: min(520px, 100%);
+  max-height: min(560px, 70vh);
+  overflow-y: auto;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 12px;
+  background: #1e293b;
+  box-shadow: 0 24px 60px rgba(2, 6, 23, 0.45);
+}
+
+.shortcut-form {
+  display: grid;
+  gap: 8px;
+}
+
+.shortcut-list {
+  display: grid;
+  gap: 6px;
+}
+
+.shortcut-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  gap: 6px;
+  align-items: center;
+}
+
+.shortcut-row > button:first-child {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  min-height: 36px;
+  border: 0;
+  border-radius: 8px;
+  padding: 0 8px;
+  color: #cbd5e1;
+  text-align: left;
+  background: #0f172a;
+  cursor: pointer;
+}
+
+.shortcut-row code {
+  color: #86efac;
+}
+
+.shortcut-row span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shortcut-row em {
+  color: #94a3b8;
+  font-size: 12px;
+  font-style: normal;
+}
+
+.ai-suggestion {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  border: 1px solid rgba(168, 85, 247, 0.45);
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: #e9d5ff;
+  background: rgba(88, 28, 135, 0.35);
+  font-size: 13px;
+}
+
+.ai-suggestion button {
+  border: 0;
+  border-radius: 6px;
+  padding: 4px 8px;
+  color: #faf5ff;
+  background: #7e22ce;
+  cursor: pointer;
+}
+
+.note-editor {
+  display: grid;
+  gap: 6px;
+  color: #94a3b8;
+  font-size: 12px;
 }
 
 .conversation-row-top {

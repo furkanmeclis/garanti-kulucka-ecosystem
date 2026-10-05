@@ -114,6 +114,16 @@ export interface FileOrphanSummary {
   total_count: number;
 }
 
+export async function sha256Base64(file: Blob): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
+  const bytes = new Uint8Array(digest);
+  let binary = "";
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+  return btoa(binary);
+}
+
 function orphanQuery(options: FileOrphanListOptions = {}) {
   const params = new URLSearchParams();
   if (typeof options.limit === "number") {
@@ -195,5 +205,25 @@ export function createFileClient(http: BackendHttpClient) {
           },
         },
       ),
+    uploadBrowserFile: async (file: File) => {
+      const checksum = await sha256Base64(file);
+      const response = await http.request<{ file: FileMetadata; upload: UploadInstruction }>("/api/files/uploads", {
+        method: "POST",
+        body: {
+          original_name: file.name,
+          mime_type: file.type || "application/octet-stream",
+          byte_size: file.size,
+          checksum,
+        },
+      });
+      if (response.upload.presigned_url) {
+        await fetch(response.upload.presigned_url, {
+          method: response.upload.method,
+          headers: response.upload.headers,
+          body: file,
+        });
+      }
+      return response.file;
+    },
   };
 }

@@ -28,6 +28,7 @@ describe("domain serialization", () => {
       last_message_text: "Merhaba",
       last_message_sender_type: "customer",
       last_message_at: date,
+      notes: "Konuşma notu",
       created_at: date,
       updated_at: date,
       customer_full_name: "Customer Name",
@@ -62,6 +63,7 @@ describe("domain serialization", () => {
     };
 
     expect(serializeMessage(message)).not.toHaveProperty("raw_payload");
+    expect(serializeMessage(message)).toMatchObject({ attachments: [] });
   });
 
   it("serializes order summaries", () => {

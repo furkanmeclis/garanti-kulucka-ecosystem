@@ -13,6 +13,7 @@ import {
   serializeCustomer,
   serializeCustomerSummary,
   serializeMessage,
+  serializeMessageShortcut,
   serializeOrder,
   serializeProduct,
   serializeProductSummary,
@@ -31,6 +32,15 @@ const createMessageSchema = z.object({
   body: z.string().nullable().default(null),
   external_message_id: z.string().min(1).nullable().default(null),
   raw_payload: z.unknown().nullable().default(null),
+  attachments: z.array(z.object({
+    file_public_id: z.string().min(1),
+    attachment_type: z.enum(["image", "video", "document", "file"]),
+  })).max(10).default([]),
+});
+
+const attachmentSchema = z.object({
+  file_public_id: z.string().min(1),
+  attachment_type: z.enum(["image", "video", "document", "file"]),
 });
 
 const updateConversationStateSchema = z
@@ -44,6 +54,35 @@ const updateConversationStateSchema = z
   .refine((payload) => Object.values(payload).some((value) => value !== undefined), {
     message: "At least one conversation state field is required",
   });
+
+const updateNoteSchema = z.object({
+  notes: z.string().max(10_000).nullable().default(null),
+});
+
+const createShortcutSchema = z.object({
+  code: z.string().trim().min(1).max(64),
+  message: z.string().max(10_000).nullable().default(null),
+  type: z.enum(["default", "custom"]).default("custom"),
+  is_active: z.boolean().default(true),
+  sort_order: z.number().int().min(0).max(100_000).default(999),
+  attachments: z.array(attachmentSchema).max(10).default([]),
+}).refine((payload) => Boolean(payload.message?.trim()) || payload.attachments.length > 0, {
+  message: "Message or attachment is required",
+});
+
+const updateShortcutSchema = z.object({
+  code: z.string().trim().min(1).max(64).optional(),
+  message: z.string().max(10_000).nullable().optional(),
+  is_active: z.boolean().optional(),
+  sort_order: z.number().int().min(0).max(100_000).optional(),
+  attachments: z.array(attachmentSchema).max(10).optional(),
+}).refine((payload) => Object.values(payload).some((value) => value !== undefined), {
+  message: "At least one shortcut field is required",
+});
+
+const aiReplySuggestionSchema = z.object({
+  conversation_public_id: z.string().min(1),
+});
 
 const createOrderSchema = z.object({
   customer_public_id: z.string().min(1).nullable().default(null),
@@ -121,6 +160,10 @@ function canSendSms(role: string | undefined) {
 }
 
 function canRequestPayment(role: string | undefined) {
+  return role === "admin" || role === "owner" || role === "calisan";
+}
+
+function canManageMessages(role: string | undefined) {
   return role === "admin" || role === "owner" || role === "calisan";
 }
 
@@ -246,6 +289,20 @@ export function createDomainRoutes() {
     return context.json({ data: messages.map(serializeMessage) });
   });
 
+  routes.get("/message-shortcuts", async (context) => {
+    if (!canManageMessages(context.get("auth")?.role)) {
+      return context.json({ error: { code: "forbidden", message: "Message shortcut access is not allowed" } }, 403);
+    }
+
+    const db = context.get("db");
+    if (!db) {
+      return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
+    }
+
+    const shortcuts = await new DomainRepository(db).listMessageShortcuts();
+    return context.json({ data: shortcuts.map(serializeMessageShortcut) });
+  });
+
   routes.get("/customers", async (context) => {
     if (!canReadCustomers(context.get("auth")?.role)) {
       return context.json({ error: { code: "forbidden", message: "Customer directory access is not allowed" } }, 403);
@@ -296,6 +353,10 @@ export function createDomainRoutes() {
       body: payload.data.body,
       externalMessageId: payload.data.external_message_id,
       rawPayload: payload.data.raw_payload,
+      attachments: payload.data.attachments.map((attachment) => ({
+        filePublicId: attachment.file_public_id,
+        attachmentType: attachment.attachment_type,
+      })),
     });
     const messageCreatedEnvelope = {
       event: "message.created",
@@ -312,6 +373,147 @@ export function createDomainRoutes() {
     realtimePublisher.broadcast(messageCreatedEnvelope);
 
     return context.json(serializeMessage(message), 201);
+  });
+
+  routes.patch("/conversations/:conversation_public_id/notes", async (context) => {
+    if (!canManageMessages(context.get("auth")?.role)) {
+      return context.json({ error: { code: "forbidden", message: "Conversation notes access is not allowed" } }, 403);
+    }
+
+    const payload = updateNoteSchema.safeParse(await context.req.json());
+    if (!payload.success) {
+      return context.json({ error: { code: "invalid_request", message: "Invalid conversation note payload" } }, 400);
+    }
+
+    const db = context.get("db");
+    if (!db) {
+      return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
+    }
+
+    const conversation = await new DomainRepository(db).updateConversationNotes({
+      conversationPublicId: context.req.param("conversation_public_id"),
+      notes: payload.data.notes,
+    });
+    return context.json(serializeConversation(conversation));
+  });
+
+  routes.patch("/conversations/:conversation_public_id/customer-notes", async (context) => {
+    if (!canManageMessages(context.get("auth")?.role)) {
+      return context.json({ error: { code: "forbidden", message: "Customer notes access is not allowed" } }, 403);
+    }
+
+    const payload = updateNoteSchema.safeParse(await context.req.json());
+    if (!payload.success) {
+      return context.json({ error: { code: "invalid_request", message: "Invalid customer note payload" } }, 400);
+    }
+
+    const db = context.get("db");
+    if (!db) {
+      return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
+    }
+
+    const customer = await new DomainRepository(db).updateCustomerNotes({
+      conversationPublicId: context.req.param("conversation_public_id"),
+      notes: payload.data.notes,
+    });
+    return context.json(serializeCustomer(customer));
+  });
+
+  routes.post("/message-shortcuts", async (context) => {
+    if (!canManageMessages(context.get("auth")?.role)) {
+      return context.json({ error: { code: "forbidden", message: "Message shortcut management is not allowed" } }, 403);
+    }
+
+    const payload = createShortcutSchema.safeParse(await context.req.json());
+    if (!payload.success) {
+      return context.json({ error: { code: "invalid_request", message: "Invalid shortcut payload" } }, 400);
+    }
+
+    const db = context.get("db");
+    if (!db) {
+      return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
+    }
+
+    const shortcut = await new DomainRepository(db).createMessageShortcut({
+      code: payload.data.code,
+      message: payload.data.message,
+      type: payload.data.type,
+      isActive: payload.data.is_active,
+      sortOrder: payload.data.sort_order,
+      createdByUserId: context.get("actorUserId"),
+      attachments: payload.data.attachments.map((attachment) => ({
+        filePublicId: attachment.file_public_id,
+        attachmentType: attachment.attachment_type,
+      })),
+    });
+    return context.json(serializeMessageShortcut(shortcut), 201);
+  });
+
+  routes.patch("/message-shortcuts/:shortcut_public_id", async (context) => {
+    if (!canManageMessages(context.get("auth")?.role)) {
+      return context.json({ error: { code: "forbidden", message: "Message shortcut management is not allowed" } }, 403);
+    }
+
+    const payload = updateShortcutSchema.safeParse(await context.req.json());
+    if (!payload.success) {
+      return context.json({ error: { code: "invalid_request", message: "Invalid shortcut payload" } }, 400);
+    }
+
+    const db = context.get("db");
+    if (!db) {
+      return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
+    }
+
+    const shortcut = await new DomainRepository(db).updateMessageShortcut({
+      shortcutPublicId: context.req.param("shortcut_public_id"),
+      ...(payload.data.code !== undefined ? { code: payload.data.code } : {}),
+      ...(payload.data.message !== undefined ? { message: payload.data.message } : {}),
+      ...(payload.data.is_active !== undefined ? { isActive: payload.data.is_active } : {}),
+      ...(payload.data.sort_order !== undefined ? { sortOrder: payload.data.sort_order } : {}),
+      ...(payload.data.attachments !== undefined
+        ? {
+            attachments: payload.data.attachments.map((attachment) => ({
+              filePublicId: attachment.file_public_id,
+              attachmentType: attachment.attachment_type,
+            })),
+          }
+        : {}),
+    });
+    return context.json(serializeMessageShortcut(shortcut));
+  });
+
+  routes.delete("/message-shortcuts/:shortcut_public_id", async (context) => {
+    if (!canManageMessages(context.get("auth")?.role)) {
+      return context.json({ error: { code: "forbidden", message: "Message shortcut management is not allowed" } }, 403);
+    }
+
+    const db = context.get("db");
+    if (!db) {
+      return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
+    }
+
+    const shortcut = await new DomainRepository(db).deleteMessageShortcut(context.req.param("shortcut_public_id"));
+    return context.json(serializeMessageShortcut(shortcut));
+  });
+
+  routes.post("/ai/reply-suggestion", async (context) => {
+    if (!canManageMessages(context.get("auth")?.role)) {
+      return context.json({ error: { code: "forbidden", message: "AI reply suggestion is not allowed" } }, 403);
+    }
+
+    const payload = aiReplySuggestionSchema.safeParse(await context.req.json());
+    if (!payload.success) {
+      return context.json({ error: { code: "invalid_request", message: "Invalid AI reply suggestion payload" } }, 400);
+    }
+
+    return context.json({
+      provider: "openai",
+      operation: "messages.reply_suggestion",
+      dry_run: true,
+      live_call_permitted: false,
+      conversation_public_id: payload.data.conversation_public_id,
+      suggestion: "AI yanıt önerisi backend dry-run sınırında tutuldu.",
+    });
   });
 
   routes.post("/sms/send", async (context) => {

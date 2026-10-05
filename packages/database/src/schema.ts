@@ -28,6 +28,8 @@ export interface Database {
   conversations: ConversationsTable;
   messages: MessagesTable;
   message_attachments: MessageAttachmentsTable;
+  message_shortcuts: MessageShortcutsTable;
+  message_shortcut_attachments: MessageShortcutAttachmentsTable;
   products: ProductsTable;
   orders: OrdersTable;
   order_items: OrderItemsTable;
@@ -155,6 +157,7 @@ export interface ConversationsTable extends BaseTable {
   last_message_text: string | null;
   last_message_sender_type: string | null;
   last_message_at: Timestamp | null;
+  notes: string | null;
 }
 
 export interface MessagesTable extends BaseTable {
@@ -172,6 +175,22 @@ export interface MessageAttachmentsTable extends BaseTable {
   message_id: number;
   file_id: number;
   attachment_type: string;
+}
+
+export interface MessageShortcutsTable extends BaseTable {
+  code: string;
+  message: string | null;
+  type: string;
+  is_active: boolean;
+  sort_order: number;
+  created_by_user_id: number | null;
+}
+
+export interface MessageShortcutAttachmentsTable extends BaseTable {
+  shortcut_id: number;
+  file_id: number;
+  attachment_type: string;
+  sort_order: number;
 }
 
 export interface ProductsTable extends BaseTable {

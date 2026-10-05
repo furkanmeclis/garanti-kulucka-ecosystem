@@ -14,12 +14,15 @@ import {
   FileUp,
   FileText,
   Headphones,
+  Image,
   LogIn,
   MessageCircle,
   MessageSquare,
   MessageSquareText,
   Package,
+  Pencil,
   Phone,
+  Plus,
   Settings,
   Search,
   Send,
@@ -32,6 +35,7 @@ import {
   Wallet,
   Wifi,
   WifiOff,
+  X,
   XCircle,
   Zap,
   type LucideIcon,
@@ -58,6 +62,7 @@ import {
   type CustomerSummary,
   type CustomerSummaryStats,
   type MessageSummary,
+  type MessageShortcutSummary,
   type OrderSummaryStats,
   type OrderSummary,
   type ProductSummaryStats,
@@ -105,6 +110,19 @@ interface DashboardData {
   shipmentPipeline: ShipmentPipelineSummary;
   commentModeration: BackendCommentModerationSummary;
   webphone: WebphoneConfig | null;
+}
+
+interface PendingAttachment {
+  file: File;
+  attachment_type: "image" | "video" | "document" | "file";
+  preview_url: string;
+  file_public_id?: string;
+}
+
+interface ShortcutDraft {
+  code: string;
+  message: string;
+  attachments: PendingAttachment[];
 }
 
 interface NetgsmConfirmationSettings {
@@ -300,6 +318,20 @@ function formatDate(value: string) {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function attachmentTypeFromFile(file: File): PendingAttachment["attachment_type"] {
+  if (file.type.startsWith("image/")) return "image";
+  if (file.type.startsWith("video/")) return "video";
+  if (file.type === "application/pdf") return "document";
+  return "file";
+}
+
+function attachmentLabel(type: string) {
+  if (type === "image") return "Görsel";
+  if (type === "video") return "Video";
+  if (type === "document") return "PDF";
+  return "Dosya";
 }
 
 function formatPercent(numerator: number, denominator: number) {
@@ -659,6 +691,14 @@ export function App() {
   const [conversationStatusFilter, setConversationStatusFilter] = useState("all");
   const [conversationSearch, setConversationSearch] = useState("");
   const [messageDraft, setMessageDraft] = useState("");
+  const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
+  const [messageShortcuts, setMessageShortcuts] = useState<MessageShortcutSummary[]>([]);
+  const [shortcutMenuOpen, setShortcutMenuOpen] = useState(false);
+  const [shortcutDraft, setShortcutDraft] = useState<ShortcutDraft>({ code: "", message: "", attachments: [] });
+  const [editingShortcutId, setEditingShortcutId] = useState<string | null>(null);
+  const [conversationNoteDraft, setConversationNoteDraft] = useState("");
+  const [customerNoteDraft, setCustomerNoteDraft] = useState("");
+  const [aiSuggestion, setAiSuggestion] = useState<string | null>(null);
   const [orderFilter, setOrderFilter] = useState("all");
   const [orderSearch, setOrderSearch] = useState("");
   const [orderStatusFilter, setOrderStatusFilter] = useState("all");
@@ -676,6 +716,11 @@ export function App() {
   const [shipmentPipelineFilter, setShipmentPipelineFilter] = useState<ShipmentPipelineFilter>("all");
   const [realtimeClient, setRealtimeClient] = useState<RealtimeClient | null>(null);
   const selectedConversationIdRef = useRef<string | null>(null);
+  const mediaInputRef = useRef<HTMLInputElement | null>(null);
+  const pdfInputRef = useRef<HTMLInputElement | null>(null);
+  const shortcutMediaInputRef = useRef<HTMLInputElement | null>(null);
+  const conversationNoteSaveRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const customerNoteSaveRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
   const conversationFilterRequestSeqRef = useRef(0);
   const orderFilterRequestSeqRef = useRef(0);
   const shipmentFilterRequestSeqRef = useRef(0);
@@ -814,7 +859,15 @@ export function App() {
     const canReadComments = user?.role === "admin" || user?.role === "owner" || user?.role === "calisan";
     const canReadBalances = user?.role === "admin" || user?.role === "owner" || user?.role === "calisan";
     const canReadShipmentPipeline = ["admin", "owner", "calisan", "kargo_operatoru"].includes(user?.role ?? "");
-    const [conversations, conversationSummary, customers, customerSummary, commentModeration, balanceSummary, orderSummary, productSummary, shipmentSummary, shipmentPipeline, reportSummary, orders, products, shipments, settings, webphoneConfig] = await Promise.all([
+    const optional = async <T,>(label: string, request: Promise<T>, fallback: T): Promise<T> => {
+      try {
+        return await request;
+      } catch (error) {
+        console.warn(`[Dashboard] Optional ${label} request failed`, error);
+        return fallback;
+      }
+    };
+    const [conversations, conversationSummary, customers, customerSummary, commentModeration, balanceSummary, orderSummary, productSummary, shipmentSummary, shipmentPipeline, reportSummary, orders, products, shipments, shortcuts, settings, webphoneConfig] = await Promise.all([
       domain.listConversations({ limit: 20 }),
       domain.getConversationSummary(),
       canReadCustomers ? domain.listCustomers(50) : Promise.resolve({ data: [] }),
@@ -829,6 +882,7 @@ export function App() {
       domain.listOrders(20),
       domain.listProducts(50),
       domain.listShipments(20),
+      canReadCustomers ? optional("message shortcuts", domain.listMessageShortcuts(), { data: [] }) : Promise.resolve({ data: [] }),
       user?.role === "admin" ? admin.listSettings("global") : Promise.resolve({ data: [] }),
       webphone.getConfig(),
     ]);
@@ -890,6 +944,7 @@ export function App() {
       commentModeration,
       webphone: webphoneConfig,
     });
+    setMessageShortcuts(shortcuts.data);
     setSelectedConversationId((current) => current ?? firstConversation ?? null);
     setSelectedOrderId((current) => current ?? orders.data[0]?.public_id ?? null);
     setSelectedShipmentId((current) => current ?? shipments.data[0]?.public_id ?? null);
@@ -953,6 +1008,12 @@ export function App() {
       setSelectedConversationId(null);
       setSelectedOrderId(null);
       setSelectedShipmentId(null);
+      setMessageShortcuts([]);
+      setPendingAttachments([]);
+      setShortcutMenuOpen(false);
+      setShortcutDraft({ code: "", message: "", attachments: [] });
+      setEditingShortcutId(null);
+      setAiSuggestion(null);
       setAuthChecked(true);
       setStatus("Oturum kapatıldı");
     }
@@ -1006,17 +1067,37 @@ export function App() {
   async function handleSendMessage() {
     const conversationId = selectedConversation?.public_id ?? data.conversations[0]?.public_id;
     const body = messageDraft.trim();
-    if (!conversationId || !body) return;
+    if (!conversationId || (!body && pendingAttachments.length === 0)) return;
 
     setStatus("Mesaj backend API üzerinden gönderiliyor");
+    const uploadedAttachments = await Promise.all(
+      pendingAttachments.map(async (attachment) => {
+        if (attachment.file_public_id) {
+          return {
+            file_public_id: attachment.file_public_id,
+            attachment_type: attachment.attachment_type,
+          };
+        }
+        const file = await files.uploadBrowserFile(attachment.file);
+        return {
+          file_public_id: file.public_id,
+          attachment_type: attachment.attachment_type,
+        };
+      }),
+    );
     const message = await domain.createMessage(conversationId, {
       sender_type: "user",
       sender_name: user?.email ?? "Admin",
-      body,
+      body: body || null,
       external_message_id: null,
       raw_payload: null,
+      attachments: uploadedAttachments,
     });
     setMessageDraft("");
+    for (const attachment of pendingAttachments) {
+      URL.revokeObjectURL(attachment.preview_url);
+    }
+    setPendingAttachments([]);
     setData((current) => ({
       ...current,
       messages: [
@@ -1027,6 +1108,194 @@ export function App() {
     await refreshConversations();
     await refreshMessages(conversationId);
     setStatus("Mesaj backend API üzerinden gönderildi");
+  }
+
+  function handlePickMessageFiles(filesList: FileList | null) {
+    const picked = Array.from(filesList ?? []).map((file) => ({
+      file,
+      attachment_type: attachmentTypeFromFile(file),
+      preview_url: URL.createObjectURL(file),
+    }));
+    setPendingAttachments((current) => [...current, ...picked].slice(0, 10));
+  }
+
+  function handlePickShortcutFiles(filesList: FileList | null) {
+    const picked = Array.from(filesList ?? []).map((file) => ({
+      file,
+      attachment_type: attachmentTypeFromFile(file),
+      preview_url: URL.createObjectURL(file),
+    }));
+    setShortcutDraft((current) => ({
+      ...current,
+      attachments: [...current.attachments, ...picked].slice(0, 10),
+    }));
+  }
+
+  async function handleSaveShortcut() {
+    const code = shortcutDraft.code.trim();
+    const message = shortcutDraft.message.trim();
+    if (!code || (!message && shortcutDraft.attachments.length === 0)) return;
+
+    setStatus("Kısayol backend API üzerinden kaydediliyor");
+    const attachments = await Promise.all(
+      shortcutDraft.attachments.map(async (attachment) => {
+        if (attachment.file_public_id) {
+          return {
+            file_public_id: attachment.file_public_id,
+            attachment_type: attachment.attachment_type,
+          };
+        }
+        const file = await files.uploadBrowserFile(attachment.file);
+        return {
+          file_public_id: file.public_id,
+          attachment_type: attachment.attachment_type,
+        };
+      }),
+    );
+    const shortcut = editingShortcutId
+      ? await domain.updateMessageShortcut(editingShortcutId, {
+          code,
+          message: message || null,
+          attachments,
+        })
+      : await domain.createMessageShortcut({
+          code,
+          message: message || null,
+          type: "custom",
+          attachments,
+        });
+    const shortcutWithLocalAttachmentNames = {
+      ...shortcut,
+      attachments: shortcut.attachments.map((attachment, index) => {
+        const localAttachment = shortcutDraft.attachments[index];
+        return {
+          ...attachment,
+          original_name: attachment.original_name ?? localAttachment?.file.name ?? null,
+          mime_type: attachment.mime_type ?? localAttachment?.file.type ?? null,
+          byte_size: attachment.byte_size ?? localAttachment?.file.size ?? null,
+        };
+      }),
+    };
+    for (const attachment of shortcutDraft.attachments) {
+      URL.revokeObjectURL(attachment.preview_url);
+    }
+    setMessageShortcuts((current) => [
+      shortcutWithLocalAttachmentNames,
+      ...current.filter((item) => item.public_id !== shortcutWithLocalAttachmentNames.public_id),
+    ].sort((first, second) => first.sort_order - second.sort_order || first.code.localeCompare(second.code, "tr")));
+    setShortcutDraft({ code: "", message: "", attachments: [] });
+    setEditingShortcutId(null);
+    setStatus("Kısayol kaydedildi");
+  }
+
+  async function handleDeleteShortcut(shortcutPublicId: string) {
+    setStatus("Kısayol backend API üzerinden siliniyor");
+    await domain.deleteMessageShortcut(shortcutPublicId);
+    setMessageShortcuts((current) => current.filter((shortcut) => shortcut.public_id !== shortcutPublicId));
+    setStatus("Kısayol silindi");
+  }
+
+  function handleUseShortcut(shortcut: MessageShortcutSummary) {
+    setMessageDraft(shortcut.message ?? "");
+    setPendingAttachments((current) => {
+      for (const attachment of current) {
+        URL.revokeObjectURL(attachment.preview_url);
+      }
+      return shortcut.attachments.map((attachment) => ({
+        file: new File([], attachment.original_name ?? attachment.file_public_id, {
+          type: attachment.mime_type ?? "application/octet-stream",
+        }),
+        file_public_id: attachment.file_public_id,
+        attachment_type: attachment.attachment_type,
+        preview_url: "",
+      }));
+    });
+    setShortcutMenuOpen(false);
+  }
+
+  function handleEditShortcut(shortcut: MessageShortcutSummary) {
+    setEditingShortcutId(shortcut.public_id);
+    setShortcutDraft({
+      code: shortcut.code,
+      message: shortcut.message ?? "",
+      attachments: shortcut.attachments.map((attachment) => ({
+        file: new File([], attachment.original_name ?? attachment.file_public_id, {
+          type: attachment.mime_type ?? "application/octet-stream",
+        }),
+        file_public_id: attachment.file_public_id,
+        attachment_type: attachment.attachment_type,
+        preview_url: "",
+      })),
+    });
+  }
+
+  async function handleDownloadShortcutAttachment(shortcut: MessageShortcutSummary) {
+    const first = shortcut.attachments[0];
+    if (!first) return;
+    setStatus("Kısayol medyası indiriliyor");
+    try {
+      const response = await files.createDownload(first.file_public_id);
+      if (response.download.presigned_url) {
+        const link = document.createElement("a");
+        link.href = response.download.presigned_url;
+        link.download = first.original_name ?? `${shortcut.code}.${first.attachment_type}`;
+        link.click();
+      }
+    } catch (error) {
+      console.warn("[Messages] Shortcut download request failed", error);
+    }
+  }
+
+  function handleConversationNoteChange(value: string) {
+    setConversationNoteDraft(value);
+    if (!selectedConversation?.public_id) return;
+    if (conversationNoteSaveRef.current) {
+      window.clearTimeout(conversationNoteSaveRef.current);
+    }
+    const conversationPublicId = selectedConversation.public_id;
+    conversationNoteSaveRef.current = window.setTimeout(() => {
+      void (async () => {
+        const conversation = await domain.updateConversationNotes(conversationPublicId, value.trim() || null);
+        setData((current) => ({
+          ...current,
+          conversations: current.conversations.map((item) =>
+            item.public_id === conversation.public_id ? conversation : item
+          ),
+        }));
+        setStatus("Konuşma notu otomatik kaydedildi");
+      })();
+    }, 500);
+  }
+
+  function handleCustomerNoteChange(value: string) {
+    setCustomerNoteDraft(value);
+    if (!selectedConversation?.public_id) return;
+    if (customerNoteSaveRef.current) {
+      window.clearTimeout(customerNoteSaveRef.current);
+    }
+    const conversationPublicId = selectedConversation.public_id;
+    customerNoteSaveRef.current = window.setTimeout(() => {
+      void (async () => {
+        const customer = await domain.updateCustomerNotes(conversationPublicId, value.trim() || null);
+        setData((current) => ({
+          ...current,
+          customers: [
+            customer,
+            ...current.customers.filter((item) => item.public_id !== customer.public_id),
+          ],
+        }));
+        setStatus("Müşteri notu otomatik kaydedildi");
+      })();
+    }, 500);
+  }
+
+  async function handleAiSuggestion() {
+    const conversationId = selectedConversation?.public_id;
+    if (!conversationId) return;
+    setStatus("AI yanıt önerisi backend dry-run sınırında hazırlanıyor");
+    const response = await domain.createAiReplySuggestion(conversationId);
+    setAiSuggestion(response.suggestion);
+    setStatus("AI yanıt önerisi dry-run olarak hazırlandı");
   }
 
   async function handleUpdateConversationState(input: {
@@ -1616,32 +1885,6 @@ export function App() {
     }
   }
 
-  if (publicPage) {
-    return <PublicPage page={publicPage} />;
-  }
-
-  if (location.pathname === "/sifre-sifirla") {
-    return <ResetPasswordScreen />;
-  }
-
-  if (token && !authChecked) {
-    return (
-      <main className="login-screen">
-        <div className="login-card">
-          <div className="brand large">
-            <span className="brand-mark">G</span>
-            <span>Garanti Kuluçka</span>
-          </div>
-          <p>Oturum backend üzerinden doğrulanıyor</p>
-        </div>
-      </main>
-    );
-  }
-
-  if (!token) {
-    return <LoginScreen onLogin={handleLogin} status={status} />;
-  }
-
   const activeSettings = data.settings.filter((setting) => !setting.is_secret);
   const visibleNavigation = navigationItems.filter((item) => item.roles.includes(user?.role ?? "guest"));
   const requestedFlow = flowFromPath(location.pathname);
@@ -1709,6 +1952,56 @@ export function App() {
   });
   const selectedConversation =
     visibleConversations.find((conversation) => conversation.public_id === selectedConversationId) ?? visibleConversations[0] ?? null;
+  const selectedConversationCustomer =
+    data.customers.find((customer) =>
+      customer.phone && customer.phone === selectedConversation?.customer?.phone
+    ) ??
+    data.customers.find((customer) =>
+      customer.full_name === selectedConversation?.customer?.full_name
+    ) ??
+    null;
+
+  useEffect(() => {
+    setConversationNoteDraft(selectedConversation?.notes ?? "");
+    setCustomerNoteDraft(selectedConversationCustomer?.notes ?? "");
+    setAiSuggestion(null);
+  }, [selectedConversation?.public_id, selectedConversation?.notes, selectedConversationCustomer?.notes]);
+
+  useEffect(() => () => {
+    for (const attachment of pendingAttachments) {
+      if (attachment.preview_url) URL.revokeObjectURL(attachment.preview_url);
+    }
+    for (const attachment of shortcutDraft.attachments) {
+      if (attachment.preview_url) URL.revokeObjectURL(attachment.preview_url);
+    }
+  }, [pendingAttachments, shortcutDraft.attachments]);
+
+  if (publicPage) {
+    return <PublicPage page={publicPage} />;
+  }
+
+  if (location.pathname === "/sifre-sifirla") {
+    return <ResetPasswordScreen />;
+  }
+
+  if (token && !authChecked) {
+    return (
+      <main className="login-screen">
+        <div className="login-card">
+          <div className="brand large">
+            <span className="brand-mark">G</span>
+            <span>Garanti Kuluçka</span>
+          </div>
+          <p>Oturum backend üzerinden doğrulanıyor</p>
+        </div>
+      </main>
+    );
+  }
+
+  if (!token) {
+    return <LoginScreen onLogin={handleLogin} status={status} />;
+  }
+
   const conversationChannelFilters = [
     { value: "all", label: `Tüm kanallar ${data.conversationSummary.total_count}` },
     { value: "instagram", label: `Instagram ${instagramConversationCount}` },
@@ -1785,6 +2078,7 @@ export function App() {
   const incubatorProductCount = data.productSummary.category_counts.incubator;
   const sparePartProductCount = data.productSummary.category_counts.spare_part;
   const otherProductCount = data.productSummary.category_counts.other;
+  const messageAttachments = data.messages.flatMap((message) => message.attachments ?? []);
 
   return (
     <div className="app-shell">
@@ -1959,35 +2253,256 @@ export function App() {
                   )}
                 </header>
                 <div className="message-scroll-area" data-testid="message-scroll-area">
+                  {messageAttachments.length > 0 && (
+                    <div className="message-attachments" data-testid="message-attachments">
+                      {messageAttachments.map((attachment) => (
+                        <span key={`${attachment.file_public_id}-${attachment.attachment_type}`}>
+                          <FileText size={13} aria-hidden="true" />
+                          {attachmentLabel(attachment.attachment_type)} {attachment.original_name ?? attachment.file_public_id}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                   {data.messages.map((message) => {
                     const mine = message.sender_type === "user" || message.sender_type === "ai";
+                    const attachments = message.attachments ?? [];
                     return (
                       <article className={cx("message-bubble", mine && "mine")} key={message.public_id}>
                         <strong>{message.sender_name ?? (mine ? "Temsilci" : "Müşteri")}</strong>
-                        <span>{message.body ?? "Boş mesaj"}</span>
+                        <span>{message.body ?? (attachments.length > 0 ? "Medya" : "Boş mesaj")}</span>
+                        {attachments.length > 0 && (
+                          <div className="message-attachments">
+                            {attachments.map((attachment) => (
+                              <span key={attachment.file_public_id}>
+                                <FileText size={13} aria-hidden="true" />
+                                {attachmentLabel(attachment.attachment_type)} {attachment.original_name ?? attachment.file_public_id}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                         <small>{formatDate(message.sent_at)}</small>
                       </article>
                     );
                   })}
                 </div>
                 <div className="message-composer" data-testid="message-composer">
-                  <textarea
-                    data-testid="message-input"
-                    disabled={!selectedConversation}
-                    onChange={(event) => setMessageDraft(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" && !event.shiftKey) {
-                        event.preventDefault();
-                        void handleSendMessage();
-                      }
+                  <input
+                    ref={mediaInputRef}
+                    accept="image/*,video/*"
+                    className="hidden-file-input"
+                    data-testid="message-media-input"
+                    multiple
+                    type="file"
+                    onChange={(event) => {
+                      handlePickMessageFiles(event.currentTarget.files);
+                      event.currentTarget.value = "";
                     }}
-                    placeholder="Mesajınızı yazın..."
-                    value={messageDraft}
                   />
+                  <input
+                    ref={pdfInputRef}
+                    accept="application/pdf"
+                    className="hidden-file-input"
+                    data-testid="message-pdf-input"
+                    type="file"
+                    onChange={(event) => {
+                      handlePickMessageFiles(event.currentTarget.files);
+                      event.currentTarget.value = "";
+                    }}
+                  />
+                  <div className="message-composer-tools">
+                    <button
+                      className="secondary-action icon-only"
+                      title="Görsel / video ekle"
+                      type="button"
+                      onClick={() => mediaInputRef.current?.click()}
+                    >
+                      <Image size={16} aria-hidden="true" />
+                    </button>
+                    <button
+                      className="secondary-action icon-only"
+                      title="PDF ekle"
+                      type="button"
+                      onClick={() => pdfInputRef.current?.click()}
+                    >
+                      <FileText size={16} aria-hidden="true" />
+                    </button>
+                    <button
+                      className={cx("secondary-action icon-only", shortcutMenuOpen && "selected")}
+                      data-testid="shortcut-menu-button"
+                      title="Hızlı cevaplar"
+                      type="button"
+                      onClick={() => setShortcutMenuOpen((current) => !current)}
+                    >
+                      <Zap size={16} aria-hidden="true" />
+                    </button>
+                    <button
+                      className="secondary-action icon-only"
+                      data-testid="ai-suggestion-button"
+                      title="AI yanıt öner"
+                      type="button"
+                      onClick={() => void handleAiSuggestion()}
+                    >
+                      <Bot size={16} aria-hidden="true" />
+                    </button>
+                  </div>
+                  <div className="message-composer-main">
+                    {pendingAttachments.length > 0 && (
+                      <div className="attachment-strip" data-testid="pending-attachments">
+                        {pendingAttachments.map((attachment, index) => (
+                          <span key={`${attachment.file.name}-${index}`}>
+                            {attachmentLabel(attachment.attachment_type)}: {attachment.file.name}
+                            <button
+                              title="Medyayı kaldır"
+                              type="button"
+                              onClick={() => {
+                                setPendingAttachments((current) => {
+                                  const removed = current[index];
+                                  if (removed?.preview_url) URL.revokeObjectURL(removed.preview_url);
+                                  return current.filter((_, itemIndex) => itemIndex !== index);
+                                });
+                              }}
+                            >
+                              <X size={12} aria-hidden="true" />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {shortcutMenuOpen && (
+                      <div className="shortcut-popover" data-testid="shortcut-popover">
+                        <div className="shortcut-form">
+                          <input
+                            ref={shortcutMediaInputRef}
+                            accept="image/*,video/*,application/pdf"
+                            className="hidden-file-input"
+                            data-testid="shortcut-media-input"
+                            multiple
+                            type="file"
+                            onChange={(event) => {
+                              handlePickShortcutFiles(event.currentTarget.files);
+                              event.currentTarget.value = "";
+                            }}
+                          />
+                          <input
+                            className="inline-input"
+                            data-testid="shortcut-code-input"
+                            placeholder="Kısayol kodu"
+                            value={shortcutDraft.code}
+                            onChange={(event) => setShortcutDraft((current) => ({ ...current, code: event.target.value }))}
+                          />
+                          <textarea
+                            data-testid="shortcut-message-input"
+                            placeholder={shortcutDraft.attachments.length > 0 ? "Medya başlığı" : "Kısayol mesajı"}
+                            value={shortcutDraft.message}
+                            onChange={(event) => setShortcutDraft((current) => ({ ...current, message: event.target.value }))}
+                          />
+                          {shortcutDraft.attachments.length > 0 && (
+                            <div className="attachment-strip">
+                              {shortcutDraft.attachments.map((attachment, index) => (
+                                <span key={`${attachment.file.name}-${index}`}>
+                                  {attachmentLabel(attachment.attachment_type)}: {attachment.file.name}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                          <div className="detail-actions compact">
+                            <button
+                              className="secondary-action"
+                              type="button"
+                              onClick={() => shortcutMediaInputRef.current?.click()}
+                            >
+                              <Image size={14} aria-hidden="true" />
+                              Medya ekle
+                            </button>
+                            <button
+                              className="primary-action"
+                              data-testid="shortcut-save-button"
+                              disabled={!shortcutDraft.code.trim() || (!shortcutDraft.message.trim() && shortcutDraft.attachments.length === 0)}
+                              type="button"
+                              onClick={() => void handleSaveShortcut()}
+                            >
+                              {editingShortcutId ? "Güncelle" : "Ekle"}
+                            </button>
+                            <button
+                              className="secondary-action"
+                              type="button"
+                              onClick={() => {
+                                setEditingShortcutId(null);
+                                setShortcutDraft({ code: "", message: "", attachments: [] });
+                              }}
+                            >
+                              İptal
+                            </button>
+                          </div>
+                        </div>
+                        <div className="shortcut-list">
+                          {messageShortcuts.filter((shortcut) => shortcut.is_active).map((shortcut) => (
+                            <div className="shortcut-row" key={shortcut.public_id}>
+                              <button data-testid="shortcut-row" type="button" onClick={() => handleUseShortcut(shortcut)}>
+                                <code>/{shortcut.code}</code>
+                                <span>{shortcut.message ?? shortcut.attachments[0]?.original_name ?? "Medya"}</span>
+                                {shortcut.attachments.length > 0 && <em>{shortcut.attachments.length} medya</em>}
+                              </button>
+                              {shortcut.attachments.length > 0 && (
+                                <button
+                                  className="secondary-action icon-only"
+                                  data-testid="shortcut-download-button"
+                                  title="Dosyayı indir"
+                                  type="button"
+                                  onClick={() => void handleDownloadShortcutAttachment(shortcut)}
+                                >
+                                  <Download size={14} aria-hidden="true" />
+                                </button>
+                              )}
+                              <button
+                                className="secondary-action icon-only"
+                                data-testid="shortcut-edit-button"
+                                title="Kısayolu düzenle"
+                                type="button"
+                                onClick={() => handleEditShortcut(shortcut)}
+                              >
+                                <Pencil size={14} aria-hidden="true" />
+                              </button>
+                              <button
+                                className="secondary-action icon-only"
+                                data-testid="shortcut-delete-button"
+                                title="Kısayolu sil"
+                                type="button"
+                                onClick={() => void handleDeleteShortcut(shortcut.public_id)}
+                              >
+                                <Trash2 size={14} aria-hidden="true" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    <textarea
+                      data-testid="message-input"
+                      disabled={!selectedConversation}
+                      onChange={(event) => setMessageDraft(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" && !event.shiftKey) {
+                          event.preventDefault();
+                          void handleSendMessage();
+                        }
+                      }}
+                      placeholder={pendingAttachments.length > 0 ? "Medya başlığı yazın..." : "Mesajınızı yazın..."}
+                      value={messageDraft}
+                    />
+                    {aiSuggestion && (
+                      <div className="ai-suggestion" data-testid="ai-suggestion">
+                        <span>{aiSuggestion}</span>
+                        <button type="button" onClick={() => setMessageDraft(aiSuggestion)}>
+                          Kullan
+                        </button>
+                      </div>
+                    )}
+                  </div>
                   <button
                     className="primary-action icon-action"
                     data-testid="message-send-button"
-                    disabled={!selectedConversation || !messageDraft.trim()}
+                    disabled={!selectedConversation || (!messageDraft.trim() && pendingAttachments.length === 0)}
                     type="button"
                     onClick={() => void handleSendMessage()}
                   >
@@ -2007,6 +2522,24 @@ export function App() {
                         ["Okunmamış", String(selectedConversation.unread_count), selectedConversation.last_message_sender_type ?? "-"],
                       ]}
                     />
+                    <label className="note-editor">
+                      <span>Konuşma notu</span>
+                      <textarea
+                        data-testid="conversation-note-input"
+                        placeholder="Konuşma için not"
+                        value={conversationNoteDraft}
+                        onChange={(event) => handleConversationNoteChange(event.target.value)}
+                      />
+                    </label>
+                    <label className="note-editor">
+                      <span>Müşteri notu</span>
+                      <textarea
+                        data-testid="customer-note-input"
+                        placeholder="Müşteri için not"
+                        value={customerNoteDraft}
+                        onChange={(event) => handleCustomerNoteChange(event.target.value)}
+                      />
+                    </label>
                     <div className="detail-actions" data-testid="conversation-state-actions">
                       <button
                         className="secondary-action"
