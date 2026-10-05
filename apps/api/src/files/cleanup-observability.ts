@@ -1,9 +1,7 @@
 import type { Context } from "hono";
+import { createStructuredLog, redactValue } from "@garanti-kulucka/shared";
 import type { AppBindings } from "../http/types.js";
 import type { FileRecord } from "./repository.js";
-
-const sensitiveQueryParameterPattern =
-  /([?&](?:X-Amz-[^=]*Signature|X-Amz-Credential|X-Amz-Security-Token|signature|token|access_token|secret|key|password)=)[^&\s]*/gi;
 
 export type OrphanCleanupMode = "dry_run" | "apply";
 
@@ -22,34 +20,14 @@ export function orphanCleanupRequestId(filePublicId: string): string {
 }
 
 export function redactLogValue(value: unknown): unknown {
-  if (typeof value === "string") {
-    return value.replace(sensitiveQueryParameterPattern, "$1[redacted]");
-  }
-  if (value instanceof Error) {
-    return {
-      name: value.name,
-      message: redactLogValue(value.message),
-    };
-  }
-  if (Array.isArray(value)) {
-    return value.map(redactLogValue);
-  }
-  if (value && typeof value === "object") {
-    return Object.fromEntries(
-      Object.entries(value).map(([key, nestedValue]) => [key, redactLogValue(nestedValue)]),
-    );
-  }
-
-  return value;
+  return redactValue(value);
 }
 
 export function logOrphanCleanup(input: OrphanCleanupLogInput): void {
   const auth = input.context.get("auth");
   const filePublicId = input.file?.public_id ?? input.filePublicId;
-  const payload: Record<string, unknown> = {
-    event: "storage.orphan_cleanup",
+  const contextPayload: Record<string, unknown> = {
     mode: input.mode,
-    request_id: input.context.get("requestId"),
     actor_id: auth?.user_public_id ?? null,
     file_public_id: filePublicId,
     bucket: input.file?.bucket ?? null,
@@ -59,11 +37,18 @@ export function logOrphanCleanup(input: OrphanCleanupLogInput): void {
   };
 
   if (input.error !== undefined) {
-    payload.error = redactLogValue(input.error);
+    contextPayload.error = redactLogValue(input.error);
   }
 
   input.context.get("logger")[input.level ?? "info"](
-    redactLogValue(payload) as Record<string, unknown>,
+    createStructuredLog({
+      level: input.level ?? "info",
+      service: "api",
+      event: "storage.orphan_cleanup",
+      request_id: input.context.get("requestId"),
+      msg: "Storage orphan cleanup decision",
+      context: contextPayload,
+    }),
     "Storage orphan cleanup decision",
   );
 }

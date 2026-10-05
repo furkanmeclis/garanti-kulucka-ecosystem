@@ -56,29 +56,37 @@ describe("orphan cleanup observability", () => {
     });
 
     expect(logger.info).toHaveBeenCalledWith(
-      {
+      expect.objectContaining({
         event: "storage.orphan_cleanup",
-        mode: "apply",
+        level: "info",
+        service: "api",
         request_id: "req_observe_1",
-        actor_id: "usr_admin",
-        file_public_id: "fil_orphan",
-        bucket: "media",
-        object_key: "media/2026/10/05/fil_orphan/proof.txt",
-        cleanup_request_id: "orphan_cleanup_fil_orphan",
-        result_code: "deleted",
-      },
+        job_id: null,
+        msg: "Storage orphan cleanup decision",
+        context: expect.objectContaining({
+          mode: "apply",
+          actor_id: "usr_admin",
+          file_public_id: "fil_orphan",
+          bucket: "media",
+          object_key: "media/2026/10/05/fil_orphan/proof.txt",
+          cleanup_request_id: "orphan_cleanup_fil_orphan",
+          result_code: "deleted",
+        }),
+      }),
       "Storage orphan cleanup decision",
     );
     expect(logger.info).toHaveBeenCalledWith(
       expect.objectContaining({
-        mode: "dry_run",
         request_id: "req_observe_1",
-        actor_id: "usr_admin",
-        file_public_id: "fil_orphan",
-        bucket: "media",
-        object_key: "media/2026/10/05/fil_orphan/proof.txt",
-        cleanup_request_id: "orphan_cleanup_fil_orphan",
-        result_code: "dry_run_ready",
+        context: expect.objectContaining({
+          mode: "dry_run",
+          actor_id: "usr_admin",
+          file_public_id: "fil_orphan",
+          bucket: "media",
+          object_key: "media/2026/10/05/fil_orphan/proof.txt",
+          cleanup_request_id: "orphan_cleanup_fil_orphan",
+          result_code: "dry_run_ready",
+        }),
       }),
       "Storage orphan cleanup decision",
     );
@@ -109,8 +117,8 @@ describe("orphan cleanup observability", () => {
     });
 
     const payload = logger.error.mock.calls[0]?.[0] as Record<string, unknown>;
-    expect(JSON.stringify(payload)).toContain("X-Amz-Credential=[redacted]");
-    expect(JSON.stringify(payload)).toContain("X-Amz-Signature=[redacted]");
+    expect(JSON.stringify(payload.context)).toContain("X-Amz-Credential=[redacted]");
+    expect(JSON.stringify(payload.context)).toContain("X-Amz-Signature=[redacted]");
     expect(JSON.stringify(payload)).toContain("safe=value");
     expect(JSON.stringify(payload)).not.toContain("AKIA%2F20261005");
     expect(JSON.stringify(payload)).not.toContain("abcdef");

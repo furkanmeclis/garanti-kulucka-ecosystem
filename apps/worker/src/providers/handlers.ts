@@ -9,6 +9,7 @@ import {
   providerWebhookJobPayloadSchema,
 } from "@garanti-kulucka/shared";
 import { assertProviderEnvelope } from "./registry.js";
+import { providerAttemptCorrelationMetadata } from "./correlation.js";
 import { buildProviderDryRunRequest } from "./dry-run-transport.js";
 import { buildProviderTransportPayload } from "./payloads.js";
 import { providerTransportPolicyFor } from "./transport-policy.js";
@@ -101,8 +102,8 @@ export function createProviderFailureAttempt(
     next_retry_at: decision.next_retry_at,
     idempotency_key: idempotencyKey,
     request_metadata: {
+      ...providerAttemptCorrelationMetadata(job, envelope),
       queue: job.queue,
-      job_id: job.job_id,
       channel: envelope.channel,
       retry: {
         reason: decision.reason,
@@ -145,8 +146,8 @@ function createFixtureAttempt(
     idempotency_key:
       typeof envelope.payload.idempotency_key === "string" ? envelope.payload.idempotency_key : null,
     request_metadata: {
+      ...providerAttemptCorrelationMetadata(job, envelope),
       queue,
-      job_id: job.job_id,
       channel: envelope.channel,
       fixture_only: true,
       transport_policy: providerTransportPolicyFor(envelope),

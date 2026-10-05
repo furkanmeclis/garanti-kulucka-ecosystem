@@ -119,6 +119,7 @@ export function buildWebhookJob(input: {
   payloadHash: string;
   eventType: string;
   externalEventId: string | null;
+  requestId?: string;
 }): JobEnvelope {
   return jobEnvelopeSchema.parse({
     job_id: `job_${randomUUID().replaceAll("-", "")}`,
@@ -133,5 +134,6 @@ export function buildWebhookJob(input: {
       external_event_id: input.externalEventId,
     },
     requested_at: new Date().toISOString(),
+    ...(input.requestId ? { request_id: input.requestId } : {}),
   });
 }

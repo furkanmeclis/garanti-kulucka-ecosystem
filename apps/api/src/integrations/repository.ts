@@ -1,5 +1,6 @@
 import type { AppDatabase } from "@garanti-kulucka/database";
 import type { Selectable } from "kysely";
+import { redactValue } from "@garanti-kulucka/shared";
 import type {
   IntegrationAccountsTable,
   IntegrationProvidersTable,
@@ -812,9 +813,6 @@ export function instagramAnalyticsSummaryFromMetadata(metadata: unknown): Instag
   };
 }
 
-const providerAttemptSecretKeyPattern =
-  /(^|_|\.)((access|refresh|verify)?_?token|authorization|api_?key|password|secret)$/i;
-
 export function parseProviderAttemptLimit(value: string | undefined, fallback = 50) {
   if (!value) {
     return fallback;
@@ -858,22 +856,7 @@ function countRetryAttempts(attempts: ProviderAttemptRecord[]) {
 }
 
 export function redactProviderAttemptMetadata(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map(redactProviderAttemptMetadata);
-  }
-
-  if (!value || typeof value !== "object") {
-    return value;
-  }
-
-  return Object.fromEntries(
-    Object.entries(value).map(([key, nestedValue]) => [
-      key,
-      providerAttemptSecretKeyPattern.test(key)
-        ? "[redacted]"
-        : redactProviderAttemptMetadata(nestedValue),
-    ]),
-  );
+  return redactValue(value);
 }
 
 export function auditIntegrationAccountValue(

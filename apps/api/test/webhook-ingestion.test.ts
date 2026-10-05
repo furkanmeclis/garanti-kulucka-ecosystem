@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import type { JobEnvelope, ProviderName } from "@garanti-kulucka/shared";
 import { createWebhookRoutes } from "../src/http/webhook-routes.js";
+import type { AppBindings } from "../src/http/types.js";
 import { hashWebhookPayload } from "../src/webhooks/payload-hash.js";
 import type {
   StoreWebhookEventInput,
@@ -43,7 +44,11 @@ class FakeWebhookRepository implements WebhookEventRepository {
 }
 
 function createTestApp(input: { repository: WebhookEventRepository; jobs?: JobEnvelope[] }) {
-  const app = new Hono();
+  const app = new Hono<AppBindings>();
+  app.use("*", async (context, next) => {
+    context.set("requestId", "req_test_webhook");
+    await next();
+  });
   app.route(
     "/webhooks",
     createWebhookRoutes({
@@ -100,6 +105,7 @@ describe("webhook ingestion", () => {
     expect(jobs[0]).toMatchObject({
       queue: "provider-webhooks",
       name: "provider.webhook.received",
+      request_id: "req_test_webhook",
       payload: {
         webhook_event_public_id: "wev_test",
         provider: "whatsapp",

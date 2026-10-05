@@ -15,7 +15,7 @@ describe("migrator error safety", () => {
     const sanitized = sanitizeMigratorErrorMessage(message);
 
     expect(sanitized).toContain("[REDACTED_DATABASE_URL]");
-    expect(sanitized).toContain("authorization=[REDACTED]");
+    expect(sanitized).toContain("Authorization: [REDACTED]");
     expect(sanitized).toContain("password=[REDACTED]");
     expect(sanitized).toContain("token=[REDACTED]");
     expect(sanitized).not.toContain("top-secret");
@@ -63,6 +63,21 @@ describe("migrator error safety", () => {
       error: {
         name: "DatabaseError password=[REDACTED]",
         message: "request failed token=[REDACTED]",
+      },
+      ts: expect.any(String),
+      level: "error",
+      service: "migrator",
+      event: "migrator.command_failed",
+      request_id: null,
+      job_id: null,
+      msg: "Migrator command failed",
+      context: {
+        command: "migrate:dry-run",
+        reportFile: "reports/dry-run.json",
+        error: {
+          name: "DatabaseError password=[REDACTED]",
+          message: "request failed token=[REDACTED]",
+        },
       },
     });
     expect(Object.keys(payload.error)).toEqual(["name", "message"]);

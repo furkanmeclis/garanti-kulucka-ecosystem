@@ -35,6 +35,7 @@ describe("provider job handlers", () => {
       queue: "provider-webhooks",
       name: "meta.message.webhook",
       requested_at: now,
+      request_id: "req_api_meta_1",
       payload: {
         envelope: {
           request_id: "req_meta_1",
@@ -51,6 +52,7 @@ describe("provider job handlers", () => {
             fixture_name: "meta_message_webhook_minimal",
           },
         },
+        webhook_event_public_id: "wev_meta_1",
       },
     });
 
@@ -70,6 +72,12 @@ describe("provider job handlers", () => {
         retry_decision: "none",
         idempotency_key: null,
         error: null,
+        request_metadata: {
+          request_id: "req_api_meta_1",
+          job_id: "job_meta_1",
+          webhook_event_id: "wev_meta_1",
+          provider_attempt_id: null,
+        },
       },
     });
   });

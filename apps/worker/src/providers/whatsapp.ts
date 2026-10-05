@@ -1,4 +1,5 @@
 import type { JobEnvelope, ProviderAttempt, ProviderRequestEnvelope } from "@garanti-kulucka/shared";
+import { providerAttemptCorrelationMetadata } from "./correlation.js";
 import { providerAttemptSchema } from "@garanti-kulucka/shared";
 import type { ProviderAccountConfig } from "./account-config.js";
 import { failureCode, failureMessage, fetchLiveHttpTransport } from "./live-http.js";
@@ -312,8 +313,8 @@ function createAttempt(input: {
         ? input.envelope.payload.idempotency_key
         : null,
     request_metadata: {
+      ...providerAttemptCorrelationMetadata(input.job, input.envelope),
       queue: input.job.queue,
-      job_id: input.job.job_id,
       channel: input.envelope.channel,
       live_call_performed: true,
       transport: "whatsapp-graph",

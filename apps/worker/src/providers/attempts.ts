@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { AppDatabase, ProviderAttemptsTable } from "@garanti-kulucka/database";
-import type { ProviderAttempt } from "@garanti-kulucka/shared";
+import { redactValue, type ProviderAttempt } from "@garanti-kulucka/shared";
 import type { Insertable, Selectable } from "kysely";
 
 export type StoredProviderAttempt = Selectable<ProviderAttemptsTable>;
@@ -17,41 +17,12 @@ export interface ProviderAttemptResolvedReferences {
 
 export type ProviderAttemptPublicIdFactory = () => string;
 
-const sensitiveMetadataKeys = new Set([
-  "authorization",
-  "api_key",
-  "apikey",
-  "access_token",
-  "refresh_token",
-  "password",
-  "secret",
-  "token",
-]);
-
 export function createProviderAttemptPublicId(): string {
   return `pat_${randomUUID().replaceAll("-", "")}`;
 }
 
-function isSensitiveMetadataKey(key: string): boolean {
-  const normalized = key.toLowerCase().replaceAll("-", "_");
-  return sensitiveMetadataKeys.has(normalized) || normalized.endsWith("_token");
-}
-
 export function sanitizeProviderAttemptMetadata(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map((item) => sanitizeProviderAttemptMetadata(item));
-  }
-
-  if (value && typeof value === "object") {
-    return Object.fromEntries(
-      Object.entries(value).map(([key, child]) => [
-        key,
-        isSensitiveMetadataKey(key) ? "[redacted]" : sanitizeProviderAttemptMetadata(child),
-      ]),
-    );
-  }
-
-  return value;
+  return redactValue(value);
 }
 
 export function mapProviderAttemptToInsert(
@@ -72,7 +43,10 @@ export function mapProviderAttemptToInsert(
     retry_decision: attempt.retry_decision,
     next_retry_at: attempt.next_retry_at,
     idempotency_key: attempt.idempotency_key,
-    request_metadata: sanitizeProviderAttemptMetadata(attempt.request_metadata),
+    request_metadata: sanitizeProviderAttemptMetadata({
+      ...attempt.request_metadata,
+      provider_attempt_id: publicId,
+    }),
     response_metadata: sanitizeProviderAttemptMetadata(attempt.response_metadata),
     error_code: attempt.error?.code ?? null,
     error_message: attempt.error?.message ?? null,

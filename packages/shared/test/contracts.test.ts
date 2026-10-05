@@ -3,7 +3,10 @@ import {
   healthStatusSchema,
   jobEnvelopeSchema,
   providerAttemptSchema,
+  redactValue,
   realtimeEnvelopeSchema,
+  structuredLogSchema,
+  createStructuredLog,
   storageMetricContracts,
   storageMetricContractSchema,
 } from "../src/index.js";
@@ -40,6 +43,29 @@ describe("shared contracts", () => {
         requested_at: new Date().toISOString(),
       }),
     ).not.toThrow();
+  });
+
+  it("keeps queue job request correlation backward compatible", () => {
+    expect(
+      jobEnvelopeSchema.parse({
+        job_id: "job_1",
+        queue: "provider-delivery",
+        name: "kolaybi.invoice.create",
+        payload: {},
+        requested_at: new Date().toISOString(),
+      }).request_id,
+    ).toBeUndefined();
+
+    expect(
+      jobEnvelopeSchema.parse({
+        job_id: "job_1",
+        queue: "provider-delivery",
+        name: "kolaybi.invoice.create",
+        payload: {},
+        requested_at: new Date().toISOString(),
+        request_id: "req_api_1",
+      }).request_id,
+    ).toBe("req_api_1");
   });
 
   it("validates provider attempts", () => {
@@ -84,5 +110,78 @@ describe("shared contracts", () => {
       "garage_capacity_bytes",
       "garage_backup_age_seconds",
     ]);
+  });
+
+  it("validates structured observability logs", () => {
+    const log = createStructuredLog({
+      ts: "2026-01-01T00:00:00.000Z",
+      level: "info",
+      service: "api",
+      event: "api.test",
+      request_id: "req_1",
+      job_id: "job_1",
+      msg: "Test log",
+      context: {
+        authorization: "Bearer secret-token",
+        safe: true,
+      },
+    });
+
+    expect(structuredLogSchema.parse(log)).toMatchObject({
+      ts: "2026-01-01T00:00:00.000Z",
+      level: "info",
+      service: "api",
+      event: "api.test",
+      request_id: "req_1",
+      job_id: "job_1",
+      msg: "Test log",
+      context: {
+        authorization: "[redacted]",
+        safe: true,
+      },
+    });
+  });
+
+  it("redacts common credentials and provider secrets recursively", () => {
+    const input = {
+      password: "plain-password",
+      token: "plain-token",
+      authorization: "Bearer auth-token",
+      cookie: "session=plain-cookie",
+      nested: {
+        url: "https://garage/object?X-Amz-Credential=credential&X-Amz-Signature=signature&safe=value",
+        database: "postgres://user:db-password@localhost:5432/app",
+        header: "Authorization: Bearer provider-token",
+        cookieHeader: "Cookie: sid=session-secret; theme=dark",
+        sifre: "netgsm-secret",
+        Sifre: "netgsm-secret-caps",
+        api_key: "api-secret",
+        access_token: "access-secret",
+        CariKodu: "customer-code-secret",
+      },
+    };
+
+    const redacted = redactValue(input);
+
+    expect(redacted).toEqual({
+      password: "[redacted]",
+      token: "[redacted]",
+      authorization: "[redacted]",
+      cookie: "[redacted]",
+      nested: {
+        url: "https://garage/object?X-Amz-Credential=[redacted]&X-Amz-Signature=[redacted]&safe=value",
+        database: "postgres://user:[redacted]@localhost:5432/app",
+        header: "Authorization: [redacted]",
+        cookieHeader: "Cookie: [redacted]",
+        sifre: "[redacted]",
+        Sifre: "[redacted]",
+        api_key: "[redacted]",
+        access_token: "[redacted]",
+        CariKodu: "[redacted]",
+      },
+    });
+    expect(JSON.stringify(redacted)).not.toContain("plain");
+    expect(JSON.stringify(redacted)).not.toContain("db-password");
+    expect(JSON.stringify(redacted)).not.toContain("provider-token");
   });
 });

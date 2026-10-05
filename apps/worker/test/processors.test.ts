@@ -45,6 +45,7 @@ function providerDeliveryJob(overrides: Record<string, unknown> = {}) {
       queue: "provider-delivery",
       name: "ptt.shipment.create",
       requested_at: now,
+      request_id: "req_api_delivery_1",
       payload: {
         envelope: {
           request_id: "req_ptt_1",
@@ -274,6 +275,10 @@ describe("worker processor registry", () => {
         code: "worker_processor_error",
       },
       request_metadata: {
+        request_id: "req_api_delivery_1",
+        job_id: "job_ptt_1",
+        webhook_event_id: null,
+        provider_attempt_id: null,
         retry: {
           reason: "terminal_error",
           attempts_remaining: 4,

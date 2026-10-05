@@ -2,7 +2,7 @@ import { Worker } from "bullmq";
 import { createDatabase, type AppDatabase } from "@garanti-kulucka/database";
 import { Redis } from "ioredis";
 import type pino from "pino";
-import type { JobEnvelope, QueueName } from "@garanti-kulucka/shared";
+import { createStructuredLog, type JobEnvelope, type QueueName } from "@garanti-kulucka/shared";
 import {
   createWorkerProcessorRegistry,
   type WorkerLifecycleRecorder,
@@ -51,7 +51,17 @@ export function createWorkerRuntime(options: WorkerRuntimeOptions): WorkerRuntim
     lifecycleRecorder:
       options.lifecycleRecorder ??
       ((event) => {
-        options.logger.info(event, "Worker job lifecycle event");
+        options.logger.info(
+          createStructuredLog({
+            level: "info",
+            service: "worker",
+            event: `worker.job_${event.event}`,
+            job_id: event.job_id,
+            msg: "Worker job lifecycle event",
+            context: { ...event },
+          }),
+          "Worker job lifecycle event",
+        );
       }),
     ...(providerAttemptRepository ? { providerAttemptRepository } : {}),
     ...(providerAccountConfigRepository ? { providerAccountConfigRepository } : {}),
@@ -71,31 +81,54 @@ export function createWorkerRuntime(options: WorkerRuntimeOptions): WorkerRuntim
 
     worker.on("completed", (job) => {
       options.logger.info(
-        {
-          queue,
+        createStructuredLog({
+          level: "info",
+          service: "worker",
+          event: "worker.job_completed",
+          request_id: job.data.request_id ?? null,
           job_id: job.data.job_id,
-          bullmq_job_id: job.id,
-          name: job.name,
-        },
+          msg: "Worker job completed",
+          context: {
+            queue,
+            bullmq_job_id: job.id,
+            name: job.name,
+          },
+        }),
         "Worker job completed",
       );
     });
 
     worker.on("failed", (job, error) => {
       options.logger.error(
-        {
-          queue,
-          job_id: job?.data.job_id,
-          bullmq_job_id: job?.id,
-          name: job?.name,
-          err: error,
-        },
+        createStructuredLog({
+          level: "error",
+          service: "worker",
+          event: "worker.job_failed",
+          request_id: job?.data.request_id ?? null,
+          job_id: job?.data.job_id ?? null,
+          msg: "Worker job failed",
+          context: {
+            queue,
+            bullmq_job_id: job?.id,
+            name: job?.name,
+            err: error,
+          },
+        }),
         "Worker job failed",
       );
     });
 
     worker.on("error", (error) => {
-      options.logger.error({ queue, err: error }, "Worker runtime error");
+      options.logger.error(
+        createStructuredLog({
+          level: "error",
+          service: "worker",
+          event: "worker.runtime_error",
+          msg: "Worker runtime error",
+          context: { queue, err: error },
+        }),
+        "Worker runtime error",
+      );
     });
 
     workers.set(queue, worker);

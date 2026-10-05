@@ -14,6 +14,7 @@ export const jobEnvelopeSchema = z.object({
   name: z.string().min(1),
   payload: z.record(z.string(), z.unknown()),
   requested_at: z.string().datetime(),
+  request_id: z.string().min(1).optional(),
 });
 
 export type QueueName = z.infer<typeof queueNameSchema>;

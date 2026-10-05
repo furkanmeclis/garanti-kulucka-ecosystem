@@ -3,7 +3,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger as honoLogger } from "hono/logger";
 import pino from "pino";
-import { healthStatusSchema } from "@garanti-kulucka/shared";
+import { createStructuredLog, healthStatusSchema } from "@garanti-kulucka/shared";
 import type { AppDatabase } from "@garanti-kulucka/database";
 import { loadConfig, type ApiConfig } from "./config.js";
 import { createAuthRoutes } from "./http/auth-routes.js";
@@ -69,7 +69,17 @@ export function createApp(options: CreateAppOptions = {}) {
   app.use("*", honoLogger());
 
   app.onError((error, context) => {
-    appLogger.error({ err: error, path: context.req.path, request_id: context.get("requestId") }, "Unhandled API error");
+    appLogger.error(
+      createStructuredLog({
+        level: "error",
+        service: "api",
+        event: "api.unhandled_error",
+        request_id: context.get("requestId"),
+        msg: "Unhandled API error",
+        context: { err: error, path: context.req.path },
+      }),
+      "Unhandled API error",
+    );
     return context.json(
       {
         error: {

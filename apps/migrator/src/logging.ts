@@ -1,3 +1,4 @@
+import { createStructuredLog } from "@garanti-kulucka/shared";
 import type { MigratorCommand } from "./commands.js";
 import { toSafeMigratorError } from "./errors.js";
 
@@ -14,15 +15,27 @@ export function createMigratorFailureLogPayload(
   error: unknown,
   command: MigratorCommand,
   reportFile: string | undefined,
-): MigratorFailureLogPayload {
+): MigratorFailureLogPayload & ReturnType<typeof createStructuredLog> {
   const safeError = toSafeMigratorError(error);
+  const safeLogError = {
+    name: safeError.name,
+    message: safeError.message,
+  };
 
   return {
     command,
     reportFile,
-    error: {
-      name: safeError.name,
-      message: safeError.message,
-    },
+    error: safeLogError,
+    ...createStructuredLog({
+      level: "error",
+      service: "migrator",
+      event: "migrator.command_failed",
+      msg: "Migrator command failed",
+      context: {
+        command,
+        reportFile,
+        error: safeLogError,
+      },
+    }),
   };
 }

@@ -316,6 +316,7 @@ export function createDomainRoutes() {
       name: "netgsm.sms.send",
       payload: providerPayload,
       requested_at: occurredAt,
+      request_id: context.get("requestId"),
     });
     const jobId = await context.get("providerDeliveryQueuePublisher").publish(job);
 

@@ -1,9 +1,8 @@
 import type { AppDatabase, AuditLogsTable } from "@garanti-kulucka/database";
+import { redactValue } from "@garanti-kulucka/shared";
 import type { Selectable } from "kysely";
 
 export type AuditLogRecord = Selectable<AuditLogsTable>;
-
-const secretKeyPattern = /(^|_|\.)((access|refresh|verify)?_?token|authorization|api_?key|password|secret)$/i;
 
 export interface ListAuditLogsInput {
   entityTypes: string[];
@@ -79,18 +78,5 @@ export function serializeAuditLog(record: AuditLogRecord) {
 }
 
 export function redactAuditValue(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map(redactAuditValue);
-  }
-
-  if (!value || typeof value !== "object") {
-    return value;
-  }
-
-  return Object.fromEntries(
-    Object.entries(value).map(([key, nestedValue]) => [
-      key,
-      secretKeyPattern.test(key) ? "[redacted]" : redactAuditValue(nestedValue),
-    ]),
-  );
+  return redactValue(value);
 }

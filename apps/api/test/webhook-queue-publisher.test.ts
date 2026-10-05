@@ -13,6 +13,7 @@ const webhookJob: JobEnvelope = {
     webhook_event_public_id: "wev_test",
   },
   requested_at: "2026-01-01T00:00:00.000Z",
+  request_id: "req_api_webhook_1",
 };
 
 const deliveryJob: JobEnvelope = {
@@ -35,6 +36,7 @@ const deliveryJob: JobEnvelope = {
     },
   },
   requested_at: "2026-01-01T00:00:00.000Z",
+  request_id: "req_api_delivery_1",
 };
 
 describe("webhook queue publisher", () => {

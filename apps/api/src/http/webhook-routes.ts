@@ -154,6 +154,7 @@ export function createWebhookRoutes(options: CreateWebhookRoutesOptions = {}) {
         payloadHash,
         eventType,
         externalEventId,
+        requestId: context.get("requestId"),
       });
       const queuedJobId = await queuePublisher.publish(job);
 
