@@ -869,6 +869,22 @@
             }
           },
           {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          },
+          {
             "$ref": "#/components/parameters/Limit"
           }
         ],
@@ -923,6 +939,31 @@
         }
       }
     },
+    "/api/shipments/{shipment_public_id}": {
+      "get": {
+        "operationId": "getShipment",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ShipmentPublicId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Shipment detail with tracking events",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Shipment"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/api/reports/summary": {
       "get": {
         "operationId": "getReportSummary",
@@ -971,6 +1012,41 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/api/shipments/{shipment_public_id}/track": {
+      "post": {
+        "operationId": "trackShipment",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ShipmentPublicId"
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TrackShipmentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Queued shipment tracking refresh",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrackShipmentResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
           }
         }
       }
@@ -3573,6 +3649,66 @@
           "raw_payload": true
         }
       },
+      "TrackShipmentRequest": {
+        "type": "object",
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "TrackShipmentResponse": {
+        "type": "object",
+        "required": [
+          "provider",
+          "operation",
+          "request_id",
+          "job_id",
+          "queued",
+          "shipment_public_id",
+          "tracking_number",
+          "live_call_permitted",
+          "live_gate"
+        ],
+        "properties": {
+          "provider": {
+            "type": "string"
+          },
+          "operation": {
+            "type": "string",
+            "const": "shipment.track"
+          },
+          "request_id": {
+            "type": "string"
+          },
+          "job_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "queued": {
+            "type": "boolean"
+          },
+          "shipment_public_id": {
+            "type": "string"
+          },
+          "tracking_number": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "live_call_permitted": {
+            "type": "boolean",
+            "const": false
+          },
+          "live_gate": {
+            "type": "string"
+          }
+        }
+      },
       "Shipment": {
         "type": "object",
         "required": [
@@ -3644,7 +3780,44 @@
               "null"
             ]
           },
+          "tracking_events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ShipmentTrackingEvent"
+            }
+          },
           "updated_at": {
+            "type": "string"
+          }
+        }
+      },
+      "ShipmentTrackingEvent": {
+        "type": "object",
+        "required": [
+          "public_id",
+          "status",
+          "occurred_at"
+        ],
+        "properties": {
+          "public_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "location": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "occurred_at": {
             "type": "string"
           }
         }

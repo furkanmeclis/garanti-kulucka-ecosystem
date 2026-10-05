@@ -11,6 +11,7 @@ import type {
   OrdersTable,
   ProductsTable,
   ProviderAttemptsTable,
+  ShipmentTrackingEventsTable,
   ShipmentsTable,
 } from "@garanti-kulucka/database";
 import { newPublicId } from "../auth/crypto.js";
@@ -53,7 +54,9 @@ export type ProviderAttemptRecord = Selectable<ProviderAttemptsTable>;
 export type ShipmentRecord = Selectable<ShipmentsTable> & {
   order_number: string | null;
   customer_full_name: string | null;
+  tracking_events?: ShipmentTrackingEventRecord[];
 };
+export type ShipmentTrackingEventRecord = Selectable<ShipmentTrackingEventsTable>;
 export type ShipmentPipelineStep = "mesaj" | "sms" | "vapi" | "teslim";
 export type ShipmentPipelineStatus = "bekliyor" | "isleniyor" | "hata" | "teslim";
 
@@ -167,8 +170,17 @@ export interface ListShipmentsFilter {
   providers?: string[];
   excludeProviders?: string[];
   status?: string;
+  search?: string;
   trackingMissing?: boolean;
+  offset?: number;
   limit: number;
+}
+
+export interface ListShipmentsResult {
+  rows: ShipmentRecord[];
+  total_count: number;
+  limit: number;
+  offset: number;
 }
 
 export interface CreateOrderInput {
@@ -1246,13 +1258,14 @@ export class DomainRepository {
     });
   }
 
-  async listShipments(filter: ListShipmentsFilter): Promise<ShipmentRecord[]> {
-    return this.db
-      .selectFrom("shipments")
-      .leftJoin("orders", "orders.id", "shipments.order_id")
-      .leftJoin("customers", "customers.id", "shipments.customer_id")
-      .selectAll("shipments")
-      .select(["orders.order_number as order_number", "customers.full_name as customer_full_name"])
+  private applyShipmentFilters<T>(query: T, filter: ListShipmentsFilter): T {
+    const searchPattern = filter.search ? `%${filter.search}%` : null;
+    type ShipmentFilterBuilder = {
+      $if: (condition: boolean, callback: (builder: ShipmentFilterBuilder) => ShipmentFilterBuilder) => ShipmentFilterBuilder;
+      where: (...args: unknown[]) => ShipmentFilterBuilder;
+    };
+    let next = query as ShipmentFilterBuilder;
+    next = next
       .$if(Boolean(filter.providers?.length), (builder) =>
         builder.where("shipments.provider", "in", filter.providers as string[]),
       )
@@ -1266,8 +1279,96 @@ export class DomainRepository {
           .where("shipments.tracking_number", "is", null)
           .where("shipments.barcode_number", "is", null),
       )
+      .$if(Boolean(searchPattern), (builder) =>
+        builder.where((expression: {
+          or: (items: unknown[]) => unknown;
+          (column: string, operator: string, value: string): unknown;
+        }) =>
+          expression.or([
+            expression("shipments.tracking_number", "ilike", searchPattern as string),
+            expression("shipments.barcode_number", "ilike", searchPattern as string),
+            expression("shipments.recipient_name", "ilike", searchPattern as string),
+            expression("shipments.recipient_phone", "ilike", searchPattern as string),
+            expression("shipments.status", "ilike", searchPattern as string),
+            expression("orders.order_number", "ilike", searchPattern as string),
+            expression("customers.full_name", "ilike", searchPattern as string),
+          ]),
+        ),
+      );
+
+    return next as T;
+  }
+
+  async listShipmentsPage(filter: ListShipmentsFilter): Promise<ListShipmentsResult> {
+    const offset = filter.offset ?? 0;
+    const countQuery = this.applyShipmentFilters(
+      this.db
+        .selectFrom("shipments")
+        .leftJoin("orders", "orders.id", "shipments.order_id")
+        .leftJoin("customers", "customers.id", "shipments.customer_id")
+        .select((expression) => [expression.fn.countAll<number>().as("total_count")]),
+      filter,
+    );
+    const countRow = await countQuery.executeTakeFirst();
+    const rows = await this.listShipments({ ...filter, offset });
+
+    return {
+      rows,
+      total_count: Number(countRow?.total_count ?? rows.length),
+      limit: filter.limit,
+      offset,
+    };
+  }
+
+  async listShipments(filter: ListShipmentsFilter): Promise<ShipmentRecord[]> {
+    const offset = filter.offset ?? 0;
+    const baseQuery = this.db
+      .selectFrom("shipments")
+      .leftJoin("orders", "orders.id", "shipments.order_id")
+      .leftJoin("customers", "customers.id", "shipments.customer_id")
+      .selectAll("shipments")
+      .select(["orders.order_number as order_number", "customers.full_name as customer_full_name"]);
+    const rows = await this.applyShipmentFilters(baseQuery, filter)
       .orderBy("shipments.created_at", "desc")
+      .orderBy("shipments.id", "desc")
+      .offset(offset)
       .limit(filter.limit)
+      .execute();
+    const events = await this.listShipmentTrackingEvents(rows.map((shipment) => shipment.id));
+    const eventsByShipmentId = new Map<number, ShipmentTrackingEventRecord[]>();
+    for (const event of events) {
+      const current = eventsByShipmentId.get(event.shipment_id) ?? [];
+      current.push(event);
+      eventsByShipmentId.set(event.shipment_id, current);
+    }
+    return rows.map((shipment) => ({
+      ...shipment,
+      tracking_events: eventsByShipmentId.get(shipment.id) ?? [],
+    }));
+  }
+
+  async getShipmentByPublicId(shipmentPublicId: string): Promise<ShipmentRecord | null> {
+    const row = await this.db
+      .selectFrom("shipments")
+      .leftJoin("orders", "orders.id", "shipments.order_id")
+      .leftJoin("customers", "customers.id", "shipments.customer_id")
+      .selectAll("shipments")
+      .select(["orders.order_number as order_number", "customers.full_name as customer_full_name"])
+      .where("shipments.public_id", "=", shipmentPublicId)
+      .executeTakeFirst();
+    if (!row) return null;
+    const tracking_events = await this.listShipmentTrackingEvents([row.id]);
+    return { ...row, tracking_events };
+  }
+
+  private async listShipmentTrackingEvents(shipmentIds: number[]): Promise<ShipmentTrackingEventRecord[]> {
+    if (shipmentIds.length === 0) return [];
+    return this.db
+      .selectFrom("shipment_tracking_events")
+      .selectAll()
+      .where("shipment_id", "in", shipmentIds)
+      .orderBy("occurred_at", "desc")
+      .orderBy("id", "desc")
       .execute();
   }
 
@@ -1341,10 +1442,11 @@ export class DomainRepository {
       throw new Error(`Unknown shipment: ${input.shipmentPublicId}`);
     }
 
-    return {
+    return await this.getShipmentByPublicId(shipment.public_id) ?? {
       ...shipment,
       order_number: null,
       customer_full_name: null,
+      tracking_events: [],
     };
   }
 }
@@ -1508,6 +1610,13 @@ export function serializeShipment(shipment: ShipmentRecord) {
     last_event_text: shipment.last_event_text,
     order_number: shipment.order_number,
     customer_full_name: shipment.customer_full_name,
+    tracking_events: (shipment.tracking_events ?? []).map((event) => ({
+      public_id: event.public_id,
+      status: event.status,
+      description: event.description,
+      location: event.location,
+      occurred_at: event.occurred_at,
+    })),
     updated_at: shipment.updated_at,
   };
 }

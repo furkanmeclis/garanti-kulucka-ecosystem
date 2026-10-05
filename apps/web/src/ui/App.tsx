@@ -14,6 +14,7 @@ import {
   FileUp,
   FileText,
   Headphones,
+  Eye,
   Image,
   LogIn,
   MessageCircle,
@@ -23,6 +24,7 @@ import {
   Pencil,
   Phone,
   Plus,
+  RefreshCw,
   Settings,
   Search,
   Send,
@@ -175,6 +177,7 @@ interface InstagramAnalyticsSummary {
 }
 
 type ShipmentPipelineFilter = "all" | ShipmentPipelineStep;
+type ShipmentFilter = "all" | "ptt" | "surat" | "other" | "in_transit" | "delivered" | "tracking_missing";
 type OrderSortBy = "created_at" | "order_number" | "status" | "total_amount";
 type SortDirection = "asc" | "desc";
 
@@ -238,6 +241,7 @@ const smsTemplateVariables = ["{musteri_adi}", "{takip_no}", "{kargo_firmasi}"] 
 const instagramDraftImageUrl = "https://example.com/garanti-kulucka.jpg";
 const instagramDraftCaption = "Kuluçka makineleri ve yedek parça operasyonundan güncel ürün duyurusu.";
 const instagramCaptionLimit = 2200;
+const shipmentPageSize = 20;
 
 type SmsTemplateVariable = typeof smsTemplateVariables[number];
 
@@ -251,8 +255,8 @@ function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
 
-function shipmentFilterParams(filter: string): { provider?: string; status?: string; tracking_missing?: boolean; limit: number } {
-  const params: { provider?: string; status?: string; tracking_missing?: boolean; limit: number } = { limit: 20 };
+function shipmentFilterParams(filter: string): { provider?: string; status?: string; tracking_missing?: boolean } {
+  const params: { provider?: string; status?: string; tracking_missing?: boolean } = {};
   if (filter === "ptt") {
     params.provider = "ptt";
   }
@@ -272,6 +276,36 @@ function shipmentFilterParams(filter: string): { provider?: string; status?: str
     params.tracking_missing = true;
   }
   return params;
+}
+
+function shipmentStatusLabel(status: string) {
+  const labels: Record<string, string> = {
+    created: "Oluşturuldu",
+    olusturuldu: "Oluşturuldu",
+    preparing: "Hazırlanıyor",
+    hazirlaniyor: "Hazırlanıyor",
+    shipped: "Kargoya Verildi",
+    kargoya_verildi: "Kargoya Verildi",
+    in_transit: "Kargoda",
+    dagitimda: "Dağıtımda",
+    delivered: "Teslim Edildi",
+    teslim_edildi: "Teslim Edildi",
+    returned: "İade",
+    iade: "İade",
+    cancelled: "İptal",
+    iptal: "İptal",
+  };
+  return labels[status] ?? status;
+}
+
+function shipmentMatchesFilter(shipment: ShipmentSummary, filter: ShipmentFilter) {
+  const provider = shipment.provider.toLocaleLowerCase("tr-TR");
+  if (filter === "all") return true;
+  if (filter === "ptt") return provider.includes("ptt");
+  if (filter === "surat") return provider.includes("sürat") || provider.includes("surat");
+  if (filter === "other") return !provider.includes("ptt") && !provider.includes("sürat") && !provider.includes("surat");
+  if (filter === "tracking_missing") return !shipment.tracking_number && !shipment.barcode_number;
+  return shipment.status === filter;
 }
 
 function orderStatusLabel(status: string) {
@@ -712,7 +746,12 @@ export function App() {
   const [orderPage, setOrderPage] = useState(0);
   const [orderTotalCount, setOrderTotalCount] = useState(0);
   const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(() => new Set());
-  const [shipmentFilter, setShipmentFilter] = useState("all");
+  const [shipmentFilter, setShipmentFilter] = useState<ShipmentFilter>("all");
+  const [shipmentSearch, setShipmentSearch] = useState("");
+  const [shipmentPage, setShipmentPage] = useState(0);
+  const [shipmentTotalCount, setShipmentTotalCount] = useState(0);
+  const [trackingShipmentId, setTrackingShipmentId] = useState<string | null>(null);
+  const [lastShipmentTrack, setLastShipmentTrack] = useState<string | null>(null);
   const [shipmentPipelineFilter, setShipmentPipelineFilter] = useState<ShipmentPipelineFilter>("all");
   const [realtimeClient, setRealtimeClient] = useState<RealtimeClient | null>(null);
   const selectedConversationIdRef = useRef<string | null>(null);
@@ -756,6 +795,28 @@ export function App() {
     }));
   }, [domain]);
 
+  const refreshShipments = useCallback(async (options: { page?: number; filter?: ShipmentFilter; search?: string } = {}) => {
+    const nextPage = options.page ?? shipmentPage;
+    const nextFilter = options.filter ?? shipmentFilter;
+    const nextSearch = options.search ?? shipmentSearch;
+    const trimmedSearch = nextSearch.trim();
+    const shipments = await domain.listShipments({
+      ...shipmentFilterParams(nextFilter),
+      ...(trimmedSearch ? { search: trimmedSearch } : {}),
+      limit: shipmentPageSize,
+      offset: nextPage * shipmentPageSize,
+    });
+    setData((current) => ({
+      ...current,
+      shipments: shipments.data,
+    }));
+    setShipmentTotalCount(shipments.meta?.total_count ?? shipments.data.length);
+    setSelectedShipmentId((current) => shipments.data.some((shipment) => shipment.public_id === current)
+      ? current
+      : shipments.data[0]?.public_id ?? null);
+    return shipments;
+  }, [domain, shipmentFilter, shipmentPage, shipmentSearch]);
+
   useEffect(() => {
     selectedConversationIdRef.current = selectedConversationId;
   }, [selectedConversationId]);
@@ -795,6 +856,12 @@ export function App() {
         }
       })();
     });
+    const offShipmentUpdated = realtime.on("shipment.updated", () => {
+      void (async () => {
+        await refreshShipments();
+        setStatus("Kargo güncellemesi Socket.IO üzerinden yenilendi");
+      })();
+    });
 
     realtime.connect();
     setRealtimeClient(realtime);
@@ -802,10 +869,11 @@ export function App() {
     return () => {
       offMessageCreated();
       offConversationUpdated();
+      offShipmentUpdated();
       realtime.disconnect();
       setRealtimeClient((current) => (current === realtime ? null : current));
     };
-  }, [authChecked, refreshConversations, refreshMessages, token, user]);
+  }, [authChecked, refreshConversations, refreshMessages, refreshShipments, token, user]);
 
   useEffect(() => {
     if (!realtimeClient || !selectedConversationId) return;
@@ -949,6 +1017,7 @@ export function App() {
     setSelectedOrderId((current) => current ?? orders.data[0]?.public_id ?? null);
     setSelectedShipmentId((current) => current ?? shipments.data[0]?.public_id ?? null);
     setOrderTotalCount(orders.meta?.total_count ?? orders.data.length);
+    setShipmentTotalCount(shipments.meta?.total_count ?? shipments.data.length);
     setStatus("Backend API, presigned dosya ve Socket.IO sınırları aktif");
   }
 
@@ -1008,6 +1077,12 @@ export function App() {
       setSelectedConversationId(null);
       setSelectedOrderId(null);
       setSelectedShipmentId(null);
+      setShipmentFilter("all");
+      setShipmentSearch("");
+      setShipmentPage(0);
+      setShipmentTotalCount(0);
+      setTrackingShipmentId(null);
+      setLastShipmentTrack(null);
       setMessageShortcuts([]);
       setPendingAttachments([]);
       setShortcutMenuOpen(false);
@@ -1457,19 +1532,66 @@ export function App() {
     });
   }
 
-  async function handleApplyShipmentFilter(nextFilter: string) {
+  async function handleApplyShipmentFilter(nextFilter: ShipmentFilter) {
     const requestSeq = shipmentFilterRequestSeqRef.current + 1;
     shipmentFilterRequestSeqRef.current = requestSeq;
     setShipmentFilter(nextFilter);
+    setShipmentPage(0);
     setStatus("Kargo filtreleri backend API üzerinden uygulanıyor");
-    const shipments = await domain.listShipments(shipmentFilterParams(nextFilter));
+    const trimmedSearch = shipmentSearch.trim();
+    const shipments = await domain.listShipments({
+      ...shipmentFilterParams(nextFilter),
+      ...(trimmedSearch ? { search: trimmedSearch } : {}),
+      limit: shipmentPageSize,
+      offset: 0,
+    });
     if (shipmentFilterRequestSeqRef.current !== requestSeq) return;
     setData((current) => ({
       ...current,
       shipments: shipments.data,
     }));
+    setShipmentTotalCount(shipments.meta?.total_count ?? shipments.data.length);
     setSelectedShipmentId(shipments.data[0]?.public_id ?? null);
     setStatus("Kargo filtreleri backend API üzerinden uygulandı");
+  }
+
+  async function handleSearchShipments(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const requestSeq = shipmentFilterRequestSeqRef.current + 1;
+    shipmentFilterRequestSeqRef.current = requestSeq;
+    setShipmentPage(0);
+    setStatus("Kargo araması backend API üzerinden uygulanıyor");
+    const shipments = await refreshShipments({ page: 0 });
+    if (shipmentFilterRequestSeqRef.current !== requestSeq) return;
+    setSelectedShipmentId(shipments.data[0]?.public_id ?? null);
+    setStatus("Kargo araması backend API üzerinden uygulandı");
+  }
+
+  async function handleShipmentPage(nextPage: number) {
+    const boundedPage = Math.max(0, nextPage);
+    const requestSeq = shipmentFilterRequestSeqRef.current + 1;
+    shipmentFilterRequestSeqRef.current = requestSeq;
+    setShipmentPage(boundedPage);
+    setStatus("Kargo sayfası backend API üzerinden yükleniyor");
+    const shipments = await refreshShipments({ page: boundedPage });
+    if (shipmentFilterRequestSeqRef.current !== requestSeq) return;
+    setSelectedShipmentId(shipments.data[0]?.public_id ?? null);
+    setStatus("Kargo sayfası backend API üzerinden yüklendi");
+  }
+
+  async function handleOpenShipmentDetail(shipmentPublicId: string) {
+    setSelectedShipmentId(shipmentPublicId);
+    setStatus("Kargo detayı backend API üzerinden yükleniyor");
+    try {
+      const shipment = await domain.getShipment(shipmentPublicId);
+      setData((current) => ({
+        ...current,
+        shipments: current.shipments.map((item) => (item.public_id === shipment.public_id ? shipment : item)),
+      }));
+      setStatus("Kargo detayı ve hareket geçmişi backend API üzerinden yüklendi");
+    } catch {
+      setStatus("Kargo detayı listeden açıldı; backend detay yanıtı bekleniyor");
+    }
   }
 
   function handleApplyShipmentPipelineFilter(nextFilter: ShipmentPipelineFilter) {
@@ -1662,13 +1784,24 @@ export function App() {
     });
     const shipmentPipeline = await domain.getShipmentPipelineSummary();
     if (shipmentFilter !== "all") {
-      const shipments = await domain.listShipments(shipmentFilterParams(shipmentFilter));
+      const trimmedSearch = shipmentSearch.trim();
+      const shipments = await domain.listShipments({
+        ...shipmentFilterParams(shipmentFilter),
+        ...(trimmedSearch ? { search: trimmedSearch } : {}),
+        limit: shipmentPageSize,
+        offset: shipmentPage * shipmentPageSize,
+      });
+      const updatedStillVisible = shipmentMatchesFilter(updated, shipmentFilter);
+      const refreshedRows = updatedStillVisible
+        ? [updated, ...shipments.data.filter((item) => item.public_id !== updated.public_id)]
+        : shipments.data;
       setData((current) => ({
         ...current,
-        shipments: shipments.data,
+        shipments: refreshedRows,
         shipmentPipeline,
       }));
-      setSelectedShipmentId(shipments.data[0]?.public_id ?? null);
+      setShipmentTotalCount(shipments.meta?.total_count ?? refreshedRows.length);
+      setSelectedShipmentId(updatedStillVisible ? updated.public_id : refreshedRows[0]?.public_id ?? null);
       setStatus("Kargo durumu backend API üzerinden güncellendi");
       return;
     }
@@ -1679,6 +1812,22 @@ export function App() {
     }));
     setSelectedShipmentId(updated.public_id);
     setStatus("Kargo durumu backend API üzerinden güncellendi");
+  }
+
+  async function handleTrackShipment(shipment: ShipmentSummary) {
+    if (trackingShipmentId) return;
+
+    setStatus("Takip güncelleme backend provider-delivery kuyruğuna gönderiliyor");
+    setTrackingShipmentId(shipment.public_id);
+    try {
+      const result = await domain.trackShipment(shipment.public_id, {
+        idempotency_key: `track_${shipment.public_id}_${Date.now()}`,
+      });
+      setLastShipmentTrack(`${result.provider} ${result.operation} ${result.queued ? "queued" : "dry-run"} ${result.request_id}`);
+      setStatus(`Takip güncelleme ${result.live_gate} kapısına bağlı olarak kuyruğa alındı`);
+    } finally {
+      setTrackingShipmentId(null);
+    }
   }
 
   async function handleSaveProviderLiveGate() {
@@ -1901,6 +2050,9 @@ export function App() {
   const visibleOrderIds = data.orders.map((order) => order.public_id);
   const allVisibleOrdersSelected = visibleOrderIds.length > 0 && visibleOrderIds.every((id) => selectedOrderIds.has(id));
   const orderPageCount = Math.max(1, Math.ceil(orderTotalCount / 20));
+  const shipmentPageCount = Math.max(1, Math.ceil(shipmentTotalCount / shipmentPageSize));
+  const shipmentOffsetStart = shipmentTotalCount === 0 ? 0 : shipmentPage * shipmentPageSize + 1;
+  const shipmentOffsetEnd = Math.min((shipmentPage + 1) * shipmentPageSize, shipmentTotalCount);
   const orderSources = [...new Set(data.orders.map((order) => order.source).filter(Boolean))].sort();
   const orderPersonnel = [...new Map(data.orders
     .filter((order) => order.created_by_user_public_id && order.created_by_user_email)
@@ -2787,13 +2939,32 @@ export function App() {
         )}
 
         {activeFlow === "shipments" && (
-          <FlowPanel title="Kargo" icon={<Truck size={18} />} testId="shipments-flow">
+          <FlowPanel title="Kargo Gönderileri" icon={<Truck size={18} />} testId="shipments-flow">
             <div className="report-grid">
               <Metric title="PTT Kargo" value={String(pttShipmentCount)} />
               <Metric title="Sürat Kargo" value={String(suratShipmentCount)} />
               <Metric title="Yoldaki Kargolar" value={String(activeShipmentCount)} />
               <Metric title="Teslim Edilen" value={String(deliveredShipmentCount)} />
             </div>
+            <form className="filter-grid" onSubmit={(event) => void handleSearchShipments(event)}>
+              <label className="field-label" htmlFor="shipment-search">
+                Arama
+              </label>
+              <div className="search-row">
+                <Search size={16} />
+                <input
+                  data-testid="shipment-search"
+                  id="shipment-search"
+                  placeholder="Takip no, müşteri veya sipariş ara..."
+                  type="search"
+                  value={shipmentSearch}
+                  onChange={(event) => setShipmentSearch(event.target.value)}
+                />
+                <button className="secondary-action" type="submit">
+                  Ara
+                </button>
+              </div>
+            </form>
             <div className="detail-actions" data-testid="shipment-section-tabs">
               <button
                 className={cx("secondary-action", shipmentFilter === "all" && "selected")}
@@ -2852,9 +3023,6 @@ export function App() {
                 Takipsiz {shipmentFilter === "all" || shipmentFilter === "tracking_missing" ? trackingMissingCount : "sonuç"}
               </button>
             </div>
-            <button className="primary-action" type="button" onClick={handleUpdateShipment}>
-              Teslim edildi yap
-            </button>
             <DetailPanel title="Kargo Filtre Özeti" testId="shipment-filter-summary">
               <DataRows
                 rows={[
@@ -2865,25 +3033,117 @@ export function App() {
                 ]}
               />
             </DetailPanel>
-            <DataRows
-              rows={data.shipments.map((shipment) => [
-                shipment.provider,
-                shipment.tracking_number ?? shipment.barcode_number ?? "-",
-                shipment.order_number ?? shipment.customer_full_name ?? shipment.status,
-              ])}
-            />
-            <div className="detail-actions">
-              {data.shipments.map((shipment) => (
-                <button
-                  className={cx("secondary-action", selectedShipment?.public_id === shipment.public_id && "selected")}
-                  key={shipment.public_id}
-                  type="button"
-                  onClick={() => setSelectedShipmentId(shipment.public_id)}
-                >
-                  {(shipment.tracking_number ?? shipment.provider).toUpperCase()} detay
-                </button>
-              ))}
+            <div className="table-wrap">
+              <table className="data-table" data-testid="shipment-table">
+                <thead>
+                  <tr>
+                    <th>Kargo Firma</th>
+                    <th>Takip No / Aktar</th>
+                    <th>Müşteri</th>
+                    <th>Sipariş</th>
+                    <th>Kargo Durumu</th>
+                    <th>Aktarılma Tarihi</th>
+                    <th>İşlem</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.shipments.length === 0 ? (
+                    <tr>
+                      <td colSpan={7}>Henüz kargoya aktarılmış sipariş bulunmuyor</td>
+                    </tr>
+                  ) : data.shipments.map((shipment) => (
+                    <tr data-testid="shipment-row" key={shipment.public_id}>
+                      <td>
+                        <span className="status-pill">{cargoProviderLabel(shipment.provider)} Kargo</span>
+                      </td>
+                      <td>
+                        <button
+                          className="link-button"
+                          data-testid="shipment-open-tracking"
+                          type="button"
+                          onClick={() => void handleOpenShipmentDetail(shipment.public_id)}
+                        >
+                          {shipment.tracking_number ?? shipment.barcode_number ?? "Takip No Yok"} detay
+                        </button>
+                        <span className="muted-line">{shipment.last_event_text ?? "Kargoya aktarıldı - hareket bekleniyor"}</span>
+                      </td>
+                      <td>
+                        <strong>{shipment.recipient_name}</strong>
+                        <span className="muted-line">
+                          {[shipment.recipient_district, shipment.recipient_city].filter(Boolean).join(" / ") || shipment.customer_full_name || "-"}
+                        </span>
+                      </td>
+                      <td>{shipment.order_number ?? shipment.customer_full_name ?? "-"}</td>
+                      <td>{shipmentStatusLabel(shipment.status)}</td>
+                      <td>{new Date(shipment.updated_at).toLocaleString("tr-TR")}</td>
+                      <td>
+                        <div className="icon-actions">
+                          <button
+                            aria-label="Detay"
+                            className={cx("icon-button", selectedShipment?.public_id === shipment.public_id && "selected")}
+                            data-testid="shipment-detail-action"
+                            title="Detay"
+                            type="button"
+                            onClick={() => void handleOpenShipmentDetail(shipment.public_id)}
+                          >
+                            <Eye size={16} />
+                          </button>
+                          <button
+                            aria-label="Takip Güncelle"
+                            className="icon-button"
+                            data-testid="shipment-track-action"
+                            disabled={trackingShipmentId === shipment.public_id || !shipment.tracking_number}
+                            title="Takip Güncelle"
+                            type="button"
+                            onClick={() => void handleTrackShipment(shipment)}
+                          >
+                            <RefreshCw className={trackingShipmentId === shipment.public_id ? "spin" : undefined} size={16} />
+                          </button>
+                          <button
+                            aria-label={selectedShipment?.public_id === shipment.public_id ? "Teslim edildi yap" : "Önce detay seç"}
+                            className="icon-button"
+                            data-testid="shipment-status-action"
+                            disabled={selectedShipment?.public_id !== shipment.public_id}
+                            title={selectedShipment?.public_id === shipment.public_id ? "Teslim edildi yap" : "Önce detay seç"}
+                            type="button"
+                            onClick={() => void handleUpdateShipment()}
+                          >
+                            <CheckCircle size={16} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
+            <div className="pagination-row" data-testid="shipment-pagination">
+              <span>
+                {shipmentOffsetStart}-{shipmentOffsetEnd} / {shipmentTotalCount}
+              </span>
+              <div className="detail-actions">
+                <button
+                  className="secondary-action"
+                  data-testid="shipment-prev-page"
+                  disabled={shipmentPage === 0}
+                  type="button"
+                  onClick={() => void handleShipmentPage(shipmentPage - 1)}
+                >
+                  Önceki
+                </button>
+                <span>Sayfa {shipmentPage + 1} / {shipmentPageCount}</span>
+                <button
+                  className="secondary-action"
+                  data-testid="shipment-next-page"
+                  disabled={shipmentPage + 1 >= shipmentPageCount}
+                  type="button"
+                  onClick={() => void handleShipmentPage(shipmentPage + 1)}
+                >
+                  Sonraki
+                </button>
+              </div>
+            </div>
+            {lastShipmentTrack && <p className="status-copy" data-testid="shipment-track-result">{lastShipmentTrack}</p>}
             {selectedShipment && (
               <DetailPanel title="Kargo Detayı" testId="shipment-detail">
                 <DataRows
@@ -2900,6 +3160,20 @@ export function App() {
                     ["Barkod", selectedShipment.barcode_number ?? "barkod bekliyor", "shipments API"],
                   ]}
                 />
+                <div className="timeline" data-testid="shipment-tracking-history">
+                  <h3>Hareket Geçmişi</h3>
+                  {(selectedShipment.tracking_events ?? []).length === 0 ? (
+                    <p>Henüz hareket yok</p>
+                  ) : (
+                    selectedShipment.tracking_events.map((event) => (
+                      <div className="timeline-item" key={event.public_id}>
+                        <strong>{event.description ?? shipmentStatusLabel(event.status)}</strong>
+                        <span>{event.location ?? "-"}</span>
+                        <span>{new Date(event.occurred_at).toLocaleString("tr-TR")}</span>
+                      </div>
+                    ))
+                  )}
+                </div>
               </DetailPanel>
             )}
           </FlowPanel>

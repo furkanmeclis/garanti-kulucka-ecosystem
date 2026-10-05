@@ -112,6 +112,10 @@ const updateShipmentStatusSchema = z.object({
   raw_payload: z.unknown().nullable().default(null),
 });
 
+const trackShipmentSchema = z.object({
+  idempotency_key: z.string().min(1).optional(),
+});
+
 const sendSmsSchema = z.object({
   recipient_phone: z.string().min(1),
   message: z.string().min(1).max(1000),
@@ -173,6 +177,13 @@ function jobIdFromIdempotencyKey(key: string) {
 
 function requestIdFromIdempotencyKey(prefix: string, key: string) {
   return `${prefix}_${key.toLowerCase().replace(/[^a-z0-9_]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 96)}`;
+}
+
+function providerKeyFromShipmentProvider(provider: string) {
+  const normalized = provider.toLocaleLowerCase("tr-TR");
+  if (normalized.includes("ptt")) return "ptt";
+  if (normalized.includes("sürat") || normalized.includes("surat")) return "surat";
+  return normalized.replace(/[^a-z0-9_]+/g, "_").replace(/^_+|_+$/g, "") || "ptt";
 }
 
 export function createDomainRoutes() {
@@ -841,7 +852,10 @@ export function createDomainRoutes() {
     }
 
     const provider = context.req.query("provider");
-    const shipmentFilter: ListShipmentsFilter = { limit: limitSchema.parse(context.req.query("limit")) };
+    const shipmentFilter: ListShipmentsFilter = {
+      limit: limitSchema.parse(context.req.query("limit")),
+      offset: offsetSchema.parse(context.req.query("offset")),
+    };
     if (provider === "surat") {
       shipmentFilter.providers = ["surat", "Sürat"];
     } else if (provider === "other") {
@@ -856,8 +870,19 @@ export function createDomainRoutes() {
     if (context.req.query("tracking_missing") === "true") {
       shipmentFilter.trackingMissing = true;
     }
-    const shipments = await new DomainRepository(db).listShipments(shipmentFilter);
-    return context.json({ data: shipments.map(serializeShipment) });
+    const search = context.req.query("search");
+    if (search) {
+      shipmentFilter.search = search;
+    }
+    const shipments = await new DomainRepository(db).listShipmentsPage(shipmentFilter);
+    return context.json({
+      data: shipments.rows.map(serializeShipment),
+      meta: {
+        total_count: shipments.total_count,
+        limit: shipments.limit,
+        offset: shipments.offset,
+      },
+    });
   });
 
   routes.get("/shipments/summary", async (context) => {
@@ -888,6 +913,94 @@ export function createDomainRoutes() {
     return context.json(summary);
   });
 
+  routes.get("/shipments/:shipment_public_id", async (context) => {
+    if (!canReadShipments(context.get("auth")?.role)) {
+      return context.json({ error: { code: "forbidden", message: "Shipment access is not allowed" } }, 403);
+    }
+
+    const db = context.get("db");
+    if (!db) {
+      return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
+    }
+
+    const shipment = await new DomainRepository(db).getShipmentByPublicId(context.req.param("shipment_public_id"));
+    if (!shipment) {
+      return context.json({ error: { code: "not_found", message: "Shipment was not found" } }, 404);
+    }
+
+    return context.json(serializeShipment(shipment));
+  });
+
+  routes.post("/shipments/:shipment_public_id/track", async (context) => {
+    if (!canReadShipments(context.get("auth")?.role)) {
+      return context.json({ error: { code: "forbidden", message: "Shipment access is not allowed" } }, 403);
+    }
+
+    const payload = trackShipmentSchema.safeParse(await context.req.json().catch(() => ({})));
+    if (!payload.success) {
+      return context.json({ error: { code: "invalid_request", message: "Invalid shipment tracking payload" } }, 400);
+    }
+
+    const db = context.get("db");
+    if (!db) {
+      return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
+    }
+
+    const shipment = await new DomainRepository(db).getShipmentByPublicId(context.req.param("shipment_public_id"));
+    if (!shipment) {
+      return context.json({ error: { code: "not_found", message: "Shipment was not found" } }, 404);
+    }
+    const provider = providerKeyFromShipmentProvider(shipment.provider);
+    const idempotencyKey = payload.data.idempotency_key ?? `track_${shipment.public_id}`;
+    const occurredAt = new Date().toISOString();
+    const requestId = requestIdFromIdempotencyKey(`req_${provider}_track`, idempotencyKey);
+    const providerPayload = providerDeliveryJobPayloadSchema.parse({
+      envelope: {
+        request_id: requestId,
+        provider,
+        operation: "shipment.track",
+        direction: "outbound",
+        channel: "cargo",
+        occurred_at: occurredAt,
+        payload: {
+          shipment_public_id: shipment.public_id,
+          tracking_number: shipment.tracking_number,
+          barcode_number: shipment.barcode_number,
+          order_number: shipment.order_number,
+          customer_full_name: shipment.customer_full_name,
+        },
+        legacy_contract: {
+          source: "legacy-kargo-list",
+          legacy_event: "takip_guncelle",
+        },
+      },
+    });
+    const job = jobEnvelopeSchema.parse({
+      job_id: jobIdFromIdempotencyKey(idempotencyKey),
+      queue: "provider-delivery",
+      name: `${provider}.shipment.track`,
+      payload: providerPayload,
+      requested_at: occurredAt,
+      request_id: context.get("requestId"),
+    });
+    const jobId = await context.get("providerDeliveryQueuePublisher").publish(job);
+
+    return context.json(
+      {
+        provider,
+        operation: "shipment.track",
+        request_id: requestId,
+        job_id: jobId,
+        queued: jobId !== null,
+        shipment_public_id: shipment.public_id,
+        tracking_number: shipment.tracking_number,
+        live_call_permitted: false,
+        live_gate: `providers.${provider}.live_mode`,
+      },
+      202,
+    );
+  });
+
   routes.patch("/shipments/:shipment_public_id/status", async (context) => {
     if (!canReadShipments(context.get("auth")?.role)) {
       return context.json({ error: { code: "forbidden", message: "Shipment access is not allowed" } }, 403);
@@ -908,6 +1021,16 @@ export function createDomainRoutes() {
       status: payload.data.status,
       lastEventText: payload.data.last_event_text,
       rawPayload: payload.data.raw_payload,
+    });
+    context.get("realtimePublisher").broadcast({
+      event: "shipment.updated",
+      id: `shipment_${shipment.public_id}_${Date.now()}`,
+      occurred_at: new Date().toISOString(),
+      payload: {
+        shipment_public_id: shipment.public_id,
+        status: shipment.status,
+        tracking_number: shipment.tracking_number,
+      },
     });
 
     return context.json(serializeShipment(shipment));

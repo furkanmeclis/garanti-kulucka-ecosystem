@@ -121,7 +121,33 @@ export interface ShipmentSummary {
   last_event_text: string | null;
   order_number: string | null;
   customer_full_name: string | null;
+  tracking_events: ShipmentTrackingEvent[];
   updated_at: string;
+}
+
+export interface ShipmentTrackingEvent {
+  public_id: string;
+  status: string;
+  description: string | null;
+  location: string | null;
+  occurred_at: string;
+}
+
+export interface ShipmentListResponse {
+  data: ShipmentSummary[];
+  meta?: ListMeta;
+}
+
+export interface ShipmentTrackResult {
+  provider: string;
+  operation: "shipment.track";
+  request_id: string;
+  job_id: string | null;
+  queued: boolean;
+  shipment_public_id: string;
+  tracking_number: string | null;
+  live_call_permitted: boolean;
+  live_gate: string;
 }
 
 export interface SmsSendResult {
@@ -471,16 +497,20 @@ export function createDomainClient(http: BackendHttpClient) {
           body: input,
         },
       ),
-    listShipments: (params: { provider?: string; status?: string; tracking_missing?: boolean; limit?: number } | number = {}) => {
+    listShipments: (params: { provider?: string; status?: string; tracking_missing?: boolean; search?: string; offset?: number; limit?: number } | number = {}) => {
       const normalized = typeof params === "number" ? { limit: params } : params;
       const search = new URLSearchParams();
       if (normalized.provider) search.set("provider", normalized.provider);
       if (normalized.status) search.set("status", normalized.status);
       if (normalized.tracking_missing !== undefined) search.set("tracking_missing", String(normalized.tracking_missing));
+      if (normalized.search) search.set("search", normalized.search);
       if (normalized.limit !== undefined) search.set("limit", String(normalized.limit));
+      if (normalized.offset !== undefined && normalized.offset > 0) search.set("offset", String(normalized.offset));
       const query = search.toString();
-      return http.request<{ data: ShipmentSummary[] }>(`/api/shipments${query ? `?${query}` : ""}`);
+      return http.request<ShipmentListResponse>(`/api/shipments${query ? `?${query}` : ""}`);
     },
+    getShipment: (shipmentPublicId: string) =>
+      http.request<ShipmentSummary>(`/api/shipments/${encodeURIComponent(shipmentPublicId)}`),
     getShipmentSummary: () =>
       http.request<ShipmentSummaryStats>("/api/shipments/summary"),
     getShipmentPipelineSummary: () =>
@@ -499,6 +529,14 @@ export function createDomainClient(http: BackendHttpClient) {
         `/api/shipments/${encodeURIComponent(shipmentPublicId)}/status`,
         {
           method: "PATCH",
+          body: input,
+        },
+      ),
+    trackShipment: (shipmentPublicId: string, input: { idempotency_key?: string } = {}) =>
+      http.request<ShipmentTrackResult>(
+        `/api/shipments/${encodeURIComponent(shipmentPublicId)}/track`,
+        {
+          method: "POST",
           body: input,
         },
       ),
