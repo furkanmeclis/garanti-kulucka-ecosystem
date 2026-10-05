@@ -1,11 +1,14 @@
 import { randomUUID } from "node:crypto";
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { z } from "zod";
 import { jobEnvelopeSchema, providerDeliveryJobPayloadSchema } from "@garanti-kulucka/shared";
 import type { AppBindings } from "./types.js";
 import { authenticate, requireDatabase } from "./middleware.js";
 import {
   DomainRepository,
+  DuplicateProductSkuError,
+  InsufficientStockError,
+  ProductNotFoundError,
   type ListOrdersFilter,
   type ListShipmentsFilter,
   serializeConversation,
@@ -19,6 +22,7 @@ import {
   serializeProductSummary,
   serializeShipment,
   serializeShipmentSummary,
+  serializeStockMovement,
 } from "../domain/repository.js";
 
 const limitSchema = z.coerce.number().int().min(1).max(200).default(50);
@@ -84,6 +88,50 @@ const aiReplySuggestionSchema = z.object({
   conversation_public_id: z.string().min(1),
 });
 
+const productCategorySchema = z.enum(["incubator", "spare_part", "other"]);
+const productUnitSchema = z.enum(["Adet", "Kg", "Lt", "Mt", "Koli"]);
+const moneySchema = z.string().trim().regex(/^\d{1,10}(\.\d{1,2})?$/);
+const stockQuantitySchema = z.number().int().min(0).max(1_000_000_000);
+const optionalTextSchema = (max: number) =>
+  z.string().trim().max(max).nullable().transform((value) => (value ? value : null));
+
+const listInventoryProductsQuerySchema = z.object({
+  limit: limitSchema,
+  category: productCategorySchema.optional(),
+  search: z.string().trim().max(200).optional(),
+  active: z.enum(["true", "false", "all"]).default("all"),
+});
+
+const createProductSchema = z.object({
+  name: z.string().trim().min(1, "Ürün adı gerekli").max(300),
+  sku: optionalTextSchema(64).default(null),
+  category: productCategorySchema.nullable().default(null),
+  unit: productUnitSchema.default("Adet"),
+  unit_price: moneySchema.default("0"),
+  stock_quantity: stockQuantitySchema.default(0),
+  description: optionalTextSchema(2000).default(null),
+  external_product_id: optionalTextSchema(64).default(null),
+}).strict();
+
+const updateProductSchema = z.object({
+  name: z.string().trim().min(1, "Ürün adı boş olamaz").max(300).optional(),
+  sku: optionalTextSchema(64).optional(),
+  category: productCategorySchema.optional(),
+  unit: productUnitSchema.optional(),
+  unit_price: moneySchema.optional(),
+  stock_quantity: stockQuantitySchema.optional(),
+  description: optionalTextSchema(2000).optional(),
+  external_product_id: optionalTextSchema(64).optional(),
+}).strict().refine((payload) => Object.values(payload).some((value) => value !== undefined), {
+  message: "At least one product field is required",
+});
+
+const createStockMovementSchema = z.object({
+  movement_type: z.enum(["in", "out"]),
+  quantity: z.number().int().min(1, "Miktar 0'dan büyük olmalı").max(1_000_000_000),
+  notes: optionalTextSchema(2000).default(null),
+}).strict();
+
 const createOrderSchema = z.object({
   customer_public_id: z.string().min(1).nullable().default(null),
   conversation_public_id: z.string().min(1).nullable().default(null),
@@ -137,6 +185,45 @@ function canReadCommentModeration(role: string | undefined) {
 
 function canReadInventory(role: string | undefined) {
   return role === "admin" || role === "owner" || role === "calisan";
+}
+
+function canManageInventory(role: string | undefined) {
+  return role === "admin" || role === "owner" || role === "calisan";
+}
+
+async function readJsonBody(request: Request): Promise<unknown> {
+  try {
+    return await request.json();
+  } catch {
+    return undefined;
+  }
+}
+
+const inventoryValidationMessages = new Set(["Ürün adı gerekli", "Ürün adı boş olamaz", "Miktar 0'dan büyük olmalı"]);
+
+function firstIssueMessage(error: z.ZodError, fallback: string) {
+  const message = error.issues[0]?.message;
+  return message && inventoryValidationMessages.has(message) ? message : fallback;
+}
+
+function inventoryErrorResponse(context: Context<AppBindings>, error: unknown) {
+  if (error instanceof ProductNotFoundError) {
+    return context.json({ error: { code: "not_found", message: "Ürün bulunamadı" } }, 404);
+  }
+  if (error instanceof InsufficientStockError) {
+    return context.json({
+      error: {
+        code: "insufficient_stock",
+        message: error.message,
+        current_quantity: error.currentQuantity,
+        requested_quantity: error.requestedQuantity,
+      },
+    }, 409);
+  }
+  if (error instanceof DuplicateProductSkuError) {
+    return context.json({ error: { code: "duplicate_sku", message: "Bu stok kodu zaten kullanılıyor" } }, 409);
+  }
+  throw error;
 }
 
 function canReadOrders(role: string | undefined) {
@@ -722,14 +809,157 @@ export function createDomainRoutes() {
     if (!canReadInventory(context.get("auth")?.role)) {
       return context.json({ error: { code: "forbidden", message: "Inventory access is not allowed" } }, 403);
     }
-
+    const query = listInventoryProductsQuerySchema.safeParse({
+      limit: context.req.query("limit"),
+      category: context.req.query("category") || undefined,
+      search: context.req.query("search") || undefined,
+      active: context.req.query("active") || undefined,
+    });
+    if (!query.success) {
+      return context.json({ error: { code: "invalid_request", message: "Invalid inventory filter" } }, 400);
+    }
     const db = context.get("db");
     if (!db) {
       return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
     }
-
-    const products = await new DomainRepository(db).listProducts(limitSchema.parse(context.req.query("limit")));
+    const repository = new DomainRepository(db);
+    const hasInventoryFilter = Boolean(query.data.category || query.data.search || query.data.active !== "all");
+    if (!hasInventoryFilter) {
+      const products = await repository.listProducts(query.data.limit);
+      return context.json({ data: products.map(serializeProduct) });
+    }
+    const products = await repository.listInventoryProducts({
+      limit: query.data.limit,
+      ...(query.data.category ? { category: query.data.category } : {}),
+      ...(query.data.search ? { search: query.data.search } : {}),
+      ...(query.data.active !== "all" ? { active: query.data.active === "true" } : {}),
+    });
     return context.json({ data: products.map(serializeProduct) });
+  });
+
+  routes.post("/products", async (context) => {
+    if (!canManageInventory(context.get("auth")?.role)) {
+      return context.json({ error: { code: "forbidden", message: "Inventory management is not allowed" } }, 403);
+    }
+    const payload = createProductSchema.safeParse(await readJsonBody(context.req.raw));
+    if (!payload.success) {
+      return context.json({ error: { code: "invalid_request", message: firstIssueMessage(payload.error, "Invalid product payload") } }, 400);
+    }
+    const db = context.get("db");
+    if (!db) {
+      return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
+    }
+    try {
+      const product = await new DomainRepository(db).createProduct({
+        name: payload.data.name,
+        sku: payload.data.sku,
+        category: payload.data.category,
+        unit: payload.data.unit,
+        unitPrice: payload.data.unit_price,
+        stockQuantity: payload.data.stock_quantity,
+        description: payload.data.description,
+        externalProductId: payload.data.external_product_id,
+        actorUserId: context.get("actorUserId") ?? null,
+      });
+      return context.json(serializeProduct(product), 201);
+    } catch (error) {
+      return inventoryErrorResponse(context, error);
+    }
+  });
+
+  routes.patch("/products/:product_public_id", async (context) => {
+    if (!canManageInventory(context.get("auth")?.role)) {
+      return context.json({ error: { code: "forbidden", message: "Inventory management is not allowed" } }, 403);
+    }
+    const payload = updateProductSchema.safeParse(await readJsonBody(context.req.raw));
+    if (!payload.success) {
+      return context.json({ error: { code: "invalid_request", message: firstIssueMessage(payload.error, "Invalid product payload") } }, 400);
+    }
+    const db = context.get("db");
+    if (!db) {
+      return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
+    }
+    try {
+      const product = await new DomainRepository(db).updateProduct({
+        productPublicId: context.req.param("product_public_id"),
+        ...(payload.data.name !== undefined ? { name: payload.data.name } : {}),
+        ...(payload.data.sku !== undefined ? { sku: payload.data.sku } : {}),
+        ...(payload.data.category !== undefined ? { category: payload.data.category } : {}),
+        ...(payload.data.unit !== undefined ? { unit: payload.data.unit } : {}),
+        ...(payload.data.unit_price !== undefined ? { unitPrice: payload.data.unit_price } : {}),
+        ...(payload.data.stock_quantity !== undefined ? { stockQuantity: payload.data.stock_quantity } : {}),
+        ...(payload.data.description !== undefined ? { description: payload.data.description } : {}),
+        ...(payload.data.external_product_id !== undefined ? { externalProductId: payload.data.external_product_id } : {}),
+        actorUserId: context.get("actorUserId") ?? null,
+      });
+      return context.json(serializeProduct(product));
+    } catch (error) {
+      return inventoryErrorResponse(context, error);
+    }
+  });
+
+  routes.delete("/products/:product_public_id", async (context) => {
+    if (!canManageInventory(context.get("auth")?.role)) {
+      return context.json({ error: { code: "forbidden", message: "Inventory management is not allowed" } }, 403);
+    }
+    const db = context.get("db");
+    if (!db) {
+      return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
+    }
+    try {
+      const product = await new DomainRepository(db).deactivateProduct(context.req.param("product_public_id"));
+      return context.json(serializeProduct(product));
+    } catch (error) {
+      return inventoryErrorResponse(context, error);
+    }
+  });
+
+  routes.get("/products/:product_public_id/stock-movements", async (context) => {
+    if (!canReadInventory(context.get("auth")?.role)) {
+      return context.json({ error: { code: "forbidden", message: "Inventory access is not allowed" } }, 403);
+    }
+    const db = context.get("db");
+    if (!db) {
+      return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
+    }
+    try {
+      const movements = await new DomainRepository(db).listStockMovements(
+        context.req.param("product_public_id"),
+        limitSchema.parse(context.req.query("limit")),
+      );
+      return context.json({ data: movements.map(serializeStockMovement) });
+    } catch (error) {
+      return inventoryErrorResponse(context, error);
+    }
+  });
+
+  routes.post("/products/:product_public_id/stock-movements", async (context) => {
+    if (!canManageInventory(context.get("auth")?.role)) {
+      return context.json({ error: { code: "forbidden", message: "Inventory management is not allowed" } }, 403);
+    }
+    const payload = createStockMovementSchema.safeParse(await readJsonBody(context.req.raw));
+    if (!payload.success) {
+      return context.json({ error: { code: "invalid_request", message: firstIssueMessage(payload.error, "Invalid stock movement payload") } }, 400);
+    }
+    const db = context.get("db");
+    if (!db) {
+      return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
+    }
+    try {
+      const result = await new DomainRepository(db).createStockMovement({
+        productPublicId: context.req.param("product_public_id"),
+        movementType: payload.data.movement_type,
+        quantity: payload.data.quantity,
+        notes: payload.data.notes,
+        actorUserId: context.get("actorUserId") ?? null,
+      });
+      return context.json(
+        { product: serializeProduct(result.product), movement: serializeStockMovement(result.movement) },
+        201,
+      );
+    } catch (error) {
+      return inventoryErrorResponse(context, error);
+    }
   });
 
   routes.post("/orders", async (context) => {

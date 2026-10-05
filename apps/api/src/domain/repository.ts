@@ -1,5 +1,5 @@
 import type { AppDatabase } from "@garanti-kulucka/database";
-import type { Selectable } from "kysely";
+import { sql, type Selectable } from "kysely";
 import type {
   ConversationsTable,
   CustomersTable,
@@ -13,6 +13,7 @@ import type {
   ProviderAttemptsTable,
   ShipmentTrackingEventsTable,
   ShipmentsTable,
+  StockMovementsTable,
 } from "@garanti-kulucka/database";
 import { newPublicId } from "../auth/crypto.js";
 
@@ -50,6 +51,84 @@ export type OrderRecord = Selectable<OrdersTable> & {
   cargo_provider: string | null;
 };
 export type ProductRecord = Selectable<ProductsTable>;
+export type StockMovementRecord = Selectable<StockMovementsTable> & {
+  product_public_id: string;
+  created_by_user_email: string | null;
+};
+export type ProductCategory = "incubator" | "spare_part" | "other";
+
+export interface ListInventoryProductsFilter {
+  limit: number;
+  category?: ProductCategory;
+  search?: string;
+  active?: boolean;
+}
+
+export interface CreateProductInput {
+  name: string;
+  sku: string | null;
+  category: ProductCategory | null;
+  unit: string;
+  unitPrice: string;
+  stockQuantity: number;
+  description: string | null;
+  externalProductId: string | null;
+  actorUserId: number | null;
+}
+
+export interface UpdateProductInput {
+  productPublicId: string;
+  name?: string;
+  sku?: string | null;
+  category?: ProductCategory;
+  unit?: string;
+  unitPrice?: string;
+  stockQuantity?: number;
+  description?: string | null;
+  externalProductId?: string | null;
+  actorUserId: number | null;
+}
+
+export interface CreateStockMovementInput {
+  productPublicId: string;
+  movementType: "in" | "out";
+  quantity: number;
+  notes: string | null;
+  actorUserId: number | null;
+}
+
+export class ProductNotFoundError extends Error {
+  constructor(productPublicId: string) {
+    super(`Unknown product: ${productPublicId}`);
+    this.name = "ProductNotFoundError";
+  }
+}
+
+export class InsufficientStockError extends Error {
+  constructor(readonly currentQuantity: number, readonly requestedQuantity: number) {
+    super(`Yetersiz stok! Mevcut: ${currentQuantity}, Çıkış: ${requestedQuantity}`);
+    this.name = "InsufficientStockError";
+  }
+}
+
+export class DuplicateProductSkuError extends Error {
+  constructor(sku: string) {
+    super(`Product code already exists: ${sku}`);
+    this.name = "DuplicateProductSkuError";
+  }
+}
+
+function isUniqueViolation(error: unknown) {
+  return typeof error === "object" && error !== null && "code" in error && (error as { code?: unknown }).code === "23505";
+}
+
+/** Legacy StokPage name-based category inference (kuluçka/makine, yedek/parça). */
+export function inferProductCategory(name: string): ProductCategory {
+  const normalized = name.toLocaleLowerCase("tr");
+  if (normalized.includes("kuluçka") || normalized.includes("makine")) return "incubator";
+  if (normalized.includes("yedek") || normalized.includes("parça")) return "spare_part";
+  return "other";
+}
 export type ProviderAttemptRecord = Selectable<ProviderAttemptsTable>;
 export type ShipmentRecord = Selectable<ShipmentsTable> & {
   order_number: string | null;
@@ -1099,6 +1178,204 @@ export class DomainRepository {
     };
   }
 
+  async listInventoryProducts(filter: ListInventoryProductsFilter): Promise<ProductRecord[]> {
+    let query = this.db.selectFrom("products").selectAll();
+    if (filter.active !== undefined) {
+      query = query.where("is_active", "=", filter.active);
+    }
+    if (filter.category === "other") {
+      query = query.where((eb) =>
+        eb.or([eb("category", "is", null), eb("category", "not in", ["incubator", "spare_part"])]),
+      );
+    } else if (filter.category) {
+      query = query.where("category", "=", filter.category);
+    }
+    const search = filter.search?.trim();
+    if (search) {
+      const pattern = `%${search.replace(/[\\%_]/g, (match) => `\\${match}`)}%`;
+      query = query.where((eb) => eb.or([eb("name", "ilike", pattern), eb("sku", "ilike", pattern)]));
+    }
+    return query.orderBy("category", "asc").orderBy("name", "asc").limit(filter.limit).execute();
+  }
+
+  async createProduct(input: CreateProductInput): Promise<ProductRecord> {
+    try {
+      return await this.db.transaction().execute(async (transaction) => {
+        const product = await transaction
+          .insertInto("products")
+          .values({
+            public_id: newPublicId("prd"),
+            sku: input.sku,
+            name: input.name,
+            category: input.category ?? inferProductCategory(input.name),
+            unit: input.unit,
+            unit_price: input.unitPrice,
+            stock_quantity: input.stockQuantity,
+            description: input.description,
+            external_product_id: input.externalProductId,
+            is_active: true,
+          })
+          .returningAll()
+          .executeTakeFirstOrThrow();
+        if (product.stock_quantity > 0) {
+          await transaction
+            .insertInto("stock_movements")
+            .values({
+              public_id: newPublicId("stm"),
+              product_id: product.id,
+              movement_type: "in",
+              quantity: product.stock_quantity,
+              previous_quantity: 0,
+              new_quantity: product.stock_quantity,
+              notes: "Açılış stoğu",
+              created_by_user_id: input.actorUserId,
+            })
+            .execute();
+        }
+        return product;
+      });
+    } catch (error) {
+      if (isUniqueViolation(error) && input.sku) {
+        throw new DuplicateProductSkuError(input.sku);
+      }
+      throw error;
+    }
+  }
+
+  async updateProduct(input: UpdateProductInput): Promise<ProductRecord> {
+    try {
+      return await this.db.transaction().execute(async (transaction) => {
+        const current = await transaction
+          .selectFrom("products")
+          .selectAll()
+          .where("public_id", "=", input.productPublicId)
+          .forUpdate()
+          .executeTakeFirst();
+        if (!current) {
+          throw new ProductNotFoundError(input.productPublicId);
+        }
+        const updated = await transaction
+          .updateTable("products")
+          .set({
+            ...(input.name !== undefined ? { name: input.name } : {}),
+            ...(input.sku !== undefined ? { sku: input.sku } : {}),
+            ...(input.category !== undefined ? { category: input.category } : {}),
+            ...(input.unit !== undefined ? { unit: input.unit } : {}),
+            ...(input.unitPrice !== undefined ? { unit_price: input.unitPrice } : {}),
+            ...(input.stockQuantity !== undefined ? { stock_quantity: input.stockQuantity } : {}),
+            ...(input.description !== undefined ? { description: input.description } : {}),
+            ...(input.externalProductId !== undefined ? { external_product_id: input.externalProductId } : {}),
+            updated_at: new Date(),
+          })
+          .where("id", "=", current.id)
+          .returningAll()
+          .executeTakeFirstOrThrow();
+        if (input.stockQuantity !== undefined && input.stockQuantity !== current.stock_quantity) {
+          await transaction
+            .insertInto("stock_movements")
+            .values({
+              public_id: newPublicId("stm"),
+              product_id: current.id,
+              movement_type: "adjustment",
+              quantity: Math.abs(input.stockQuantity - current.stock_quantity),
+              previous_quantity: current.stock_quantity,
+              new_quantity: input.stockQuantity,
+              notes: "Stok kartı düzenlemesi",
+              created_by_user_id: input.actorUserId,
+            })
+            .execute();
+        }
+        return updated;
+      });
+    } catch (error) {
+      if (isUniqueViolation(error) && input.sku) {
+        throw new DuplicateProductSkuError(input.sku);
+      }
+      throw error;
+    }
+  }
+
+  async deactivateProduct(productPublicId: string): Promise<ProductRecord> {
+    const product = await this.db
+      .updateTable("products")
+      .set({ is_active: false, updated_at: new Date() })
+      .where("public_id", "=", productPublicId)
+      .returningAll()
+      .executeTakeFirst();
+    if (!product) {
+      throw new ProductNotFoundError(productPublicId);
+    }
+    return product;
+  }
+
+  async createStockMovement(input: CreateStockMovementInput): Promise<{ product: ProductRecord; movement: StockMovementRecord }> {
+    return this.db.transaction().execute(async (transaction) => {
+      const current = await transaction
+        .selectFrom("products")
+        .selectAll()
+        .where("public_id", "=", input.productPublicId)
+        .forUpdate()
+        .executeTakeFirst();
+      if (!current) {
+        throw new ProductNotFoundError(input.productPublicId);
+      }
+      const delta = input.movementType === "in" ? input.quantity : -input.quantity;
+      const product = await transaction
+        .updateTable("products")
+        .set({ stock_quantity: sql<number>`stock_quantity + ${delta}`, updated_at: new Date() })
+        .where("id", "=", current.id)
+        .where(sql<boolean>`stock_quantity + ${delta} >= 0`)
+        .returningAll()
+        .executeTakeFirst();
+      if (!product) {
+        throw new InsufficientStockError(current.stock_quantity, input.quantity);
+      }
+      const movement = await transaction
+        .insertInto("stock_movements")
+        .values({
+          public_id: newPublicId("stm"),
+          product_id: current.id,
+          movement_type: input.movementType,
+          quantity: input.quantity,
+          previous_quantity: product.stock_quantity - delta,
+          new_quantity: product.stock_quantity,
+          notes: input.notes,
+          created_by_user_id: input.actorUserId,
+        })
+        .returningAll()
+        .executeTakeFirstOrThrow();
+      const actor = input.actorUserId
+        ? await transaction.selectFrom("users").select("email").where("id", "=", input.actorUserId).executeTakeFirst()
+        : undefined;
+      return {
+        product,
+        movement: { ...movement, product_public_id: product.public_id, created_by_user_email: actor?.email ?? null },
+      };
+    });
+  }
+
+  async listStockMovements(productPublicId: string, limit: number): Promise<StockMovementRecord[]> {
+    const product = await this.db
+      .selectFrom("products")
+      .select(["id", "public_id"])
+      .where("public_id", "=", productPublicId)
+      .executeTakeFirst();
+    if (!product) {
+      throw new ProductNotFoundError(productPublicId);
+    }
+    const rows = await this.db
+      .selectFrom("stock_movements")
+      .leftJoin("users", "users.id", "stock_movements.created_by_user_id")
+      .selectAll("stock_movements")
+      .select("users.email as created_by_user_email")
+      .where("stock_movements.product_id", "=", product.id)
+      .orderBy("stock_movements.created_at", "desc")
+      .orderBy("stock_movements.id", "desc")
+      .limit(limit)
+      .execute();
+    return rows.map((row) => ({ ...row, product_public_id: product.public_id }));
+  }
+
   async createOrder(input: CreateOrderInput): Promise<OrderRecord> {
     return this.db.transaction().execute(async (transaction) => {
       const [customer, conversation] = await Promise.all([
@@ -1584,7 +1861,23 @@ export function serializeProduct(product: ProductRecord) {
     stock_quantity: product.stock_quantity,
     is_active: product.is_active,
     external_product_id: product.external_product_id,
+    unit: product.unit,
+    description: product.description,
     updated_at: product.updated_at,
+  };
+}
+
+export function serializeStockMovement(movement: StockMovementRecord) {
+  return {
+    public_id: movement.public_id,
+    product_public_id: movement.product_public_id,
+    movement_type: movement.movement_type,
+    quantity: movement.quantity,
+    previous_quantity: movement.previous_quantity,
+    new_quantity: movement.new_quantity,
+    notes: movement.notes,
+    created_by_user_email: movement.created_by_user_email,
+    created_at: movement.created_at,
   };
 }
 

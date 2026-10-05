@@ -105,7 +105,43 @@ export interface ProductSummary {
   stock_quantity: number;
   is_active: boolean;
   external_product_id: string | null;
+  unit?: ProductUnit;
+  description?: string | null;
   updated_at: string;
+}
+
+export type ProductCategory = "incubator" | "spare_part" | "other";
+export type ProductUnit = "Adet" | "Kg" | "Lt" | "Mt" | "Koli";
+export type StockMovementType = "in" | "out" | "adjustment";
+
+export interface StockMovementSummary {
+  public_id: string;
+  product_public_id: string;
+  movement_type: StockMovementType;
+  quantity: number;
+  previous_quantity: number;
+  new_quantity: number;
+  notes: string | null;
+  created_by_user_email: string | null;
+  created_at: string;
+}
+
+export interface ProductInput {
+  name: string;
+  sku?: string | null;
+  category?: ProductCategory | null;
+  unit?: ProductUnit;
+  unit_price?: string;
+  stock_quantity?: number;
+  description?: string | null;
+  external_product_id?: string | null;
+}
+
+export interface InventoryProductFilter {
+  category?: ProductCategory;
+  search?: string;
+  active?: "true" | "false" | "all";
+  limit?: number;
 }
 
 export interface ShipmentSummary {
@@ -454,6 +490,35 @@ export function createDomainClient(http: BackendHttpClient) {
       http.request<ProductSummaryStats>("/api/products/summary"),
     listProducts: (limit = 50) =>
       http.request<{ data: ProductSummary[] }>(`/api/products?limit=${limit}`),
+    listInventoryProducts: (filter: InventoryProductFilter = {}) => {
+      const search = new URLSearchParams();
+      search.set("limit", String(filter.limit ?? 200));
+      if (filter.category) search.set("category", filter.category);
+      if (filter.search?.trim()) search.set("search", filter.search.trim());
+      if (filter.active) search.set("active", filter.active);
+      return http.request<{ data: ProductSummary[] }>(`/api/products?${search.toString()}`);
+    },
+    createProduct: (input: ProductInput) =>
+      http.request<ProductSummary>("/api/products", { method: "POST", body: input }),
+    updateProduct: (productPublicId: string, input: Partial<ProductInput>) =>
+      http.request<ProductSummary>(`/api/products/${encodeURIComponent(productPublicId)}`, {
+        method: "PATCH",
+        body: input,
+      }),
+    deactivateProduct: (productPublicId: string) =>
+      http.request<ProductSummary>(`/api/products/${encodeURIComponent(productPublicId)}`, { method: "DELETE" }),
+    listProductStockMovements: (productPublicId: string, limit = 50) =>
+      http.request<{ data: StockMovementSummary[] }>(
+        `/api/products/${encodeURIComponent(productPublicId)}/stock-movements?limit=${limit}`,
+      ),
+    createProductStockMovement: (
+      productPublicId: string,
+      input: { movement_type: "in" | "out"; quantity: number; notes?: string | null },
+    ) =>
+      http.request<{ product: ProductSummary; movement: StockMovementSummary }>(
+        `/api/products/${encodeURIComponent(productPublicId)}/stock-movements`,
+        { method: "POST", body: input },
+      ),
     createOrder: (input: {
       customer_public_id?: string | null;
       conversation_public_id?: string | null;

@@ -31,6 +31,7 @@ export interface Database {
   message_shortcuts: MessageShortcutsTable;
   message_shortcut_attachments: MessageShortcutAttachmentsTable;
   products: ProductsTable;
+  stock_movements: StockMovementsTable;
   orders: OrdersTable;
   order_items: OrderItemsTable;
   shipments: ShipmentsTable;
@@ -201,6 +202,20 @@ export interface ProductsTable extends BaseTable {
   stock_quantity: number;
   is_active: boolean;
   external_product_id: string | null;
+  unit: ColumnType<string, string | undefined, string>;
+  description: ColumnType<string | null, string | null | undefined, string | null>;
+}
+
+export type StockMovementType = "in" | "out" | "adjustment";
+
+export interface StockMovementsTable extends BaseTable {
+  product_id: number;
+  movement_type: StockMovementType;
+  quantity: number;
+  previous_quantity: number;
+  new_quantity: number;
+  notes: string | null;
+  created_by_user_id: number | null;
 }
 
 export interface OrdersTable extends BaseTable {

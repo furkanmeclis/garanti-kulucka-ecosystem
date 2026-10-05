@@ -810,6 +810,40 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "incubator",
+                "spare_part",
+                "other"
+              ]
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "Case-insensitive match on name or sku."
+          },
+          {
+            "name": "active",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false",
+                "all"
+              ],
+              "default": "all"
+            }
           }
         ],
         "responses": {
@@ -822,6 +856,40 @@
                 }
               }
             }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createProduct",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateProductRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created product (stok kartı)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Product"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
           }
         }
       }
@@ -839,6 +907,138 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/api/products/{product_public_id}": {
+      "patch": {
+        "operationId": "updateProduct",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProductPublicId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateProductRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated product",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Product"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deactivateProduct",
+        "description": "Soft delete: sets is_active=false.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProductPublicId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deactivated product",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Product"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/products/{product_public_id}/stock-movements": {
+      "get": {
+        "operationId": "listProductStockMovements",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProductPublicId"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Stock movement history, newest first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StockMovementList"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createProductStockMovement",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProductPublicId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateStockMovementRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Atomic stock in/out with movement record",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StockMovementResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
           }
         }
       }
@@ -2018,6 +2218,14 @@
       },
       "AccountPublicId": {
         "name": "account_public_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "ProductPublicId": {
+        "name": "product_public_id",
         "in": "path",
         "required": true,
         "schema": {
@@ -3558,6 +3766,12 @@
             "type": [
               "string",
               "null"
+            ],
+            "enum": [
+              "incubator",
+              "spare_part",
+              "other",
+              null
             ]
           },
           "unit_price": {
@@ -3577,6 +3791,22 @@
           },
           "updated_at": {
             "type": "string"
+          },
+          "unit": {
+            "type": "string",
+            "enum": [
+              "Adet",
+              "Kg",
+              "Lt",
+              "Mt",
+              "Koli"
+            ]
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
@@ -5040,6 +5270,251 @@
           "scope": {
             "type": "string",
             "default": "global"
+          }
+        }
+      },
+      "CreateProductRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          },
+          "sku": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 64
+          },
+          "category": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "incubator",
+              "spare_part",
+              "other",
+              null
+            ],
+            "description": "Omitted/null infers the legacy category from the product name."
+          },
+          "unit": {
+            "type": "string",
+            "enum": [
+              "Adet",
+              "Kg",
+              "Lt",
+              "Mt",
+              "Koli"
+            ]
+          },
+          "unit_price": {
+            "type": "string",
+            "pattern": "^\\d{1,10}(\\.\\d{1,2})?$"
+          },
+          "stock_quantity": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000000
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 2000
+          },
+          "external_product_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 64
+          }
+        }
+      },
+      "UpdateProductRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "minProperties": 1,
+        "description": "Changing stock_quantity records an adjustment stock movement.",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          },
+          "sku": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 64
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "incubator",
+              "spare_part",
+              "other"
+            ]
+          },
+          "unit": {
+            "type": "string",
+            "enum": [
+              "Adet",
+              "Kg",
+              "Lt",
+              "Mt",
+              "Koli"
+            ]
+          },
+          "unit_price": {
+            "type": "string",
+            "pattern": "^\\d{1,10}(\\.\\d{1,2})?$"
+          },
+          "stock_quantity": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000000
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 2000
+          },
+          "external_product_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 64
+          }
+        }
+      },
+      "CreateStockMovementRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "movement_type",
+          "quantity"
+        ],
+        "properties": {
+          "movement_type": {
+            "type": "string",
+            "enum": [
+              "in",
+              "out"
+            ]
+          },
+          "quantity": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000000000
+          },
+          "notes": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 2000
+          }
+        }
+      },
+      "StockMovement": {
+        "type": "object",
+        "required": [
+          "public_id",
+          "product_public_id",
+          "movement_type",
+          "quantity",
+          "previous_quantity",
+          "new_quantity",
+          "created_at"
+        ],
+        "properties": {
+          "public_id": {
+            "type": "string"
+          },
+          "product_public_id": {
+            "type": "string"
+          },
+          "movement_type": {
+            "type": "string",
+            "enum": [
+              "in",
+              "out",
+              "adjustment"
+            ]
+          },
+          "quantity": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "previous_quantity": {
+            "type": "integer"
+          },
+          "new_quantity": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "notes": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_by_user_email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "StockMovementList": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/DataEnvelope"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "data": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/StockMovement"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "StockMovementResult": {
+        "type": "object",
+        "required": [
+          "product",
+          "movement"
+        ],
+        "properties": {
+          "product": {
+            "$ref": "#/components/schemas/Product"
+          },
+          "movement": {
+            "$ref": "#/components/schemas/StockMovement"
           }
         }
       }

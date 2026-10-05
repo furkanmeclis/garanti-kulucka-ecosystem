@@ -55,6 +55,7 @@ import {
   toProviderAttemptViewModel,
 } from "../api/admin-client.js";
 import { createAuthClient, type LoginResponse } from "../api/auth-client.js";
+import { StokPage } from "./pages/StokPage.js";
 import {
   createDomainClient,
   type BalanceSummary as BackendBalanceSummary,
@@ -399,17 +400,6 @@ function compactJson(value: unknown) {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function inventoryCategoryLabel(category: string | null) {
-  switch (category) {
-    case "incubator":
-      return "Kuluçka Makineleri";
-    case "spare_part":
-      return "Yedek Parçalar";
-    default:
-      return "Diğer Malzemeler";
-  }
 }
 
 const defaultBalanceSummary: BackendBalanceSummary = {
@@ -2224,12 +2214,6 @@ export function App() {
   const customerWithPhoneCount = data.customerSummary.with_phone_count;
   const customerWithEmailCount = data.customerSummary.with_email_count;
   const customerWithNotesCount = data.customerSummary.with_notes_count;
-  const activeProductCount = data.productSummary.active_count;
-  const criticalProducts = data.products.filter((product) => product.stock_quantity <= data.productSummary.critical_threshold);
-  const selectedProduct = data.products[0] ?? null;
-  const incubatorProductCount = data.productSummary.category_counts.incubator;
-  const sparePartProductCount = data.productSummary.category_counts.spare_part;
-  const otherProductCount = data.productSummary.category_counts.other;
   const messageAttachments = data.messages.flatMap((message) => message.attachments ?? []);
 
   return (
@@ -3679,71 +3663,7 @@ export function App() {
           </FlowPanel>
         )}
 
-        {activeFlow === "inventory" && (
-          <FlowPanel title="Stoklar" icon={<Package size={18} />} testId="inventory-flow">
-            <div className="report-grid">
-              <Metric title="Ürün" value={String(data.productSummary.total_count)} />
-              <Metric title="Aktif Stok" value={String(activeProductCount)} />
-              <Metric title="Kritik Stok" value={String(data.productSummary.critical_count)} />
-            </div>
-            <DetailPanel title="Stok Kategorileri" testId="inventory-categories">
-              <DataRows
-                rows={[
-                  ["Kuluçka Makineleri", String(incubatorProductCount), "products API"],
-                  ["Yedek Parçalar", String(sparePartProductCount), "products API"],
-                  ["Diğer Malzemeler", String(otherProductCount), "products API"],
-                ]}
-              />
-            </DetailPanel>
-            <DetailPanel title="Ürün Stok Özeti" testId="inventory-products-detail">
-              <DataRows
-                rows={data.products.map((product) => [
-                  product.name,
-                  product.sku ?? "SKU yok",
-                  `${product.stock_quantity} adet`,
-                ])}
-              />
-              <DataRows
-                rows={[
-                  [
-                    "Seçili ürün",
-                    selectedProduct?.name ?? "-",
-                    selectedProduct ? `${selectedProduct.unit_price} TRY` : "products API",
-                  ],
-                  [
-                    "Kategori",
-                    selectedProduct ? inventoryCategoryLabel(selectedProduct.category) : "-",
-                    selectedProduct?.is_active ? "aktif" : "pasif",
-                  ],
-                  [
-                    "Harici ürün",
-                    selectedProduct?.external_product_id ?? "-",
-                    selectedProduct?.updated_at ?? "-",
-                  ],
-                ]}
-              />
-            </DetailPanel>
-            <DetailPanel title="Kritik Stok Takibi" testId="inventory-critical-stock">
-              <DataRows
-                rows={(criticalProducts.length > 0 ? criticalProducts : data.products.slice(0, 1)).map((product) => [
-                  product.name,
-                  `${product.stock_quantity} adet`,
-                  product.stock_quantity <= data.productSummary.critical_threshold ? "kritik stok" : "normal stok",
-                ])}
-              />
-            </DetailPanel>
-            <DetailPanel title="Stok ve Sevkiyat Sinyali" testId="inventory-detail">
-              <DataRows
-                rows={[
-                  ["Sipariş kaynaklı stok sinyali", String(data.orderSummary.total_count), "orders summary API"],
-                  ["Son sipariş", selectedOrder?.order_number ?? "-", selectedOrder?.status ?? "-"],
-                  ["Müşteri", selectedOrder?.customer_full_name ?? "-", selectedOrder?.source ?? "-"],
-                  ["Depo entegrasyonu", data.shipmentSummary.total_count > 0 ? "sevkiyat bağlı" : "hazır", "shipments summary API"],
-                ]}
-              />
-            </DetailPanel>
-          </FlowPanel>
-        )}
+        {activeFlow === "inventory" && <StokPage domain={domain} />}
 
         {activeFlow === "balances" && (
           <FlowPanel title="Bakiyeler" icon={<Wallet size={18} />} testId="balances-flow">
