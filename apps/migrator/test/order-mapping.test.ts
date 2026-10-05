@@ -121,6 +121,7 @@ describe("transformLegacyOrder", () => {
       status: "created",
       source: "manual",
       orderType: "standard",
+      cargoProvider: null,
       totalAmount: "143.50",
       subtotal: "100.50",
       taxTotal: "18.00",
@@ -143,7 +144,6 @@ describe("transformLegacyOrder", () => {
       sourceRemainder: {
         id: orderId.toLowerCase(),
         kargo_takip_no: null,
-        kargo_firmasi: null,
         teyit_tarihi: null,
         teyit_eden_id: null,
         iptal_nedeni: null,
@@ -250,6 +250,15 @@ describe("transformLegacyOrder", () => {
   ] as const)("maps siparis_tipi %j to orderType %s", (siparisTipi, orderType) => {
     expect(transformLegacyOrder(fixture({ siparis_tipi: siparisTipi }), orderContext()).order.orderType)
       .toBe(orderType);
+  });
+
+  it.each([
+    [null, null],
+    ["PTT Kargo", "ptt"],
+    ["Sürat Kargo", "surat"],
+  ] as const)("maps kargo_firmasi %j to cargoProvider %s", (kargoFirmasi, cargoProvider) => {
+    expect(transformLegacyOrder(fixture({ kargo_firmasi: kargoFirmasi }), orderContext()).order.cargoProvider)
+      .toBe(cargoProvider);
   });
 
   it.each([

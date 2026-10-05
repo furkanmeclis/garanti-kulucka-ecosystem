@@ -357,6 +357,21 @@ const settings = [
   },
 ];
 
+const orderCargoProviderFilterKey = "__order_cargo_provider";
+
+function latestShipmentProvider(orderId: number) {
+  return shipments
+    .filter((shipment) => shipment.order_id === orderId)
+    .sort((left, right) =>
+      right.created_at.getTime() - left.created_at.getTime() ||
+      right.id - left.id,
+    )[0]?.provider ?? null;
+}
+
+function resolvedOrderCargoProvider(order: { id: number; cargo_provider: string | null }) {
+  return order.cargo_provider ?? latestShipmentProvider(order.id);
+}
+
 class FixtureQuery {
   private readonly whereValues = new Map<string, unknown>();
   private readonly whereOperators = new Map<string, string>();
@@ -414,10 +429,11 @@ class FixtureQuery {
     return condition ? callback(this) : this;
   }
 
-  where(columnOrExpression: string | ((expression: unknown) => unknown), operator?: string, value?: unknown) {
-    if (typeof columnOrExpression === "string" && operator !== undefined) {
-      this.whereValues.set(columnOrExpression, value);
-      this.whereOperators.set(columnOrExpression, operator);
+  where(columnOrExpression: string | ((expression: unknown) => unknown) | unknown, operator?: string, value?: unknown) {
+    if (typeof columnOrExpression !== "function" && operator !== undefined) {
+      const key = typeof columnOrExpression === "string" ? columnOrExpression : orderCargoProviderFilterKey;
+      this.whereValues.set(key, value);
+      this.whereOperators.set(key, operator);
     }
     return this;
   }
@@ -435,7 +451,9 @@ class FixtureQuery {
           const statusFilter = this.whereValues.get("orders.status");
           const confirmationFilter = this.whereValues.get("orders.confirmation_status");
           const sourceFilter = this.whereValues.get("orders.source");
-          const providerFilter = this.whereValues.get("shipments.provider");
+          const providerFilter = this.whereValues.get(orderCargoProviderFilterKey) ?? this.whereValues.get("shipments.provider");
+          const providerOperator =
+            this.whereOperators.get(orderCargoProviderFilterKey) ?? this.whereOperators.get("shipments.provider");
           const createdByUserFilter = this.whereValues.get("users.public_id");
           const statusMatches =
             statusFilter === undefined ||
@@ -451,10 +469,10 @@ class FixtureQuery {
           const providerMatches =
             providerFilter === undefined ||
             (Array.isArray(providerFilter)
-              ? this.whereOperators.get("shipments.provider") === "not in"
-                ? !providerFilter.includes(order.cargo_provider)
-                : providerFilter.includes(order.cargo_provider)
-              : order.cargo_provider === providerFilter);
+              ? providerOperator === "not in"
+                ? !providerFilter.includes(resolvedOrderCargoProvider(order))
+                : providerFilter.includes(resolvedOrderCargoProvider(order))
+              : resolvedOrderCargoProvider(order) === providerFilter);
           const createdByUserMatches =
             createdByUserFilter === undefined || order.created_by_user_public_id === createdByUserFilter;
           return statusMatches && confirmationMatches && sourceMatches && providerMatches && createdByUserMatches;

@@ -243,6 +243,7 @@ export interface OrderCanonicalRecord {
     readonly order_number: string;
     readonly status: string;
     readonly source: string;
+    readonly cargo_provider: string | null;
     readonly total_amount: string;
     readonly manual_adjustment_amount: string;
     readonly currency: string;

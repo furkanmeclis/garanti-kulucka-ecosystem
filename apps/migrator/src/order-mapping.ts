@@ -29,6 +29,7 @@ const mappedCatalogColumns = new Set<string>([
   "kdv_toplam",
   "kargo_ucreti",
   "genel_toplam",
+  "kargo_firmasi",
   "teyit_durumu",
   "notlar",
   "olusturma_tarihi",
@@ -73,6 +74,14 @@ const confirmationStatuses: ReadonlyMap<string, OrderConfirmationStatus> = new M
   ["iptal_istegi", "cancellation_requested"],
   ["gecersiz_numara", "invalid_number"],
 ]);
+const cargoProviders: ReadonlyMap<string, OrderCargoProvider> = new Map([
+  ["ptt", "ptt"],
+  ["ptt kargo", "ptt"],
+  ["sürat", "surat"],
+  ["surat", "surat"],
+  ["sürat kargo", "surat"],
+  ["surat kargo", "surat"],
+]);
 
 export type OrderStatus =
   | "created"
@@ -86,6 +95,7 @@ export type OrderStatus =
   | "returned";
 export type OrderSource = "manual" | "ai" | "webhook";
 export type OrderType = "standard" | "spare_part";
+export type OrderCargoProvider = "ptt" | "surat";
 export type OrderConfirmationStatus =
   | "pending"
   | "confirmed"
@@ -121,6 +131,7 @@ export interface LegacyOrderDraft {
   readonly status: OrderStatus;
   readonly source: OrderSource;
   readonly orderType: OrderType;
+  readonly cargoProvider: OrderCargoProvider | null;
   readonly totalAmount: string;
   readonly subtotal: string;
   readonly taxTotal: string;
@@ -228,6 +239,7 @@ export function transformLegacyOrder(
     orderType: payload.siparis_tipi === null
       ? "standard"
       : requiredEnum(payload.siparis_tipi, "siparis_tipi", orderTypes, rejectRow),
+    cargoProvider: optionalOrderCargoProvider(payload.kargo_firmasi, rejectRow),
     totalAmount: moneyAmount(payload.genel_toplam, "genel_toplam", rejectRow),
     subtotal: moneyAmount(payload.ara_toplam, "ara_toplam", rejectRow),
     taxTotal: moneyAmount(payload.kdv_toplam, "kdv_toplam", rejectRow),
@@ -394,6 +406,16 @@ function normalizePhoneLast10(value: string | null): string | null {
   const digits = value.replace(/\D/g, "");
   if (digits.length < 10) return null;
   return digits.slice(-10);
+}
+
+function optionalOrderCargoProvider(value: unknown, reject: LegacyRowRejection): OrderCargoProvider | null {
+  if (value === null) return null;
+  if (typeof value !== "string") reject("field kargo_firmasi must be a string or null");
+  const key = value.trim().toLocaleLowerCase("tr-TR").replace(/\s+/g, " ");
+  if (!key) return null;
+  const mapped = cargoProviders.get(key) ?? cargoProviders.get(key.replace(/\s+/g, "_"));
+  if (mapped === undefined) reject("field kargo_firmasi has an unsupported value");
+  return mapped;
 }
 
 function moneyAmount(value: unknown, field: string, reject: LegacyRowRejection): string {

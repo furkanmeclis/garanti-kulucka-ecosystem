@@ -29,6 +29,17 @@ export interface CustomerSummary {
   updated_at: string;
 }
 
+export interface CustomerLookupResult {
+  customer: CustomerSummary | null;
+  default_address: {
+    address_line: string;
+    city: string | null;
+    district: string | null;
+    country: string;
+    postal_code: string | null;
+  } | null;
+}
+
 export interface MessageSummary {
   public_id: string;
   sender_type: string;
@@ -142,6 +153,40 @@ export interface InventoryProductFilter {
   search?: string;
   active?: "true" | "false" | "all";
   limit?: number;
+}
+
+export interface CreateOrderLineItemInput {
+  product_public_id?: string | null;
+  name: string;
+  quantity: number;
+  unit_price: string;
+  external_product_id?: string | null;
+}
+
+export interface CreateOrderInput {
+  customer_public_id?: string | null;
+  customer?: {
+    full_name: string;
+    phone: string;
+    email?: string | null;
+    username?: string | null;
+  };
+  address: {
+    address_line: string;
+    city: string;
+    district: string;
+    country?: string;
+    postal_code?: string | null;
+  };
+  conversation_public_id?: string | null;
+  status?: string;
+  source?: string;
+  cargo_provider: "ptt" | "surat";
+  notes?: string | null;
+  currency?: string;
+  items: CreateOrderLineItemInput[];
+  force_duplicate?: boolean;
+  force_surat_at?: boolean;
 }
 
 export interface ShipmentSummary {
@@ -342,6 +387,8 @@ export function createDomainClient(http: BackendHttpClient) {
       http.request<ConversationSummaryStats>("/api/conversations/summary"),
     listCustomers: (limit = 50) =>
       http.request<{ data: CustomerSummary[] }>(`/api/customers?limit=${limit}`),
+    lookupCustomerByPhone: (phone: string) =>
+      http.request<CustomerLookupResult>(`/api/orders/customer-lookup?phone=${encodeURIComponent(phone)}`),
     getCustomerSummary: () =>
       http.request<CustomerSummaryStats>("/api/customers/summary"),
     getCommentModerationSummary: () =>
@@ -519,16 +566,9 @@ export function createDomainClient(http: BackendHttpClient) {
         `/api/products/${encodeURIComponent(productPublicId)}/stock-movements`,
         { method: "POST", body: input },
       ),
-    createOrder: (input: {
-      customer_public_id?: string | null;
-      conversation_public_id?: string | null;
-      order_number: string;
-      status?: string;
-      source?: string;
-      total_amount: string;
-      currency?: string;
-      notes?: string | null;
-    }) =>
+    listOrderProductOptions: (limit = 50) =>
+      http.request<{ data: ProductSummary[] }>(`/api/orders/product-options?limit=${limit}`),
+    createOrder: (input: CreateOrderInput) =>
       http.request<OrderSummary>("/api/orders", {
         method: "POST",
         body: input,

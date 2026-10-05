@@ -1,13 +1,14 @@
-import type { AppDatabase } from "@garanti-kulucka/database";
-import { sql, type Selectable } from "kysely";
+import { sql, type AppDatabase, type Selectable } from "@garanti-kulucka/database";
 import type {
   ConversationsTable,
   CustomersTable,
+  CustomerAddressesTable,
   FilesTable,
   MessageAttachmentsTable,
   MessageShortcutAttachmentsTable,
   MessageShortcutsTable,
   MessagesTable,
+  OrderItemsTable,
   OrdersTable,
   ProductsTable,
   ProviderAttemptsTable,
@@ -24,6 +25,7 @@ export type ConversationRecord = Selectable<ConversationsTable> & {
 };
 
 export type CustomerRecord = Selectable<CustomersTable>;
+export type CustomerAddressRecord = Selectable<CustomerAddressesTable>;
 export type MessageRecord = Selectable<MessagesTable>;
 export type MessageAttachmentRecord = Selectable<MessageAttachmentsTable> & {
   file_public_id: string;
@@ -51,6 +53,7 @@ export type OrderRecord = Selectable<OrdersTable> & {
   cargo_provider: string | null;
 };
 export type ProductRecord = Selectable<ProductsTable>;
+export type OrderItemRecord = Selectable<OrderItemsTable>;
 export type StockMovementRecord = Selectable<StockMovementsTable> & {
   product_public_id: string;
   created_by_user_email: string | null;
@@ -274,6 +277,41 @@ export interface CreateOrderInput {
   notes: string | null;
 }
 
+export interface CreateOrderLineItemInput {
+  productPublicId: string | null;
+  name: string;
+  quantity: number;
+  unitPrice: string;
+  totalAmount: string;
+  externalProductId: string | null;
+}
+
+export interface CreateOrderFromFormInput {
+  customerPublicId: string | null;
+  customer: {
+    fullName: string;
+    phone: string;
+    email: string | null;
+    username: string | null;
+  } | null;
+  address: {
+    addressLine: string;
+    city: string;
+    district: string;
+    country: string;
+    postalCode: string | null;
+  };
+  conversationPublicId: string | null;
+  createdByUserId: number | null;
+  status: string;
+  source: string;
+  cargoProvider: "ptt" | "surat";
+  totalAmount: string;
+  currency: string;
+  notes: string | null;
+  items: CreateOrderLineItemInput[];
+}
+
 export interface UpdateOrderStatusInput {
   orderPublicId: string;
   status: string;
@@ -391,6 +429,30 @@ function moneyCents(value: string) {
   return Number(whole) * 100 + Number(fraction.padEnd(2, "0").slice(0, 2));
 }
 
+function normalizedPhone(value: string | null | undefined) {
+  return (value ?? "").replace(/\D/g, "").slice(-10);
+}
+
+function orderNumberFromDate(date: Date) {
+  const stamp = date.toISOString().replace(/\D/g, "").slice(0, 14);
+  return `ORD-${stamp}-${Math.floor(Math.random() * 900 + 100)}`;
+}
+
+function orderCargoProviderExpression() {
+  return sql<string | null>`
+    coalesce(
+      orders.cargo_provider,
+      (
+        select latest_shipments.provider
+        from shipments latest_shipments
+        where latest_shipments.order_id = orders.id
+        order by latest_shipments.created_at desc, latest_shipments.id desc
+        limit 1
+      )
+    )
+  `;
+}
+
 function centsToMoney(cents: number) {
   return Math.round(cents) / 100;
 }
@@ -488,18 +550,45 @@ export class DomainRepository {
       .selectFrom("orders")
       .leftJoin("customers", "customers.id", "orders.customer_id")
       .leftJoin("users", "users.id", "orders.created_by_user_id")
-      .leftJoin("shipments", "shipments.order_id", "orders.id")
       .selectAll("orders")
       .select([
         "customers.full_name as customer_full_name",
         "users.public_id as created_by_user_public_id",
         "users.email as created_by_user_email",
-        "shipments.provider as cargo_provider",
       ])
+      .select(orderCargoProviderExpression().as("cargo_provider"))
       .where("orders.public_id", "=", orderPublicId)
       .executeTakeFirst();
 
     return order ?? null;
+  }
+
+  private async lookupCustomerByPhoneInDb(
+    db: AppDatabase,
+    phone: string,
+  ): Promise<{ customer: CustomerRecord | null; defaultAddress: CustomerAddressRecord | null }> {
+    const phoneTail = normalizedPhone(phone);
+    if (!phoneTail) return { customer: null, defaultAddress: null };
+
+    const customers = await db
+      .selectFrom("customers")
+      .selectAll()
+      .where("phone", "is not", null)
+      .orderBy("updated_at", "desc")
+      .limit(100)
+      .execute();
+    const customer = customers.find((item) => normalizedPhone(item.phone) === phoneTail) ?? null;
+    const defaultAddress = customer
+      ? await db
+          .selectFrom("customer_addresses")
+          .selectAll()
+          .where("customer_id", "=", customer.id)
+          .orderBy("is_default", "desc")
+          .orderBy("updated_at", "desc")
+          .executeTakeFirst()
+      : null;
+
+    return { customer, defaultAddress: defaultAddress ?? null };
   }
 
   async listConversations(filter: ListConversationsFilter): Promise<ConversationRecord[]> {
@@ -605,6 +694,44 @@ export class DomainRepository {
       .orderBy("full_name", "asc")
       .limit(limit)
       .execute();
+  }
+
+  async lookupCustomerByPhone(phone: string): Promise<{ customer: CustomerRecord | null; defaultAddress: CustomerAddressRecord | null }> {
+    return this.lookupCustomerByPhoneInDb(this.db, phone);
+  }
+
+  async findDuplicateActiveOrders(input: { phone: string; fullName: string }): Promise<{ phoneMatches: OrderRecord[]; nameMatches: OrderRecord[] }> {
+    const phoneTail = normalizedPhone(input.phone);
+    const activeOrders = await this.listOrders({ status: "active", limit: 200 });
+    let phoneMatches: OrderRecord[] = [];
+    if (phoneTail) {
+      type OrderWithCustomerPhone = OrderRecord & { customer_phone: string | null };
+      const matchedCustomers: OrderWithCustomerPhone[] = await this.db
+        .selectFrom("orders")
+        .leftJoin("customers", "customers.id", "orders.customer_id")
+        .leftJoin("users", "users.id", "orders.created_by_user_id")
+        .selectAll("orders")
+        .select([
+          "customers.full_name as customer_full_name",
+          "users.public_id as created_by_user_public_id",
+          "users.email as created_by_user_email",
+          "customers.phone as customer_phone",
+        ])
+        .select(orderCargoProviderExpression().as("cargo_provider"))
+        .where("orders.status", "not in", ["cancelled", "returned"])
+        .orderBy("orders.created_at", "desc")
+        .limit(200)
+        .execute();
+      phoneMatches = matchedCustomers
+        .filter((order) => normalizedPhone(order.customer_phone) === phoneTail)
+        .map(({ customer_phone: _customerPhone, ...order }) => order as OrderRecord);
+    }
+
+    const normalizedName = input.fullName.trim().toLocaleLowerCase("tr-TR");
+    const nameMatches = normalizedName.length >= 4
+      ? activeOrders.filter((order) => (order.customer_full_name ?? "").trim().toLocaleLowerCase("tr-TR") === normalizedName)
+      : [];
+    return { phoneMatches, nameMatches };
   }
 
   async getCustomerSummary(): Promise<CustomerSummaryRecord> {
@@ -1032,11 +1159,11 @@ export class DomainRepository {
       );
 
     if (filter.cargoProvider === "surat") {
-      next = next.where("shipments.provider", "in", ["surat", "Sürat"]) as typeof next;
+      next = next.where(orderCargoProviderExpression(), "in", ["surat", "Sürat"]) as typeof next;
     } else if (filter.cargoProvider === "other") {
-      next = next.where("shipments.provider", "not in", ["ptt", "surat", "Sürat"]) as typeof next;
+      next = next.where(orderCargoProviderExpression(), "not in", ["ptt", "surat", "Sürat"]) as typeof next;
     } else if (filter.cargoProvider) {
-      next = next.where("shipments.provider", "=", filter.cargoProvider) as typeof next;
+      next = next.where(orderCargoProviderExpression(), "=", filter.cargoProvider) as typeof next;
     }
 
     return next as T;
@@ -1051,7 +1178,6 @@ export class DomainRepository {
         .selectFrom("orders")
         .leftJoin("customers", "customers.id", "orders.customer_id")
         .leftJoin("users", "users.id", "orders.created_by_user_id")
-        .leftJoin("shipments", "shipments.order_id", "orders.id")
         .select((expression) => [expression.fn.countAll<number>().as("total_count")]),
       filter,
     );
@@ -1074,14 +1200,13 @@ export class DomainRepository {
       .selectFrom("orders")
       .leftJoin("customers", "customers.id", "orders.customer_id")
       .leftJoin("users", "users.id", "orders.created_by_user_id")
-      .leftJoin("shipments", "shipments.order_id", "orders.id")
       .selectAll("orders")
       .select([
         "customers.full_name as customer_full_name",
         "users.public_id as created_by_user_public_id",
         "users.email as created_by_user_email",
-        "shipments.provider as cargo_provider",
-      ]);
+      ])
+      .select(orderCargoProviderExpression().as("cargo_provider"));
 
     return this.applyOrderFilters(baseQuery, filter)
       .orderBy(`orders.${sortBy}`, sortDirection)
@@ -1154,6 +1279,16 @@ export class DomainRepository {
       .selectFrom("products")
       .selectAll()
       .orderBy("updated_at", "desc")
+      .orderBy("name", "asc")
+      .limit(limit)
+      .execute();
+  }
+
+  async listOrderProductOptions(limit: number): Promise<ProductRecord[]> {
+    return this.db
+      .selectFrom("products")
+      .selectAll()
+      .where("is_active", "=", true)
       .orderBy("name", "asc")
       .limit(limit)
       .execute();
@@ -1405,6 +1540,7 @@ export class DomainRepository {
           order_number: input.orderNumber,
           status: input.status,
           source: input.source,
+          cargo_provider: null,
           total_amount: input.totalAmount,
           currency: input.currency,
           confirmation_status: null,
@@ -1420,6 +1556,172 @@ export class DomainRepository {
         created_by_user_public_id: null,
         created_by_user_email: null,
         cargo_provider: null,
+      };
+    });
+  }
+
+  async createOrderFromForm(input: CreateOrderFromFormInput): Promise<OrderRecord> {
+    return this.db.transaction().execute(async (transaction) => {
+      let customer: Pick<CustomerRecord, "id" | "public_id" | "full_name" | "phone"> | null = null;
+      if (input.customerPublicId) {
+        customer = await transaction
+          .selectFrom("customers")
+          .select(["id", "public_id", "full_name", "phone"])
+          .where("public_id", "=", input.customerPublicId)
+          .executeTakeFirst() ?? null;
+      }
+      if (!customer && input.customer) {
+        const existing = await this.lookupCustomerByPhoneInDb(transaction as AppDatabase, input.customer.phone);
+        if (existing.customer) {
+          customer = existing.customer;
+          await transaction
+            .updateTable("customers")
+            .set({
+              full_name: input.customer.fullName,
+              email: input.customer.email,
+              username: input.customer.username,
+              updated_at: new Date(),
+            })
+            .where("id", "=", existing.customer.id)
+            .execute();
+        } else {
+          customer = await transaction
+            .insertInto("customers")
+            .values({
+              public_id: newPublicId("cus"),
+              full_name: input.customer.fullName,
+              phone: input.customer.phone,
+              email: input.customer.email,
+              username: input.customer.username,
+              notes: null,
+            })
+            .returning(["id", "public_id", "full_name", "phone"])
+            .executeTakeFirstOrThrow();
+        }
+      }
+      if (!customer) {
+        throw new Error("Order customer could not be resolved");
+      }
+
+      await transaction
+        .insertInto("customer_addresses")
+        .values({
+          public_id: newPublicId("adr"),
+          customer_id: customer.id,
+          label: "Teslimat",
+          address_line: input.address.addressLine,
+          district: input.address.district,
+          city: input.address.city,
+          country: input.address.country,
+          postal_code: input.address.postalCode,
+          is_default: true,
+        })
+        .execute();
+
+      const conversation = input.conversationPublicId
+        ? await transaction
+            .selectFrom("conversations")
+            .select("id")
+            .where("public_id", "=", input.conversationPublicId)
+            .executeTakeFirst()
+        : null;
+      const now = new Date();
+      let orderNumber = orderNumberFromDate(now);
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        const existing = await transaction
+          .selectFrom("orders")
+          .select("id")
+          .where("order_number", "=", orderNumber)
+          .executeTakeFirst();
+        if (!existing) break;
+        orderNumber = orderNumberFromDate(new Date(now.getTime() + attempt + 1));
+      }
+
+      const order = await transaction
+        .insertInto("orders")
+        .values({
+          public_id: newPublicId("ord"),
+          customer_id: customer.id,
+          conversation_id: conversation?.id ?? null,
+          created_by_user_id: input.createdByUserId,
+          order_number: orderNumber,
+          status: input.status,
+          source: input.source,
+          cargo_provider: input.cargoProvider,
+          total_amount: input.totalAmount,
+          currency: input.currency,
+          confirmation_status: null,
+          notes: input.notes,
+          external_order_id: null,
+        })
+        .returningAll()
+        .executeTakeFirstOrThrow();
+
+      for (const item of input.items) {
+        const product = item.productPublicId
+          ? await transaction
+              .selectFrom("products")
+              .select(["id", "external_product_id"])
+              .where("public_id", "=", item.productPublicId)
+              .executeTakeFirst()
+          : null;
+        await transaction
+          .insertInto("order_items")
+          .values({
+            public_id: newPublicId("oit"),
+            order_id: order.id,
+            product_id: product?.id ?? null,
+            name: item.name,
+            quantity: item.quantity,
+            unit_price: item.unitPrice,
+            total_amount: item.totalAmount,
+            external_product_id: item.externalProductId ?? product?.external_product_id ?? null,
+          })
+          .execute();
+        if (product) {
+          // Legacy stok_dusur parity: atomic decrement clamped at zero (GREATEST(0, stock - qty)).
+          const previous = await transaction
+            .selectFrom("products")
+            .select("stock_quantity")
+            .where("id", "=", product.id)
+            .forUpdate()
+            .executeTakeFirstOrThrow();
+          const updated = await transaction
+            .updateTable("products")
+            .set({
+              stock_quantity: sql<number>`GREATEST(0, stock_quantity - ${item.quantity})`,
+              updated_at: new Date(),
+            })
+            .where("id", "=", product.id)
+            .returning("stock_quantity")
+            .executeTakeFirstOrThrow();
+          const previousQuantity = Number(previous.stock_quantity);
+          const newQuantity = Number(updated.stock_quantity);
+          const decremented = previousQuantity - newQuantity;
+          if (decremented > 0) {
+            await transaction
+              .insertInto("stock_movements")
+              .values({
+                public_id: newPublicId("stm"),
+                product_id: product.id,
+                movement_type: "out",
+                quantity: decremented,
+                previous_quantity: previousQuantity,
+                new_quantity: newQuantity,
+                notes: `Sipariş ${orderNumber}`,
+                created_by_user_id: input.createdByUserId,
+              })
+              .execute();
+          }
+        }
+      }
+
+      return (await this.getOrderByPublicId(transaction as AppDatabase, order.public_id)) ?? {
+        ...order,
+        customer_full_name: customer.full_name,
+        created_by_user_public_id: null,
+        created_by_user_email: null,
+        cargo_provider: input.cargoProvider,
       };
     });
   }

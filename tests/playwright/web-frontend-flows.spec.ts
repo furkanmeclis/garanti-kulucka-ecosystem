@@ -25,6 +25,44 @@ declare global {
   }
 }
 
+function productFixtures() {
+  return [
+    {
+      public_id: "prd_incubator",
+      sku: "SKU-KUL-56",
+      name: "Kuluçka Pro 56",
+      category: "incubator",
+      unit_price: "1250.00",
+      stock_quantity: 7,
+      is_active: true,
+      external_product_id: "kb_prd_56",
+      updated_at: "2026-01-01T00:00:00.000Z",
+    },
+    {
+      public_id: "prd_fan",
+      sku: "SKU-FAN",
+      name: "Yedek Fan",
+      category: "spare_part",
+      unit_price: "85.00",
+      stock_quantity: 0,
+      is_active: true,
+      external_product_id: "kb_fan",
+      updated_at: "2026-01-01T00:00:00.000Z",
+    },
+    {
+      public_id: "prd_meter",
+      sku: "SKU-METER",
+      name: "Nem Ölçer",
+      category: "other",
+      unit_price: "40.00",
+      stock_quantity: 2,
+      is_active: false,
+      external_product_id: "kb_meter",
+      updated_at: "2026-01-01T00:00:00.000Z",
+    },
+  ];
+}
+
 async function startWebApp() {
   const server = await createServer({
     root: "apps/web",
@@ -73,6 +111,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
   let conversationHumanAgent = false;
   let conversationAssignedUserEmail: string | null = null;
   let conversationOrderCreated = false;
+  let orderCreateCount = 0;
   let cancellationApproved = false;
   let cancellationPayload: { status?: string; notes?: string | null } | null = null;
   let smsSendPayload: {
@@ -484,29 +523,36 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       if (route.request().method() === "POST") {
         const payload = JSON.parse(route.request().postData() ?? "{}") as {
           conversation_public_id?: string | null;
-          order_number?: string;
           notes?: string | null;
+          customer?: { full_name?: string; phone?: string };
+          address?: { address_line?: string; city?: string; district?: string };
+          cargo_provider?: string;
+          items?: Array<{ name?: string; quantity?: number; unit_price?: string }>;
         };
-        if (payload.order_number === "ORD-WEB-CHAT") {
+        orderCreateCount += 1;
+        if (payload.conversation_public_id === "cnv_playwright") {
           expect(payload.conversation_public_id).toBe("cnv_playwright");
-          expect(payload.notes).toBe("Frontend conversation order smoke");
+          expect(payload.customer?.full_name).toBe("Playwright Customer");
           conversationOrderCreated = true;
         }
+        expect(payload.address?.address_line).toBeTruthy();
+        expect(payload.cargo_provider).toMatch(/ptt|surat/);
+        expect(payload.items?.length).toBeGreaterThanOrEqual(1);
         await route.fulfill({
           contentType: "application/json",
           body: JSON.stringify({
-            public_id: payload.order_number === "ORD-WEB-CHAT" ? "ord_web_chat" : "ord_web_new",
-            order_number: payload.order_number ?? "ORD-WEB-NEW",
+            public_id: payload.conversation_public_id === "cnv_playwright" ? "ord_web_chat" : `ord_web_new_${orderCreateCount}`,
+            order_number: payload.conversation_public_id === "cnv_playwright" ? "ORD-WEB-CHAT" : `ORD-WEB-NEW-${orderCreateCount}`,
             status: "draft",
-            source: "manual",
-            total_amount: "250.00",
+            source: payload.conversation_public_id ? "conversation" : "manual",
+            total_amount: String((payload.items ?? []).reduce((sum, item) => sum + Number(item.quantity ?? 1) * Number(item.unit_price ?? 0), 0).toFixed(2)),
             currency: "TRY",
             confirmation_status: null,
-            notes: payload.notes ?? "Frontend backend create smoke",
-            customer_full_name: "Playwright Customer",
+            notes: payload.notes ?? "Frontend form create",
+            customer_full_name: payload.customer?.full_name ?? "Playwright Customer",
             created_by_user_public_id: "usr_admin",
             created_by_user_email: "admin@example.com",
-            cargo_provider: "ptt",
+            cargo_provider: payload.cargo_provider,
             created_at: "2026-01-01T00:02:00.000Z",
             updated_at: "2026-01-01T00:02:00.000Z",
           }),
@@ -593,6 +639,42 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
             offset: Number(url.searchParams.get("offset") ?? 0),
           },
         }),
+      });
+      return;
+    }
+
+    if (url.pathname === "/api/orders/customer-lookup") {
+      const phone = url.searchParams.get("phone") ?? "";
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify(phone.includes("5550000000") || phone.includes("05051234567")
+          ? {
+              customer: {
+                public_id: "cus_playwright",
+                full_name: "Playwright Customer",
+                phone: "5550000000",
+                email: "playwright@example.com",
+                username: "playwright_customer",
+                notes: "VIP kuluçka müşterisi",
+                updated_at: "2026-01-01T00:00:00.000Z",
+              },
+              default_address: {
+                address_line: "Playwright Sokak No 1",
+                city: "İstanbul",
+                district: "Kadıköy",
+                country: "Türkiye",
+                postal_code: null,
+              },
+            }
+          : { customer: null, default_address: null }),
+      });
+      return;
+    }
+
+    if (url.pathname === "/api/orders/product-options") {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({ data: productFixtures() }),
       });
       return;
     }
@@ -894,43 +976,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     if (url.pathname === "/api/products") {
       await route.fulfill({
         contentType: "application/json",
-        body: JSON.stringify({
-          data: [
-            {
-              public_id: "prd_incubator",
-              sku: "SKU-KUL-56",
-              name: "Kuluçka Pro 56",
-              category: "incubator",
-              unit_price: "1250.00",
-              stock_quantity: 7,
-              is_active: true,
-              external_product_id: "kb_prd_56",
-              updated_at: "2026-01-01T00:00:00.000Z",
-            },
-            {
-              public_id: "prd_fan",
-              sku: "SKU-FAN",
-              name: "Yedek Fan",
-              category: "spare_part",
-              unit_price: "85.00",
-              stock_quantity: 0,
-              is_active: true,
-              external_product_id: "kb_fan",
-              updated_at: "2026-01-01T00:00:00.000Z",
-            },
-            {
-              public_id: "prd_meter",
-              sku: "SKU-METER",
-              name: "Nem Ölçer",
-              category: "other",
-              unit_price: "40.00",
-              stock_quantity: 2,
-              is_active: false,
-              external_product_id: "kb_meter",
-              updated_at: "2026-01-01T00:00:00.000Z",
-            },
-          ],
-        }),
+        body: JSON.stringify({ data: productFixtures() }),
       });
       return;
     }
@@ -2019,9 +2065,17 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       page.getByRole("button", { name: /havuzdan al/i }).click(),
     ]);
     await expect(page.getByTestId("conversation-detail")).toContainText("admin@example.com");
+    await page.getByRole("button", { name: /konuşmadan sipariş aç/i }).click();
+    await expect(page.getByTestId("order-create-modal")).toBeVisible();
+    await expect(page.getByTestId("order-form-name")).toHaveValue("Playwright Customer");
+    await expect(page.getByTestId("order-form-phone")).toHaveValue("5550000000");
+    await page.getByTestId("order-form-city").fill("İstanbul");
+    await page.getByTestId("order-form-district").fill("Kadıköy");
+    await page.getByTestId("order-form-address").fill("Playwright Sokak No 1");
+    await page.getByRole("button", { name: /ptt kargo/i }).click();
     await Promise.all([
       page.waitForResponse(`${backendBaseUrl}/api/orders`),
-      page.getByRole("button", { name: /konuşmadan sipariş aç/i }).click(),
+      page.getByTestId("order-form-submit").click(),
     ]);
     expect(conversationOrderCreated).toBe(true);
     await expect.poll(async () =>
@@ -2348,9 +2402,29 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByText(/filtrelenmiş sipariş Excel olarak indirildi/i)).toBeVisible();
     await expect(page.getByTestId("orders-pagination")).toContainText("sayfa 1/1");
     await page.getByRole("button", { name: /sipariş oluştur/i }).click();
-    await expect(page.getByTestId("orders-flow")).toContainText("ORD-WEB-NEW");
-    await expect(page.getByTestId("order-detail")).toContainText("ORD-WEB-NEW");
-    await expect(page.getByTestId("order-detail")).toContainText("Frontend backend create smoke");
+    await expect(page.getByTestId("order-create-modal")).toBeVisible();
+    await page.getByTestId("order-form-submit").click();
+    await expect(page.getByTestId("order-form-message")).toContainText("Müşteri adı gerekli");
+    await page.getByTestId("order-form-phone").fill("05051234567");
+    await page.getByTestId("order-form-phone").blur();
+    await expect(page.getByTestId("order-form-name")).toHaveValue("Playwright Customer");
+    await expect(page.getByTestId("order-form-address")).toHaveValue("Playwright Sokak No 1");
+    await page.getByTestId("order-form-product-0").selectOption("prd_incubator");
+    await page.getByTestId("order-form-quantity-0").fill("2");
+    await expect(page.getByTestId("order-form-line-total-0")).toContainText("2500.00 TRY");
+    await page.getByTestId("order-form-add-item").click();
+    await page.getByTestId("order-form-product-1").selectOption("prd_fan");
+    await page.getByTestId("order-form-quantity-1").fill("3");
+    await expect(page.getByTestId("order-create-modal")).toContainText("Genel Toplam");
+    await expect(page.getByTestId("order-create-modal")).toContainText("2755.00 TRY");
+    await page.getByRole("button", { name: /sürat kargo/i }).click();
+    await Promise.all([
+      page.waitForResponse(`${backendBaseUrl}/api/orders`),
+      page.getByTestId("order-form-submit").click(),
+    ]);
+    await expect(page.getByTestId("orders-flow")).toContainText(/ORD-WEB-NEW-\d+/);
+    await expect(page.getByTestId("order-detail")).toContainText("2755.00 TRY");
+    await expect(page.getByTestId("order-detail")).toContainText("Frontend form create");
     await page.getByRole("link", { name: /kargo/i }).click();
     await expect(page.getByTestId("shipments-flow")).toContainText("TRK-PLAYWRIGHT");
     await expect(page.getByTestId("shipments-flow")).toContainText("PTT Kargo");

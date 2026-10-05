@@ -679,6 +679,58 @@ describe("web API client boundary", () => {
     expect(requests[2]?.url).toBe("http://localhost:3000/api/orders?search=ali&source=manual&cargo_provider=surat&created_by_user_public_id=usr_1&created_from=2026-01-01&created_to=2026-01-31&sort_by=order_number&sort_direction=asc&offset=20&limit=20");
   });
 
+  it("maps order creation parity endpoints to backend routes", async () => {
+    const requests: Request[] = [];
+    const client = createApiClient("http://localhost:3000", {
+      fetchImpl: async (input, init) => {
+        requests.push(new Request(input, init));
+        return Response.json(requests.length === 3
+          ? {
+              public_id: "ord_created",
+              order_number: "ORD-CREATED",
+              status: "draft",
+              source: "manual",
+              cargo_provider: "surat",
+              total_amount: "2755.00",
+              currency: "TRY",
+              confirmation_status: null,
+              notes: "not",
+              customer_full_name: "Playwright Customer",
+              created_by_user_public_id: "usr_test",
+              created_by_user_email: "test@example.com",
+              created_at: "2026-01-01T00:00:00.000Z",
+              updated_at: "2026-01-01T00:00:00.000Z",
+            }
+          : { data: [] });
+      },
+    });
+
+    await client.domain.lookupCustomerByPhone("05051234567");
+    await client.domain.listOrderProductOptions(25);
+    await client.domain.createOrder({
+      customer: { full_name: "Playwright Customer", phone: "05051234567" },
+      address: { address_line: "Adres", city: "İstanbul", district: "Kadıköy" },
+      cargo_provider: "surat",
+      notes: "not",
+      items: [
+        { product_public_id: "prd_incubator", name: "Kuluçka Pro 56", quantity: 2, unit_price: "1250.00" },
+        { product_public_id: "prd_fan", name: "Yedek Fan", quantity: 3, unit_price: "85.00" },
+      ],
+    });
+
+    expect(requests[0]?.url).toBe("http://localhost:3000/api/orders/customer-lookup?phone=05051234567");
+    expect(requests[1]?.url).toBe("http://localhost:3000/api/orders/product-options?limit=25");
+    expect(requests[2]?.method).toBe("POST");
+    expect(requests[2]?.url).toBe("http://localhost:3000/api/orders");
+    await expect(requests[2]?.json()).resolves.toMatchObject({
+      cargo_provider: "surat",
+      items: [
+        { name: "Kuluçka Pro 56", quantity: 2, unit_price: "1250.00" },
+        { name: "Yedek Fan", quantity: 3, unit_price: "85.00" },
+      ],
+    });
+  });
+
   it("maps domain order status updates to backend routes", async () => {
     const requests: Request[] = [];
     const client = createApiClient("http://localhost:3000", {

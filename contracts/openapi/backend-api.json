@@ -804,6 +804,60 @@
         }
       }
     },
+    "/api/orders/customer-lookup": {
+      "get": {
+        "operationId": "lookupOrderCustomerByPhone",
+        "parameters": [
+          {
+            "name": "phone",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Customer and default address matched by phone for order creation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderCustomerLookup"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/orders/product-options": {
+      "get": {
+        "operationId": "listOrderProductOptions",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Limit"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Active product options available to the order creation form",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductList"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/api/products": {
       "get": {
         "operationId": "listProducts",
@@ -3899,8 +3953,9 @@
       "CreateOrderRequest": {
         "type": "object",
         "required": [
-          "order_number",
-          "total_amount"
+          "address",
+          "cargo_provider",
+          "items"
         ],
         "properties": {
           "customer_public_id": {
@@ -3910,15 +3965,68 @@
             ],
             "default": null
           },
+          "customer": {
+            "type": "object",
+            "required": [
+              "full_name",
+              "phone"
+            ],
+            "properties": {
+              "full_name": {
+                "type": "string"
+              },
+              "phone": {
+                "type": "string"
+              },
+              "email": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "username": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          },
+          "address": {
+            "type": "object",
+            "required": [
+              "address_line",
+              "city",
+              "district"
+            ],
+            "properties": {
+              "address_line": {
+                "type": "string"
+              },
+              "city": {
+                "type": "string"
+              },
+              "district": {
+                "type": "string"
+              },
+              "country": {
+                "type": "string",
+                "default": "Türkiye"
+              },
+              "postal_code": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          },
           "conversation_public_id": {
             "type": [
               "string",
               "null"
             ],
             "default": null
-          },
-          "order_number": {
-            "type": "string"
           },
           "status": {
             "type": "string",
@@ -3928,9 +4036,12 @@
             "type": "string",
             "default": "manual"
           },
-          "total_amount": {
+          "cargo_provider": {
             "type": "string",
-            "pattern": "^\\d+(\\.\\d{1,2})?$"
+            "enum": [
+              "ptt",
+              "surat"
+            ]
           },
           "currency": {
             "type": "string",
@@ -3944,6 +4055,105 @@
               "null"
             ],
             "default": null
+          },
+          "items": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/components/schemas/CreateOrderLineItem"
+            }
+          },
+          "force_duplicate": {
+            "type": "boolean",
+            "default": false
+          },
+          "force_surat_at": {
+            "type": "boolean",
+            "default": false
+          }
+        }
+      },
+      "CreateOrderLineItem": {
+        "type": "object",
+        "required": [
+          "name",
+          "quantity",
+          "unit_price"
+        ],
+        "properties": {
+          "product_public_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "unit_price": {
+            "type": "string",
+            "pattern": "^\\d+(\\.\\d{1,2})?$"
+          },
+          "external_product_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "OrderCustomerLookup": {
+        "type": "object",
+        "required": [
+          "customer",
+          "default_address"
+        ],
+        "properties": {
+          "customer": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Customer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "default_address": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "address_line": {
+                "type": "string"
+              },
+              "city": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "district": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "country": {
+                "type": "string"
+              },
+              "postal_code": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
           }
         }
       },

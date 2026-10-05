@@ -24,6 +24,7 @@ import {
   serializeShipmentSummary,
   serializeStockMovement,
 } from "../domain/repository.js";
+import { calculateVatInclusiveOrder, moneyToCents } from "../domain/order-totals.js";
 
 const limitSchema = z.coerce.number().int().min(1).max(200).default(50);
 const offsetSchema = z.coerce.number().int().min(0).default(0);
@@ -134,13 +135,38 @@ const createStockMovementSchema = z.object({
 
 const createOrderSchema = z.object({
   customer_public_id: z.string().min(1).nullable().default(null),
+  customer: z
+    .object({
+      full_name: z.string().trim().min(1),
+      phone: z.string().trim().min(1),
+      email: z.string().trim().min(1).nullable().optional(),
+      username: z.string().trim().min(1).nullable().optional(),
+    })
+    .optional(),
+  address: z.object({
+    address_line: z.string().trim().min(1),
+    city: z.string().trim().min(1),
+    district: z.string().trim().min(1),
+    country: z.string().trim().min(1).default("Türkiye"),
+    postal_code: z.string().trim().min(1).nullable().optional(),
+  }),
   conversation_public_id: z.string().min(1).nullable().default(null),
-  order_number: z.string().min(1),
   status: z.string().min(1).default("draft"),
   source: z.string().min(1).default("manual"),
-  total_amount: z.string().regex(/^\d+(\.\d{1,2})?$/),
+  cargo_provider: z.enum(["ptt", "surat"]),
   currency: z.string().min(3).max(3).default("TRY"),
   notes: z.string().nullable().default(null),
+  items: z.array(z.object({
+    product_public_id: z.string().min(1).nullable().optional(),
+    name: z.string().trim().min(1),
+    quantity: z.coerce.number().int().min(1),
+    unit_price: z.string().regex(/^\d+(\.\d{1,2})?$/),
+    external_product_id: z.string().min(1).nullable().optional(),
+  })).min(1),
+  force_duplicate: z.boolean().default(false),
+  force_surat_at: z.boolean().default(false),
+}).refine((payload) => payload.customer_public_id !== null || payload.customer !== undefined, {
+  message: "Customer identity is required",
 });
 
 const updateOrderStatusSchema = z.object({
@@ -230,6 +256,8 @@ function canReadOrders(role: string | undefined) {
   return role === "admin" || role === "owner" || role === "calisan" || role === "kargo_operatoru";
 }
 
+const canUseOrderCreateForm = canReadOrders;
+
 function canReadShipments(role: string | undefined) {
   return role === "admin" || role === "owner" || role === "calisan" || role === "kargo_operatoru";
 }
@@ -271,6 +299,16 @@ function providerKeyFromShipmentProvider(provider: string) {
   if (normalized.includes("ptt")) return "ptt";
   if (normalized.includes("sürat") || normalized.includes("surat")) return "surat";
   return normalized.replace(/[^a-z0-9_]+/g, "_").replace(/^_+|_+$/g, "") || "ptt";
+}
+
+function normalizePhoneTail(value: string) {
+  return value.replace(/\D/g, "").slice(-10);
+}
+
+function isSuratAtWarningAddress(payload: { cargo_provider: string; address: { city: string; district: string; address_line: string } }) {
+  if (payload.cargo_provider !== "surat") return false;
+  const addressText = `${payload.address.city} ${payload.address.district} ${payload.address.address_line}`.toLocaleLowerCase("tr-TR");
+  return addressText.includes("at dışı") || addressText.includes("at disi") || addressText.includes("teslimat yok");
 }
 
 export function createDomainRoutes() {
@@ -427,6 +465,36 @@ export function createDomainRoutes() {
 
     const summary = await new DomainRepository(db).getCustomerSummary();
     return context.json(serializeCustomerSummary(summary));
+  });
+
+  routes.get("/orders/customer-lookup", async (context) => {
+    if (!canUseOrderCreateForm(context.get("auth")?.role)) {
+      return context.json({ error: { code: "forbidden", message: "Order customer lookup is not allowed" } }, 403);
+    }
+
+    const phone = context.req.query("phone") ?? "";
+    if (!normalizePhoneTail(phone)) {
+      return context.json({ customer: null, default_address: null });
+    }
+
+    const db = context.get("db");
+    if (!db) {
+      return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
+    }
+
+    const lookup = await new DomainRepository(db).lookupCustomerByPhone(phone);
+    return context.json({
+      customer: lookup.customer ? serializeCustomer(lookup.customer) : null,
+      default_address: lookup.defaultAddress
+        ? {
+            address_line: lookup.defaultAddress.address_line,
+            city: lookup.defaultAddress.city,
+            district: lookup.defaultAddress.district,
+            country: lookup.defaultAddress.country,
+            postal_code: lookup.defaultAddress.postal_code,
+          }
+        : null,
+    });
   });
 
   routes.post("/conversations/:conversation_public_id/messages", async (context) => {
@@ -837,6 +905,20 @@ export function createDomainRoutes() {
     return context.json({ data: products.map(serializeProduct) });
   });
 
+  routes.get("/orders/product-options", async (context) => {
+    if (!canUseOrderCreateForm(context.get("auth")?.role)) {
+      return context.json({ error: { code: "forbidden", message: "Order product lookup is not allowed" } }, 403);
+    }
+
+    const db = context.get("db");
+    if (!db) {
+      return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
+    }
+
+    const products = await new DomainRepository(db).listOrderProductOptions(limitSchema.parse(context.req.query("limit")));
+    return context.json({ data: products.map(serializeProduct) });
+  });
+
   routes.post("/products", async (context) => {
     if (!canManageInventory(context.get("auth")?.role)) {
       return context.json({ error: { code: "forbidden", message: "Inventory management is not allowed" } }, 403);
@@ -977,16 +1059,78 @@ export function createDomainRoutes() {
       return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
     }
 
-    const order = await new DomainRepository(db).createOrder({
+    const repository = new DomainRepository(db);
+    const customerName = payload.data.customer?.full_name ?? "";
+    const customerPhone = payload.data.customer?.phone ?? "";
+    const duplicateOrders = payload.data.customer && !payload.data.force_duplicate
+      ? await repository.findDuplicateActiveOrders({ phone: customerPhone, fullName: customerName })
+      : { phoneMatches: [], nameMatches: [] };
+    if (duplicateOrders.phoneMatches.length > 0) {
+      return context.json(
+        {
+          error: {
+            code: "duplicate_phone_warning",
+            message: "Aynı telefon numarasıyla başka aktif sipariş bulunuyor.",
+          },
+        },
+        409,
+      );
+    }
+    if (duplicateOrders.nameMatches.length > 0) {
+      return context.json(
+        {
+          error: {
+            code: "duplicate_name_warning",
+            message: "Aynı ad-soyad ile başka aktif sipariş bulunuyor.",
+          },
+        },
+        409,
+      );
+    }
+    if (!payload.data.force_surat_at && isSuratAtWarningAddress(payload.data)) {
+      return context.json(
+        {
+          error: {
+            code: "surat_at_warning",
+            message: "Bu adrese sürat kargo teslimat yapmamaktadır",
+          },
+        },
+        409,
+      );
+    }
+
+    const calculatedOrder = calculateVatInclusiveOrder(payload.data.items);
+    const totalCents = moneyToCents(calculatedOrder.totalAmount);
+    if (totalCents <= 0) {
+      return context.json({ error: { code: "invalid_order_total", message: "Sipariş tutarı 0 TL olamaz. Lütfen fiyat bilgisini kontrol edin." } }, 400);
+    }
+
+    const order = await repository.createOrderFromForm({
       customerPublicId: payload.data.customer_public_id,
+      customer: payload.data.customer
+        ? {
+            fullName: payload.data.customer.full_name,
+            phone: payload.data.customer.phone,
+            email: payload.data.customer.email ?? null,
+            username: payload.data.customer.username ?? null,
+          }
+        : null,
+      address: {
+        addressLine: payload.data.address.address_line,
+        city: payload.data.address.city,
+        district: payload.data.address.district,
+        country: payload.data.address.country,
+        postalCode: payload.data.address.postal_code ?? null,
+      },
       conversationPublicId: payload.data.conversation_public_id,
       createdByUserId: context.get("actorUserId"),
-      orderNumber: payload.data.order_number,
       status: payload.data.status,
       source: payload.data.source,
-      totalAmount: payload.data.total_amount,
+      cargoProvider: payload.data.cargo_provider,
+      totalAmount: calculatedOrder.totalAmount,
       currency: payload.data.currency,
       notes: payload.data.notes,
+      items: calculatedOrder.items,
     });
 
     return context.json(serializeOrder(order), 201);

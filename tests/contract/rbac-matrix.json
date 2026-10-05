@@ -15,6 +15,8 @@
   "GET /api/customers/summary": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "allow", "admin": "allow" },
   "GET /api/orders": { "anonymous": "deny", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" },
   "POST /api/orders": { "anonymous": "deny", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" },
+  "GET /api/orders/customer-lookup": { "anonymous": "deny", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" },
+  "GET /api/orders/product-options": { "anonymous": "deny", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" },
   "GET /api/orders/summary": { "anonymous": "deny", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" },
   "PATCH /api/orders/{order_public_id}/status": { "anonymous": "deny", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" },
   "POST /api/orders/{order_public_id}/payment-request": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "allow", "admin": "allow" },

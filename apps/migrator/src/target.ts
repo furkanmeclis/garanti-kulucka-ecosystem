@@ -268,6 +268,7 @@ export class DatabaseMigrationTarget implements MigrationTarget {
         order_number: input.payload.order_number,
         status: input.payload.status,
         source: input.payload.source,
+        cargo_provider: input.payload.cargo_provider,
         total_amount: input.payload.total_amount,
         manual_adjustment_amount: input.payload.manual_adjustment_amount,
         currency: input.payload.currency,

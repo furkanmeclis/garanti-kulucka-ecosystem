@@ -43,6 +43,8 @@ const expectedOperations = new Map<string, string[]>([
   ["/api/customers", ["get"]],
   ["/api/customers/summary", ["get"]],
   ["/api/orders", ["get", "post"]],
+  ["/api/orders/customer-lookup", ["get"]],
+  ["/api/orders/product-options", ["get"]],
   ["/api/orders/summary", ["get"]],
   ["/api/orders/{order_public_id}/status", ["patch"]],
   ["/api/orders/{order_public_id}/payment-request", ["post"]],

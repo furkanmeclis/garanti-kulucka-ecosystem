@@ -897,6 +897,7 @@ async function applyOrderMigrationBatch(
         order_number: order.orderNumber,
         status: order.status,
         source: order.source,
+        cargo_provider: order.cargoProvider,
         total_amount: order.totalAmount,
         manual_adjustment_amount: "0.00",
         currency: order.currency,

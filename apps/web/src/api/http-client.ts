@@ -15,6 +15,17 @@ export interface BackendHttpClient {
   request: <T>(path: string, options?: BackendRequestOptions) => Promise<T>;
 }
 
+export class BackendRequestError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly body: unknown,
+  ) {
+    super(message);
+    this.name = "BackendRequestError";
+  }
+}
+
 export function createBackendHttpClient(options: BackendHttpClientOptions): BackendHttpClient {
   assertBackendBaseUrl(options.baseUrl);
   const fetchImpl = options.fetchImpl ?? fetch;
@@ -46,7 +57,8 @@ export function createBackendHttpClient(options: BackendHttpClientOptions): Back
       const response = await fetchImpl(new URL(path, options.baseUrl), requestInit);
 
       if (!response.ok) {
-        throw new Error(`Backend request failed: ${response.status}`);
+        const responseBody = await response.json().catch(() => null);
+        throw new BackendRequestError(`Backend request failed: ${response.status}`, response.status, responseBody);
       }
 
       return response.json() as Promise<T>;

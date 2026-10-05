@@ -77,7 +77,7 @@ import {
   type ShipmentSummary,
 } from "../api/domain-client.js";
 import { createFileClient, type DownloadInstruction, type FileMetadata, type FileOrphanCleanupDryRun } from "../api/file-client.js";
-import { createBackendHttpClient } from "../api/http-client.js";
+import { BackendRequestError, createBackendHttpClient } from "../api/http-client.js";
 import { createRealtimeClient, type RealtimeClient } from "../api/realtime-client.js";
 import { createWebphoneClient, type WebphoneConfig } from "../api/webphone-client.js";
 import { YorumlarPage } from "./pages/YorumlarPage.js";
@@ -182,6 +182,31 @@ type ShipmentPipelineFilter = "all" | ShipmentPipelineStep;
 type ShipmentFilter = "all" | "ptt" | "surat" | "other" | "in_transit" | "delivered" | "tracking_missing";
 type OrderSortBy = "created_at" | "order_number" | "status" | "total_amount";
 type SortDirection = "asc" | "desc";
+type OrderCargoProvider = "ptt" | "surat";
+
+interface OrderFormItem {
+  product_public_id: string;
+  name: string;
+  quantity: number;
+  unit_price: string;
+  external_product_id: string | null;
+}
+
+interface OrderFormState {
+  customer_public_id: string | null;
+  customer_name: string;
+  customer_phone: string;
+  address_line: string;
+  city: string;
+  district: string;
+  country: string;
+  notes: string;
+  cargo_provider: OrderCargoProvider | "";
+  items: OrderFormItem[];
+  force_duplicate: boolean;
+  force_surat_at: boolean;
+  conversation_public_id: string | null;
+}
 
 interface NavigationItem {
   key: string;
@@ -401,6 +426,52 @@ function compactJson(value: unknown) {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function firstOrderFormItem(products: ProductSummary[]): OrderFormItem {
+  const defaultProduct =
+    products.find((product) => product.name.toLocaleLowerCase("tr-TR").includes("kuluçka")) ??
+    products[0];
+  return {
+    product_public_id: defaultProduct?.public_id ?? "",
+    name: defaultProduct?.name ?? "El yapımı kuluçka makinası",
+    quantity: 1,
+    unit_price: defaultProduct?.unit_price ?? "0.00",
+    external_product_id: defaultProduct?.external_product_id ?? null,
+  };
+}
+
+function defaultOrderForm(products: ProductSummary[] = []): OrderFormState {
+  return {
+    customer_public_id: null,
+    customer_name: "",
+    customer_phone: "",
+    address_line: "",
+    city: "",
+    district: "",
+    country: "Türkiye",
+    notes: "",
+    cargo_provider: "",
+    items: [firstOrderFormItem(products)],
+    force_duplicate: false,
+    force_surat_at: false,
+    conversation_public_id: null,
+  };
+}
+
+function parseMoneyInput(value: string) {
+  const parsed = Number(value.replace(",", "."));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function orderFormTotals(items: OrderFormItem[]) {
+  const genelToplam = items.reduce(
+    (total, item) => total + Math.max(Number(item.quantity) || 0, 0) * parseMoneyInput(item.unit_price),
+    0,
+  );
+  const araToplam = Math.round((genelToplam / 1.2) * 100) / 100;
+  const kdvToplam = Math.round((genelToplam - araToplam) * 100) / 100;
+  return { araToplam, kdvToplam, genelToplam };
 }
 
 const defaultBalanceSummary: BackendBalanceSummary = {
@@ -737,6 +808,10 @@ export function App() {
   const [orderPage, setOrderPage] = useState(0);
   const [orderTotalCount, setOrderTotalCount] = useState(0);
   const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(() => new Set());
+  const [orderFormOpen, setOrderFormOpen] = useState(false);
+  const [orderFormSubmitting, setOrderFormSubmitting] = useState(false);
+  const [orderFormMessage, setOrderFormMessage] = useState<string | null>(null);
+  const [orderForm, setOrderForm] = useState<OrderFormState>(() => defaultOrderForm());
   const [shipmentFilter, setShipmentFilter] = useState<ShipmentFilter>("all");
   const [shipmentSearch, setShipmentSearch] = useState("");
   const [shipmentPage, setShipmentPage] = useState(0);
@@ -917,6 +992,7 @@ export function App() {
     const canReadCustomers = user?.role === "admin" || user?.role === "owner" || user?.role === "calisan";
     const canReadComments = user?.role === "admin" || user?.role === "owner" || user?.role === "calisan";
     const canReadBalances = user?.role === "admin" || user?.role === "owner" || user?.role === "calisan";
+    const canReadInventory = user?.role === "admin" || user?.role === "owner" || user?.role === "calisan";
     const canReadShipmentPipeline = ["admin", "owner", "calisan", "kargo_operatoru"].includes(user?.role ?? "");
     const optional = async <T,>(label: string, request: Promise<T>, fallback: T): Promise<T> => {
       try {
@@ -939,7 +1015,7 @@ export function App() {
       canReadShipmentPipeline ? domain.getShipmentPipelineSummary() : Promise.resolve(defaultShipmentPipelineSummary),
       user?.role === "admin" ? domain.getReportSummary() : Promise.resolve(defaultReportSummary),
       domain.listOrders(20),
-      domain.listProducts(50),
+      canReadInventory ? domain.listProducts(50) : domain.listOrderProductOptions(50),
       domain.listShipments(20),
       canReadCustomers ? optional("message shortcuts", domain.listMessageShortcuts(), { data: [] }) : Promise.resolve({ data: [] }),
       user?.role === "admin" ? admin.listSettings("global") : Promise.resolve({ data: [] }),
@@ -1598,24 +1674,156 @@ export function App() {
     setStatus("Konuşma detayı backend API üzerinden yüklendi");
   }
 
-  async function handleCreateOrder(source: "orders" | "conversation" = "orders") {
-    setStatus("Sipariş backend API üzerinden oluşturuluyor");
-    const order = await domain.createOrder({
-      customer_public_id: null,
-      conversation_public_id: selectedConversation?.public_id ?? data.conversations[0]?.public_id ?? null,
-      order_number: source === "conversation" ? "ORD-WEB-CHAT" : "ORD-WEB-NEW",
-      status: "draft",
-      source: "manual",
-      total_amount: "250.00",
-      currency: "TRY",
-      notes: source === "conversation" ? "Frontend conversation order smoke" : "Frontend backend create smoke",
+  function openOrderForm(source: "orders" | "conversation" = "orders") {
+    const conversation = source === "conversation" ? selectedConversation : null;
+    setOrderForm({
+      ...defaultOrderForm(data.products),
+      customer_name: conversation?.customer?.full_name ?? "",
+      customer_phone: conversation?.customer?.phone ?? "",
+      conversation_public_id: conversation?.public_id ?? null,
+      notes: source === "conversation" ? "Konuşmadan oluşturuldu" : "",
     });
-    setData((current) => ({
+    setOrderFormMessage(null);
+    setOrderFormOpen(true);
+  }
+
+  function updateOrderFormItem(index: number, patch: Partial<OrderFormItem>) {
+    setOrderForm((current) => ({
       ...current,
-      orders: [order, ...current.orders],
+      items: current.items.map((item, itemIndex) => (itemIndex === index ? { ...item, ...patch } : item)),
+      force_duplicate: false,
+      force_surat_at: false,
     }));
-    setSelectedOrderId(order.public_id);
-    setStatus("Sipariş backend API üzerinden oluşturuldu");
+  }
+
+  function selectOrderFormProduct(index: number, productPublicId: string) {
+    const product = data.products.find((item) => item.public_id === productPublicId);
+    updateOrderFormItem(index, {
+      product_public_id: productPublicId,
+      name: product?.name ?? "",
+      unit_price: product?.unit_price ?? "0.00",
+      external_product_id: product?.external_product_id ?? null,
+    });
+  }
+
+  function addOrderFormItem() {
+    setOrderForm((current) => ({
+      ...current,
+      items: [...current.items, { product_public_id: "", name: "", quantity: 1, unit_price: "0.00", external_product_id: null }],
+    }));
+  }
+
+  function removeOrderFormItem(index: number) {
+    setOrderForm((current) => ({
+      ...current,
+      items: current.items.filter((_, itemIndex) => itemIndex !== index),
+    }));
+  }
+
+  async function lookupOrderCustomerByPhone() {
+    const phone = orderForm.customer_phone.trim();
+    if (phone.replace(/\D/g, "").length < 10) return;
+    const lookup = await domain.lookupCustomerByPhone(phone);
+    if (!lookup.customer) return;
+    setOrderForm((current) => ({
+      ...current,
+      customer_public_id: lookup.customer?.public_id ?? current.customer_public_id,
+      customer_name: lookup.customer?.full_name ?? current.customer_name,
+      customer_phone: lookup.customer?.phone ?? current.customer_phone,
+      address_line: lookup.default_address?.address_line ?? current.address_line,
+      city: lookup.default_address?.city ?? current.city,
+      district: lookup.default_address?.district ?? current.district,
+      country: lookup.default_address?.country ?? current.country,
+    }));
+    setOrderFormMessage("Müşteri telefonla bulundu ve bilgiler dolduruldu.");
+  }
+
+  async function handleSubmitOrderForm() {
+    const validationError = !orderForm.customer_name.trim() ? "Müşteri adı gerekli"
+      : !orderForm.customer_phone.trim() ? "Müşteri telefonu gerekli"
+      : !orderForm.city.trim() ? "İl bilgisi gerekli"
+      : !orderForm.district.trim() ? "İlçe bilgisi gerekli"
+      : !orderForm.address_line.trim() ? "Adres bilgisi gerekli"
+      : !orderForm.cargo_provider ? "Kargo firması seçimi zorunlu (PTT veya Sürat)"
+      : null;
+    if (validationError) {
+      setOrderFormMessage(validationError);
+      setStatus(validationError);
+      return;
+    }
+    if (orderFormTotals(orderForm.items).genelToplam <= 0) {
+      setOrderFormMessage("Sipariş tutarı 0 TL olamaz. Lütfen fiyat bilgisini kontrol edin.");
+      setStatus("Sipariş tutarı 0 TL olamaz. Lütfen fiyat bilgisini kontrol edin.");
+      return;
+    }
+    if (!orderForm.items.some((item) => item.name.trim())) {
+      setOrderFormMessage("Ürün seçimi zorunlu.");
+      setStatus("Ürün seçimi zorunlu.");
+      return;
+    }
+
+    setOrderFormSubmitting(true);
+    setStatus("Sipariş backend API üzerinden oluşturuluyor");
+    try {
+      const order = await domain.createOrder({
+        customer_public_id: orderForm.customer_public_id,
+        customer: {
+          full_name: orderForm.customer_name.trim(),
+          phone: orderForm.customer_phone.trim(),
+        },
+        address: {
+          address_line: orderForm.address_line.trim(),
+          city: orderForm.city.trim(),
+          district: orderForm.district.trim(),
+          country: orderForm.country.trim() || "Türkiye",
+        },
+        conversation_public_id: orderForm.conversation_public_id,
+        status: "draft",
+        source: orderForm.conversation_public_id ? "conversation" : "manual",
+        cargo_provider: orderForm.cargo_provider as OrderCargoProvider,
+        notes: orderForm.notes.trim() || null,
+        currency: "TRY",
+        force_duplicate: orderForm.force_duplicate,
+        force_surat_at: orderForm.force_surat_at,
+        items: orderForm.items
+          .filter((item) => item.name.trim())
+          .map((item) => ({
+            product_public_id: item.product_public_id || null,
+            name: item.name.trim(),
+            quantity: Math.max(Number(item.quantity) || 1, 1),
+            unit_price: parseMoneyInput(item.unit_price).toFixed(2),
+            external_product_id: item.external_product_id,
+          })),
+      });
+      setData((current) => ({
+        ...current,
+        orders: [order, ...current.orders],
+      }));
+      setSelectedOrderId(order.public_id);
+      setOrderFormOpen(false);
+      setOrderFormMessage(null);
+      setStatus(`Sipariş oluşturuldu! (${order.order_number})`);
+    } catch (error) {
+      if (error instanceof BackendRequestError && error.status === 409 && isRecord(error.body)) {
+        const bodyError = isRecord(error.body.error) ? error.body.error : null;
+        const code = typeof bodyError?.code === "string" ? bodyError.code : "";
+        const message = typeof bodyError?.message === "string" ? bodyError.message : "Sipariş oluşturma uyarısı";
+        setOrderFormMessage(message);
+        setStatus(message);
+        if (code === "duplicate_phone_warning" || code === "duplicate_name_warning") {
+          setOrderForm((current) => ({ ...current, force_duplicate: true }));
+        }
+        if (code === "surat_at_warning") {
+          setOrderForm((current) => ({ ...current, force_surat_at: true }));
+        }
+        return;
+      }
+      const message = error instanceof Error ? error.message : "Sipariş oluşturulurken hata oluştu";
+      setOrderFormMessage(`Sipariş oluşturulurken hata oluştu: ${message}`);
+      setStatus("Sipariş oluşturulurken hata oluştu");
+    } finally {
+      setOrderFormSubmitting(false);
+    }
   }
 
   function toggleOrderSelection(orderPublicId: string) {
@@ -2160,6 +2368,7 @@ export function App() {
   const selectedProviderCatalogItem = data.providerCatalog[0] ?? null;
   const suratProviderCatalogItem = data.providerCatalog.find((item) => item.provider === "surat") ?? null;
   const pttProviderCatalogItem = data.providerCatalog.find((item) => item.provider === "ptt") ?? null;
+  const currentOrderFormTotals = orderFormTotals(orderForm.items);
   const providerDebugSummaries = new Map(data.providerDebugSummary.providers.map((summary) => [summary.provider_key, summary]));
   const pttProviderDebug = providerDebugSummaries.get("ptt") ?? emptyProviderDebug("ptt");
   const suratProviderDebug = providerDebugSummaries.get("surat") ?? emptyProviderDebug("surat");
@@ -2264,6 +2473,56 @@ export function App() {
           <span>Supabase kullanılmıyor</span>
           <span>Socket.IO backend sınırı hazır</span>
         </section>
+
+        {activeFlow !== "orders" && orderFormOpen && (
+          <div className="order-form-backdrop" data-testid="order-create-modal">
+            <form
+              className="order-form-modal"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void handleSubmitOrderForm();
+              }}
+            >
+              <div className="order-form-header">
+                <h2>Sipariş Oluştur</h2>
+                <button className="secondary-action icon-only" type="button" onClick={() => setOrderFormOpen(false)} aria-label="Kapat">
+                  <XCircle size={16} aria-hidden="true" />
+                </button>
+              </div>
+              {orderFormMessage && <div className="order-form-message" data-testid="order-form-message">{orderFormMessage}</div>}
+              <div className="order-form-grid">
+                <label>
+                  <span>İsim</span>
+                  <input className="inline-input" data-testid="order-form-name" value={orderForm.customer_name} onChange={(event) => setOrderForm((current) => ({ ...current, customer_name: event.target.value }))} />
+                </label>
+                <label>
+                  <span>Telefon</span>
+                  <input className="inline-input" data-testid="order-form-phone" value={orderForm.customer_phone} onChange={(event) => setOrderForm((current) => ({ ...current, customer_phone: event.target.value }))} />
+                </label>
+                <label>
+                  <span>Şehir</span>
+                  <input className="inline-input" data-testid="order-form-city" value={orderForm.city} onChange={(event) => setOrderForm((current) => ({ ...current, city: event.target.value }))} />
+                </label>
+                <label>
+                  <span>İlçe</span>
+                  <input className="inline-input" data-testid="order-form-district" value={orderForm.district} onChange={(event) => setOrderForm((current) => ({ ...current, district: event.target.value }))} />
+                </label>
+              </div>
+              <label className="order-form-full">
+                <span>Adres</span>
+                <textarea className="inline-input" data-testid="order-form-address" rows={2} value={orderForm.address_line} onChange={(event) => setOrderForm((current) => ({ ...current, address_line: event.target.value }))} />
+              </label>
+              <div className="order-form-cargo" data-testid="order-form-cargo">
+                <span>Kargo</span>
+                <button className={cx("secondary-action", orderForm.cargo_provider === "ptt" && "selected")} type="button" onClick={() => setOrderForm((current) => ({ ...current, cargo_provider: "ptt" }))}>PTT Kargo</button>
+                <button className={cx("secondary-action", orderForm.cargo_provider === "surat" && "selected")} type="button" onClick={() => setOrderForm((current) => ({ ...current, cargo_provider: "surat" }))}>Sürat Kargo</button>
+              </div>
+              <button className="primary-action order-form-submit" data-testid="order-form-submit" disabled={orderFormSubmitting} type="submit">
+                {orderFormSubmitting ? "Oluşturuluyor..." : "Sipariş Oluştur"}
+              </button>
+            </form>
+          </div>
+        )}
 
         {activeFlow === "inbox" && (
           <FlowPanel title="Mesajlar" icon={<MessageCircle size={18} />} testId="inbox-flow">
@@ -2707,7 +2966,7 @@ export function App() {
                     <button
                       className="primary-action"
                       type="button"
-                      onClick={() => void handleCreateOrder("conversation")}
+                      onClick={() => openOrderForm("conversation")}
                     >
                       Konuşmadan sipariş aç
                     </button>
@@ -2824,7 +3083,7 @@ export function App() {
               </button>
             </div>
             <div className="orders-toolbar">
-              <button className="primary-action" type="button" onClick={() => void handleCreateOrder("orders")}>
+              <button className="primary-action" type="button" onClick={() => openOrderForm("orders")}>
                 Sipariş oluştur
               </button>
               <button className="secondary-action icon-action" data-testid="orders-export-current" type="button" onClick={() => void handleExportOrders("current")}>
@@ -2845,6 +3104,183 @@ export function App() {
                 Toplu KolayBi aktar
               </button>
             </div>
+            {orderFormOpen && (
+              <div className="order-form-backdrop" data-testid="order-create-modal">
+                <form
+                  className="order-form-modal"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void handleSubmitOrderForm();
+                  }}
+                >
+                  <div className="order-form-header">
+                    <h2>Sipariş Oluştur</h2>
+                    <button className="secondary-action icon-only" type="button" onClick={() => setOrderFormOpen(false)} aria-label="Kapat">
+                      <XCircle size={16} aria-hidden="true" />
+                    </button>
+                  </div>
+                  {orderFormMessage && (
+                    <div className="order-form-message" data-testid="order-form-message">
+                      {orderFormMessage}
+                    </div>
+                  )}
+                  <div className="order-form-grid">
+                    <label>
+                      <span>İsim</span>
+                      <input
+                        className="inline-input"
+                        data-testid="order-form-name"
+                        placeholder="İsim Soyisim"
+                        value={orderForm.customer_name}
+                        onChange={(event) => setOrderForm((current) => ({ ...current, customer_name: event.target.value, customer_public_id: null, force_duplicate: false }))}
+                      />
+                    </label>
+                    <label>
+                      <span>Telefon</span>
+                      <input
+                        className="inline-input"
+                        data-testid="order-form-phone"
+                        placeholder="05XX XXX XX XX"
+                        value={orderForm.customer_phone}
+                        onBlur={() => void lookupOrderCustomerByPhone()}
+                        onChange={(event) => setOrderForm((current) => ({ ...current, customer_phone: event.target.value, customer_public_id: null, force_duplicate: false }))}
+                      />
+                    </label>
+                  </div>
+                  <div className="order-form-items">
+                    <div className="order-form-section-title">
+                      <span>Ürünler</span>
+                      <button className="secondary-action" data-testid="order-form-add-item" type="button" onClick={addOrderFormItem}>
+                        Ürün Ekle
+                      </button>
+                    </div>
+                    {orderForm.items.map((item, index) => (
+                      <div className="order-form-item" data-testid={`order-form-item-${index}`} key={index}>
+                        <select
+                          className="inline-input"
+                          data-testid={`order-form-product-${index}`}
+                          value={item.product_public_id}
+                          onChange={(event) => selectOrderFormProduct(index, event.target.value)}
+                        >
+                          <option value="">Ürün seç...</option>
+                          {data.products.map((product) => (
+                            <option key={product.public_id} value={product.public_id}>{product.name}</option>
+                          ))}
+                        </select>
+                        <input
+                          className="inline-input"
+                          data-testid={`order-form-item-name-${index}`}
+                          placeholder="Ürün adı"
+                          value={item.name}
+                          onChange={(event) => updateOrderFormItem(index, { name: event.target.value, product_public_id: "" })}
+                        />
+                        <input
+                          className="inline-input"
+                          data-testid={`order-form-quantity-${index}`}
+                          min="1"
+                          type="number"
+                          value={item.quantity}
+                          onChange={(event) => updateOrderFormItem(index, { quantity: Number(event.target.value) || 1 })}
+                        />
+                        <input
+                          className="inline-input"
+                          data-testid={`order-form-price-${index}`}
+                          min="0"
+                          step="0.01"
+                          type="number"
+                          value={item.unit_price}
+                          onChange={(event) => updateOrderFormItem(index, { unit_price: event.target.value })}
+                        />
+                        <span data-testid={`order-form-line-total-${index}`}>
+                          {(Math.max(Number(item.quantity) || 0, 0) * parseMoneyInput(item.unit_price)).toFixed(2)} TRY
+                        </span>
+                        {orderForm.items.length > 1 && (
+                          <button className="secondary-action icon-only" type="button" onClick={() => removeOrderFormItem(index)} aria-label="Ürünü çıkar">
+                            <Trash2 size={16} aria-hidden="true" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="order-form-grid">
+                    <label>
+                      <span>Şehir</span>
+                      <input
+                        className="inline-input"
+                        data-testid="order-form-city"
+                        placeholder="Şehir"
+                        value={orderForm.city}
+                        onChange={(event) => setOrderForm((current) => ({ ...current, city: event.target.value, force_surat_at: false }))}
+                      />
+                    </label>
+                    <label>
+                      <span>İlçe</span>
+                      <input
+                        className="inline-input"
+                        data-testid="order-form-district"
+                        placeholder="İlçe"
+                        value={orderForm.district}
+                        onChange={(event) => setOrderForm((current) => ({ ...current, district: event.target.value, force_surat_at: false }))}
+                      />
+                    </label>
+                  </div>
+                  <label className="order-form-full">
+                    <span>Adres</span>
+                    <textarea
+                      className="inline-input"
+                      data-testid="order-form-address"
+                      placeholder="Adres"
+                      rows={2}
+                      value={orderForm.address_line}
+                      onChange={(event) => setOrderForm((current) => ({ ...current, address_line: event.target.value, force_surat_at: false }))}
+                    />
+                  </label>
+                  <label className="order-form-full">
+                    <span>Not</span>
+                    <input
+                      className="inline-input"
+                      data-testid="order-form-notes"
+                      placeholder="Sipariş notu..."
+                      value={orderForm.notes}
+                      onChange={(event) => setOrderForm((current) => ({ ...current, notes: event.target.value }))}
+                    />
+                  </label>
+                  <div className="order-form-cargo" data-testid="order-form-cargo">
+                    <span>Kargo</span>
+                    <button
+                      className={cx("secondary-action", orderForm.cargo_provider === "ptt" && "selected")}
+                      type="button"
+                      onClick={() => setOrderForm((current) => ({ ...current, cargo_provider: "ptt", force_surat_at: false }))}
+                    >
+                      PTT Kargo
+                    </button>
+                    <button
+                      className={cx("secondary-action", orderForm.cargo_provider === "surat" && "selected")}
+                      type="button"
+                      onClick={() => setOrderForm((current) => ({ ...current, cargo_provider: "surat", force_surat_at: false }))}
+                    >
+                      Sürat Kargo
+                    </button>
+                  </div>
+                  <DataRows
+                    rows={[
+                      ["Ara Toplam", `${currentOrderFormTotals.araToplam.toFixed(2)} TRY`, "KDV hariç"],
+                      ["KDV", `${currentOrderFormTotals.kdvToplam.toFixed(2)} TRY`, "%20"],
+                      ["Genel Toplam", `${currentOrderFormTotals.genelToplam.toFixed(2)} TRY`, "KDV dahil"],
+                    ]}
+                  />
+                  <button className="primary-action order-form-submit" data-testid="order-form-submit" disabled={orderFormSubmitting} type="submit">
+                    {orderFormSubmitting
+                      ? "Oluşturuluyor..."
+                      : orderForm.force_surat_at
+                        ? "Oluştur"
+                        : orderForm.force_duplicate
+                          ? "Yine de Oluştur"
+                          : "Sipariş Oluştur"}
+                  </button>
+                </form>
+              </div>
+            )}
             <div className="orders-list" data-testid="orders-list">
               <div className="orders-list-header">
                 <button className="secondary-action icon-only" data-testid="orders-select-all" type="button" onClick={toggleAllVisibleOrders} aria-label="Tümünü seç">

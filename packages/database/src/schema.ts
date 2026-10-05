@@ -256,6 +256,7 @@ export interface OrdersTable extends BaseTable {
   order_number: string;
   status: string;
   source: string;
+  cargo_provider: string | null;
   total_amount: string;
   manual_adjustment_amount: ColumnType<string, string | undefined, string>;
   currency: string;
