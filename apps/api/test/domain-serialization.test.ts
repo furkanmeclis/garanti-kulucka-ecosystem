@@ -82,11 +82,16 @@ describe("domain serialization", () => {
       created_at: date,
       updated_at: date,
       customer_full_name: null,
+      created_by_user_public_id: "usr_test",
+      created_by_user_email: "personel@example.com",
+      cargo_provider: "ptt",
     };
 
     expect(serializeOrder(order)).toMatchObject({
       order_number: "ORD-1",
       total_amount: "100.00",
+      created_by_user_email: "personel@example.com",
+      cargo_provider: "ptt",
     });
   });
 

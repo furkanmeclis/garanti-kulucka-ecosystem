@@ -6,8 +6,11 @@ import {
   BarChart3,
   Bot,
   Bug,
+  Calendar,
   CheckCircle,
   CheckCheck,
+  CheckSquare,
+  Download,
   FileUp,
   FileText,
   Headphones,
@@ -22,6 +25,7 @@ import {
   Send,
   Shield,
   ShoppingCart,
+  Square,
   Trash2,
   Truck,
   Users,
@@ -153,6 +157,8 @@ interface InstagramAnalyticsSummary {
 }
 
 type ShipmentPipelineFilter = "all" | ShipmentPipelineStep;
+type OrderSortBy = "created_at" | "order_number" | "status" | "total_amount";
+type SortDirection = "asc" | "desc";
 
 interface NavigationItem {
   key: string;
@@ -248,6 +254,37 @@ function shipmentFilterParams(filter: string): { provider?: string; status?: str
     params.tracking_missing = true;
   }
   return params;
+}
+
+function orderStatusLabel(status: string) {
+  const labels: Record<string, string> = {
+    draft: "Oluşturuldu",
+    created: "Oluşturuldu",
+    olusturuldu: "Oluşturuldu",
+    pending_confirmation: "Teyit Bekliyor",
+    teyit_bekliyor: "Teyit Bekliyor",
+    confirmed: "Teyit Edildi",
+    teyit_edildi: "Teyit Edildi",
+    preparing: "Hazırlanıyor",
+    hazirlaniyor: "Hazırlanıyor",
+    shipped: "Sevk Edildi",
+    sevk_edildi: "Sevk Edildi",
+    delivered: "Teslim Edildi",
+    teslim_edildi: "Teslim Edildi",
+    cancelled: "İptal",
+    iptal: "İptal",
+    returned: "İade",
+    iade: "İade",
+  };
+  return labels[status] ?? status;
+}
+
+function cargoProviderLabel(provider: string | null) {
+  if (!provider) return "-";
+  const normalized = provider.toLocaleLowerCase("tr-TR");
+  if (normalized.includes("ptt")) return "PTT";
+  if (normalized.includes("sürat") || normalized.includes("surat")) return "Sürat";
+  return provider;
 }
 
 function readStoredToken() {
@@ -623,6 +660,18 @@ export function App() {
   const [conversationSearch, setConversationSearch] = useState("");
   const [messageDraft, setMessageDraft] = useState("");
   const [orderFilter, setOrderFilter] = useState("all");
+  const [orderSearch, setOrderSearch] = useState("");
+  const [orderStatusFilter, setOrderStatusFilter] = useState("all");
+  const [orderSourceFilter, setOrderSourceFilter] = useState("all");
+  const [orderCargoFilter, setOrderCargoFilter] = useState("all");
+  const [orderPersonnelFilter, setOrderPersonnelFilter] = useState("all");
+  const [orderCreatedFrom, setOrderCreatedFrom] = useState("");
+  const [orderCreatedTo, setOrderCreatedTo] = useState("");
+  const [orderSortBy, setOrderSortBy] = useState<OrderSortBy>("created_at");
+  const [orderSortDirection, setOrderSortDirection] = useState<SortDirection>("desc");
+  const [orderPage, setOrderPage] = useState(0);
+  const [orderTotalCount, setOrderTotalCount] = useState(0);
+  const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(() => new Set());
   const [shipmentFilter, setShipmentFilter] = useState("all");
   const [shipmentPipelineFilter, setShipmentPipelineFilter] = useState<ShipmentPipelineFilter>("all");
   const [realtimeClient, setRealtimeClient] = useState<RealtimeClient | null>(null);
@@ -630,6 +679,7 @@ export function App() {
   const conversationFilterRequestSeqRef = useRef(0);
   const orderFilterRequestSeqRef = useRef(0);
   const shipmentFilterRequestSeqRef = useRef(0);
+  const dashboardLoadKeyRef = useRef<string | null>(null);
 
   const http = useMemo(
     () =>
@@ -752,6 +802,9 @@ export function App() {
 
   useEffect(() => {
     if (!token || !authChecked || !user) return;
+    const loadKey = `${token}:${user.public_id}`;
+    if (dashboardLoadKeyRef.current === loadKey) return;
+    dashboardLoadKeyRef.current = loadKey;
     void loadDashboard();
   }, [authChecked, token, user]);
 
@@ -840,6 +893,7 @@ export function App() {
     setSelectedConversationId((current) => current ?? firstConversation ?? null);
     setSelectedOrderId((current) => current ?? orders.data[0]?.public_id ?? null);
     setSelectedShipmentId((current) => current ?? shipments.data[0]?.public_id ?? null);
+    setOrderTotalCount(orders.meta?.total_count ?? orders.data.length);
     setStatus("Backend API, presigned dosya ve Socket.IO sınırları aktif");
   }
 
@@ -862,6 +916,7 @@ export function App() {
       await auth.logout();
     } finally {
       window.localStorage.removeItem(tokenStorageKey);
+      dashboardLoadKeyRef.current = null;
       setToken(null);
       setUser(null);
       setData({
@@ -1027,29 +1082,110 @@ export function App() {
     setStatus("Konuşma filtreleri backend API üzerinden uygulandı");
   }
 
-  async function handleApplyOrderFilter(nextFilter: string) {
+  function orderListParams(overrides: Partial<{
+    status: string;
+    confirmation_status: string;
+    search: string;
+    source: string;
+    cargo_provider: string;
+    created_by_user_public_id: string;
+    created_from: string;
+    created_to: string;
+    sort_by: OrderSortBy;
+    sort_direction: SortDirection;
+    page: number;
+    limit: number;
+  }> = {}) {
+    const status = overrides.status ?? orderStatusFilter;
+    const source = overrides.source ?? orderSourceFilter;
+    const cargoProvider = overrides.cargo_provider ?? orderCargoFilter;
+    const personnel = overrides.created_by_user_public_id ?? orderPersonnelFilter;
+    const search = overrides.search ?? orderSearch;
+    const createdFrom = overrides.created_from ?? orderCreatedFrom;
+    const createdTo = overrides.created_to ?? orderCreatedTo;
+    const sortBy = overrides.sort_by ?? orderSortBy;
+    const sortDirection = overrides.sort_direction ?? orderSortDirection;
+    const page = overrides.page ?? orderPage;
+    const limit = overrides.limit ?? 20;
+    const params: Parameters<typeof domain.listOrders>[0] = {
+      limit,
+      offset: page * limit,
+      sort_by: sortBy,
+      sort_direction: sortDirection,
+    };
+    if (status !== "all") params.status = status;
+    if (overrides.confirmation_status) params.confirmation_status = overrides.confirmation_status;
+    if (source !== "all") params.source = source;
+    if (cargoProvider !== "all") params.cargo_provider = cargoProvider;
+    if (personnel !== "all") params.created_by_user_public_id = personnel;
+    if (search.trim()) params.search = search.trim();
+    if (createdFrom) params.created_from = createdFrom;
+    if (createdTo) params.created_to = createdTo;
+    return params;
+  }
+
+  async function refreshOrders(overrides: Parameters<typeof orderListParams>[0] = {}) {
+    await refreshOrdersWithParams(orderListParams(overrides));
+  }
+
+  async function refreshOrdersWithParams(params: Parameters<typeof domain.listOrders>[0]) {
     const requestSeq = orderFilterRequestSeqRef.current + 1;
     orderFilterRequestSeqRef.current = requestSeq;
-    setOrderFilter(nextFilter);
     setStatus("Sipariş filtreleri backend API üzerinden uygulanıyor");
-    const filterParams: { status?: string; confirmation_status?: string; limit: number } = { limit: 20 };
-    if (nextFilter === "active") {
-      filterParams.status = "active";
-    }
-    if (nextFilter === "pending_confirmation") {
-      filterParams.confirmation_status = "pending";
-    }
-    if (nextFilter === "delivered") {
-      filterParams.status = "delivered";
-    }
-    const orders = await domain.listOrders(filterParams);
+    const orders = await domain.listOrders(params);
     if (orderFilterRequestSeqRef.current !== requestSeq) return;
     setData((current) => ({
       ...current,
       orders: orders.data,
     }));
+    setOrderTotalCount(orders.meta?.total_count ?? orders.data.length);
     setSelectedOrderId(orders.data[0]?.public_id ?? null);
+    setSelectedOrderIds(new Set());
     setStatus("Sipariş filtreleri backend API üzerinden uygulandı");
+  }
+
+  async function handleApplyOrderFilter(nextFilter: string) {
+    setOrderFilter(nextFilter);
+    setOrderPage(0);
+    setOrderStatusFilter("all");
+    let params: Parameters<typeof domain.listOrders>[0] = { limit: 20 };
+    if (nextFilter === "active") {
+      setOrderStatusFilter("active");
+      params = { status: "active", limit: 20 };
+    }
+    if (nextFilter === "pending_confirmation") {
+      params = { confirmation_status: "pending", limit: 20 };
+    }
+    if (nextFilter === "delivered") {
+      setOrderStatusFilter("delivered");
+      params = { status: "delivered", limit: 20 };
+    }
+    await refreshOrdersWithParams(params);
+  }
+
+  async function handleApplyOrderAdvancedFilters() {
+    setOrderFilter("custom");
+    setOrderPage(0);
+    await refreshOrders({ page: 0, confirmation_status: "" });
+  }
+
+  async function handleOrderPage(nextPage: number) {
+    const boundedPage = Math.max(0, nextPage);
+    setOrderPage(boundedPage);
+    await refreshOrders({ page: boundedPage, confirmation_status: orderFilter === "pending_confirmation" ? "pending" : "" });
+  }
+
+  async function handleOrderSort(nextSortBy: OrderSortBy) {
+    const nextDirection: SortDirection = orderSortBy === nextSortBy && orderSortDirection === "desc" ? "asc" : "desc";
+    setOrderSortBy(nextSortBy);
+    setOrderSortDirection(nextDirection);
+    setOrderPage(0);
+    await refreshOrders({
+      page: 0,
+      sort_by: nextSortBy,
+      sort_direction: nextDirection,
+      confirmation_status: orderFilter === "pending_confirmation" ? "pending" : "",
+    });
   }
 
   async function handleApplyShipmentFilter(nextFilter: string) {
@@ -1098,6 +1234,73 @@ export function App() {
     }));
     setSelectedOrderId(order.public_id);
     setStatus("Sipariş backend API üzerinden oluşturuldu");
+  }
+
+  function toggleOrderSelection(orderPublicId: string) {
+    setSelectedOrderIds((current) => {
+      const next = new Set(current);
+      if (next.has(orderPublicId)) next.delete(orderPublicId);
+      else next.add(orderPublicId);
+      return next;
+    });
+  }
+
+  function toggleAllVisibleOrders() {
+    setSelectedOrderIds((current) => {
+      const visibleIds = data.orders.map((order) => order.public_id);
+      const allSelected = visibleIds.length > 0 && visibleIds.every((id) => current.has(id));
+      if (allSelected) return new Set([...current].filter((id) => !visibleIds.includes(id)));
+      return new Set([...current, ...visibleIds]);
+    });
+  }
+
+  function downloadOrderExcel(rows: OrderSummary[], format: "liste" | "telefon") {
+    const headers = format === "telefon"
+      ? ["İsim", "Telefon"]
+      : ["Sipariş No", "Müşteri", "Durum", "Kaynak", "Kargo", "Personel", "Tutar", "Tarih"];
+    const bodyRows = rows.map((order) => format === "telefon"
+      ? [order.customer_full_name ?? order.order_number, ""]
+      : [
+          order.order_number,
+          order.customer_full_name ?? "",
+          orderStatusLabel(order.status),
+          order.source,
+          cargoProviderLabel(order.cargo_provider),
+          order.created_by_user_email ?? "",
+          `${order.total_amount} ${order.currency}`,
+          new Date(order.created_at).toLocaleDateString("tr-TR"),
+        ]);
+    const escapeCell = (value: string) => value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+    const tableRows = [headers, ...bodyRows]
+      .map((row) => `<tr>${row.map((cell) => `<td>${escapeCell(String(cell))}</td>`).join("")}</tr>`)
+      .join("");
+    const blob = new Blob(
+      [`<html><head><meta charset="utf-8" /></head><body><table>${tableRows}</table></body></html>`],
+      { type: "application/vnd.ms-excel;charset=utf-8" },
+    );
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `siparisler-${format}-${new Date().toISOString().slice(0, 10)}.xls`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function handleExportOrders(scope: "current" | "selected" | "all") {
+    const selectedRows = data.orders.filter((order) => selectedOrderIds.has(order.public_id));
+    if (scope === "selected") {
+      downloadOrderExcel(selectedRows, "liste");
+      setStatus(`${selectedRows.length} seçili sipariş Excel olarak indirildi`);
+      return;
+    }
+    if (scope === "current") {
+      downloadOrderExcel(data.orders, "liste");
+      setStatus(`${data.orders.length} görünür sipariş Excel olarak indirildi`);
+      return;
+    }
+    const orders = await domain.listOrders(orderListParams({ page: 0, limit: 200, confirmation_status: orderFilter === "pending_confirmation" ? "pending" : "" }));
+    downloadOrderExcel(orders.data, "liste");
+    setStatus(`${orders.data.length} filtrelenmiş sipariş Excel olarak indirildi`);
   }
 
   async function handleCancelSelectedOrder() {
@@ -1452,6 +1655,13 @@ export function App() {
   const selectedCustomer = data.customers[0] ?? null;
   const selectedOrder = data.orders.find((order) => order.public_id === selectedOrderId) ?? data.orders[0] ?? null;
   const selectedShipment = data.shipments.find((shipment) => shipment.public_id === selectedShipmentId) ?? data.shipments[0] ?? null;
+  const visibleOrderIds = data.orders.map((order) => order.public_id);
+  const allVisibleOrdersSelected = visibleOrderIds.length > 0 && visibleOrderIds.every((id) => selectedOrderIds.has(id));
+  const orderPageCount = Math.max(1, Math.ceil(orderTotalCount / 20));
+  const orderSources = [...new Set(data.orders.map((order) => order.source).filter(Boolean))].sort();
+  const orderPersonnel = [...new Map(data.orders
+    .filter((order) => order.created_by_user_public_id && order.created_by_user_email)
+    .map((order) => [order.created_by_user_public_id as string, order.created_by_user_email as string])).entries()];
   const smsVariableValues: Record<SmsTemplateVariable, string> = {
     "{musteri_adi}": selectedShipment?.recipient_name ?? selectedOrder?.customer_full_name ?? "Müşteri",
     "{takip_no}": selectedShipment?.tracking_number ?? selectedShipment?.barcode_number ?? "takip bekliyor",
@@ -1847,7 +2057,7 @@ export function App() {
               <Metric title="Teyit Bekleyen" value={String(data.orderSummary.pending_confirmation_count)} />
               <Metric title="Ciro" value={formatMoney(data.orderSummary.total_revenue, data.orderSummary.currency)} />
             </div>
-            <div className="detail-actions" data-testid="order-section-filters">
+            <div className="orders-toolbar" data-testid="order-section-filters">
               <button
                 className={cx("secondary-action", orderFilter === "all" && "selected")}
                 data-testid="order-filter-all"
@@ -1881,33 +2091,160 @@ export function App() {
                 Teslim {orderFilter === "all" || orderFilter === "delivered" ? data.orderSummary.delivered_count : "sonuç"}
               </button>
             </div>
-            <button className="primary-action" type="button" onClick={() => void handleCreateOrder("orders")}>
-              Sipariş oluştur
-            </button>
-            <DataRows rows={data.orders.map((order) => [order.order_number, order.status, `${order.total_amount} ${order.currency}`])} />
-            <div className="detail-actions">
+            <div className="orders-filter-grid" data-testid="orders-advanced-filters">
+              <label>
+                <span>Arama</span>
+                <input
+                  className="inline-input"
+                  data-testid="orders-search-input"
+                  placeholder="Sipariş, müşteri, not"
+                  value={orderSearch}
+                  onChange={(event) => setOrderSearch(event.target.value)}
+                />
+              </label>
+              <label>
+                <span>Durum</span>
+                <select className="inline-input" data-testid="orders-status-filter" value={orderStatusFilter} onChange={(event) => setOrderStatusFilter(event.target.value)}>
+                  <option value="all">Tüm durumlar</option>
+                  <option value="active">Aktif</option>
+                  <option value="draft">Oluşturuldu</option>
+                  <option value="delivered">Teslim Edildi</option>
+                  <option value="cancelled">İptal</option>
+                  <option value="returned">İade</option>
+                </select>
+              </label>
+              <label>
+                <span>Kaynak</span>
+                <select className="inline-input" data-testid="orders-source-filter" value={orderSourceFilter} onChange={(event) => setOrderSourceFilter(event.target.value)}>
+                  <option value="all">Tüm kaynaklar</option>
+                  <option value="manual">manual</option>
+                  {orderSources.filter((source) => source !== "manual").map((source) => (
+                    <option key={source} value={source}>{source}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>Kargo</span>
+                <select className="inline-input" data-testid="orders-cargo-filter" value={orderCargoFilter} onChange={(event) => setOrderCargoFilter(event.target.value)}>
+                  <option value="all">Tüm kargolar</option>
+                  <option value="ptt">PTT</option>
+                  <option value="surat">Sürat</option>
+                  <option value="other">Diğer</option>
+                </select>
+              </label>
+              <label>
+                <span>Personel</span>
+                <select className="inline-input" data-testid="orders-person-filter" value={orderPersonnelFilter} onChange={(event) => setOrderPersonnelFilter(event.target.value)}>
+                  <option value="all">Tüm personel</option>
+                  {orderPersonnel.map(([publicId, email]) => (
+                    <option key={publicId} value={publicId}>{email}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>Başlangıç</span>
+                <input className="inline-input" data-testid="orders-date-from" type="date" value={orderCreatedFrom} onChange={(event) => setOrderCreatedFrom(event.target.value)} />
+              </label>
+              <label>
+                <span>Bitiş</span>
+                <input className="inline-input" data-testid="orders-date-to" type="date" value={orderCreatedTo} onChange={(event) => setOrderCreatedTo(event.target.value)} />
+              </label>
+              <button className="primary-action icon-action" data-testid="orders-apply-filters" type="button" onClick={() => void handleApplyOrderAdvancedFilters()}>
+                <Search size={16} aria-hidden="true" />
+                <span>Filtrele</span>
+              </button>
+            </div>
+            <div className="orders-toolbar">
+              <button className="primary-action" type="button" onClick={() => void handleCreateOrder("orders")}>
+                Sipariş oluştur
+              </button>
+              <button className="secondary-action icon-action" data-testid="orders-export-current" type="button" onClick={() => void handleExportOrders("current")}>
+                <Download size={16} aria-hidden="true" />
+                <span>Excel indir</span>
+              </button>
+              <button className="secondary-action icon-action" data-testid="orders-export-all" type="button" onClick={() => void handleExportOrders("all")}>
+                <Download size={16} aria-hidden="true" />
+                <span>Filtreli Excel</span>
+              </button>
+              <button className="secondary-action" data-testid="orders-export-selected" disabled={selectedOrderIds.size === 0} type="button" onClick={() => void handleExportOrders("selected")}>
+                Seçilenleri indir ({selectedOrderIds.size})
+              </button>
+              <button className="secondary-action" disabled type="button" title="P5 slice 5 provider boundary ile açılacak">
+                Toplu teyit ara
+              </button>
+              <button className="secondary-action" disabled type="button" title="P5 slice 5 KolayBi boundary ile açılacak">
+                Toplu KolayBi aktar
+              </button>
+            </div>
+            <div className="orders-list" data-testid="orders-list">
+              <div className="orders-list-header">
+                <button className="secondary-action icon-only" data-testid="orders-select-all" type="button" onClick={toggleAllVisibleOrders} aria-label="Tümünü seç">
+                  {allVisibleOrdersSelected ? <CheckSquare size={16} aria-hidden="true" /> : <Square size={16} aria-hidden="true" />}
+                </button>
+                <button className="orders-sort-button" type="button" onClick={() => void handleOrderSort("order_number")}>Sipariş No</button>
+                <span>Müşteri</span>
+                <button className="orders-sort-button" type="button" onClick={() => void handleOrderSort("status")}>Durum</button>
+                <span>Kaynak</span>
+                <span>Kargo</span>
+                <span>Personel</span>
+                <button className="orders-sort-button" type="button" onClick={() => void handleOrderSort("total_amount")}>Tutar</button>
+                <button className="orders-sort-button" type="button" onClick={() => void handleOrderSort("created_at")}>Tarih</button>
+              </div>
               {data.orders.map((order) => (
                 <button
-                  className={cx("secondary-action", selectedOrder?.public_id === order.public_id && "selected")}
+                  className={cx("orders-list-row", selectedOrder?.public_id === order.public_id && "selected")}
+                  data-testid={`order-row-${order.public_id}`}
                   key={order.public_id}
                   type="button"
                   onClick={() => setSelectedOrderId(order.public_id)}
                 >
-                  {order.order_number} detay
+                  <span
+                    className="orders-row-checkbox"
+                    role="checkbox"
+                    aria-checked={selectedOrderIds.has(order.public_id)}
+                    tabIndex={0}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      toggleOrderSelection(order.public_id);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        toggleOrderSelection(order.public_id);
+                      }
+                    }}
+                  >
+                    {selectedOrderIds.has(order.public_id) ? <CheckSquare size={16} aria-hidden="true" /> : <Square size={16} aria-hidden="true" />}
+                  </span>
+                  <strong>{order.order_number}</strong>
+                  <span>{order.customer_full_name ?? "Müşteri eşleşmedi"}</span>
+                  <span>{orderStatusLabel(order.status)}</span>
+                  <span>{order.source}</span>
+                  <span>{cargoProviderLabel(order.cargo_provider)}</span>
+                  <span>{order.created_by_user_email ?? "-"}</span>
+                  <span>{order.total_amount} {order.currency}</span>
+                  <span><Calendar size={14} aria-hidden="true" /> {new Date(order.created_at).toLocaleDateString("tr-TR")}</span>
                 </button>
               ))}
+            </div>
+            <div className="orders-pagination" data-testid="orders-pagination">
+              <span>{orderTotalCount.toLocaleString("tr-TR")} kayıt, sayfa {orderPage + 1}/{orderPageCount}</span>
+              <button className="secondary-action" disabled={orderPage === 0} type="button" onClick={() => void handleOrderPage(orderPage - 1)}>Önceki</button>
+              <button className="secondary-action" disabled={orderPage + 1 >= orderPageCount} type="button" onClick={() => void handleOrderPage(orderPage + 1)}>Sonraki</button>
             </div>
             {selectedOrder && (
               <DetailPanel title="Sipariş Detayı" testId="order-detail">
                 <DataRows
                   rows={[
-                    ["Sipariş No", selectedOrder.order_number, selectedOrder.status],
+                    ["Sipariş No", selectedOrder.order_number, orderStatusLabel(selectedOrder.status)],
                     ["Müşteri", selectedOrder.customer_full_name ?? "Müşteri eşleşmedi", selectedOrder.source],
                     [
                       "Tutar",
                       `${selectedOrder.total_amount} ${selectedOrder.currency}`,
                       selectedOrder.confirmation_status ?? "teyit bekliyor",
                     ],
+                    ["Kargo", cargoProviderLabel(selectedOrder.cargo_provider), selectedOrder.created_by_user_email ?? "personel yok"],
                     ["Not", selectedOrder.notes ?? "-", selectedOrder.updated_at],
                   ]}
                 />

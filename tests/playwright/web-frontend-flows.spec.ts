@@ -504,6 +504,9 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
             confirmation_status: null,
             notes: payload.notes ?? "Frontend backend create smoke",
             customer_full_name: "Playwright Customer",
+            created_by_user_public_id: "usr_admin",
+            created_by_user_email: "admin@example.com",
+            cargo_provider: "ptt",
             created_at: "2026-01-01T00:02:00.000Z",
             updated_at: "2026-01-01T00:02:00.000Z",
           }),
@@ -523,6 +526,9 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
           confirmation_status: null,
           notes: "fixture order",
           customer_full_name: "Playwright Customer",
+          created_by_user_public_id: "usr_admin",
+          created_by_user_email: "admin@example.com",
+          cargo_provider: "ptt",
           created_at: "2026-01-01T00:00:00.000Z",
           updated_at: "2026-01-01T00:00:00.000Z",
         },
@@ -536,12 +542,21 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
           confirmation_status: "confirmed",
           notes: "delivered fixture order",
           customer_full_name: "Delivered Customer",
+          created_by_user_public_id: "usr_staff",
+          created_by_user_email: "staff@example.com",
+          cargo_provider: "Sürat",
           created_at: "2026-01-01T00:03:00.000Z",
           updated_at: "2026-01-01T00:03:00.000Z",
         },
       ];
       const requestedStatus = url.searchParams.get("status");
       const requestedConfirmationStatus = url.searchParams.get("confirmation_status");
+      const requestedSearch = url.searchParams.get("search")?.toLocaleLowerCase("tr-TR");
+      const requestedSource = url.searchParams.get("source");
+      const requestedCargo = url.searchParams.get("cargo_provider");
+      const requestedPerson = url.searchParams.get("created_by_user_public_id");
+      const requestedFrom = url.searchParams.get("created_from");
+      const requestedTo = url.searchParams.get("created_to");
       const filteredOrders = orders.filter((order) => {
         const statusMatches =
           !requestedStatus ||
@@ -553,12 +568,30 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
           (requestedConfirmationStatus === "pending"
             ? order.confirmation_status === null
             : order.confirmation_status === requestedConfirmationStatus);
-        return statusMatches && confirmationMatches;
+        const searchMatches =
+          !requestedSearch ||
+          [order.order_number, order.customer_full_name, order.notes, order.source]
+            .some((value) => value?.toLocaleLowerCase("tr-TR").includes(requestedSearch));
+        const sourceMatches = !requestedSource || order.source === requestedSource;
+        const cargoMatches =
+          !requestedCargo ||
+          (requestedCargo === "surat"
+            ? ["surat", "sürat"].some((value) => order.cargo_provider.toLocaleLowerCase("tr-TR").includes(value))
+            : order.cargo_provider.toLocaleLowerCase("tr-TR").includes(requestedCargo));
+        const personMatches = !requestedPerson || order.created_by_user_public_id === requestedPerson;
+        const createdAt = order.created_at.slice(0, 10);
+        const dateMatches = (!requestedFrom || createdAt >= requestedFrom) && (!requestedTo || createdAt <= requestedTo);
+        return statusMatches && confirmationMatches && searchMatches && sourceMatches && cargoMatches && personMatches && dateMatches;
       });
       await route.fulfill({
         contentType: "application/json",
         body: JSON.stringify({
           data: filteredOrders,
+          meta: {
+            total_count: filteredOrders.length,
+            limit: Number(url.searchParams.get("limit") ?? 20),
+            offset: Number(url.searchParams.get("offset") ?? 0),
+          },
         }),
       });
       return;
@@ -2310,6 +2343,27 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
         "/api/orders?status=delivered&limit=20",
       ]),
     );
+    await page.getByTestId("orders-search-input").fill("Delivered");
+    await page.getByTestId("orders-status-filter").selectOption("delivered");
+    await page.getByTestId("orders-source-filter").selectOption("manual");
+    await page.getByTestId("orders-cargo-filter").selectOption("surat");
+    await page.getByTestId("orders-date-from").fill("2026-01-01");
+    await page.getByTestId("orders-date-to").fill("2026-01-01");
+    await page.getByTestId("orders-apply-filters").click();
+    await expect(page.getByTestId("orders-list")).toContainText("ORD-DELIVERED");
+    await expect(page.getByTestId("orders-list")).not.toContainText("ORD-PLAYWRIGHT");
+    await page.getByTestId("orders-person-filter").selectOption("usr_staff");
+    await page.getByTestId("orders-apply-filters").click();
+    await expect(page.getByTestId("orders-list")).toContainText("staff@example.com");
+    await page.getByTestId("orders-select-all").click();
+    await expect(page.getByTestId("orders-export-selected")).toContainText("Seçilenleri indir (1)");
+    await page.getByTestId("orders-export-current").click();
+    await expect(page.getByText(/görünür sipariş Excel olarak indirildi/i)).toBeVisible();
+    await page.getByTestId("orders-export-selected").click();
+    await expect(page.getByText(/seçili sipariş Excel olarak indirildi/i)).toBeVisible();
+    await page.getByTestId("orders-export-all").click();
+    await expect(page.getByText(/filtrelenmiş sipariş Excel olarak indirildi/i)).toBeVisible();
+    await expect(page.getByTestId("orders-pagination")).toContainText("sayfa 1/1");
     await page.getByRole("button", { name: /sipariş oluştur/i }).click();
     await expect(page.getByTestId("orders-flow")).toContainText("ORD-WEB-NEW");
     await expect(page.getByTestId("order-detail")).toContainText("ORD-WEB-NEW");

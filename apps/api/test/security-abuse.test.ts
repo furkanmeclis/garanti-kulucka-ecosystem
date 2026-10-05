@@ -29,6 +29,36 @@ describe("security abuse guards", () => {
     expect(conversationsQuery.parameters).toEqual([maliciousChannel]);
   });
 
+  it("keeps expanded order list filters parameterized", () => {
+    const db = new Kysely<Database>({
+      dialect: new PostgresDialect({ pool: {} as never }),
+    });
+    const maliciousSearch = "%' OR 1=1 --";
+    const maliciousCargo = "ptt'); DROP TABLE shipments; --";
+    const maliciousUser = "usr_bad' OR role='admin";
+
+    const query = db
+      .selectFrom("orders")
+      .leftJoin("customers", "customers.id", "orders.customer_id")
+      .leftJoin("users", "users.id", "orders.created_by_user_id")
+      .leftJoin("shipments", "shipments.order_id", "orders.id")
+      .selectAll("orders")
+      .where((expression) =>
+        expression.or([
+          expression("orders.order_number", "ilike", maliciousSearch),
+          expression("customers.full_name", "ilike", maliciousSearch),
+        ]),
+      )
+      .where("shipments.provider", "=", maliciousCargo)
+      .where("users.public_id", "=", maliciousUser)
+      .compile();
+
+    expect(query.sql).not.toContain(maliciousSearch);
+    expect(query.sql).not.toContain(maliciousCargo);
+    expect(query.sql).not.toContain(maliciousUser);
+    expect(query.parameters).toEqual([maliciousSearch, maliciousSearch, maliciousCargo, maliciousUser]);
+  });
+
   it("blocks private and localhost user-supplied URLs before provider preview storage", () => {
     expect(isAllowedOutboundUserUrl("https://example.com/media.jpg")).toBe(true);
     expect(isAllowedOutboundUserUrl("http://127.0.0.1/admin")).toBe(false);

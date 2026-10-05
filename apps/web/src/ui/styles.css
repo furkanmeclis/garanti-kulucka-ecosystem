@@ -493,6 +493,114 @@ nav {
   gap: 10px;
 }
 
+.orders-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.orders-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  align-items: end;
+}
+
+.orders-filter-grid label {
+  display: grid;
+  gap: 6px;
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+.orders-list {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.orders-list-header,
+.orders-list-row {
+  display: grid;
+  grid-template-columns: 42px minmax(120px, 1fr) minmax(140px, 1.2fr) minmax(112px, 0.9fr) minmax(80px, 0.7fr) minmax(80px, 0.7fr) minmax(150px, 1.1fr) minmax(90px, 0.8fr) minmax(110px, 0.9fr);
+  gap: 8px;
+  align-items: center;
+  min-width: 1080px;
+}
+
+.orders-list-header {
+  padding: 0 10px;
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.orders-list-row {
+  width: 100%;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 10px;
+  color: #cbd5e1;
+  text-align: left;
+  background: #0f172a;
+}
+
+.orders-list-row:hover,
+.orders-list-row.selected {
+  border-color: rgba(34, 197, 94, 0.55);
+  background: rgba(34, 197, 94, 0.08);
+}
+
+.orders-list-row > span,
+.orders-list-row > strong,
+.orders-list-header > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.orders-row-checkbox,
+.orders-list-row span:last-child {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.orders-sort-button {
+  border: 0;
+  padding: 0;
+  color: #94a3b8;
+  text-align: left;
+  text-transform: uppercase;
+  background: transparent;
+  cursor: pointer;
+}
+
+.orders-sort-button:hover {
+  color: #86efac;
+}
+
+.orders-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  color: #94a3b8;
+}
+
+.icon-only {
+  width: 36px;
+  padding: 0;
+}
+
+.secondary-action:disabled,
+.primary-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .detail-panel,
 .integration-detail {
   display: grid;

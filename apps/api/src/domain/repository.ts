@@ -21,6 +21,9 @@ export type CustomerRecord = Selectable<CustomersTable>;
 export type MessageRecord = Selectable<MessagesTable>;
 export type OrderRecord = Selectable<OrdersTable> & {
   customer_full_name: string | null;
+  created_by_user_public_id: string | null;
+  created_by_user_email: string | null;
+  cargo_provider: string | null;
 };
 export type ProductRecord = Selectable<ProductsTable>;
 export type ProviderAttemptRecord = Selectable<ProviderAttemptsTable>;
@@ -82,7 +85,23 @@ export interface CustomerSummaryRecord {
 export interface ListOrdersFilter {
   status?: string;
   confirmationStatus?: string;
+  search?: string;
+  source?: string;
+  cargoProvider?: string;
+  createdByUserPublicId?: string;
+  createdFrom?: Date;
+  createdTo?: Date;
+  sortBy?: "created_at" | "order_number" | "status" | "total_amount";
+  sortDirection?: "asc" | "desc";
+  offset?: number;
   limit: number;
+}
+
+export interface ListOrdersResult {
+  rows: OrderRecord[];
+  total_count: number;
+  limit: number;
+  offset: number;
 }
 
 export interface ListShipmentsFilter {
@@ -270,8 +289,15 @@ export class DomainRepository {
     const order = await db
       .selectFrom("orders")
       .leftJoin("customers", "customers.id", "orders.customer_id")
+      .leftJoin("users", "users.id", "orders.created_by_user_id")
+      .leftJoin("shipments", "shipments.order_id", "orders.id")
       .selectAll("orders")
-      .select("customers.full_name as customer_full_name")
+      .select([
+        "customers.full_name as customer_full_name",
+        "users.public_id as created_by_user_public_id",
+        "users.email as created_by_user_email",
+        "shipments.provider as cargo_provider",
+      ])
       .where("orders.public_id", "=", orderPublicId)
       .executeTakeFirst();
 
@@ -478,12 +504,14 @@ export class DomainRepository {
     });
   }
 
-  async listOrders(filter: ListOrdersFilter): Promise<OrderRecord[]> {
-    return this.db
-      .selectFrom("orders")
-      .leftJoin("customers", "customers.id", "orders.customer_id")
-      .selectAll("orders")
-      .select("customers.full_name as customer_full_name")
+  private applyOrderFilters<T>(query: T, filter: ListOrdersFilter): T {
+    const searchPattern = filter.search ? `%${filter.search}%` : null;
+    type OrderFilterBuilder = {
+      $if: (condition: boolean, callback: (builder: OrderFilterBuilder) => OrderFilterBuilder) => OrderFilterBuilder;
+      where: (...args: unknown[]) => OrderFilterBuilder;
+    };
+    let next = query as OrderFilterBuilder;
+    next = next
       .$if(filter.status === "active", (builder) =>
         builder.where("orders.status", "not in", ["cancelled", "returned", "delivered"]),
       )
@@ -496,7 +524,83 @@ export class DomainRepository {
       .$if(Boolean(filter.confirmationStatus && filter.confirmationStatus !== "pending"), (builder) =>
         builder.where("orders.confirmation_status", "=", filter.confirmationStatus as string),
       )
-      .orderBy("orders.created_at", "desc")
+      .$if(Boolean(filter.source), (builder) => builder.where("orders.source", "=", filter.source as string))
+      .$if(Boolean(filter.createdByUserPublicId), (builder) =>
+        builder.where("users.public_id", "=", filter.createdByUserPublicId as string),
+      )
+      .$if(Boolean(filter.createdFrom), (builder) => builder.where("orders.created_at", ">=", filter.createdFrom as Date))
+      .$if(Boolean(filter.createdTo), (builder) => builder.where("orders.created_at", "<=", filter.createdTo as Date))
+      .$if(Boolean(searchPattern), (builder) =>
+        builder.where((expression: {
+          or: (items: unknown[]) => unknown;
+          (column: string, operator: string, value: string): unknown;
+        }) =>
+          expression.or([
+            expression("orders.order_number", "ilike", searchPattern as string),
+            expression("orders.status", "ilike", searchPattern as string),
+            expression("orders.source", "ilike", searchPattern as string),
+            expression("orders.notes", "ilike", searchPattern as string),
+            expression("customers.full_name", "ilike", searchPattern as string),
+          ]),
+        ),
+      );
+
+    if (filter.cargoProvider === "surat") {
+      next = next.where("shipments.provider", "in", ["surat", "Sürat"]) as typeof next;
+    } else if (filter.cargoProvider === "other") {
+      next = next.where("shipments.provider", "not in", ["ptt", "surat", "Sürat"]) as typeof next;
+    } else if (filter.cargoProvider) {
+      next = next.where("shipments.provider", "=", filter.cargoProvider) as typeof next;
+    }
+
+    return next as T;
+  }
+
+  async listOrdersPage(filter: ListOrdersFilter): Promise<ListOrdersResult> {
+    const sortBy = filter.sortBy ?? "created_at";
+    const sortDirection = filter.sortDirection ?? "desc";
+    const offset = filter.offset ?? 0;
+    const countQuery = this.applyOrderFilters(
+      this.db
+        .selectFrom("orders")
+        .leftJoin("customers", "customers.id", "orders.customer_id")
+        .leftJoin("users", "users.id", "orders.created_by_user_id")
+        .leftJoin("shipments", "shipments.order_id", "orders.id")
+        .select((expression) => [expression.fn.countAll<number>().as("total_count")]),
+      filter,
+    );
+    const countRow = await countQuery.executeTakeFirst();
+    const rows = await this.listOrders({ ...filter, sortBy, sortDirection, offset });
+
+    return {
+      rows,
+      total_count: Number(countRow?.total_count ?? rows.length),
+      limit: filter.limit,
+      offset,
+    };
+  }
+
+  async listOrders(filter: ListOrdersFilter): Promise<OrderRecord[]> {
+    const sortBy = filter.sortBy ?? "created_at";
+    const sortDirection = filter.sortDirection ?? "desc";
+    const offset = filter.offset ?? 0;
+    const baseQuery = this.db
+      .selectFrom("orders")
+      .leftJoin("customers", "customers.id", "orders.customer_id")
+      .leftJoin("users", "users.id", "orders.created_by_user_id")
+      .leftJoin("shipments", "shipments.order_id", "orders.id")
+      .selectAll("orders")
+      .select([
+        "customers.full_name as customer_full_name",
+        "users.public_id as created_by_user_public_id",
+        "users.email as created_by_user_email",
+        "shipments.provider as cargo_provider",
+      ]);
+
+    return this.applyOrderFilters(baseQuery, filter)
+      .orderBy(`orders.${sortBy}`, sortDirection)
+      .orderBy("orders.id", "desc")
+      .offset(offset)
       .limit(filter.limit)
       .execute();
   }
@@ -629,6 +733,9 @@ export class DomainRepository {
       return {
         ...order,
         customer_full_name: customer?.full_name ?? null,
+        created_by_user_public_id: null,
+        created_by_user_email: null,
+        cargo_provider: null,
       };
     });
   }
@@ -650,7 +757,13 @@ export class DomainRepository {
     if (!order) {
       throw new Error(`Unknown order: ${input.orderPublicId}`);
     }
-    return (await this.getOrderByPublicId(this.db, order.public_id)) ?? { ...order, customer_full_name: null };
+    return (await this.getOrderByPublicId(this.db, order.public_id)) ?? {
+      ...order,
+      customer_full_name: null,
+      created_by_user_public_id: null,
+      created_by_user_email: null,
+      cargo_provider: null,
+    };
   }
 
   async requestOrderPayment(input: RequestOrderPaymentInput): Promise<PaymentRequestRecord> {
@@ -916,11 +1029,14 @@ export function serializeOrder(order: OrderRecord) {
     order_number: order.order_number,
     status: order.status,
     source: order.source,
+    cargo_provider: order.cargo_provider,
     total_amount: order.total_amount,
     currency: order.currency,
     confirmation_status: order.confirmation_status,
     notes: order.notes,
     customer_full_name: order.customer_full_name,
+    created_by_user_public_id: order.created_by_user_public_id,
+    created_by_user_email: order.created_by_user_email,
     created_at: order.created_at,
     updated_at: order.updated_at,
   };

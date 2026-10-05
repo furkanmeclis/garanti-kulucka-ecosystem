@@ -43,13 +43,27 @@ export interface OrderSummary {
   order_number: string;
   status: string;
   source: string;
+  cargo_provider: string | null;
   total_amount: string;
   currency: string;
   confirmation_status: string | null;
   notes: string | null;
   customer_full_name: string | null;
+  created_by_user_public_id: string | null;
+  created_by_user_email: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface ListMeta {
+  total_count: number;
+  limit: number;
+  offset: number;
+}
+
+export interface OrderListResponse {
+  data: OrderSummary[];
+  meta?: ListMeta;
 }
 
 export interface ProductSummary {
@@ -278,14 +292,36 @@ export function createDomainClient(http: BackendHttpClient) {
           body: input,
         },
       ),
-    listOrders: (params: { status?: string; confirmation_status?: string; limit?: number } | number = {}) => {
+    listOrders: (params: {
+      status?: string;
+      confirmation_status?: string;
+      search?: string;
+      source?: string;
+      cargo_provider?: string;
+      created_by_user_public_id?: string;
+      created_from?: string;
+      created_to?: string;
+      sort_by?: "created_at" | "order_number" | "status" | "total_amount";
+      sort_direction?: "asc" | "desc";
+      offset?: number;
+      limit?: number;
+    } | number = {}) => {
       const normalized = typeof params === "number" ? { limit: params } : params;
       const search = new URLSearchParams();
       if (normalized.status) search.set("status", normalized.status);
       if (normalized.confirmation_status) search.set("confirmation_status", normalized.confirmation_status);
+      if (normalized.search) search.set("search", normalized.search);
+      if (normalized.source) search.set("source", normalized.source);
+      if (normalized.cargo_provider) search.set("cargo_provider", normalized.cargo_provider);
+      if (normalized.created_by_user_public_id) search.set("created_by_user_public_id", normalized.created_by_user_public_id);
+      if (normalized.created_from) search.set("created_from", normalized.created_from);
+      if (normalized.created_to) search.set("created_to", normalized.created_to);
+      if (normalized.sort_by) search.set("sort_by", normalized.sort_by);
+      if (normalized.sort_direction) search.set("sort_direction", normalized.sort_direction);
+      if (normalized.offset !== undefined) search.set("offset", String(normalized.offset));
       if (normalized.limit !== undefined) search.set("limit", String(normalized.limit));
       const query = search.toString();
-      return http.request<{ data: OrderSummary[] }>(`/api/orders${query ? `?${query}` : ""}`);
+      return http.request<OrderListResponse>(`/api/orders${query ? `?${query}` : ""}`);
     },
     getBalanceSummary: () =>
       http.request<BalanceSummary>("/api/balances/summary"),

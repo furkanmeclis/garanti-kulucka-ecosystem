@@ -121,6 +121,9 @@ const orders = [
     created_at: date,
     updated_at: date,
     customer_full_name: "Playwright Customer",
+    created_by_user_public_id: "usr_playwright",
+    created_by_user_email: "admin@example.com",
+    cargo_provider: "ptt",
   },
   {
     id: 201,
@@ -139,6 +142,9 @@ const orders = [
     created_at: date,
     updated_at: date,
     customer_full_name: "Delivered Customer",
+    created_by_user_public_id: "usr_playwright",
+    created_by_user_email: "admin@example.com",
+    cargo_provider: "Sürat",
   },
 ];
 
@@ -400,6 +406,10 @@ class FixtureQuery {
     return this;
   }
 
+  offset() {
+    return this;
+  }
+
   $if(condition: boolean, callback: (builder: this) => this) {
     return condition ? callback(this) : this;
   }
@@ -424,6 +434,9 @@ class FixtureQuery {
         return orders.filter((order) => {
           const statusFilter = this.whereValues.get("orders.status");
           const confirmationFilter = this.whereValues.get("orders.confirmation_status");
+          const sourceFilter = this.whereValues.get("orders.source");
+          const providerFilter = this.whereValues.get("shipments.provider");
+          const createdByUserFilter = this.whereValues.get("users.public_id");
           const statusMatches =
             statusFilter === undefined ||
             (Array.isArray(statusFilter)
@@ -434,7 +447,17 @@ class FixtureQuery {
             (confirmationFilter === null
               ? order.confirmation_status === null
               : order.confirmation_status === confirmationFilter);
-          return statusMatches && confirmationMatches;
+          const sourceMatches = sourceFilter === undefined || order.source === sourceFilter;
+          const providerMatches =
+            providerFilter === undefined ||
+            (Array.isArray(providerFilter)
+              ? this.whereOperators.get("shipments.provider") === "not in"
+                ? !providerFilter.includes(order.cargo_provider)
+                : providerFilter.includes(order.cargo_provider)
+              : order.cargo_provider === providerFilter);
+          const createdByUserMatches =
+            createdByUserFilter === undefined || order.created_by_user_public_id === createdByUserFilter;
+          return statusMatches && confirmationMatches && sourceMatches && providerMatches && createdByUserMatches;
         });
       case "products":
         return products;
@@ -491,6 +514,18 @@ class FixtureQuery {
   }
 
   async executeTakeFirst() {
+    if (this.aggregateCounts.size > 0) {
+      const rows = await this.execute() as Array<Record<string, unknown>>;
+      return Object.fromEntries(
+        [...this.aggregateCounts.entries()].map(([alias, column]) => [
+          alias,
+          column === "*"
+            ? rows.length
+            : rows.filter((row) => Boolean(row[column as keyof typeof row])).length,
+        ]),
+      );
+    }
+
     if (this.table === "customers" && this.aggregateCounts.size > 0) {
       return Object.fromEntries(
         [...this.aggregateCounts.entries()].map(([alias, column]) => [
@@ -982,9 +1017,10 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
       with_notes_count: 1,
     });
 
-    const [activeOrdersResponse, pendingConfirmationOrdersResponse] = await Promise.all([
+    const [activeOrdersResponse, pendingConfirmationOrdersResponse, filteredOrdersResponse] = await Promise.all([
       api.client.get("/api/orders?status=active&limit=10"),
       api.client.get("/api/orders?confirmation_status=pending&limit=10"),
+      api.client.get("/api/orders?search=PLAYWRIGHT&cargo_provider=ptt&source=manual&created_by_user_public_id=usr_playwright&created_from=2026-01-01&created_to=2026-01-01&sort_by=order_number&sort_direction=asc&offset=0&limit=10"),
     ]);
     expect(activeOrdersResponse.status()).toBe(200);
     expect(await activeOrdersResponse.json()).toMatchObject({
@@ -993,6 +1029,22 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
     expect(pendingConfirmationOrdersResponse.status()).toBe(200);
     expect(await pendingConfirmationOrdersResponse.json()).toMatchObject({
       data: [{ public_id: "ord_playwright", confirmation_status: null }],
+    });
+    expect(filteredOrdersResponse.status()).toBe(200);
+    await expect(filteredOrdersResponse.json()).resolves.toMatchObject({
+      data: [
+        {
+          public_id: "ord_playwright",
+          order_number: "ORD-PLAYWRIGHT",
+          cargo_provider: "ptt",
+          created_by_user_email: "admin@example.com",
+        },
+      ],
+      meta: {
+        total_count: 1,
+        limit: 10,
+        offset: 0,
+      },
     });
     expect(orderSummaryResponse.status()).toBe(200);
     await expect(orderSummaryResponse.json()).resolves.toMatchObject({

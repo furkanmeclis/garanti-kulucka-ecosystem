@@ -87,6 +87,7 @@ describe("backend OpenAPI contract", () => {
         "AuthSession",
         "AuthUser",
         "Conversation",
+        "ListMeta",
         "ConversationList",
         "ConversationSummaryStats",
         "CommentModerationSummary",

@@ -392,6 +392,90 @@
             }
           },
           {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cargo_provider",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "ptt",
+                "surat",
+                "other"
+              ]
+            }
+          },
+          {
+            "name": "created_by_user_public_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "created_from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "created_to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "sort_by",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "created_at",
+                "order_number",
+                "status",
+                "total_amount"
+              ],
+              "default": "created_at"
+            }
+          },
+          {
+            "name": "sort_direction",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "default": "desc"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          },
+          {
             "$ref": "#/components/parameters/Limit"
           }
         ],
@@ -1895,6 +1979,28 @@
           }
         }
       },
+      "ListMeta": {
+        "type": "object",
+        "required": [
+          "total_count",
+          "limit",
+          "offset"
+        ],
+        "properties": {
+          "total_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
       "ConversationList": {
         "allOf": [
           {
@@ -2053,6 +2159,20 @@
         "allOf": [
           {
             "$ref": "#/components/schemas/DataEnvelope"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "data": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Order"
+                }
+              },
+              "meta": {
+                "$ref": "#/components/schemas/ListMeta"
+              }
+            }
           }
         ]
       },
@@ -2796,6 +2916,12 @@
           "source": {
             "type": "string"
           },
+          "cargo_provider": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "total_amount": {
             "type": "string"
           },
@@ -2815,6 +2941,18 @@
             ]
           },
           "customer_full_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_by_user_public_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_by_user_email": {
             "type": [
               "string",
               "null"

@@ -6,6 +6,7 @@ import type { AppBindings } from "./types.js";
 import { authenticate, requireDatabase } from "./middleware.js";
 import {
   DomainRepository,
+  type ListOrdersFilter,
   type ListShipmentsFilter,
   serializeConversation,
   serializeConversationSummary,
@@ -20,6 +21,9 @@ import {
 } from "../domain/repository.js";
 
 const limitSchema = z.coerce.number().int().min(1).max(200).default(50);
+const offsetSchema = z.coerce.number().int().min(0).default(0);
+const orderSortSchema = z.enum(["created_at", "order_number", "status", "total_amount"]).default("created_at");
+const sortDirectionSchema = z.enum(["asc", "desc"]).default("desc");
 
 const createMessageSchema = z.object({
   sender_type: z.enum(["customer", "user", "ai", "system"]).default("user"),
@@ -424,15 +428,39 @@ export function createDomainRoutes() {
       return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
     }
 
-    const orderFilter = { limit: limitSchema.parse(context.req.query("limit")) };
+    const orderFilter: ListOrdersFilter = {
+      limit: limitSchema.parse(context.req.query("limit")),
+      offset: offsetSchema.parse(context.req.query("offset")),
+      sortBy: orderSortSchema.parse(context.req.query("sort_by")),
+      sortDirection: sortDirectionSchema.parse(context.req.query("sort_direction")),
+    };
     const status = context.req.query("status");
     const confirmationStatus = context.req.query("confirmation_status");
-    const orders = await new DomainRepository(db).listOrders({
+    const search = context.req.query("search");
+    const source = context.req.query("source");
+    const cargoProvider = context.req.query("cargo_provider");
+    const createdByUserPublicId = context.req.query("created_by_user_public_id");
+    const createdFrom = context.req.query("created_from");
+    const createdTo = context.req.query("created_to");
+    const orders = await new DomainRepository(db).listOrdersPage({
       ...orderFilter,
       ...(status ? { status } : {}),
       ...(confirmationStatus ? { confirmationStatus } : {}),
+      ...(search ? { search } : {}),
+      ...(source ? { source } : {}),
+      ...(cargoProvider ? { cargoProvider } : {}),
+      ...(createdByUserPublicId ? { createdByUserPublicId } : {}),
+      ...(createdFrom ? { createdFrom: new Date(`${createdFrom}T00:00:00.000Z`) } : {}),
+      ...(createdTo ? { createdTo: new Date(`${createdTo}T23:59:59.999Z`) } : {}),
     });
-    return context.json({ data: orders.map(serializeOrder) });
+    return context.json({
+      data: orders.rows.map(serializeOrder),
+      meta: {
+        total_count: orders.total_count,
+        limit: orders.limit,
+        offset: orders.offset,
+      },
+    });
   });
 
   routes.get("/orders/summary", async (context) => {

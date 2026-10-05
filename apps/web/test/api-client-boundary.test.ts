@@ -661,9 +661,22 @@ describe("web API client boundary", () => {
 
     await client.domain.listOrders({ status: "active", limit: 20 });
     await client.domain.listOrders({ confirmation_status: "pending", limit: 20 });
+    await client.domain.listOrders({
+      search: "ali",
+      source: "manual",
+      cargo_provider: "surat",
+      created_by_user_public_id: "usr_1",
+      created_from: "2026-01-01",
+      created_to: "2026-01-31",
+      sort_by: "order_number",
+      sort_direction: "asc",
+      offset: 20,
+      limit: 20,
+    });
 
     expect(requests[0]?.url).toBe("http://localhost:3000/api/orders?status=active&limit=20");
     expect(requests[1]?.url).toBe("http://localhost:3000/api/orders?confirmation_status=pending&limit=20");
+    expect(requests[2]?.url).toBe("http://localhost:3000/api/orders?search=ali&source=manual&cargo_provider=surat&created_by_user_public_id=usr_1&created_from=2026-01-01&created_to=2026-01-31&sort_by=order_number&sort_direction=asc&offset=20&limit=20");
   });
 
   it("maps domain order status updates to backend routes", async () => {
@@ -676,11 +689,14 @@ describe("web API client boundary", () => {
           order_number: "ORD-TEST",
           status: "cancelled",
           source: "manual",
+          cargo_provider: "ptt",
           total_amount: "125.50",
           currency: "TRY",
           confirmation_status: null,
           notes: "cancel proof",
           customer_full_name: "Test Customer",
+          created_by_user_public_id: "usr_test",
+          created_by_user_email: "test@example.com",
           created_at: "2026-01-01T00:00:00.000Z",
           updated_at: "2026-01-01T00:00:00.000Z",
         });
@@ -777,11 +793,14 @@ describe("web API client boundary", () => {
             order_number: "ORD-TEST",
             status: "draft",
             source: "manual",
+            cargo_provider: null,
             total_amount: "125.50",
             currency: "TRY",
             confirmation_status: null,
             notes: null,
             customer_full_name: "Test Customer",
+            created_by_user_public_id: null,
+            created_by_user_email: null,
             created_at: "2026-01-01T00:00:00.000Z",
             updated_at: "2026-01-01T00:01:00.000Z",
           },
