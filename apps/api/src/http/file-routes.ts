@@ -4,6 +4,10 @@ import type { AppBindings } from "./types.js";
 import { authenticate, requireAdmin, requireDatabase } from "./middleware.js";
 import { FilesRepository, serializeFile } from "../files/repository.js";
 import { createMediaStorageFromEnv } from "../files/storage.js";
+import {
+  logOrphanCleanup,
+  orphanCleanupRequestId,
+} from "../files/cleanup-observability.js";
 
 const createUploadSchema = z.object({
   original_name: z.string().min(1).max(255).nullable().default(null),
@@ -106,6 +110,13 @@ export function createFileRoutes() {
 
     const payload = orphanCleanupDryRunSchema.safeParse(body);
     if (!payload.success) {
+      logOrphanCleanup({
+        context,
+        mode: "dry_run",
+        filePublicId: context.req.param("file_public_id") ?? "",
+        resultCode: "invalid_request",
+        level: "warn",
+      });
       return context.json({ error: { code: "invalid_request", message: "Invalid orphan cleanup dry-run payload" } }, 400);
     }
 
@@ -116,17 +127,39 @@ export function createFileRoutes() {
 
     const filePublicId = context.req.param("file_public_id");
     if (!filePublicId) {
+      logOrphanCleanup({
+        context,
+        mode: "dry_run",
+        filePublicId: filePublicId ?? "",
+        resultCode: "invalid_request",
+        level: "warn",
+      });
       return context.json({ error: { code: "invalid_request", message: "File public id is required" } }, 400);
     }
 
     const file = await new FilesRepository(db).findOrphanCandidateByPublicId(filePublicId);
     if (!file) {
+      logOrphanCleanup({
+        context,
+        mode: "dry_run",
+        filePublicId,
+        resultCode: "not_found",
+        level: "warn",
+      });
       return context.json({ error: { code: "not_found", message: "Orphan file candidate was not found" } }, 404);
     }
 
+    logOrphanCleanup({
+      context,
+      mode: "dry_run",
+      filePublicId,
+      file,
+      resultCode: "dry_run_ready",
+    });
+
     return context.json({
       mode: "dry_run",
-      request_id: `orphan_cleanup_${file.public_id}`,
+      request_id: orphanCleanupRequestId(file.public_id),
       deletion_performed: false,
       eligible_for_cleanup: true,
       reason: payload.data.reason,
@@ -150,10 +183,24 @@ export function createFileRoutes() {
 
     const payload = orphanCleanupApplySchema.safeParse(body);
     if (!payload.success) {
+      logOrphanCleanup({
+        context,
+        mode: "apply",
+        filePublicId: context.req.param("file_public_id") ?? "",
+        resultCode: "invalid_request",
+        level: "warn",
+      });
       return context.json({ error: { code: "invalid_request", message: "Invalid orphan cleanup payload" } }, 400);
     }
 
     if (!storageDeleteEnabled()) {
+      logOrphanCleanup({
+        context,
+        mode: "apply",
+        filePublicId: context.req.param("file_public_id") ?? "",
+        resultCode: "storage_operation_disabled",
+        level: "warn",
+      });
       return context.json(
         {
           error: {
@@ -172,16 +219,38 @@ export function createFileRoutes() {
 
     const filePublicId = context.req.param("file_public_id");
     if (!filePublicId) {
+      logOrphanCleanup({
+        context,
+        mode: "apply",
+        filePublicId: filePublicId ?? "",
+        resultCode: "invalid_request",
+        level: "warn",
+      });
       return context.json({ error: { code: "invalid_request", message: "File public id is required" } }, 400);
     }
 
     const file = await new FilesRepository(db).findOrphanCandidateByPublicId(filePublicId);
     if (!file) {
+      logOrphanCleanup({
+        context,
+        mode: "apply",
+        filePublicId,
+        resultCode: "not_found",
+        level: "warn",
+      });
       return context.json({ error: { code: "not_found", message: "Orphan file candidate was not found" } }, 404);
     }
 
     const storage = createMediaStorageFromEnv();
     if (file.bucket !== storage.bucket) {
+      logOrphanCleanup({
+        context,
+        mode: "apply",
+        filePublicId,
+        file,
+        resultCode: "storage_bucket_mismatch",
+        level: "warn",
+      });
       return context.json(
         {
           error: {
@@ -193,14 +262,38 @@ export function createFileRoutes() {
       );
     }
 
+    let storageAction;
+    try {
+      storageAction = await storage.deleteObject(file.object_key);
+    } catch (error) {
+      logOrphanCleanup({
+        context,
+        mode: "apply",
+        filePublicId,
+        file,
+        resultCode: "storage_delete_failed",
+        level: "error",
+        error,
+      });
+      throw error;
+    }
+
+    logOrphanCleanup({
+      context,
+      mode: "apply",
+      filePublicId,
+      file,
+      resultCode: "deleted",
+    });
+
     return context.json({
       mode: "apply",
-      request_id: `orphan_cleanup_${file.public_id}`,
+      request_id: orphanCleanupRequestId(file.public_id),
       deletion_performed: true,
       eligible_for_cleanup: true,
       reason: payload.data.reason,
       file: serializeFile(file),
-      storage_action: await storage.deleteObject(file.object_key),
+      storage_action: storageAction,
     });
   });
 

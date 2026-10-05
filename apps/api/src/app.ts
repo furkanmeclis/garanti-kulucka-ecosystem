@@ -13,7 +13,7 @@ import { createIntegrationRoutes } from "./http/integration-routes.js";
 import { createSettingsRoutes } from "./http/settings-routes.js";
 import { createWebhookRoutes } from "./http/webhook-routes.js";
 import { createWebphoneRoutes } from "./http/webphone-routes.js";
-import type { AppBindings } from "./http/types.js";
+import type { ApiLogger, AppBindings } from "./http/types.js";
 import { noopRealtimePublisher, type RealtimePublisher } from "./realtime.js";
 import { createSecretEncryptor, type SecretEncryptor } from "./security/encryption.js";
 import {
@@ -31,10 +31,12 @@ export interface CreateAppOptions {
   webhookQueuePublisher?: WebhookQueuePublisher;
   providerDeliveryQueuePublisher?: ProviderDeliveryQueuePublisher;
   realtimePublisher?: RealtimePublisher;
+  logger?: ApiLogger;
 }
 
 export function createApp(options: CreateAppOptions = {}) {
   const config = options.config ?? loadConfig();
+  const appLogger = options.logger ?? logger;
   const encryptor =
     options.encryptor ?? createSecretEncryptor(config.encryptionKey, config.encryptionKeyId);
   const app = new Hono<AppBindings>();
@@ -57,6 +59,8 @@ export function createApp(options: CreateAppOptions = {}) {
     context.set("encryptor", encryptor);
     context.set("auth", null);
     context.set("actorUserId", null);
+    context.set("requestId", requestId);
+    context.set("logger", appLogger);
     context.set("realtimePublisher", options.realtimePublisher ?? noopRealtimePublisher);
     context.set("providerDeliveryQueuePublisher", options.providerDeliveryQueuePublisher ?? noopProviderDeliveryQueuePublisher);
     await next();
@@ -65,7 +69,7 @@ export function createApp(options: CreateAppOptions = {}) {
   app.use("*", honoLogger());
 
   app.onError((error, context) => {
-    logger.error({ err: error, path: context.req.path }, "Unhandled API error");
+    appLogger.error({ err: error, path: context.req.path, request_id: context.get("requestId") }, "Unhandled API error");
     return context.json(
       {
         error: {

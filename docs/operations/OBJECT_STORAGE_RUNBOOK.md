@@ -40,9 +40,11 @@ The API keeps canonical file metadata after object deletion. This preserves audi
 
 ## Observability
 
-- Correlate API request ID, admin actor, file public ID, bucket, object key, cleanup request ID, and result code in structured logs.
+- Correlate API request ID, admin actor, file public ID, bucket, object key, cleanup request ID, and result code in structured JSON logs with `event: "storage.orphan_cleanup"`.
+- The cleanup log fields are `request_id`, `actor_id`, `file_public_id`, `bucket`, `object_key`, `cleanup_request_id`, and `result_code`.
 - Alert on any `storage_operation_disabled`, `storage_bucket_mismatch`, S3 `AccessDenied`, S3 timeout, or orphan cleanup apply failure.
-- Track orphan candidate summary count, cleanup apply count, cleanup error count, media bucket usage, Garage disk free percentage, and backup age.
+- Track `storage_orphan_candidate_count`, `storage_orphan_cleanup_apply_total`, `storage_orphan_cleanup_error_total`, `garage_capacity_bytes`, and `garage_backup_age_seconds`.
+- `garage_capacity_bytes` and `garage_backup_age_seconds` are externally scraped infrastructure gauges until Garage metrics and backup evidence are wired into an in-process source.
 - Page the operator when disk free percentage drops below the production threshold or backup age exceeds the approved recovery point objective.
 
 ## Incident Response
