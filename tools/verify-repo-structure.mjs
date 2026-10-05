@@ -14,6 +14,8 @@ const requiredPaths = [
   "docs/migration/MIGRATOR_DESIGN.md",
   "docs/webphone/WEBPHONE_DESIGN.md",
   "docs/operations/RELEASE_MODEL.md",
+  "docs/operations/DEPLOYMENT_RUNBOOK.md",
+  "tools/load/README.md",
   "docs/domain/NAMING_AND_SCHEMA.md",
   "docs/adr/0001-stack-and-runtime.md",
   "docs/adr/0002-admin-managed-settings.md",

@@ -72,7 +72,8 @@ npm run release-notes -- --tag vX.Y.Z --previous vA.B.C --output docs/releases/v
 
 ## Rollback
 
-Rollback is tag-based.
+Rollback is tag-based. Rollout order, graceful drain, the pre-migration backup gate and the
+forward-fix policy are defined in `DEPLOYMENT_RUNBOOK.md`.
 
 1. Pick the last known-good `vX.Y.Z` tag from GitHub Actions.
 2. Download that run's `container-images-vX.Y.Z` artifact.

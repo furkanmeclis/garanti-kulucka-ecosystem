@@ -648,6 +648,14 @@ Kabul kapısı: upload/download browser E2E, restart persistence, orphan cleanup
 
 ### P11. Production Hazırlığı
 
+Durum (2026-10-05, repo içi kısım): API/worker/migrator startup env doğrulaması
+(`packages/shared/src/config/service-env.ts`, exit 78, secret-free mesaj), API HTTP + Socket.IO
+graceful drain (`apps/api/src/http/graceful-drain.ts`), worker BullMQ pause + timeout drain
+(`apps/worker/src/shutdown.ts`), `docs/operations/DEPLOYMENT_RUNBOOK.md`, `tools/load/` load scriptleri
+ve CI bakımı (runner `ubuntu-24.04`, Node 24 action sürümleri, raporlayıcı `npm audit`) tamamlandı.
+Gerçek altyapı gerektiren maddeler (PITR/restore tatbikatı, Garage replication, staging load koşuları,
+container vulnerability taraması, secret rotation tatbikatı) açık kalır.
+
 Deployment:
 
 - Tag tabanlı immutable image deployment
