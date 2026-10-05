@@ -7,6 +7,7 @@ import { createStructuredLog, healthStatusSchema, resolveMetricsExposure, type M
 import type { AppDatabase } from "@garanti-kulucka/database";
 import { loadConfig, type ApiConfig } from "./config.js";
 import { createAuthRoutes } from "./http/auth-routes.js";
+import { createCommentRoutes } from "./http/comment-routes.js";
 import { createDomainRoutes } from "./http/domain-routes.js";
 import { createFileRoutes } from "./http/file-routes.js";
 import { createIntegrationRoutes } from "./http/integration-routes.js";
@@ -160,6 +161,7 @@ export function createApp(options: CreateAppOptions = {}) {
 
   app.route("/auth", createAuthRoutes());
   app.route("/api", createDomainRoutes());
+  app.route("/api/comments", createCommentRoutes());
   app.route("/api/files", createFileRoutes());
   app.route("/api/webphone", createWebphoneRoutes());
   app.route(

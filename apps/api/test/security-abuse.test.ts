@@ -72,8 +72,12 @@ describe("security abuse guards", () => {
     const appSource = readFileSync("../../apps/web/src/ui/App.tsx", "utf8");
     const xssPayload = "<img src=x onerror=alert(1)>";
 
+    const commentsSource = readFileSync("../../apps/web/src/ui/pages/YorumlarPage.tsx", "utf8");
+
     expect(appSource).not.toContain("dangerouslySetInnerHTML");
-    expect(appSource).toContain("{message.body ?? \"Boş mesaj\"}");
+    expect(commentsSource).not.toContain("dangerouslySetInnerHTML");
+    expect(appSource).toContain("{message.body ?? (attachments.length > 0 ? \"Medya\" : \"Boş mesaj\")}");
+    expect(commentsSource).toContain("{yorum.text || \"(boş)\"}");
     expect(xssPayload).toContain("onerror");
   });
 });

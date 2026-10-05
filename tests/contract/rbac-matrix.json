@@ -68,5 +68,15 @@
   "DELETE /api/message-shortcuts/{shortcut_public_id}": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "allow", "admin": "allow" },
   "PATCH /api/conversations/{conversation_public_id}/notes": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "allow", "admin": "allow" },
   "PATCH /api/conversations/{conversation_public_id}/customer-notes": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "allow", "admin": "allow" },
-  "POST /api/ai/reply-suggestion": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "allow", "admin": "allow" }
+  "POST /api/ai/reply-suggestion": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "allow", "admin": "allow" },
+  "GET /api/comments": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "allow", "admin": "allow" },
+  "GET /api/comments/stats": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "allow", "admin": "allow" },
+  "GET /api/comments/control": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "allow", "admin": "allow" },
+  "GET /api/comments/settings": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "allow", "admin": "allow" },
+  "PUT /api/comments/settings": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "allow", "admin": "allow" },
+  "POST /api/comments/{comment_public_id}/reply": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "allow", "admin": "allow" },
+  "POST /api/comments/{comment_public_id}/hide": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "allow", "admin": "allow" },
+  "POST /api/comments/{comment_public_id}/delete": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "allow", "admin": "allow" },
+  "POST /api/comments/{comment_public_id}/manual": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "allow", "admin": "allow" },
+  "POST /api/comments/{comment_public_id}/ai-suggestion": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "allow", "admin": "allow" }
 }

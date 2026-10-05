@@ -30,6 +30,8 @@ export interface Database {
   message_attachments: MessageAttachmentsTable;
   message_shortcuts: MessageShortcutsTable;
   message_shortcut_attachments: MessageShortcutAttachmentsTable;
+  social_comments: SocialCommentsTable;
+  social_comment_actions: SocialCommentActionsTable;
   products: ProductsTable;
   stock_movements: StockMovementsTable;
   orders: OrdersTable;
@@ -192,6 +194,35 @@ export interface MessageShortcutAttachmentsTable extends BaseTable {
   file_id: number;
   attachment_type: string;
   sort_order: number;
+}
+
+export interface SocialCommentsTable extends BaseTable {
+  integration_account_id: number | null;
+  platform: string;
+  external_comment_id: string;
+  media_id: string | null;
+  post_id: string | null;
+  username: string | null;
+  text: string | null;
+  status: string;
+  classification: string | null;
+  classification_reason: string | null;
+  confidence: string | null;
+  ai_reply_draft: string | null;
+  manual_reply: string | null;
+  reply_type: string | null;
+  error_message: string | null;
+  received_at: Timestamp;
+}
+
+export interface SocialCommentActionsTable extends BaseTable {
+  comment_id: number;
+  action: string;
+  idempotency_key: string;
+  request_payload: Json;
+  job_id: string | null;
+  queued: boolean;
+  actor_user_id: number | null;
 }
 
 export interface ProductsTable extends BaseTable {

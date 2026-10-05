@@ -2155,6 +2155,414 @@
           }
         }
       }
+    },
+    "/api/comments": {
+      "get": {
+        "operationId": "listComments",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "manual",
+                "auto_replied",
+                "replied",
+                "deleted",
+                "hidden",
+                "error"
+              ]
+            }
+          },
+          {
+            "name": "platform",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "instagram",
+                "facebook"
+              ]
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated social comment moderation list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommentList"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/comments/stats": {
+      "get": {
+        "operationId": "getCommentStats",
+        "responses": {
+          "200": {
+            "description": "Comment counts per moderation status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommentStats"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/comments/control": {
+      "get": {
+        "operationId": "getCommentControl",
+        "responses": {
+          "200": {
+            "description": "Comment AI prerequisite control report",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommentControlReport"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/comments/settings": {
+      "get": {
+        "operationId": "getCommentSettings",
+        "responses": {
+          "200": {
+            "description": "Comment moderation AI settings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommentSettingsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "put": {
+        "operationId": "updateCommentSettings",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CommentModerationConfig"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Saved comment moderation AI settings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommentSettingsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/comments/{comment_public_id}/reply": {
+      "post": {
+        "operationId": "replyToComment",
+        "parameters": [
+          {
+            "name": "comment_public_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CommentReplyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Queued Instagram comment.reply or comment.private_reply provider-delivery job",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommentActionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/comments/{comment_public_id}/hide": {
+      "post": {
+        "operationId": "hideComment",
+        "parameters": [
+          {
+            "name": "comment_public_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CommentActionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Queued Instagram comment.hide provider-delivery job",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommentActionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/comments/{comment_public_id}/delete": {
+      "post": {
+        "operationId": "deleteComment",
+        "parameters": [
+          {
+            "name": "comment_public_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CommentActionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Queued Instagram comment.delete provider-delivery job",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommentActionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/comments/{comment_public_id}/manual": {
+      "post": {
+        "operationId": "markCommentManual",
+        "parameters": [
+          {
+            "name": "comment_public_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CommentActionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Comment moved to the manual queue without a provider call",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommentActionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/comments/{comment_public_id}/ai-suggestion": {
+      "post": {
+        "operationId": "suggestCommentReply",
+        "parameters": [
+          {
+            "name": "comment_public_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Dry-run AI reply suggestion for a comment",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommentAiSuggestionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -5515,6 +5923,524 @@
           },
           "movement": {
             "$ref": "#/components/schemas/StockMovement"
+          }
+        }
+      },
+      "Comment": {
+        "type": "object",
+        "required": [
+          "public_id",
+          "platform",
+          "external_comment_id",
+          "status",
+          "received_at",
+          "updated_at"
+        ],
+        "properties": {
+          "public_id": {
+            "type": "string"
+          },
+          "platform": {
+            "type": "string",
+            "enum": [
+              "instagram",
+              "facebook"
+            ]
+          },
+          "external_comment_id": {
+            "type": "string"
+          },
+          "media_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "post_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "username": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "text": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "manual",
+              "auto_replied",
+              "replied",
+              "deleted",
+              "hidden",
+              "error"
+            ]
+          },
+          "classification": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "classification_reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "confidence": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 1
+          },
+          "ai_reply_draft": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "manual_reply": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reply_type": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "public",
+              "private",
+              null
+            ]
+          },
+          "error_message": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "received_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "CommentList": {
+        "type": "object",
+        "required": [
+          "data",
+          "total",
+          "page",
+          "page_size"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Comment"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "page_size": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      },
+      "CommentStats": {
+        "type": "object",
+        "required": [
+          "counts"
+        ],
+        "properties": {
+          "counts": {
+            "type": "object",
+            "required": [
+              "pending",
+              "manual",
+              "auto_replied",
+              "replied",
+              "deleted",
+              "hidden",
+              "error"
+            ],
+            "properties": {
+              "pending": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "manual": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "auto_replied": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "replied": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "deleted": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "hidden": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "error": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          }
+        }
+      },
+      "CommentModerationConfig": {
+        "type": "object",
+        "required": [
+          "enabled",
+          "platforms",
+          "reply_type",
+          "delete_profanity",
+          "delete_brand_disparagement",
+          "risk_manual_examples",
+          "auto_reply_topics",
+          "min_confidence"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "platforms": {
+            "type": "object",
+            "required": [
+              "instagram",
+              "facebook"
+            ],
+            "properties": {
+              "instagram": {
+                "type": "boolean"
+              },
+              "facebook": {
+                "type": "boolean"
+              }
+            }
+          },
+          "reply_type": {
+            "type": "string",
+            "enum": [
+              "public",
+              "private"
+            ]
+          },
+          "delete_profanity": {
+            "type": "boolean"
+          },
+          "delete_brand_disparagement": {
+            "type": "boolean"
+          },
+          "risk_manual_examples": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "auto_reply_topics": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "min_confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        }
+      },
+      "CommentSettingsResponse": {
+        "type": "object",
+        "required": [
+          "config"
+        ],
+        "properties": {
+          "config": {
+            "$ref": "#/components/schemas/CommentModerationConfig"
+          }
+        }
+      },
+      "CommentControlReport": {
+        "type": "object",
+        "required": [
+          "status",
+          "summary",
+          "warnings",
+          "checks"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ready",
+              "warning",
+              "critical"
+            ]
+          },
+          "summary": {
+            "type": "object",
+            "required": [
+              "ok",
+              "warning",
+              "error"
+            ],
+            "properties": {
+              "ok": {
+                "type": "integer"
+              },
+              "warning": {
+                "type": "integer"
+              },
+              "error": {
+                "type": "integer"
+              }
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "level",
+                "title",
+                "detail"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "level": {
+                  "type": "string",
+                  "enum": [
+                    "ok",
+                    "warning",
+                    "error"
+                  ]
+                },
+                "title": {
+                  "type": "string"
+                },
+                "detail": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "checks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "level",
+                "title",
+                "detail"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "level": {
+                  "type": "string",
+                  "enum": [
+                    "ok",
+                    "warning",
+                    "error"
+                  ]
+                },
+                "title": {
+                  "type": "string"
+                },
+                "detail": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "CommentReplyRequest": {
+        "type": "object",
+        "required": [
+          "message",
+          "idempotency_key"
+        ],
+        "properties": {
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "reply_type": {
+            "type": "string",
+            "enum": [
+              "public",
+              "private"
+            ],
+            "default": "public"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          }
+        }
+      },
+      "CommentActionRequest": {
+        "type": "object",
+        "required": [
+          "idempotency_key"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          }
+        }
+      },
+      "CommentActionResponse": {
+        "type": "object",
+        "required": [
+          "provider",
+          "operation",
+          "action",
+          "job_id",
+          "queued",
+          "replayed",
+          "live_call_permitted",
+          "comment"
+        ],
+        "properties": {
+          "provider": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "instagram",
+              null
+            ]
+          },
+          "operation": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "comment.reply",
+              "comment.private_reply",
+              "comment.hide",
+              "comment.delete",
+              null
+            ]
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "reply",
+              "private_reply",
+              "hide",
+              "delete",
+              "mark_manual"
+            ]
+          },
+          "job_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "queued": {
+            "type": "boolean"
+          },
+          "replayed": {
+            "type": "boolean"
+          },
+          "live_call_permitted": {
+            "type": "boolean",
+            "const": false
+          },
+          "comment": {
+            "$ref": "#/components/schemas/Comment"
+          }
+        }
+      },
+      "CommentAiSuggestionResponse": {
+        "type": "object",
+        "required": [
+          "provider",
+          "operation",
+          "dry_run",
+          "live_call_permitted",
+          "comment_public_id",
+          "action",
+          "suggestion"
+        ],
+        "properties": {
+          "provider": {
+            "type": "string",
+            "const": "openai"
+          },
+          "operation": {
+            "type": "string",
+            "const": "comments.reply_suggestion"
+          },
+          "dry_run": {
+            "type": "boolean",
+            "const": true
+          },
+          "live_call_permitted": {
+            "type": "boolean",
+            "const": false
+          },
+          "comment_public_id": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string"
+          },
+          "suggestion": {
+            "type": "string"
           }
         }
       }

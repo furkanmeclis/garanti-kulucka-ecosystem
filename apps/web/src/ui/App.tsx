@@ -80,6 +80,7 @@ import { createFileClient, type DownloadInstruction, type FileMetadata, type Fil
 import { createBackendHttpClient } from "../api/http-client.js";
 import { createRealtimeClient, type RealtimeClient } from "../api/realtime-client.js";
 import { createWebphoneClient, type WebphoneConfig } from "../api/webphone-client.js";
+import { YorumlarPage } from "./pages/YorumlarPage.js";
 
 const backendBaseUrl = import.meta.env.VITE_BACKEND_BASE_URL ?? "/backend";
 const tokenStorageKey = "garanti.web.access_token";
@@ -2060,7 +2061,6 @@ export function App() {
   const smsInfo = smsSegmentInfo(smsPreview);
   const smsRecipientCount = data.shipmentSummary.recipient_phone_count;
   const balanceSummary = toBalanceView(data.balanceSummary);
-  const commentSummary = toCommentModerationView(data.commentModeration);
   const unreadConversationCount = data.conversationSummary.unread_count;
   const poolConversationCount = data.conversationSummary.pool_count;
   const humanAgentConversationCount = data.conversationSummary.human_agent_count;
@@ -3549,58 +3549,7 @@ export function App() {
           </FlowPanel>
         )}
 
-        {activeFlow === "comments" && (
-          <FlowPanel title="Yorumlar" icon={<MessageSquareText size={18} />} testId="comments-flow">
-            <div className="split-grid">
-              <List title="Yorum Kuyruğu">
-                {data.conversations.map((conversation) => (
-                  <li key={conversation.public_id}>
-                    <button
-                      className={cx("conversation-button", selectedConversation?.public_id === conversation.public_id && "selected")}
-                      type="button"
-                      onClick={() => void handleSelectConversation(conversation.public_id)}
-                    >
-                      <strong>{conversation.customer?.full_name ?? conversation.public_id}</strong>
-                      <span>{conversation.channel} / {conversation.status}</span>
-                    </button>
-                  </li>
-                ))}
-              </List>
-              <DetailPanel title="Yorum AI Kuyruğu" testId="comments-ai-summary">
-                <DataRows
-                  rows={[
-                    ["Manuel bekleyen", String(commentSummary.manualQueue), "legacy durum filtresi"],
-                    ["Otomatik", String(commentSummary.automaticQueue), "AI pipeline"],
-                    ["Cevaplı", String(commentSummary.answered), "moderasyon durumu"],
-                    ["Instagram", String(commentSummary.instagram), "platform filtresi"],
-                    ["Facebook", String(commentSummary.facebook), "platform filtresi"],
-                    ["AI cevap tipi", "public", "admin ayarı"],
-                  ]}
-                />
-              </DetailPanel>
-              <DetailPanel title="Yorum Moderasyonu" testId="comments-detail">
-                <DataRows
-                  rows={[
-                    ["Açık konuşma", String(openConversationCount), "conversation summary API"],
-                    ["Okunmamış mesaj", String(unreadConversationCount), "conversation summary API"],
-                    [
-                      "Müşteri",
-                      selectedConversation?.customer?.full_name ?? selectedConversation?.public_id ?? "-",
-                      selectedConversation?.customer?.phone ?? "-",
-                    ],
-                    ["Son yorum", selectedConversation?.last_message_text ?? "-", selectedConversation?.channel ?? "-"],
-                  ]}
-                />
-                {data.messages.map((message) => (
-                  <article key={message.public_id}>
-                    <strong>{message.sender_name ?? message.sender_type}</strong>
-                    <span>{message.body ?? "Boş mesaj"}</span>
-                  </article>
-                ))}
-              </DetailPanel>
-            </div>
-          </FlowPanel>
-        )}
+        {activeFlow === "comments" && <YorumlarPage http={http} />}
 
         {activeFlow === "customers" && (
           <FlowPanel title="Müşteriler" icon={<Users size={18} />} testId="customers-flow">
