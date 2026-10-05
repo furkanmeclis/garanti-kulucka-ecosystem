@@ -26,6 +26,7 @@ import { KolaybiLiveTransportError, sendKolaybiLiveRequest, type KolaybiFetchTra
 import { WhatsappLiveTransportError, sendWhatsappLiveRequest, type WhatsappFetchTransport } from "./whatsapp.js";
 import { InstagramLiveTransportError, sendInstagramLiveRequest, type InstagramFetchTransport } from "./instagram.js";
 import { MessengerLiveTransportError, sendMessengerLiveRequest, type MessengerFetchTransport } from "./messenger.js";
+import { NetgsmLiveTransportError, sendNetgsmLiveRequest, type NetgsmFetchTransport } from "./netgsm.js";
 
 export { decideProviderRetry, type ProviderFailureInput, type ProviderRetryDecision, type ProviderRetryReason };
 
@@ -46,6 +47,7 @@ export interface ProviderDeliveryHandlerOptions {
   whatsappTransport?: WhatsappFetchTransport;
   instagramTransport?: InstagramFetchTransport;
   messengerTransport?: MessengerFetchTransport;
+  netgsmTransport?: NetgsmFetchTransport;
   attemptNumber?: number;
   maxAttempts?: number;
   now?: Date;
@@ -342,7 +344,18 @@ export async function handleProviderDeliveryJobWithTransport(
                   ...(options.messengerTransport ? { transport: options.messengerTransport } : {}),
                   ...(options.now ? { now: options.now } : {}),
                 })
-              : null;
+              : payload.envelope.provider === "netgsm"
+                ? await sendNetgsmLiveRequest({
+                    envelope: payload.envelope,
+                    job,
+                    accountConfig,
+                    policy,
+                    attemptNumber: options.attemptNumber ?? 1,
+                    maxAttempts: options.maxAttempts ?? policy.max_attempts,
+                    ...(options.netgsmTransport ? { transport: options.netgsmTransport } : {}),
+                    ...(options.now ? { now: options.now } : {}),
+                  })
+                : null;
 
   if (!liveResult) {
     return handleProviderDeliveryJob(job);
@@ -369,11 +382,12 @@ export async function handleProviderDeliveryJobWithTransport(
 
 export function isProviderLiveTransportError(
   error: unknown,
-): error is PttLiveTransportError | SuratLiveTransportError | KolaybiLiveTransportError | WhatsappLiveTransportError | InstagramLiveTransportError | MessengerLiveTransportError {
+): error is PttLiveTransportError | SuratLiveTransportError | KolaybiLiveTransportError | WhatsappLiveTransportError | InstagramLiveTransportError | MessengerLiveTransportError | NetgsmLiveTransportError {
   return error instanceof PttLiveTransportError ||
     error instanceof SuratLiveTransportError ||
     error instanceof KolaybiLiveTransportError ||
     error instanceof WhatsappLiveTransportError ||
     error instanceof InstagramLiveTransportError ||
-    error instanceof MessengerLiveTransportError;
+    error instanceof MessengerLiveTransportError ||
+    error instanceof NetgsmLiveTransportError;
 }

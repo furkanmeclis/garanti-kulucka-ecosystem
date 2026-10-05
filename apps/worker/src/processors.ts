@@ -24,6 +24,7 @@ import type { KolaybiFetchTransport } from "./providers/kolaybi.js";
 import type { WhatsappFetchTransport } from "./providers/whatsapp.js";
 import type { InstagramFetchTransport } from "./providers/instagram.js";
 import type { MessengerFetchTransport } from "./providers/messenger.js";
+import type { NetgsmFetchTransport } from "./providers/netgsm.js";
 
 export type WorkerLifecycleEventName = "started" | "completed" | "failed";
 
@@ -109,6 +110,7 @@ export interface WorkerProcessorRegistryOptions {
   whatsappTransport?: WhatsappFetchTransport;
   instagramTransport?: InstagramFetchTransport;
   messengerTransport?: MessengerFetchTransport;
+  netgsmTransport?: NetgsmFetchTransport;
 }
 
 export const workerQueueNames: QueueName[] = [
@@ -246,6 +248,7 @@ function createProviderDeliveryProcessor(
   whatsappTransport?: WhatsappFetchTransport,
   instagramTransport?: InstagramFetchTransport,
   messengerTransport?: MessengerFetchTransport,
+  netgsmTransport?: NetgsmFetchTransport,
 ): QueueProcessor {
   return async (job) => {
     const envelope = assertJobMatchesQueue("provider-delivery", job);
@@ -264,6 +267,7 @@ function createProviderDeliveryProcessor(
           ...(whatsappTransport ? { whatsappTransport } : {}),
           ...(instagramTransport ? { instagramTransport } : {}),
           ...(messengerTransport ? { messengerTransport } : {}),
+          ...(netgsmTransport ? { netgsmTransport } : {}),
           ...providerFailureInputFromJob(job),
         });
       } else {
@@ -481,6 +485,8 @@ export function createWorkerProcessorRegistry(
     typeof options === "function" ? undefined : options.instagramTransport;
   const messengerTransport =
     typeof options === "function" ? undefined : options.messengerTransport;
+  const netgsmTransport =
+    typeof options === "function" ? undefined : options.netgsmTransport;
   const processors = new Map<QueueName, QueueProcessor>([
     ["provider-webhooks", createProviderWebhookProcessor(providerAttemptRepository)],
     [
@@ -494,6 +500,7 @@ export function createWorkerProcessorRegistry(
         whatsappTransport,
         instagramTransport,
         messengerTransport,
+        netgsmTransport,
       ),
     ],
     ["shipment-tracking", createShipmentTrackingProcessor()],

@@ -77,7 +77,7 @@ export const providerAdapters: ProviderAdapterDefinition[] = [
     channels: ["sms"],
     webhook_operations: [],
     delivery_operations: ["sms.send"],
-    live_calls_enabled: false,
+    live_calls_enabled: true,
   },
   {
     provider: "vapi",

@@ -38,7 +38,8 @@ describe("provider catalog parity", () => {
           provider === "kolaybi" ||
           provider === "whatsapp" ||
           provider === "instagram" ||
-          provider === "messenger",
+          provider === "messenger" ||
+          provider === "netgsm",
       );
     }
   });

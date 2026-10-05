@@ -20,7 +20,7 @@ describe("provider adapter registry", () => {
       "vapi",
       "sip",
     ]);
-    expect(providerAdapters.filter((adapter) => adapter.live_calls_enabled).map((adapter) => adapter.provider)).toEqual(["ptt", "surat", "kolaybi", "whatsapp", "instagram", "messenger"]);
+    expect(providerAdapters.filter((adapter) => adapter.live_calls_enabled).map((adapter) => adapter.provider)).toEqual(["ptt", "surat", "kolaybi", "whatsapp", "instagram", "messenger", "netgsm"]);
   });
 
   it("models SIP as config sync rather than a live provider call", () => {
