@@ -3,6 +3,7 @@ import { providerAttemptSchema } from "@garanti-kulucka/shared";
 import type { ProviderAccountConfig } from "./account-config.js";
 import { decideProviderRetry, type ProviderRetryDecision } from "./retry.js";
 import type { LiveProviderTransportPolicy } from "./transport-policy.js";
+import { failureCode, failureMessage, fetchLiveHttpTransport } from "./live-http.js";
 
 export interface KolaybiTransportResponse {
   status: number;
@@ -310,41 +311,7 @@ function createAttempt(input: {
 }
 
 export async function defaultKolaybiFetchTransport(request: KolaybiTransportRequest): Promise<KolaybiTransportResponse> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), request.timeout_ms);
-  try {
-    const response = await fetch(request.url, {
-      method: request.method,
-      headers: request.headers,
-      body: request.body,
-      signal: controller.signal,
-    });
-    return {
-      status: response.status,
-      headers: Object.fromEntries(response.headers.entries()),
-      body: await response.text(),
-    };
-  } catch (error) {
-    if (error instanceof Error && error.name === "AbortError") {
-      const timeoutError = new Error(`KolayBi request timed out after ${request.timeout_ms}ms`);
-      Object.assign(timeoutError, { code: "timeout" });
-      throw timeoutError;
-    }
-    const networkError = error instanceof Error ? error : new Error("KolayBi network error");
-    Object.assign(networkError, { code: "network_error" });
-    throw networkError;
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-function failureCode(error: unknown): string {
-  if (error && typeof error === "object" && "code" in error && typeof error.code === "string") return error.code;
-  return "network_error";
-}
-
-function failureMessage(error: unknown): string {
-  return error instanceof Error ? error.message : "KolayBi transport failed";
+  return fetchLiveHttpTransport(request, "KolayBi");
 }
 
 function responseMetadata(response: KolaybiTransportResponse, calls: KolaybiCallRecord[]): Record<string, unknown> {
@@ -414,10 +381,10 @@ async function performRequest(
       request,
       requests,
       response: { live_call_performed: true, accepted: false },
-      error: { code: failureCode(error), message: failureMessage(error) },
+      error: { code: failureCode(error), message: failureMessage(error, "KolayBi transport failed") },
       retry: retryMetadata(decision),
     });
-    throw new KolaybiLiveTransportError(failureMessage(error), attempt);
+    throw new KolaybiLiveTransportError(failureMessage(error, "KolayBi transport failed"), attempt);
   }
 }
 

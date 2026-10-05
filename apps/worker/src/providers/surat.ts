@@ -4,6 +4,7 @@ import type { ProviderRetryDecision } from "./retry.js";
 import { decideProviderRetry } from "./retry.js";
 import type { ProviderAccountConfig } from "./account-config.js";
 import type { LiveProviderTransportPolicy } from "./transport-policy.js";
+import { failureCode, failureMessage, fetchLiveHttpTransport } from "./live-http.js";
 
 export interface SuratTransportResponse {
   status: number;
@@ -546,41 +547,7 @@ function createAttempt(input: {
 }
 
 export async function defaultSuratFetchTransport(request: SuratTransportRequest): Promise<SuratTransportResponse> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), request.timeout_ms);
-  try {
-    const response = await fetch(request.url, {
-      method: request.method,
-      headers: request.headers,
-      body: request.body,
-      signal: controller.signal,
-    });
-    return {
-      status: response.status,
-      headers: Object.fromEntries(response.headers.entries()),
-      body: await response.text(),
-    };
-  } catch (error) {
-    if (error instanceof Error && error.name === "AbortError") {
-      const timeoutError = new Error(`Sürat request timed out after ${request.timeout_ms}ms`);
-      Object.assign(timeoutError, { code: "timeout" });
-      throw timeoutError;
-    }
-    const networkError = error instanceof Error ? error : new Error("Sürat network error");
-    Object.assign(networkError, { code: "network_error" });
-    throw networkError;
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-function failureCode(error: unknown): string {
-  if (error && typeof error === "object" && "code" in error && typeof error.code === "string") return error.code;
-  return "network_error";
-}
-
-function failureMessage(error: unknown): string {
-  return error instanceof Error ? error.message : "Sürat transport failed";
+  return fetchLiveHttpTransport(request, "Sürat");
 }
 
 function responseMetadata(response: SuratTransportResponse, calls: SuratCallRecord[] = []): Record<string, unknown> {
@@ -649,10 +616,10 @@ async function performRequest(
       request,
       requests,
       response: { live_call_performed: true, accepted: false },
-      error: { code: failureCode(error), message: failureMessage(error) },
+      error: { code: failureCode(error), message: failureMessage(error, "Sürat transport failed") },
       retry: retryMetadata(decision),
     });
-    throw new SuratLiveTransportError(failureMessage(error), attempt);
+    throw new SuratLiveTransportError(failureMessage(error, "Sürat transport failed"), attempt);
   }
 }
 

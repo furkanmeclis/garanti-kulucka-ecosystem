@@ -22,6 +22,7 @@ import type { ProviderAccountConfigRepository } from "./account-config.js";
 import { PttLiveTransportError, sendPttLiveRequest, type PttFetchTransport } from "./ptt.js";
 import { SuratLiveTransportError, sendSuratLiveRequest, type SuratFetchTransport } from "./surat.js";
 import { KolaybiLiveTransportError, sendKolaybiLiveRequest, type KolaybiFetchTransport } from "./kolaybi.js";
+import { WhatsappLiveTransportError, sendWhatsappLiveRequest, type WhatsappFetchTransport } from "./whatsapp.js";
 
 export { decideProviderRetry, type ProviderFailureInput, type ProviderRetryDecision, type ProviderRetryReason };
 
@@ -39,6 +40,7 @@ export interface ProviderDeliveryHandlerOptions {
   pttTransport?: PttFetchTransport;
   suratTransport?: SuratFetchTransport;
   kolaybiTransport?: KolaybiFetchTransport;
+  whatsappTransport?: WhatsappFetchTransport;
   attemptNumber?: number;
   maxAttempts?: number;
   now?: Date;
@@ -284,7 +286,18 @@ export async function handleProviderDeliveryJobWithTransport(
             ...(options.kolaybiTransport ? { transport: options.kolaybiTransport } : {}),
             ...(options.now ? { now: options.now } : {}),
           })
-        : null;
+        : payload.envelope.provider === "whatsapp"
+          ? await sendWhatsappLiveRequest({
+              envelope: payload.envelope,
+              job,
+              accountConfig,
+              policy,
+              attemptNumber: options.attemptNumber ?? 1,
+              maxAttempts: options.maxAttempts ?? policy.max_attempts,
+              ...(options.whatsappTransport ? { transport: options.whatsappTransport } : {}),
+              ...(options.now ? { now: options.now } : {}),
+            })
+          : null;
 
   if (!liveResult) {
     return handleProviderDeliveryJob(job);
@@ -311,8 +324,9 @@ export async function handleProviderDeliveryJobWithTransport(
 
 export function isProviderLiveTransportError(
   error: unknown,
-): error is PttLiveTransportError | SuratLiveTransportError | KolaybiLiveTransportError {
+): error is PttLiveTransportError | SuratLiveTransportError | KolaybiLiveTransportError | WhatsappLiveTransportError {
   return error instanceof PttLiveTransportError ||
     error instanceof SuratLiveTransportError ||
-    error instanceof KolaybiLiveTransportError;
+    error instanceof KolaybiLiveTransportError ||
+    error instanceof WhatsappLiveTransportError;
 }

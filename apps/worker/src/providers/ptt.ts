@@ -4,6 +4,7 @@ import type { ProviderRetryDecision } from "./retry.js";
 import { decideProviderRetry } from "./retry.js";
 import type { ProviderAccountConfig } from "./account-config.js";
 import type { LiveProviderTransportPolicy } from "./transport-policy.js";
+import { failureCode, failureMessage, fetchLiveHttpTransport } from "./live-http.js";
 
 export interface PttTransportResponse {
   status: number;
@@ -626,44 +627,7 @@ function createAttempt(input: {
 }
 
 export async function defaultPttFetchTransport(request: PttTransportRequest): Promise<PttTransportResponse> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), request.timeout_ms);
-  try {
-    const response = await fetch(request.url, {
-      method: request.method,
-      headers: request.headers,
-      body: request.body,
-      signal: controller.signal,
-    });
-    const headers = Object.fromEntries(response.headers.entries());
-    return {
-      status: response.status,
-      headers,
-      body: await response.text(),
-    };
-  } catch (error) {
-    if (error instanceof Error && error.name === "AbortError") {
-      const timeoutError = new Error(`PTT request timed out after ${request.timeout_ms}ms`);
-      Object.assign(timeoutError, { code: "timeout" });
-      throw timeoutError;
-    }
-    const networkError = error instanceof Error ? error : new Error("PTT network error");
-    Object.assign(networkError, { code: "network_error" });
-    throw networkError;
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-function failureCode(error: unknown): string {
-  if (error && typeof error === "object" && "code" in error && typeof error.code === "string") {
-    return error.code;
-  }
-  return "network_error";
-}
-
-function failureMessage(error: unknown): string {
-  return error instanceof Error ? error.message : "PTT transport failed";
+  return fetchLiveHttpTransport(request, "PTT");
 }
 
 function createResponseMetadata(
@@ -752,11 +716,11 @@ export async function sendPttLiveRequest(input: PttLiveAdapterInput): Promise<Pt
         },
         error: {
           code: failureCode(error),
-          message: failureMessage(error),
+          message: failureMessage(error, "PTT transport failed"),
         },
         retry: retryMetadata(decision),
       });
-      throw new PttLiveTransportError(failureMessage(error), attempt);
+      throw new PttLiveTransportError(failureMessage(error, "PTT transport failed"), attempt);
     }
 
     calls.push({ request, response });

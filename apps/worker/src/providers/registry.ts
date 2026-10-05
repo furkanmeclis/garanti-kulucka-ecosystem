@@ -53,7 +53,7 @@ export const providerAdapters: ProviderAdapterDefinition[] = [
     channels: ["whatsapp"],
     webhook_operations: ["message.webhook"],
     delivery_operations: ["message.send"],
-    live_calls_enabled: false,
+    live_calls_enabled: true,
   },
   {
     provider: "instagram",

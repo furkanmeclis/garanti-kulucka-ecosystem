@@ -21,6 +21,7 @@ import { providerTransportPolicyFor } from "./providers/transport-policy.js";
 import type { PttFetchTransport } from "./providers/ptt.js";
 import type { SuratFetchTransport } from "./providers/surat.js";
 import type { KolaybiFetchTransport } from "./providers/kolaybi.js";
+import type { WhatsappFetchTransport } from "./providers/whatsapp.js";
 
 export type WorkerLifecycleEventName = "started" | "completed" | "failed";
 
@@ -103,6 +104,7 @@ export interface WorkerProcessorRegistryOptions {
   pttTransport?: PttFetchTransport;
   suratTransport?: SuratFetchTransport;
   kolaybiTransport?: KolaybiFetchTransport;
+  whatsappTransport?: WhatsappFetchTransport;
 }
 
 export const workerQueueNames: QueueName[] = [
@@ -237,6 +239,7 @@ function createProviderDeliveryProcessor(
   pttTransport?: PttFetchTransport,
   suratTransport?: SuratFetchTransport,
   kolaybiTransport?: KolaybiFetchTransport,
+  whatsappTransport?: WhatsappFetchTransport,
 ): QueueProcessor {
   return async (job) => {
     const envelope = assertJobMatchesQueue("provider-delivery", job);
@@ -252,6 +255,7 @@ function createProviderDeliveryProcessor(
           ...(pttTransport ? { pttTransport } : {}),
           ...(suratTransport ? { suratTransport } : {}),
           ...(kolaybiTransport ? { kolaybiTransport } : {}),
+          ...(whatsappTransport ? { whatsappTransport } : {}),
           ...providerFailureInputFromJob(job),
         });
       } else {
@@ -463,6 +467,8 @@ export function createWorkerProcessorRegistry(
     typeof options === "function" ? undefined : options.suratTransport;
   const kolaybiTransport =
     typeof options === "function" ? undefined : options.kolaybiTransport;
+  const whatsappTransport =
+    typeof options === "function" ? undefined : options.whatsappTransport;
   const processors = new Map<QueueName, QueueProcessor>([
     ["provider-webhooks", createProviderWebhookProcessor(providerAttemptRepository)],
     [
@@ -473,6 +479,7 @@ export function createWorkerProcessorRegistry(
         pttTransport,
         suratTransport,
         kolaybiTransport,
+        whatsappTransport,
       ),
     ],
     ["shipment-tracking", createShipmentTrackingProcessor()],

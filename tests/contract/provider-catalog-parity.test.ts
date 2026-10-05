@@ -32,7 +32,9 @@ describe("provider catalog parity", () => {
       );
       expect(apiItem.contract_mode).toBe("fixture_only");
       expect(apiItem.live_call_permitted).toBe(false);
-      expect(workerAdapter?.live_calls_enabled).toBe(provider === "ptt" || provider === "surat" || provider === "kolaybi");
+      expect(workerAdapter?.live_calls_enabled).toBe(
+        provider === "ptt" || provider === "surat" || provider === "kolaybi" || provider === "whatsapp",
+      );
     }
   });
 });
