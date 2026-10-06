@@ -14,6 +14,8 @@ import { createFileRoutes } from "./http/file-routes.js";
 import { createIntegrationRoutes } from "./http/integration-routes.js";
 import { createOrderActionRoutes } from "./http/order-action-routes.js";
 import { createSmsRoutes } from "./http/sms-routes.js";
+import { createReportRoutes } from "./http/report-routes.js";
+import { createInstagramRoutes } from "./http/instagram-routes.js";
 import { createSettingsRoutes } from "./http/settings-routes.js";
 import { createShipmentCreateRoutes } from "./http/shipment-create-routes.js";
 import { createAccountRoutes, createAdminUserRoutes, createAppSettingsRoutes } from "./http/admin-user-routes.js";
@@ -172,6 +174,8 @@ export function createApp(options: CreateAppOptions = {}) {
   app.route("/api/comments", createCommentRoutes());
   app.route("/api/sms", createSmsRoutes());
   app.route("/api/balances", createBalanceRoutes());
+  app.route("/api/reports", createReportRoutes());
+  app.route("/api/instagram", createInstagramRoutes());
   app.route("/api/files", createFileRoutes());
   app.route("/api/webphone", createWebphoneRoutes());
   app.route("/api/app-settings", createAppSettingsRoutes());

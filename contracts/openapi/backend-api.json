@@ -4360,6 +4360,191 @@
           }
         }
       }
+    },
+    "/api/reports/analysis": {
+      "get": {
+        "operationId": "getReportAnalysis",
+        "description": "Legacy RaporlarPage (İş Analizi) KPIs, rates, status/daily/cargo/personnel breakdowns computed in SQL for the date range (Europe/Istanbul days). Admin only.",
+        "parameters": [
+          {
+            "name": "start_date",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "end_date",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "personnel_public_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cargo_provider",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "tumu",
+                "ptt",
+                "surat"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Report analysis aggregates",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportAnalysis"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/instagram/publications": {
+      "post": {
+        "operationId": "createInstagramPublication",
+        "description": "Legacy /api/instagram/publish/{photo,video}: records the publish request idempotently and queues instagram.media.publish on provider-delivery (live gated by providers.instagram.live_mode). Garage files are handed to Graph as a presigned GET.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InstagramPublishRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Publish queued or idempotent replay",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstagramPublishResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "423": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/instagram/publications/{publication_public_id}": {
+      "get": {
+        "operationId": "getInstagramPublication",
+        "parameters": [
+          {
+            "name": "publication_public_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Publication with worker delivery status and media id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstagramPublication"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/instagram/insights/account": {
+      "get": {
+        "operationId": "getInstagramAccountInsights",
+        "description": "Legacy /api/instagram/insights/account?days=N served as a backend dry-run boundary over the stored account analytics snapshot; the browser never calls Meta.",
+        "parameters": [
+          {
+            "name": "days",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "enum": [
+                7,
+                14,
+                28
+              ]
+            }
+          },
+          {
+            "name": "account_public_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Account insights metrics for the selected days",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstagramAccountInsights"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -10609,6 +10794,663 @@
             "items": {
               "$ref": "#/components/schemas/OrderBulkActionResult"
             }
+          }
+        }
+      },
+      "ReportAnalysis": {
+        "type": "object",
+        "required": [
+          "filters",
+          "currency",
+          "metrics",
+          "rates",
+          "status_distribution",
+          "daily_source",
+          "daily",
+          "cargo_providers",
+          "personnel_performance",
+          "personnel_options"
+        ],
+        "properties": {
+          "filters": {
+            "type": "object",
+            "required": [
+              "start_date",
+              "end_date",
+              "personnel_public_id",
+              "cargo_provider"
+            ],
+            "properties": {
+              "start_date": {
+                "type": "string",
+                "format": "date"
+              },
+              "end_date": {
+                "type": "string",
+                "format": "date"
+              },
+              "personnel_public_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "cargo_provider": {
+                "type": "string",
+                "enum": [
+                  "tumu",
+                  "ptt",
+                  "surat"
+                ]
+              }
+            }
+          },
+          "currency": {
+            "type": "string",
+            "enum": [
+              "TRY"
+            ]
+          },
+          "metrics": {
+            "type": "object",
+            "required": [
+              "toplam",
+              "ciro",
+              "aktif",
+              "iptal",
+              "iade",
+              "sevk_edildi",
+              "teslim_edildi",
+              "kargoya_giden",
+              "ptt",
+              "surat",
+              "ptt_subede",
+              "surat_subede",
+              "subede_toplam",
+              "teyit_edildi",
+              "teyit_bekliyor",
+              "kargo_iade",
+              "ptt_kargo_iade",
+              "surat_kargo_iade",
+              "kargo_takip_iade"
+            ],
+            "properties": {
+              "toplam": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "ciro": {
+                "type": "number"
+              },
+              "aktif": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "iptal": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "iade": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "sevk_edildi": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "teslim_edildi": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "kargoya_giden": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "ptt": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "surat": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "ptt_subede": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "surat_subede": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "subede_toplam": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "teyit_edildi": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "teyit_bekliyor": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "kargo_iade": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "ptt_kargo_iade": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "surat_kargo_iade": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "kargo_takip_iade": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          },
+          "rates": {
+            "type": "object",
+            "required": [
+              "teslim",
+              "iptal",
+              "iade",
+              "kargo_iade",
+              "teyit",
+              "sube"
+            ],
+            "properties": {
+              "teslim": {
+                "type": "number"
+              },
+              "iptal": {
+                "type": "number"
+              },
+              "iade": {
+                "type": "number"
+              },
+              "kargo_iade": {
+                "type": "number"
+              },
+              "teyit": {
+                "type": "number"
+              },
+              "sube": {
+                "type": "number"
+              }
+            }
+          },
+          "status_distribution": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "status",
+                "count"
+              ],
+              "properties": {
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "olusturuldu",
+                    "teyit_bekliyor",
+                    "teyit_edildi",
+                    "hazirlaniyor",
+                    "kargoya_verildi",
+                    "sevk_edildi",
+                    "teslim_edildi",
+                    "iptal",
+                    "iade"
+                  ]
+                },
+                "count": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "daily_source": {
+            "type": "string",
+            "enum": [
+              "daily_series",
+              "filtered_rows"
+            ]
+          },
+          "daily": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "date",
+                "orders",
+                "revenue",
+                "cancelled",
+                "returned"
+              ],
+              "properties": {
+                "date": {
+                  "type": "string",
+                  "format": "date"
+                },
+                "orders": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "revenue": {
+                  "type": "number"
+                },
+                "cancelled": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "returned": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "cargo_providers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "provider",
+                "active",
+                "returns"
+              ],
+              "properties": {
+                "provider": {
+                  "type": "string",
+                  "enum": [
+                    "ptt",
+                    "surat"
+                  ]
+                },
+                "active": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "returns": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "personnel_performance": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "user_public_id",
+                "name",
+                "orders",
+                "revenue",
+                "cancelled"
+              ],
+              "properties": {
+                "user_public_id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "orders": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "revenue": {
+                  "type": "number"
+                },
+                "cancelled": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "personnel_options": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "public_id",
+                "first_name",
+                "last_name"
+              ],
+              "properties": {
+                "public_id": {
+                  "type": "string"
+                },
+                "first_name": {
+                  "type": "string"
+                },
+                "last_name": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "InstagramPublishRequest": {
+        "type": "object",
+        "required": [
+          "idempotency_key"
+        ],
+        "description": "Exactly one of image_url, video_url, file_public_id.",
+        "properties": {
+          "account_public_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "image_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uri"
+          },
+          "video_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uri"
+          },
+          "file_public_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "media_type": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "IMAGE",
+              "REELS",
+              "VIDEO",
+              null
+            ]
+          },
+          "caption": {
+            "type": "string",
+            "maxLength": 2200
+          },
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          }
+        }
+      },
+      "InstagramPublication": {
+        "type": "object",
+        "required": [
+          "public_id",
+          "media_kind",
+          "media_type",
+          "caption",
+          "idempotency_key",
+          "request_id",
+          "job_id",
+          "queued",
+          "status",
+          "media_id",
+          "created_at"
+        ],
+        "properties": {
+          "public_id": {
+            "type": "string"
+          },
+          "account_public_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "media_kind": {
+            "type": "string",
+            "enum": [
+              "image",
+              "video"
+            ]
+          },
+          "media_type": {
+            "type": "string",
+            "enum": [
+              "IMAGE",
+              "REELS",
+              "VIDEO"
+            ]
+          },
+          "media_url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "file_public_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "caption": {
+            "type": "string"
+          },
+          "idempotency_key": {
+            "type": "string"
+          },
+          "request_id": {
+            "type": "string"
+          },
+          "job_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "queued": {
+            "type": "boolean"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "recorded",
+              "queued",
+              "dry_run",
+              "published",
+              "retrying",
+              "failed"
+            ]
+          },
+          "media_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "error_message": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "InstagramPublishResponse": {
+        "type": "object",
+        "required": [
+          "provider",
+          "operation",
+          "publication",
+          "job_id",
+          "queued",
+          "replayed",
+          "live_call_permitted",
+          "live_gate"
+        ],
+        "properties": {
+          "provider": {
+            "type": "string",
+            "enum": [
+              "instagram"
+            ]
+          },
+          "operation": {
+            "type": "string",
+            "enum": [
+              "media.publish"
+            ]
+          },
+          "publication": {
+            "$ref": "#/components/schemas/InstagramPublication"
+          },
+          "job_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "queued": {
+            "type": "boolean"
+          },
+          "replayed": {
+            "type": "boolean"
+          },
+          "live_call_permitted": {
+            "type": "boolean"
+          },
+          "live_gate": {
+            "type": "string"
+          }
+        }
+      },
+      "InstagramAccountInsights": {
+        "type": "object",
+        "required": [
+          "success",
+          "cached",
+          "data",
+          "followers",
+          "period",
+          "dry_run",
+          "live_call_permitted"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "cached": {
+            "type": "boolean"
+          },
+          "account_public_id": {
+            "type": "string"
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "name",
+                "period",
+                "values"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "period": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "value",
+                      "end_time"
+                    ],
+                    "properties": {
+                      "value": {
+                        "type": "number"
+                      },
+                      "end_time": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "followers": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "followers_count": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "media_count": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          },
+          "period": {
+            "type": "object",
+            "required": [
+              "days",
+              "since",
+              "until"
+            ],
+            "properties": {
+              "days": {
+                "type": "integer"
+              },
+              "since": {
+                "type": "integer"
+              },
+              "until": {
+                "type": "integer"
+              }
+            }
+          },
+          "provider": {
+            "type": "string"
+          },
+          "operation": {
+            "type": "string"
+          },
+          "dry_run": {
+            "type": "boolean"
+          },
+          "live_call_permitted": {
+            "type": "boolean"
           }
         }
       }

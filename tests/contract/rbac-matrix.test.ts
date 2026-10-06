@@ -41,6 +41,9 @@ describe("API RBAC permission matrix", () => {
     });
     expect(matrix["GET /api/conversations"]).toMatchObject({ kargo_operatoru: "deny", calisan: "allow" });
     expect(matrix["GET /api/products"]).toMatchObject({ kargo_operatoru: "deny", calisan: "allow" });
+    expect(matrix["GET /api/reports/analysis"]).toMatchObject({ kargo_operatoru: "deny", calisan: "deny" });
+    expect(matrix["POST /api/instagram/publications"]).toMatchObject({ kargo_operatoru: "deny", calisan: "allow" });
+    expect(matrix["GET /api/instagram/insights/account"]).toMatchObject({ kargo_operatoru: "deny", calisan: "allow" });
     expect(matrix["GET /api/reports/summary"]).toMatchObject({ kargo_operatoru: "deny", calisan: "deny" });
     expect(matrix["GET /api/files/orphans"]).toMatchObject({ kargo_operatoru: "deny", calisan: "deny" });
   });

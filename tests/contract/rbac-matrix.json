@@ -123,5 +123,9 @@
   "POST /api/orders/{order_public_id}/kolaybi/e-document": { "anonymous": "deny", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" },
   "POST /api/orders/{order_public_id}/kolaybi/invoice": { "anonymous": "deny", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" },
   "POST /api/orders/{order_public_id}/confirmation-call": { "anonymous": "deny", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" },
-  "POST /api/orders/{order_public_id}/confirmation-call/status": { "anonymous": "deny", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" }
+  "POST /api/orders/{order_public_id}/confirmation-call/status": { "anonymous": "deny", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" },
+  "GET /api/reports/analysis": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "deny", "admin": "allow" },
+  "POST /api/instagram/publications": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "allow", "admin": "allow" },
+  "GET /api/instagram/publications/{publication_public_id}": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "allow", "admin": "allow" },
+  "GET /api/instagram/insights/account": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "allow", "admin": "allow" }
 }

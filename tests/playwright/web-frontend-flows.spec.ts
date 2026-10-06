@@ -299,6 +299,31 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       return;
     }
 
+    if (url.pathname === "/api/reports/analysis") {
+      expect(currentUser.role).toBe("admin");
+      const metrics = {
+        toplam: 4, ciro: 777.77, aktif: 3, iptal: 1, iade: 0, sevk_edildi: 1, teslim_edildi: 1, kargoya_giden: 2,
+        ptt: 2, surat: 1, ptt_subede: 1, surat_subede: 0, subede_toplam: 1, teyit_edildi: 2, teyit_bekliyor: 1,
+        kargo_iade: 0, ptt_kargo_iade: 0, surat_kargo_iade: 0, kargo_takip_iade: 0,
+      };
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          filters: { start_date: url.searchParams.get("start_date"), end_date: url.searchParams.get("end_date"), personnel_public_id: null, cargo_provider: "tumu" },
+          currency: "TRY",
+          metrics,
+          rates: { teslim: 50, iptal: 25, iade: 0, kargo_iade: 0, teyit: 66.7, sube: 50 },
+          status_distribution: [{ status: "teslim_edildi", count: 1 }, { status: "iptal", count: 1 }],
+          daily_source: "daily_series",
+          daily: [{ date: "2026-10-01", orders: 4, revenue: 777.77, cancelled: 1, returned: 0 }],
+          cargo_providers: [{ provider: "ptt", active: 2, returns: 0 }, { provider: "surat", active: 1, returns: 0 }],
+          personnel_performance: [],
+          personnel_options: [],
+        }),
+      });
+      return;
+    }
+
     if (url.pathname === "/api/conversations") {
       conversationQueryUrls.push(`${url.pathname}${url.search}`);
       const conversations = [
@@ -2255,18 +2280,12 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     });
     await expect(page.getByTestId("vapi-test-call-detail")).toContainText("call.test vapitest_vapi_test_05051234567");
     await page.goto(`${app.url}/raporlar`);
-    await expect(page.getByTestId("reports-flow")).toContainText("777.77 TRY");
-    await expect(page.getByTestId("reports-flow")).toContainText("9");
-    await expect(page.getByTestId("reports-flow")).toContainText("8");
-    await expect(page.getByTestId("reports-detail")).toContainText("Açık konuşma");
-    await expect(page.getByTestId("reports-detail")).toContainText("3");
-    await expect(page.getByTestId("reports-detail")).toContainText("Aktif kargo");
-    await expect(page.getByTestId("reports-detail")).toContainText("6");
-    await expect(page.getByTestId("reports-ratio-summary")).toContainText("Teslim Oranı");
-    await expect(page.getByTestId("reports-ratio-summary")).toContainText("Teyit Oranı");
-    await expect(page.getByTestId("reports-ratio-summary")).toContainText("%25");
-    await expect(page.getByTestId("reports-ratio-summary")).toContainText("%50");
-    await expect(page.getByTestId("reports-ratio-summary")).toContainText("%75");
+    await expect(page.getByTestId("raporlar-page")).toContainText("İş Analizi");
+    await expect(page.getByTestId("rapor-siparis-ozeti")).toContainText("777,77 ₺");
+    await expect(page.getByTestId("rapor-siparis-ozeti")).toContainText("%25 iptal oranı");
+    await expect(page.getByTestId("rapor-kargo-durumu")).toContainText("Şubede Bekleyen");
+    await expect(page.getByTestId("rapor-oran-ozeti")).toContainText("Teslim Oranı");
+    await expect(page.getByTestId("rapor-oran-ozeti")).toContainText("%50");
     await page.goto(`${app.url}/ayarlar/entegrasyonlar`);
     await expect(page.getByTestId("integrations-flow")).toContainText("Instagram Main");
     await expect(page.getByTestId("instagram-publish-preview")).toContainText("Instagram Yayın Önizleme");
@@ -2621,7 +2640,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       { path: "/sms", testId: "sms-flow" },
       { path: "/sesli-asistan", testId: "calls-flow" },
       { path: "/sesli-asistan/vapi", testId: "vapi-flow" },
-      { path: "/raporlar", testId: "reports-flow" },
+      { path: "/raporlar", testId: "raporlar-page" },
       { path: "/ayarlar/entegrasyonlar", testId: "integrations-flow" },
       { path: "/ayarlar", testId: "admin-flow" },
       { path: "/dosya", testId: "file-upload-flow" },

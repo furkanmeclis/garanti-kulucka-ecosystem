@@ -34,6 +34,7 @@ export interface Database {
   social_comment_actions: SocialCommentActionsTable;
   sms_templates: SmsTemplatesTable;
   sms_messages: SmsMessagesTable;
+  instagram_publications: InstagramPublicationsTable;
   products: ProductsTable;
   stock_movements: StockMovementsTable;
   orders: OrdersTable;
@@ -255,6 +256,20 @@ export interface SmsMessagesTable extends BaseTable {
   job_id: string | null;
   queued: boolean;
   actor_user_id: number | null;
+}
+
+export interface InstagramPublicationsTable extends BaseTable {
+  account_id: number | null;
+  media_kind: string;
+  media_type: string;
+  media_url: string | null;
+  file_id: number | null;
+  caption: string;
+  idempotency_key: string;
+  request_id: string;
+  job_id: string | null;
+  queued: boolean;
+  created_by_user_id: number | null;
 }
 
 export interface BalanceMovementsTable extends BaseTable {

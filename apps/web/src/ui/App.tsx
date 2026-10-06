@@ -87,6 +87,9 @@ import { AyarlarPage } from "./pages/AyarlarPage.js";
 import { SuratDebugPage } from "./pages/SuratDebugPage.js";
 import { CronDebugPage } from "./pages/CronDebugPage.js";
 import { SiparisAksiyonlari, SiparisTopluAksiyonlar } from "./pages/SiparisAksiyonlari.js";
+import { RaporlarPage } from "./pages/RaporlarPage.js";
+import { InstagramYayinlaPage } from "./pages/InstagramYayinlaPage.js";
+import { InstagramAnalitikPage } from "./pages/InstagramAnalitikPage.js";
 import { YorumlarPage } from "./pages/YorumlarPage.js";
 import { KargoSiparisAksiyonlari, KargoTopluAktar } from "./pages/KargoOlusturModal.js";
 import { KargoPrintView } from "./pages/KargoPrintView.js";
@@ -208,6 +211,8 @@ interface NavigationItem {
   icon: LucideIcon;
   roles: string[];
   path: string;
+  /** Routed but not in the sidebar (legacy NAV_MENU omits the Instagram Meta review pages). */
+  hidden?: boolean;
 }
 
 const navigationItems: NavigationItem[] = [
@@ -226,6 +231,8 @@ const navigationItems: NavigationItem[] = [
   { key: "calls", label: "Arama", icon: Phone, roles: ["admin"], path: "/sesli-asistan" },
   { key: "vapi", label: "VAPI AI", icon: Bot, roles: ["admin"], path: "/sesli-asistan/vapi" },
   { key: "reports", label: "İş Analizi", icon: BarChart3, roles: ["admin"], path: "/raporlar" },
+  { key: "instagramPublish", label: "Yayın Oluştur", icon: Send, roles: ["admin", "calisan"], path: "/instagram/yayinla", hidden: true },
+  { key: "instagramAnalytics", label: "Analitik", icon: BarChart3, roles: ["admin", "calisan"], path: "/instagram/analitik", hidden: true },
   { key: "integrations", label: "Entegrasyonlar", icon: Settings, roles: ["admin"], path: "/ayarlar/entegrasyonlar" },
   { key: "admin", label: "Ayarlar", icon: Settings, roles: ["admin", "calisan", "kargo_operatoru"], path: "/ayarlar" },
   { key: "files", label: "Dosya", icon: FileUp, roles: ["admin", "calisan"], path: "/dosya" },
@@ -2252,7 +2259,7 @@ export function App() {
           <span>Garanti Kuluçka</span>
         </div>
         <nav aria-label="Ana gezinme">
-          {visibleNavigation.map((item) => {
+          {visibleNavigation.filter((item) => !item.hidden).map((item) => {
             const Icon = item.icon;
             return (
               <NavLink
@@ -3861,35 +3868,11 @@ export function App() {
           </FlowPanel>
         )}
 
-        {activeFlow === "reports" && (
-          <FlowPanel title="İş Analizi" icon={<BarChart3 size={18} />} testId="reports-flow">
-            <div className="report-grid">
-              <Metric title="Konuşma" value={String(data.reportSummary.conversation_count)} />
-              <Metric title="Sipariş" value={String(data.reportSummary.order_count)} />
-              <Metric title="Kargo" value={String(data.reportSummary.shipment_count)} />
-              <Metric title="Ciro" value={formatMoney(data.reportSummary.total_revenue, data.reportSummary.currency)} />
-            </div>
-            <DetailPanel title="Operasyon Dağılımı" testId="reports-detail">
-              <DataRows
-                rows={[
-                  ["Açık konuşma", String(data.reportSummary.open_conversation_count), "reports API"],
-                  ["Teyit bekleyen", String(data.reportSummary.pending_confirmation_count), "reports API"],
-                  ["Aktif kargo", String(data.reportSummary.active_shipment_count), "reports API"],
-                  ["Teslim edilen", String(data.reportSummary.delivered_shipment_count), "reports API"],
-                ]}
-              />
-            </DetailPanel>
-            <DetailPanel title="Oran Özeti" testId="reports-ratio-summary">
-              <DataRows
-                rows={[
-                  ["Teslim Oranı", `%${data.reportSummary.delivered_shipment_rate}`, "teslim / toplam kargo"],
-                  ["Teyit Oranı", `%${data.reportSummary.confirmation_rate}`, `${data.reportSummary.pending_confirmation_count} teyit bekliyor`],
-                  ["Kargo Hareketi", `%${data.reportSummary.active_shipment_rate}`, "aktif / toplam kargo"],
-                ]}
-              />
-            </DetailPanel>
-          </FlowPanel>
-        )}
+        {activeFlow === "reports" && <RaporlarPage http={http} />}
+
+        {activeFlow === "instagramPublish" && <InstagramYayinlaPage http={http} />}
+
+        {activeFlow === "instagramAnalytics" && <InstagramAnalitikPage http={http} />}
 
         {activeFlow === "files" && (
           <FlowPanel title="Dosya Upload" icon={<FileUp size={18} />} testId="file-upload-flow">
