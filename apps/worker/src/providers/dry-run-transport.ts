@@ -39,6 +39,10 @@ function providerPath(envelope: ProviderRequestEnvelope): string {
       return "/kolaybi/associates/find";
     case "kolaybi:contact.create":
       return "/kolaybi/associates";
+    case "kolaybi:contact.update":
+      return "/kolaybi/associates/update";
+    case "kolaybi:invoice.payment.create":
+      return "/kolaybi/invoices/proceed";
     case "kolaybi:product.list":
       return "/kolaybi/products";
     case "netgsm:call.confirmation.create":

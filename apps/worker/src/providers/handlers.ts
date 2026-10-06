@@ -82,6 +82,8 @@ const explicitOptInOperations = new Set<ProviderOperation>([
   "invoice.e_document.cancel",
   "contact.find",
   "contact.create",
+  "contact.update",
+  "invoice.payment.create",
   "product.list",
   "call.confirmation.create",
   "call.confirmation.status",

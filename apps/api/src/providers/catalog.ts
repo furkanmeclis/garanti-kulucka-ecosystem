@@ -36,6 +36,8 @@ export const apiProviderCatalog: ApiProviderCatalogItem[] = [
     "invoice.e_document.cancel",
     "contact.find",
     "contact.create",
+    "contact.update",
+    "invoice.payment.create",
     "product.list",
   ]),
   catalogItem("meta", ["whatsapp", "instagram", "messenger"], ["message.webhook"]),

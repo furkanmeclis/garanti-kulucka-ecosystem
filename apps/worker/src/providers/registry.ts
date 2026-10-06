@@ -43,6 +43,8 @@ export const providerAdapters: ProviderAdapterDefinition[] = [
       "invoice.e_document.cancel",
       "contact.find",
       "contact.create",
+      "contact.update",
+      "invoice.payment.create",
       "product.list",
     ],
     live_calls_enabled: true,

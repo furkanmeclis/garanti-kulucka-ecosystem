@@ -184,6 +184,20 @@
     },
     {
       "provider": "kolaybi",
+      "operation": "contact.update",
+      "direction": "outbound",
+      "status": "covered",
+      "fixture_file": "kolaybi/fixtures/contact_update_minimal.json"
+    },
+    {
+      "provider": "kolaybi",
+      "operation": "invoice.payment.create",
+      "direction": "outbound",
+      "status": "covered",
+      "fixture_file": "kolaybi/fixtures/invoice_payment_create_minimal.json"
+    },
+    {
+      "provider": "kolaybi",
       "operation": "product.list",
       "direction": "outbound",
       "status": "covered",

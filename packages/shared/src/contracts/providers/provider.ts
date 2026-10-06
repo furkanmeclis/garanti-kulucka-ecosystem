@@ -22,6 +22,8 @@ export const providerOperationSchema = z.enum([
   "invoice.e_document.cancel",
   "contact.find",
   "contact.create",
+  "contact.update",
+  "invoice.payment.create",
   "product.list",
   "message.send",
   "message.webhook",

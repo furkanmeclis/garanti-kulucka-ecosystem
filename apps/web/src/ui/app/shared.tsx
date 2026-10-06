@@ -1,5 +1,5 @@
 import { type ReactNode } from "react";
-import { BarChart3, Bot, Bug, FileUp, MessageCircle, MessageSquare, MessageSquareText, Package, Phone, Settings, Send, ShoppingCart, Truck, Users, Wallet, XCircle, Zap, type LucideIcon } from "lucide-react";
+import { BarChart3, BookUser, Bot, Bug, FileText, FileUp, MessageCircle, MessageSquare, MessageSquareText, Package, Phone, Settings, Send, ShoppingCart, Truck, Users, Wallet, XCircle, Zap, type LucideIcon } from "lucide-react";
 import { type AdminAuditLog, type AdminSetting, type IntegrationAccount, type InstagramAnalyticsSummary as BackendInstagramAnalyticsSummary, type ProviderCatalogItem, type ProviderDebugSummary, type ProviderAttemptViewModel } from "../../api/admin-client.js";
 import { type BalanceSummary as BackendBalanceSummary, type CommentModerationSummary as BackendCommentModerationSummary, type ConversationSummary, type ConversationSummaryStats, type CustomerSummary, type CustomerSummaryStats, type MessageSummary, type OrderSummaryStats, type OrderSummary, type ProductSummaryStats, type ProductSummary, type ReportSummary as BackendReportSummary, type ShipmentPipelineSummary, type ShipmentPipelineStep, type ShipmentSummaryStats, type ShipmentSummary } from "../../api/domain-client.js";
 import { type FileMetadata } from "../../api/file-client.js";
@@ -149,6 +149,8 @@ export const navigationItems: NavigationItem[] = [
   { key: "calls", label: "Arama", icon: Phone, roles: ["admin"], path: "/sesli-asistan" },
   { key: "vapi", label: "VAPI AI", icon: Bot, roles: ["admin"], path: "/sesli-asistan/vapi" },
   { key: "reports", label: "İş Analizi", icon: BarChart3, roles: ["admin"], path: "/raporlar" },
+  { key: "invoices", label: "Faturalar", icon: FileText, roles: ["admin"], path: "/faturalar" },
+  { key: "accounts", label: "Cari Hesaplar", icon: BookUser, roles: ["admin"], path: "/cari-hesaplar" },
   { key: "instagramPublish", label: "Yayın Oluştur", icon: Send, roles: ["admin", "calisan"], path: "/instagram/yayinla", hidden: true },
   { key: "instagramAnalytics", label: "Analitik", icon: BarChart3, roles: ["admin", "calisan"], path: "/instagram/analitik", hidden: true },
   { key: "integrations", label: "Entegrasyonlar", icon: Settings, roles: ["admin"], path: "/ayarlar/entegrasyonlar" },

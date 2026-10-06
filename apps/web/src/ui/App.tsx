@@ -13,8 +13,10 @@ import {
   AyarlarPage,
   BakiyePage,
   CancellationsFlow,
+  CariHesaplarPage,
   CronDebugPage,
   CustomersFlow,
+  FaturalarPage,
   FilesFlow,
   InboxFlow,
   InstagramAnalitikPage,
@@ -201,6 +203,8 @@ export function App() {
         {activeFlow === "calls" && <AramaPage http={http} />}
         {activeFlow === "vapi" && <VapiAramalarPage http={http} />}
         {activeFlow === "reports" && <RaporlarPage http={http} />}
+        {activeFlow === "invoices" && <FaturalarPage http={http} />}
+        {activeFlow === "accounts" && <CariHesaplarPage http={http} />}
         {activeFlow === "instagramPublish" && <InstagramYayinlaPage http={http} />}
         {activeFlow === "instagramAnalytics" && <InstagramAnalitikPage http={http} />}
         {activeFlow === "files" && <FilesFlow ctx={ctx} />}

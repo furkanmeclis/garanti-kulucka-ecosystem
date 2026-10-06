@@ -29,6 +29,8 @@ export type KolaybiEndpoint =
   | "invoices.e_document.cancel"
   | "associates.list"
   | "associates.create"
+  | "associates.update"
+  | "invoices.proceed"
   | "products.list";
 
 export type KolaybiFetchTransport = (request: KolaybiTransportRequest) => Promise<KolaybiTransportResponse>;
@@ -816,6 +818,50 @@ async function contactCreate(context: KolaybiCallContext): Promise<KolaybiOperat
   };
 }
 
+/** Legacy cariHesaplar.guncelle: `PUT /associates/{id}` with a JSON body built like the create form. */
+async function contactUpdate(context: KolaybiCallContext): Promise<KolaybiOperationResult> {
+  const payload = context.input.envelope.payload;
+  const contactId = requiredPayloadString(payload, ["contact_id", "kolaybi_contact_id"], "contact_id");
+  const form = contactForm(payload, context.input.now ?? new Date());
+  const body: Record<string, unknown> = {};
+  const address: Record<string, string> = {};
+  for (const [key, value] of form.entries()) {
+    const nested = /^addresses\[(\w+)\]$/.exec(key);
+    if (nested?.[1]) address[nested[1]] = value;
+    else body[key] = key === "is_corporate" ? value === "true" : value;
+  }
+  if (Object.keys(address).length > 0) body.addresses = [address];
+  const { request, response } = await authorizedCall(context, (token) => ({
+    method: "PUT",
+    url: `${credentials(context.input.accountConfig).apiUrl}/associates/${encodeURIComponent(contactId)}`,
+    headers: { ...authHeaders(context.input.accountConfig, token), "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    timeout_ms: context.input.policy.timeout_ms,
+    kolaybi_endpoint: "associates.update",
+  }));
+  const parsed = parseJsonRecord(context, request, response);
+  const data = isRecord(parsed.data) ? parsed.data : parsed;
+  return { request, response, payload: { success: true, contact_id: data.id ?? contactId, address_id: firstAddressId(data) } };
+}
+
+/** Legacy faturalar.tahsilatYap: `POST /invoices/proceed` (document_id, vault_id, optional amount). */
+async function invoicePaymentCreate(context: KolaybiCallContext): Promise<KolaybiOperationResult> {
+  const payload = context.input.envelope.payload;
+  const documentId = requiredPayloadString(payload, ["document_id", "invoice_id", "kolaybi_invoice_id"], "tahsilat document_id");
+  const vaultId = requiredPayloadString(payload, ["vault_id"], "tahsilat vault_id");
+  const amount = payloadString(payload, ["amount"]);
+  const { request, response } = await authorizedCall(context, (token) => {
+    const form = new URLSearchParams();
+    form.append("document_id", documentId);
+    form.append("vault_id", vaultId);
+    if (amount) form.append("amount", amount);
+    return postFormRequest(context.input, "/invoices/proceed", "invoices.proceed", token, form);
+  });
+  const parsed = parseJsonRecord(context, request, response);
+  const data = isRecord(parsed.data) ? parsed.data : parsed;
+  return { request, response, payload: { success: true, document_id: documentId, payment_id: data.id ?? null, data } };
+}
+
 async function productList(context: KolaybiCallContext): Promise<KolaybiOperationResult> {
   const payload = context.input.envelope.payload;
   const perPage = Math.max(1, Math.trunc(payloadNumber(payload, ["per_page"], 200)));
@@ -862,6 +908,8 @@ const kolaybiOperations: Partial<Record<ProviderRequestEnvelope["operation"], (c
   "invoice.get": invoiceGet,
   "contact.find": contactFind,
   "contact.create": contactCreate,
+  "contact.update": contactUpdate,
+  "invoice.payment.create": invoicePaymentCreate,
   "product.list": productList,
 };
 

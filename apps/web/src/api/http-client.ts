@@ -13,6 +13,8 @@ export interface BackendRequestOptions {
 
 export interface BackendHttpClient {
   request: <T>(path: string, options?: BackendRequestOptions) => Promise<T>;
+  /** Authenticated binary download (PDF/HTML documents); optional so test doubles can omit it. */
+  requestBlob?: (path: string) => Promise<Blob>;
 }
 
 export class BackendRequestError extends Error {
@@ -62,6 +64,19 @@ export function createBackendHttpClient(options: BackendHttpClientOptions): Back
       }
 
       return response.json() as Promise<T>;
+    },
+    requestBlob: async (path: string) => {
+      const headers = new Headers();
+      const token = options.getAccessToken?.();
+      if (token) {
+        headers.set("authorization", `Bearer ${token}`);
+      }
+      const response = await fetchImpl(new URL(path, options.baseUrl), { method: "GET", headers });
+      if (!response.ok) {
+        const responseBody = await response.json().catch(() => null);
+        throw new BackendRequestError(`Backend request failed: ${response.status}`, response.status, responseBody);
+      }
+      return response.blob();
     },
   };
 }

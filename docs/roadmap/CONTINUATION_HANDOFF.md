@@ -8,7 +8,8 @@ Sıra: 1) müşteri detayı, 2) fatura/cari/KolayBi, 3) sağlayıcı ayar sayfal
 
 | # | Parça | Durum | Not |
 | --- | --- | --- | --- |
-| 1 | Müşteri detayı `/musteriler/:id` | tamam | `GET/PATCH /api/customers/{customer_public_id}`, `PATCH .../notes` (owner/admin/calisan); mevcut panelde `CustomerDetailPage`, betada `customer-detail-page`; testler `apps/api/test/customer-detail-routes.test.ts`, `tests/playwright/customer-detail-parity.spec.ts`, `tests/playwright-beta/customer-detail.beta.ts` |
+| 1 | Müşteri detayı `/musteriler/:id` | tamam (`ffc6f61` → `v0.1.343`, run `37527929578`) | `GET/PATCH /api/customers/{customer_public_id}`, `PATCH .../notes` (owner/admin/calisan); mevcut panelde `CustomerDetailPage`, betada `customer-detail-page`; testler `apps/api/test/customer-detail-routes.test.ts`, `tests/playwright/customer-detail-parity.spec.ts`, `tests/playwright-beta/customer-detail.beta.ts` |
+| 2 | Fatura, cari hesap, tahsilat, KolayBi senkronu | tamam | migration `021`; `/api/accounting/*` (yalnız owner/admin); fatura HTML + sunucu PDF (`apps/api/src/documents/pdf.ts`, base-14 Helvetica + Türkçe glif `/Differences`, 6. parçadaki etiket PDF'i için de kullanılacak); KolayBi senkronu `provider-delivery` işleriyle, canlı çağrı `providers.kolaybi.live_mode` + etkin KolayBi hesabının `live_mode` onayı olmadan kuru çalışır ve satır `failed` + açıklama ile işaretlenir; mevcut panelde `/faturalar`, `/cari-hesaplar`; betaya 8. parçada eklenecek |
 
 Not: `8ef5709` koşusunda (`37524984748`) testler ve imajlar yeşildi; yalnız tag push'u, main o sırada iş akışını değiştiren `4646638`'e ilerlediği için reddedildi. `v0.1.342` `4646638`'e verildi (`37525429376`, `playwright-report-<sha>` artifact'ı mevcut).
 

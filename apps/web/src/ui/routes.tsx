@@ -61,4 +61,6 @@ export const InstagramYayinlaPage = lazyPage(() =>
 export const InstagramAnalitikPage = lazyPage(() =>
   import("./pages/InstagramAnalitikPage.js").then((m) => m.InstagramAnalitikPage),
 );
+export const FaturalarPage = lazyPage(() => import("./pages/FaturalarPage.js").then((m) => m.FaturalarPage));
+export const CariHesaplarPage = lazyPage(() => import("./pages/CariHesaplarPage.js").then((m) => m.CariHesaplarPage));
 export const KargoPrintView = lazyPage(() => import("./pages/KargoPrintView.js").then((m) => m.KargoPrintView));

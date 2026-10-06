@@ -35,6 +35,10 @@ export interface Database {
   sms_templates: SmsTemplatesTable;
   sms_messages: SmsMessagesTable;
   instagram_publications: InstagramPublicationsTable;
+  accounting_contacts: AccountingContactsTable;
+  invoices: InvoicesTable;
+  invoice_items: InvoiceItemsTable;
+  invoice_payments: InvoicePaymentsTable;
   vapi_call_queue: VapiCallQueueTable;
   vapi_calls: VapiCallsTable;
   products: ProductsTable;
@@ -271,6 +275,81 @@ export interface InstagramPublicationsTable extends BaseTable {
   request_id: string;
   job_id: string | null;
   queued: boolean;
+  created_by_user_id: number | null;
+}
+
+/** Local sync state of a row mirrored to KolayBi through provider-delivery jobs. */
+export interface KolaybiSyncColumns {
+  sync_status: ColumnType<string, string | undefined, string>;
+  sync_error: string | null;
+  sync_request_id: string | null;
+  sync_job_id: string | null;
+}
+
+export interface AccountingContactsTable extends BaseTable, KolaybiSyncColumns {
+  customer_id: number | null;
+  contact_type: ColumnType<string, string | undefined, string>;
+  name: string;
+  tax_number: string | null;
+  tax_office: string | null;
+  phone: string | null;
+  email: string | null;
+  address_line: string | null;
+  district: string | null;
+  city: string | null;
+  country: ColumnType<string, string | undefined, string>;
+  notes: string | null;
+  kolaybi_contact_id: string | null;
+  kolaybi_address_id: string | null;
+  last_synced_at: Timestamp | null;
+  created_by_user_id: number | null;
+}
+
+/** `issue_date` / `due_date` are SQL DATE columns (node-postgres returns a local-midnight Date). */
+export interface InvoicesTable extends BaseTable, KolaybiSyncColumns {
+  invoice_number: string;
+  contact_id: number;
+  order_id: number | null;
+  invoice_type: ColumnType<string, string | undefined, string>;
+  status: ColumnType<string, string | undefined, string>;
+  currency: ColumnType<string, string | undefined, string>;
+  issue_date: ColumnType<Date | string, string, string>;
+  due_date: ColumnType<Date | string | null, string | null, string | null>;
+  description: string | null;
+  subtotal: string;
+  vat_total: string;
+  grand_total: string;
+  paid_total: ColumnType<string, string | undefined, string>;
+  kolaybi_invoice_id: string | null;
+  e_document_status: string | null;
+  last_synced_at: Timestamp | null;
+  idempotency_key: string;
+  cancelled_at: Timestamp | null;
+  created_by_user_id: number | null;
+}
+
+export interface InvoiceItemsTable extends BaseTable {
+  invoice_id: number;
+  product_id: number | null;
+  description: string;
+  quantity: string;
+  unit: ColumnType<string, string | undefined, string>;
+  unit_price: string;
+  vat_rate: string;
+  line_subtotal: string;
+  line_vat: string;
+  line_total: string;
+  sort_order: ColumnType<number, number | undefined, number>;
+}
+
+export interface InvoicePaymentsTable extends BaseTable, KolaybiSyncColumns {
+  invoice_id: number;
+  amount: string;
+  method: ColumnType<string, string | undefined, string>;
+  vault_id: string | null;
+  paid_at: Timestamp;
+  notes: string | null;
+  idempotency_key: string;
   created_by_user_id: number | null;
 }
 

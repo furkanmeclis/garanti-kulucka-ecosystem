@@ -5354,6 +5354,532 @@
           }
         }
       }
+    },
+    "/api/accounting/contacts": {
+      "get": {
+        "operationId": "listAccountingContacts",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sync_status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "local",
+                "queued",
+                "synced",
+                "failed"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Cari hesaplar (open balance included)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountingContactList"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createAccountingContact",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAccountingContactRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created cari hesap",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountingContact"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/accounting/contacts/{contact_public_id}": {
+      "get": {
+        "operationId": "getAccountingContact",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountingContactPublicId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Cari hesap",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountingContact"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateAccountingContact",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountingContactPublicId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAccountingContactRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated cari hesap",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountingContact"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/accounting/invoices": {
+      "get": {
+        "operationId": "listInvoices",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "issued",
+                "partially_paid",
+                "paid",
+                "cancelled",
+                "open"
+              ]
+            }
+          },
+          {
+            "name": "contact_public_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sync_status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "local",
+                "queued",
+                "synced",
+                "failed"
+              ]
+            }
+          },
+          {
+            "name": "issued_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "issued_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Invoices with list totals",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvoiceList"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createInvoice",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateInvoiceRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created invoice",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvoiceDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "200": {
+            "description": "Idempotent replay",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvoiceDetail"
+                }
+              }
+            }
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/accounting/invoices/{invoice_public_id}": {
+      "get": {
+        "operationId": "getInvoice",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/InvoicePublicId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Invoice with lines and tahsilat",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvoiceDetail"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/accounting/invoices/{invoice_public_id}/document": {
+      "get": {
+        "operationId": "getInvoiceDocument",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/InvoicePublicId"
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "html",
+                "pdf"
+              ]
+            }
+          },
+          {
+            "name": "download",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Printable invoice (HTML) or PDF",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/accounting/invoices/{invoice_public_id}/payments": {
+      "post": {
+        "operationId": "createInvoicePayment",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/InvoicePublicId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateInvoicePaymentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Recorded tahsilat",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvoicePaymentResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/accounting/invoices/{invoice_public_id}/cancel": {
+      "post": {
+        "operationId": "cancelInvoice",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/InvoicePublicId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Cancelled invoice",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvoiceDetail"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/accounting/kolaybi/status": {
+      "get": {
+        "operationId": "getKolaybiSyncStatus",
+        "responses": {
+          "200": {
+            "description": "KolayBi live gate and per-table sync counts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KolaybiSyncStatus"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/accounting/kolaybi/sync": {
+      "post": {
+        "operationId": "queueKolaybiSync",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KolaybiSyncRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Queued provider-delivery jobs (live calls gated by providers.kolaybi.live_mode)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KolaybiSyncResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -5433,6 +5959,22 @@
       },
       "CustomerPublicId": {
         "name": "customer_public_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "AccountingContactPublicId": {
+        "name": "contact_public_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "InvoicePublicId": {
+        "name": "invoice_public_id",
         "in": "path",
         "required": true,
         "schema": {
@@ -13431,6 +13973,912 @@
               "null"
             ],
             "maxLength": 10000
+          }
+        }
+      },
+      "AccountingSyncState": {
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "local",
+              "queued",
+              "synced",
+              "failed"
+            ]
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "request_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "job_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "AccountingContact": {
+        "type": "object",
+        "required": [
+          "public_id",
+          "name",
+          "contact_type",
+          "sync"
+        ],
+        "properties": {
+          "public_id": {
+            "type": "string"
+          },
+          "contact_type": {
+            "type": "string",
+            "enum": [
+              "individual",
+              "corporate"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "tax_number": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tax_office": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "phone": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "address_line": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "district": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "city": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "country": {
+            "type": "string"
+          },
+          "notes": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "kolaybi_contact_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sync": {
+            "$ref": "#/components/schemas/AccountingSyncState"
+          },
+          "last_synced_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "invoice_count": {
+            "type": "integer"
+          },
+          "open_balance": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          }
+        }
+      },
+      "AccountingContactList": {
+        "type": "object",
+        "required": [
+          "data",
+          "meta"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccountingContact"
+            }
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ListMeta"
+          }
+        }
+      },
+      "CreateAccountingContactRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "contact_type": {
+            "type": "string",
+            "enum": [
+              "individual",
+              "corporate"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "tax_number": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tax_office": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "phone": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "address_line": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "district": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "city": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "country": {
+            "type": "string"
+          },
+          "notes": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "customer_public_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "UpdateAccountingContactRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "minProperties": 1,
+        "properties": {
+          "contact_type": {
+            "type": "string",
+            "enum": [
+              "individual",
+              "corporate"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "tax_number": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tax_office": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "phone": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "address_line": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "district": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "city": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "country": {
+            "type": "string"
+          },
+          "notes": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "customer_public_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "Invoice": {
+        "type": "object",
+        "required": [
+          "public_id",
+          "invoice_number",
+          "status",
+          "grand_total",
+          "sync"
+        ],
+        "properties": {
+          "public_id": {
+            "type": "string"
+          },
+          "invoice_number": {
+            "type": "string"
+          },
+          "invoice_type": {
+            "type": "string",
+            "enum": [
+              "sale",
+              "sale_return"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "issued",
+              "partially_paid",
+              "paid",
+              "cancelled"
+            ]
+          },
+          "currency": {
+            "type": "string"
+          },
+          "issue_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "due_date": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "subtotal": {
+            "type": "string"
+          },
+          "vat_total": {
+            "type": "string"
+          },
+          "grand_total": {
+            "type": "string"
+          },
+          "paid_total": {
+            "type": "string"
+          },
+          "open_amount": {
+            "type": "string"
+          },
+          "contact": {
+            "type": "object",
+            "properties": {
+              "public_id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            }
+          },
+          "order": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "public_id": {
+                "type": "string"
+              },
+              "order_number": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          },
+          "kolaybi_invoice_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "e_document_status": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sync": {
+            "$ref": "#/components/schemas/AccountingSyncState"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          }
+        }
+      },
+      "InvoiceItem": {
+        "type": "object",
+        "properties": {
+          "public_id": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "string"
+          },
+          "unit": {
+            "type": "string"
+          },
+          "unit_price": {
+            "type": "string"
+          },
+          "vat_rate": {
+            "type": "string"
+          },
+          "line_subtotal": {
+            "type": "string"
+          },
+          "line_vat": {
+            "type": "string"
+          },
+          "line_total": {
+            "type": "string"
+          },
+          "product_public_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "InvoicePayment": {
+        "type": "object",
+        "properties": {
+          "public_id": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "string"
+          },
+          "method": {
+            "type": "string",
+            "enum": [
+              "cash",
+              "bank_transfer",
+              "credit_card",
+              "other"
+            ]
+          },
+          "vault_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "paid_at": {
+            "type": "string"
+          },
+          "notes": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sync": {
+            "$ref": "#/components/schemas/AccountingSyncState"
+          },
+          "created_at": {
+            "type": "string"
+          }
+        }
+      },
+      "InvoiceDetail": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Invoice"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "contact": {
+                "$ref": "#/components/schemas/AccountingContact"
+              },
+              "items": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/InvoiceItem"
+                }
+              },
+              "payments": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/InvoicePayment"
+                }
+              },
+              "replayed": {
+                "type": "boolean"
+              }
+            }
+          }
+        ]
+      },
+      "InvoiceList": {
+        "type": "object",
+        "required": [
+          "data",
+          "meta",
+          "totals"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Invoice"
+            }
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ListMeta"
+          },
+          "totals": {
+            "type": "object",
+            "properties": {
+              "grand_total": {
+                "type": "string"
+              },
+              "paid_total": {
+                "type": "string"
+              },
+              "open_total": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "CreateInvoiceRequest": {
+        "type": "object",
+        "required": [
+          "idempotency_key",
+          "contact_public_id",
+          "issue_date",
+          "items"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string"
+          },
+          "contact_public_id": {
+            "type": "string"
+          },
+          "order_public_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "invoice_type": {
+            "type": "string",
+            "enum": [
+              "sale",
+              "sale_return"
+            ]
+          },
+          "issue_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "due_date": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "currency": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 3
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "items": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 200,
+            "items": {
+              "type": "object",
+              "required": [
+                "description",
+                "quantity",
+                "unit_price"
+              ],
+              "properties": {
+                "description": {
+                  "type": "string"
+                },
+                "quantity": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "unit": {
+                  "type": "string"
+                },
+                "unit_price": {
+                  "type": [
+                    "string",
+                    "number"
+                  ]
+                },
+                "vat_rate": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 100
+                },
+                "product_public_id": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "CreateInvoicePaymentRequest": {
+        "type": "object",
+        "required": [
+          "idempotency_key",
+          "amount"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string"
+          },
+          "amount": {
+            "type": [
+              "string",
+              "number"
+            ]
+          },
+          "method": {
+            "type": "string",
+            "enum": [
+              "cash",
+              "bank_transfer",
+              "credit_card",
+              "other"
+            ]
+          },
+          "paid_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "vault_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "notes": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "InvoicePaymentResult": {
+        "type": "object",
+        "required": [
+          "invoice",
+          "payment",
+          "replayed"
+        ],
+        "properties": {
+          "invoice": {
+            "$ref": "#/components/schemas/InvoiceDetail"
+          },
+          "payment": {
+            "$ref": "#/components/schemas/InvoicePayment"
+          },
+          "replayed": {
+            "type": "boolean"
+          }
+        }
+      },
+      "KolaybiSyncStatus": {
+        "type": "object",
+        "required": [
+          "live_call_permitted",
+          "live_gate",
+          "counts"
+        ],
+        "properties": {
+          "account": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "public_id": {
+                "type": "string"
+              },
+              "display_name": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string"
+              }
+            }
+          },
+          "provider_live_mode": {
+            "type": "boolean"
+          },
+          "account_live_mode": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "live_call_permitted": {
+            "type": "boolean"
+          },
+          "live_gate": {
+            "type": "string"
+          },
+          "counts": {
+            "type": "object",
+            "properties": {
+              "contact": {
+                "type": "object",
+                "properties": {
+                  "local": {
+                    "type": "integer"
+                  },
+                  "queued": {
+                    "type": "integer"
+                  },
+                  "synced": {
+                    "type": "integer"
+                  },
+                  "failed": {
+                    "type": "integer"
+                  }
+                }
+              },
+              "invoice": {
+                "type": "object",
+                "properties": {
+                  "local": {
+                    "type": "integer"
+                  },
+                  "queued": {
+                    "type": "integer"
+                  },
+                  "synced": {
+                    "type": "integer"
+                  },
+                  "failed": {
+                    "type": "integer"
+                  }
+                }
+              },
+              "payment": {
+                "type": "object",
+                "properties": {
+                  "local": {
+                    "type": "integer"
+                  },
+                  "queued": {
+                    "type": "integer"
+                  },
+                  "synced": {
+                    "type": "integer"
+                  },
+                  "failed": {
+                    "type": "integer"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "KolaybiSyncRequest": {
+        "type": "object",
+        "required": [
+          "idempotency_key"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
+        }
+      },
+      "KolaybiSyncResult": {
+        "type": "object",
+        "required": [
+          "provider",
+          "live_call_permitted",
+          "live_gate",
+          "queued_count",
+          "results"
+        ],
+        "properties": {
+          "provider": {
+            "const": "kolaybi"
+          },
+          "live_call_permitted": {
+            "type": "boolean"
+          },
+          "live_gate": {
+            "type": "string"
+          },
+          "account_public_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "requested_count": {
+            "type": "integer"
+          },
+          "queued_count": {
+            "type": "integer"
+          },
+          "results": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "target": {
+                  "type": "string",
+                  "enum": [
+                    "contact",
+                    "invoice",
+                    "payment"
+                  ]
+                },
+                "public_id": {
+                  "type": "string"
+                },
+                "operation": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "queued": {
+                  "type": "boolean"
+                },
+                "skipped_reason": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            }
           }
         }
       }

@@ -1,0 +1,19 @@
+{
+  "request_id": "req_kolaybi_contact_update_fixture_1",
+  "provider": "kolaybi",
+  "operation": "contact.update",
+  "direction": "outbound",
+  "channel": "accounting",
+  "occurred_at": "2026-10-06T00:00:00.000Z",
+  "payload": {
+    "contact_id": "1001",
+    "contact_public_id": "acc_fixture",
+    "musteri_ad": "Ayşe Yılmaz",
+    "phone": "05551112233",
+    "idempotency_key": "accounting:contact:acc_fixture:1"
+  },
+  "legacy_contract": {
+    "source": "frontend/src/services/kolaybi.js cariHesaplar.guncelle (PUT /associates/{id})",
+    "fixture_name": "kolaybi_contact_update_minimal"
+  }
+}
