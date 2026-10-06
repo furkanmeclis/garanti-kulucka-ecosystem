@@ -4,6 +4,8 @@ import { type AdminAuditLog, type AdminSetting, type IntegrationAccount, type In
 import { type BalanceSummary as BackendBalanceSummary, type CommentModerationSummary as BackendCommentModerationSummary, type ConversationSummary, type ConversationSummaryStats, type CustomerSummary, type CustomerSummaryStats, type MessageSummary, type OrderSummaryStats, type OrderSummary, type ProductSummaryStats, type ProductSummary, type ReportSummary as BackendReportSummary, type ShipmentPipelineSummary, type ShipmentPipelineStep, type ShipmentSummaryStats, type ShipmentSummary } from "../../api/domain-client.js";
 import { type FileMetadata } from "../../api/file-client.js";
 import { type WebphoneConfig } from "../../api/webphone-client.js";
+import { localeFor, translate, type UiLanguage } from "../i18n/index.js";
+import { commonMessages, type CommonKey } from "../i18n/messages/common.js";
 
 export const backendBaseUrl = import.meta.env.VITE_BACKEND_BASE_URL ?? "/backend";
 
@@ -219,24 +221,26 @@ export function shipmentFilterParams(filter: string): { provider?: string; statu
   return params;
 }
 
-export function shipmentStatusLabel(status: string) {
-  const labels: Record<string, string> = {
-    created: "Oluşturuldu",
-    olusturuldu: "Oluşturuldu",
-    preparing: "Hazırlanıyor",
-    hazirlaniyor: "Hazırlanıyor",
-    shipped: "Kargoya Verildi",
-    kargoya_verildi: "Kargoya Verildi",
-    in_transit: "Kargoda",
-    dagitimda: "Dağıtımda",
-    delivered: "Teslim Edildi",
-    teslim_edildi: "Teslim Edildi",
-    returned: "İade",
-    iade: "İade",
-    cancelled: "İptal",
-    iptal: "İptal",
-  };
-  return labels[status] ?? status;
+const shipmentStatusKeys: Record<string, CommonKey> = {
+  created: "statusCreated",
+  olusturuldu: "statusCreated",
+  preparing: "statusPreparing",
+  hazirlaniyor: "statusPreparing",
+  shipped: "statusShipped",
+  kargoya_verildi: "statusShipped",
+  in_transit: "statusInTransit",
+  dagitimda: "statusOutForDelivery",
+  delivered: "statusDelivered",
+  teslim_edildi: "statusDelivered",
+  returned: "statusReturned",
+  iade: "statusReturned",
+  cancelled: "statusCancelled",
+  iptal: "statusCancelled",
+};
+
+export function shipmentStatusLabel(status: string, language: UiLanguage = "tr") {
+  const key = shipmentStatusKeys[status];
+  return key ? translate(commonMessages, language, key) : status;
 }
 
 export function shipmentMatchesFilter(shipment: ShipmentSummary, filter: ShipmentFilter) {
@@ -249,27 +253,29 @@ export function shipmentMatchesFilter(shipment: ShipmentSummary, filter: Shipmen
   return shipment.status === filter;
 }
 
-export function orderStatusLabel(status: string) {
-  const labels: Record<string, string> = {
-    draft: "Oluşturuldu",
-    created: "Oluşturuldu",
-    olusturuldu: "Oluşturuldu",
-    pending_confirmation: "Teyit Bekliyor",
-    teyit_bekliyor: "Teyit Bekliyor",
-    confirmed: "Teyit Edildi",
-    teyit_edildi: "Teyit Edildi",
-    preparing: "Hazırlanıyor",
-    hazirlaniyor: "Hazırlanıyor",
-    shipped: "Sevk Edildi",
-    sevk_edildi: "Sevk Edildi",
-    delivered: "Teslim Edildi",
-    teslim_edildi: "Teslim Edildi",
-    cancelled: "İptal",
-    iptal: "İptal",
-    returned: "İade",
-    iade: "İade",
-  };
-  return labels[status] ?? status;
+const orderStatusKeys: Record<string, CommonKey> = {
+  draft: "statusCreated",
+  created: "statusCreated",
+  olusturuldu: "statusCreated",
+  pending_confirmation: "statusPendingConfirmation",
+  teyit_bekliyor: "statusPendingConfirmation",
+  confirmed: "statusConfirmed",
+  teyit_edildi: "statusConfirmed",
+  preparing: "statusPreparing",
+  hazirlaniyor: "statusPreparing",
+  shipped: "statusShippedOrder",
+  sevk_edildi: "statusShippedOrder",
+  delivered: "statusDelivered",
+  teslim_edildi: "statusDelivered",
+  cancelled: "statusCancelled",
+  iptal: "statusCancelled",
+  returned: "statusReturned",
+  iade: "statusReturned",
+};
+
+export function orderStatusLabel(status: string, language: UiLanguage = "tr") {
+  const key = orderStatusKeys[status];
+  return key ? translate(commonMessages, language, key) : status;
 }
 
 export function cargoProviderLabel(provider: string | null) {
@@ -288,8 +294,8 @@ export function formatMoney(value: number, currency: string) {
   return `${value.toFixed(2)} ${currency}`;
 }
 
-export function formatDate(value: string) {
-  return new Date(value).toLocaleTimeString("tr-TR", {
+export function formatDate(value: string, language: UiLanguage = "tr") {
+  return new Date(value).toLocaleTimeString(localeFor(language), {
     hour: "2-digit",
     minute: "2-digit",
   });
@@ -302,11 +308,10 @@ export function attachmentTypeFromFile(file: File): PendingAttachment["attachmen
   return "file";
 }
 
-export function attachmentLabel(type: string) {
-  if (type === "image") return "Görsel";
-  if (type === "video") return "Video";
-  if (type === "document") return "PDF";
-  return "Dosya";
+export function attachmentLabel(type: string, language: UiLanguage = "tr") {
+  const key: CommonKey =
+    type === "image" ? "attachmentImage" : type === "video" ? "attachmentVideo" : type === "document" ? "attachmentPdf" : "attachmentFile";
+  return translate(commonMessages, language, key);
 }
 
 export function formatPercent(numerator: number, denominator: number) {

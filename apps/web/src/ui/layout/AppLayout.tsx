@@ -4,97 +4,20 @@ import { Bell, ChevronDown, Languages, LogOut, Settings, Truck, User, MessageCir
 import type { LoginResponse } from "../../api/auth-client.js";
 import { unreadBadgeLabel, type AppNotification, type NotificationsState } from "../app/notifications.js";
 import { cx, navigationRole, type NavigationItem } from "../app/shared.js";
+import { translate, uiLanguages, useLanguage, useT, type Translator, type UiLanguage } from "../i18n/index.js";
+import { layoutMessages, navMessages } from "../i18n/messages/layout.js";
+import { useUiMessageText, type UiMessage } from "../i18n/messages/status.js";
 
-export type UiLanguage = "tr" | "en";
+export type { UiLanguage } from "../i18n/index.js";
 
-/** Legacy `garanti-lang` key (frontend/src/i18n) so a returning user keeps the same choice. */
-const languageStorageKey = "garanti-lang";
+type LayoutKey = Parameters<Translator<keyof (typeof layoutMessages)["tr"]>>[0];
 
-const navLabelsEn: Record<string, string> = {
-  inbox: "Messages",
-  comments: "Comments",
-  customers: "Customers",
-  orders: "Orders",
-  shipments: "Shipments",
-  shipmentPipeline: "Pipeline",
-  suratDebug: "Sürat Debug",
-  cronDebug: "Cron Debug",
-  cancellations: "Cancellations",
-  inventory: "Inventory",
-  balances: "Balances",
-  sms: "SMS",
-  calls: "Calls",
-  vapi: "VAPI AI",
-  reports: "Business Analytics",
-  instagramPublish: "Create Post",
-  instagramAnalytics: "Analytics",
-  integrations: "Integrations",
-  admin: "Settings",
-  files: "Files",
-  webphone: "PBX",
+const roleLabelKeys: Record<string, LayoutKey> = {
+  owner: "roleOwner",
+  admin: "roleAdmin",
+  calisan: "roleCalisan",
+  kargo_operatoru: "roleKargo",
 };
-
-const headerText = {
-  tr: {
-    online: "Çevrimiçi",
-    offline: "Çevrimdışı",
-    changing: "Değişiyor",
-    logout: "Çıkış",
-    language: "Dil",
-    nav: "Ana gezinme",
-    profileMenu: "Profil menüsü",
-    profile: "Profil",
-    settings: "Ayarlar",
-    notifications: "Bildirimler",
-    noNotifications: "Bildirim yok",
-    markAllRead: "Tümünü okundu işaretle",
-    unread: "okunmamış",
-    newMessage: "Yeni müşteri mesajı",
-    shipmentUpdated: "Kargo güncellendi",
-    justNow: "az önce",
-  },
-  en: {
-    online: "Online",
-    offline: "Offline",
-    changing: "Updating",
-    logout: "Sign out",
-    language: "Language",
-    nav: "Main navigation",
-    profileMenu: "Profile menu",
-    profile: "Profile",
-    settings: "Settings",
-    notifications: "Notifications",
-    noNotifications: "No notifications",
-    markAllRead: "Mark all as read",
-    unread: "unread",
-    newMessage: "New customer message",
-    shipmentUpdated: "Shipment updated",
-    justNow: "just now",
-  },
-} satisfies Record<UiLanguage, Record<string, string>>;
-
-type HeaderText = (typeof headerText)[UiLanguage];
-
-const roleLabels: Record<UiLanguage, Record<string, string>> = {
-  tr: { owner: "Admin", admin: "Admin", calisan: "Personel", kargo_operatoru: "Kargo" },
-  en: { owner: "Admin", admin: "Admin", calisan: "Personnel", kargo_operatoru: "Cargo" },
-};
-
-function readStoredLanguage(): UiLanguage {
-  try {
-    return window.localStorage.getItem(languageStorageKey) === "en" ? "en" : "tr";
-  } catch {
-    return "tr";
-  }
-}
-
-function storeLanguage(language: UiLanguage) {
-  try {
-    window.localStorage.setItem(languageStorageKey, language);
-  } catch {
-    // Storage can be unavailable (private mode); the choice then lasts for the session only.
-  }
-}
 
 /** Legacy `basHarflerAl(ad, soyad)`: first letters of first/last name, falling back to the e-mail. */
 export function userInitials(user: Pick<LoginResponse["user"], "first_name" | "last_name" | "email"> | null) {
@@ -113,15 +36,15 @@ export function relativeTime(iso: string, language: UiLanguage, now = Date.now()
   const time = Date.parse(iso);
   if (Number.isNaN(time)) return "";
   const seconds = Math.round((now - time) / 1000);
-  if (seconds < 60) return headerText[language].justNow;
+  if (seconds < 60) return translate(layoutMessages, language, "justNow");
   const format = new Intl.RelativeTimeFormat(language === "en" ? "en" : "tr", { numeric: "always", style: "short" });
   if (seconds < 3600) return format.format(-Math.floor(seconds / 60), "minute");
   if (seconds < 86_400) return format.format(-Math.floor(seconds / 3600), "hour");
   return new Date(time).toLocaleDateString(language === "en" ? "en-GB" : "tr-TR");
 }
 
-function notificationTitle(notification: AppNotification, text: HeaderText) {
-  return notification.kind === "message" ? text.newMessage : text.shipmentUpdated;
+function notificationTitle(notification: AppNotification, t: Translator<LayoutKey>) {
+  return t(notification.kind === "message" ? "newMessage" : "shipmentUpdated");
 }
 
 function notificationDetail(notification: AppNotification) {
@@ -168,19 +91,19 @@ function handleMenuKeyDown(event: ReactKeyboardEvent<HTMLElement>) {
 
 interface NotificationBellProps {
   notifications: NotificationsState;
-  language: UiLanguage;
-  text: HeaderText;
   onOpen: (notification: AppNotification) => void;
 }
 
 /** Legacy Header bell: unread badge ("9+"), last 5 notifications, "mark all read". */
-function NotificationBell({ notifications, language, text, onOpen }: NotificationBellProps) {
+function NotificationBell({ notifications, onOpen }: NotificationBellProps) {
+  const { language } = useLanguage();
+  const t = useT(layoutMessages);
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   useDismiss(open, containerRef, triggerRef, () => setOpen(false));
   const unread = notifications.unreadCount;
-  const label = unread > 0 ? `${text.notifications} (${unread} ${text.unread})` : text.notifications;
+  const label = unread > 0 ? t("notificationsUnread", { count: unread }) : t("notifications");
 
   return (
     <div className="header-menu" data-testid="notification-bell" ref={containerRef}>
@@ -192,7 +115,7 @@ function NotificationBell({ notifications, language, text, onOpen }: Notificatio
         data-testid="notification-trigger"
         onClick={() => setOpen((current) => !current)}
         ref={triggerRef}
-        title={text.notifications}
+        title={t("notifications")}
         type="button"
       >
         <Bell size={18} aria-hidden="true" />
@@ -203,12 +126,12 @@ function NotificationBell({ notifications, language, text, onOpen }: Notificatio
         )}
       </button>
       {open && (
-        <div aria-label={text.notifications} className="header-dropdown notification-panel" data-testid="notification-panel" id="notification-panel" role="region">
+        <div aria-label={t("notifications")} className="header-dropdown notification-panel" data-testid="notification-panel" id="notification-panel" role="region">
           <div className="header-dropdown-title">
-            <h3>{text.notifications}</h3>
+            <h3>{t("notifications")}</h3>
           </div>
           {notifications.items.length === 0 ? (
-            <p className="notification-empty">{text.noNotifications}</p>
+            <p className="notification-empty">{t("noNotifications")}</p>
           ) : (
             <ul className="notification-list">
               {notifications.items.slice(0, 5).map((notification) => {
@@ -227,7 +150,7 @@ function NotificationBell({ notifications, language, text, onOpen }: Notificatio
                     >
                       <Icon size={15} aria-hidden="true" />
                       <span className="notification-text">
-                        <strong>{notificationTitle(notification, text)}</strong>
+                        <strong>{notificationTitle(notification, t)}</strong>
                         <span>{notificationDetail(notification)}</span>
                         <time dateTime={notification.occurredAt}>{relativeTime(notification.occurredAt, language)}</time>
                       </span>
@@ -248,7 +171,7 @@ function NotificationBell({ notifications, language, text, onOpen }: Notificatio
                 }}
                 type="button"
               >
-                {text.markAllRead}
+                {t("markAllRead")}
               </button>
             </div>
           )}
@@ -264,7 +187,7 @@ export interface AppLayoutProps {
   activeFlow: string;
   canTogglePresence: boolean;
   presenceUpdating: boolean;
-  status: string;
+  status: UiMessage;
   notifications: NotificationsState;
   onOpenNotification: (notification: AppNotification) => void;
   onTogglePresence: () => void;
@@ -273,17 +196,19 @@ export interface AppLayoutProps {
 }
 
 export function AppLayout(props: AppLayoutProps) {
-  const [language, setLanguage] = useState<UiLanguage>(() => readStoredLanguage());
+  const { language, setLanguage } = useLanguage();
+  const t = useT(layoutMessages);
+  const messageText = useUiMessageText();
   const [profileOpen, setProfileOpen] = useState(false);
   const navRef = useRef<HTMLElement>(null);
   const profileRef = useRef<HTMLDivElement>(null);
   const profileTriggerRef = useRef<HTMLButtonElement>(null);
   const profileMenuRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
-  const text = headerText[language];
   const { user } = props;
   const fullName = user ? `${user.first_name ?? ""} ${user.last_name ?? ""}`.trim() : "";
-  const roleLabel = user ? roleLabels[language][user.role] ?? user.role : "";
+  const roleKey = user ? roleLabelKeys[user.role] : undefined;
+  const roleLabel = roleKey ? t(roleKey) : user?.role ?? "";
   const settingsPath = props.navigation.find((item) => item.key === "admin" && !item.hidden)?.path ?? null;
   const isAdmin = user ? navigationRole(user.role) === "admin" : false;
   useDismiss(profileOpen, profileRef, profileTriggerRef, () => setProfileOpen(false));
@@ -311,7 +236,6 @@ export function AppLayout(props: AppLayoutProps) {
 
   function chooseLanguage(next: UiLanguage) {
     setLanguage(next);
-    storeLanguage(next);
     closeProfileMenu();
   }
 
@@ -327,12 +251,12 @@ export function AppLayout(props: AppLayoutProps) {
           <span className="brand-mark">G</span>
           <span className="brand-name">Garanti Kuluçka</span>
         </div>
-        <nav aria-label={text.nav} data-testid="app-nav" ref={navRef}>
+        <nav aria-label={t("nav")} data-testid="app-nav" ref={navRef}>
           {props.navigation
             .filter((item) => !item.hidden)
             .map((item) => {
               const Icon = item.icon;
-              const label = language === "en" ? navLabelsEn[item.key] ?? item.label : item.label;
+              const label = (navMessages[language] as Record<string, string>)[item.key] ?? item.label;
               const active = props.activeFlow === item.key;
               return (
                 <NavLink
@@ -359,16 +283,16 @@ export function AppLayout(props: AppLayoutProps) {
               type="button"
             >
               {user?.is_online ? <Wifi size={15} aria-hidden="true" /> : <WifiOff size={15} aria-hidden="true" />}
-              <span>{props.presenceUpdating ? text.changing : user?.is_online ? text.online : text.offline}</span>
+              <span>{t(props.presenceUpdating ? "changing" : user?.is_online ? "online" : "offline")}</span>
             </button>
           )}
-          <NotificationBell language={language} notifications={props.notifications} onOpen={props.onOpenNotification} text={text} />
+          <NotificationBell notifications={props.notifications} onOpen={props.onOpenNotification} />
           <div className="header-menu user-chip" data-testid="app-profile" ref={profileRef}>
             <button
               aria-controls="profile-menu"
               aria-expanded={profileOpen}
               aria-haspopup="menu"
-              aria-label={text.profileMenu}
+              aria-label={t("profileMenu")}
               className="profile-trigger"
               data-testid="profile-menu-trigger"
               onClick={() => setProfileOpen((current) => !current)}
@@ -389,7 +313,7 @@ export function AppLayout(props: AppLayoutProps) {
               </span>
               <span className="profile-text">
                 <strong className="profile-name" title={fullName || undefined}>
-                  {fullName || "Backend session"}
+                  {fullName || t("backendSession")}
                 </strong>
                 {user && (
                   <span className="profile-meta">
@@ -404,7 +328,7 @@ export function AppLayout(props: AppLayoutProps) {
             </button>
             {profileOpen && (
               <div
-                aria-label={text.profileMenu}
+                aria-label={t("profileMenu")}
                 className="header-dropdown profile-dropdown"
                 data-testid="profile-menu"
                 id="profile-menu"
@@ -413,25 +337,25 @@ export function AppLayout(props: AppLayoutProps) {
                 role="menu"
               >
                 <div className="profile-dropdown-head" role="presentation">
-                  <strong>{fullName || "Backend session"}</strong>
+                  <strong>{fullName || t("backendSession")}</strong>
                   {user && <span>{user.email}</span>}
                 </div>
                 {settingsPath && (
                   <button className="menu-item" onClick={openSettings} role="menuitem" tabIndex={-1} type="button">
                     <User size={15} aria-hidden="true" />
-                    {text.profile}
+                    {t("profile")}
                   </button>
                 )}
                 {settingsPath && isAdmin && (
                   <button className="menu-item" onClick={openSettings} role="menuitem" tabIndex={-1} type="button">
                     <Settings size={15} aria-hidden="true" />
-                    {text.settings}
+                    {t("settings")}
                   </button>
                 )}
                 <div className="menu-separator" role="separator" />
-                <div aria-label={text.language} className="lang-switch" data-testid="language-switch" role="group">
+                <div aria-label={t("language")} className="lang-switch" data-testid="language-switch" role="group">
                   <Languages size={14} aria-hidden="true" />
-                  {(["tr", "en"] as const).map((option) => (
+                  {uiLanguages.map((option) => (
                     <button
                       aria-checked={language === option}
                       className={cx("lang-option", language === option && "selected")}
@@ -457,7 +381,7 @@ export function AppLayout(props: AppLayoutProps) {
                   type="button"
                 >
                   <LogOut size={15} aria-hidden="true" />
-                  <span>{text.logout}</span>
+                  <span>{t("logout")}</span>
                 </button>
               </div>
             )}
@@ -467,9 +391,9 @@ export function AppLayout(props: AppLayoutProps) {
 
       <main className="workspace">
         <section className="status-row" aria-live="polite">
-          <span>{props.status}</span>
-          <span>Supabase kullanılmıyor</span>
-          <span>Socket.IO backend sınırı hazır</span>
+          <span>{messageText(props.status)}</span>
+          <span>{t("noSupabase")}</span>
+          <span>{t("socketReady")}</span>
         </section>
         {props.children}
       </main>

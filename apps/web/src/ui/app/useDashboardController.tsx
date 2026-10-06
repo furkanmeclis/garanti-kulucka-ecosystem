@@ -10,6 +10,7 @@ import { createWebphoneClient } from "../../api/webphone-client.js";
 import { backendBaseUrl, tokenStorageKey, type DashboardData, type PendingAttachment, type ShortcutDraft, type ShipmentPipelineFilter, type ShipmentFilter, type OrderSortBy, type SortDirection, type OrderCargoProvider, type OrderFormItem, type OrderFormState, navigationItems, navigationRole, instagramDraftImageUrl, instagramDraftCaption, shipmentPageSize, flowFromPath, shipmentFilterParams, shipmentMatchesFilter, orderStatusLabel, cargoProviderLabel, readStoredToken, attachmentTypeFromFile, isRecord, defaultOrderForm, parseMoneyInput, orderFormTotals, defaultBalanceSummary, defaultConversationSummary, defaultCustomerSummary, defaultOrderSummary, defaultProductSummary, defaultProviderDebugSummary, defaultShipmentPipelineSummary, defaultShipmentSummary, defaultCommentModerationSummary, defaultInstagramAnalyticsSummary, defaultReportSummary, toInstagramAnalyticsView, sipServerSettingsFrom, operationalPolicyFrom } from "./shared.js";
 import { publicPageFromPath } from "../pages/AuthScreens.js";
 import { useNotifications } from "./notifications.js";
+import { rawMessage, uiMessage, type StatusKey, type UiMessage } from "../i18n/messages/status.js";
 
 export function useDashboardController() {
   const location = useLocation();
@@ -49,7 +50,7 @@ export function useDashboardController() {
     commentModeration: defaultCommentModerationSummary,
     webphone: null,
   });
-  const [status, setStatus] = useState("Hazır");
+  const [status, setStatus] = useState<UiMessage>(() => uiMessage("ready"));
   const [uploadedFile, setUploadedFile] = useState<FileMetadata | null>(null);
   const [downloadInstruction, setDownloadInstruction] = useState<DownloadInstruction | null>(null);
   const [orphanCleanupPreview, setOrphanCleanupPreview] = useState<FileOrphanCleanupDryRun | null>(null);
@@ -89,7 +90,7 @@ export function useDashboardController() {
   const [printShipmentId, setPrintShipmentId] = useState<string | null>(null);
   const [orderFormOpen, setOrderFormOpen] = useState(false);
   const [orderFormSubmitting, setOrderFormSubmitting] = useState(false);
-  const [orderFormMessage, setOrderFormMessage] = useState<string | null>(null);
+  const [orderFormMessage, setOrderFormMessage] = useState<UiMessage | null>(null);
   const [orderForm, setOrderForm] = useState<OrderFormState>(() => defaultOrderForm());
   const [shipmentFilter, setShipmentFilter] = useState<ShipmentFilter>("all");
   const [shipmentSearch, setShipmentSearch] = useState("");
@@ -185,9 +186,9 @@ export function useDashboardController() {
         await refreshConversations();
         if (selectedConversationIdRef.current === conversationPublicId) {
           await refreshMessages(conversationPublicId);
-          setStatus("Yeni mesaj Socket.IO üzerinden alındı");
+          setStatus(uiMessage("realtimeNewMessage"));
         } else {
-          setStatus("Yeni konuşma bildirimi Socket.IO üzerinden alındı");
+          setStatus(uiMessage("realtimeNewConversation"));
         }
       })();
     });
@@ -198,7 +199,7 @@ export function useDashboardController() {
       void (async () => {
         await refreshConversations();
         if (selectedConversationIdRef.current === conversationPublicId) {
-          setStatus("Konuşma durumu Socket.IO üzerinden yenilendi");
+          setStatus(uiMessage("realtimeConversationUpdated"));
         }
       })();
     });
@@ -206,7 +207,7 @@ export function useDashboardController() {
       pushNotification(envelope);
       void (async () => {
         await refreshShipments();
-        setStatus("Kargo güncellemesi Socket.IO üzerinden yenilendi");
+        setStatus(uiMessage("realtimeShipmentUpdated"));
       })();
     });
 
@@ -269,7 +270,7 @@ export function useDashboardController() {
   }, [authChecked, token, user]);
 
   async function loadDashboard() {
-    setStatus("Backend API akışları yükleniyor");
+    setStatus(uiMessage("flowsLoading"));
     const canReadCustomers = user?.role === "admin" || user?.role === "owner" || user?.role === "calisan";
     const canReadComments = user?.role === "admin" || user?.role === "owner" || user?.role === "calisan";
     const canReadBalances = user?.role === "admin" || user?.role === "owner" || user?.role === "calisan";
@@ -366,7 +367,7 @@ export function useDashboardController() {
     setSelectedShipmentId((current) => current ?? shipments.data[0]?.public_id ?? null);
     setOrderTotalCount(orders.meta?.total_count ?? orders.data.length);
     setShipmentTotalCount(shipments.meta?.total_count ?? shipments.data.length);
-    setStatus("Backend API, presigned dosya ve Socket.IO sınırları aktif");
+    setStatus(uiMessage("boundariesActive"));
   }
 
   async function handleLogin(event: FormEvent<HTMLFormElement>) {
@@ -374,16 +375,16 @@ export function useDashboardController() {
     const form = new FormData(event.currentTarget);
     const email = String(form.get("email"));
     const password = String(form.get("password"));
-    setStatus("Giriş yapılıyor");
+    setStatus(uiMessage("signingIn"));
     const response = await auth.login(email, password);
     window.localStorage.setItem(tokenStorageKey, response.access_token);
     setToken(response.access_token);
     setUser(response.user);
-    setStatus("Oturum backend auth üzerinden açıldı");
+    setStatus(uiMessage("signedIn"));
   }
 
   async function handleLogout() {
-    setStatus("Çıkış yapılıyor");
+    setStatus(uiMessage("signingOut"));
     try {
       await auth.logout();
     } finally {
@@ -438,12 +439,12 @@ export function useDashboardController() {
       setEditingShortcutId(null);
       setAiSuggestion(null);
       setAuthChecked(true);
-      setStatus("Oturum kapatıldı");
+      setStatus(uiMessage("signedOut"));
     }
   }
 
   async function handleUpload() {
-    setStatus("Presigned upload instruction isteniyor");
+    setStatus(uiMessage("uploadRequesting"));
     const response = await files.createUpload({
       original_name: "kanit.txt",
       mime_type: "text/plain",
@@ -469,19 +470,19 @@ export function useDashboardController() {
       });
     }
     setDownloadInstruction(download.download);
-    setStatus("Dosya akışı presigned S3 sınırından geçti");
+    setStatus(uiMessage("fileFlowPassed"));
   }
 
   async function handlePrepareOrphanCleanupDryRun() {
     const orphan = data.fileOrphans[0];
     if (!orphan || orphanCleanupPreviewing) return;
 
-    setStatus("Orphan dosya lifecycle dry-run backend API üzerinden hazırlanıyor");
+    setStatus(uiMessage("orphanPreparing"));
     setOrphanCleanupPreviewing(true);
     try {
       const preview = await files.createOrphanCleanupDryRun(orphan.public_id);
       setOrphanCleanupPreview(preview);
-      setStatus("Orphan cleanup dry-run canlı silme yapmadan hazırlandı");
+      setStatus(uiMessage("orphanPrepared"));
     } finally {
       setOrphanCleanupPreviewing(false);
     }
@@ -492,7 +493,7 @@ export function useDashboardController() {
     const body = messageDraft.trim();
     if (!conversationId || (!body && pendingAttachments.length === 0)) return;
 
-    setStatus("Mesaj backend API üzerinden gönderiliyor");
+    setStatus(uiMessage("messageSending"));
     const uploadedAttachments = await Promise.all(
       pendingAttachments.map(async (attachment) => {
         if (attachment.file_public_id) {
@@ -530,7 +531,7 @@ export function useDashboardController() {
     }));
     await refreshConversations();
     await refreshMessages(conversationId);
-    setStatus("Mesaj backend API üzerinden gönderildi");
+    setStatus(uiMessage("messageSent"));
   }
 
   function handlePickMessageFiles(filesList: FileList | null) {
@@ -559,7 +560,7 @@ export function useDashboardController() {
     const message = shortcutDraft.message.trim();
     if (!code || (!message && shortcutDraft.attachments.length === 0)) return;
 
-    setStatus("Kısayol backend API üzerinden kaydediliyor");
+    setStatus(uiMessage("shortcutSaving"));
     const attachments = await Promise.all(
       shortcutDraft.attachments.map(async (attachment) => {
         if (attachment.file_public_id) {
@@ -608,14 +609,14 @@ export function useDashboardController() {
     ].sort((first, second) => first.sort_order - second.sort_order || first.code.localeCompare(second.code, "tr")));
     setShortcutDraft({ code: "", message: "", attachments: [] });
     setEditingShortcutId(null);
-    setStatus("Kısayol kaydedildi");
+    setStatus(uiMessage("shortcutSaved"));
   }
 
   async function handleDeleteShortcut(shortcutPublicId: string) {
-    setStatus("Kısayol backend API üzerinden siliniyor");
+    setStatus(uiMessage("shortcutDeleting"));
     await domain.deleteMessageShortcut(shortcutPublicId);
     setMessageShortcuts((current) => current.filter((shortcut) => shortcut.public_id !== shortcutPublicId));
-    setStatus("Kısayol silindi");
+    setStatus(uiMessage("shortcutDeleted"));
   }
 
   function handleUseShortcut(shortcut: MessageShortcutSummary) {
@@ -655,7 +656,7 @@ export function useDashboardController() {
   async function handleDownloadShortcutAttachment(shortcut: MessageShortcutSummary) {
     const first = shortcut.attachments[0];
     if (!first) return;
-    setStatus("Kısayol medyası indiriliyor");
+    setStatus(uiMessage("shortcutMediaDownloading"));
     try {
       const response = await files.createDownload(first.file_public_id);
       if (response.download.presigned_url) {
@@ -685,7 +686,7 @@ export function useDashboardController() {
             item.public_id === conversation.public_id ? conversation : item
           ),
         }));
-        setStatus("Konuşma notu otomatik kaydedildi");
+        setStatus(uiMessage("conversationNoteSaved"));
       })();
     }, 500);
   }
@@ -707,7 +708,7 @@ export function useDashboardController() {
             ...current.customers.filter((item) => item.public_id !== customer.public_id),
           ],
         }));
-        setStatus("Müşteri notu otomatik kaydedildi");
+        setStatus(uiMessage("customerNoteSaved"));
       })();
     }, 500);
   }
@@ -715,10 +716,10 @@ export function useDashboardController() {
   async function handleAiSuggestion() {
     const conversationId = selectedConversation?.public_id;
     if (!conversationId) return;
-    setStatus("AI yanıt önerisi backend dry-run sınırında hazırlanıyor");
+    setStatus(uiMessage("aiSuggestionPreparing"));
     const response = await domain.createAiReplySuggestion(conversationId);
     setAiSuggestion(response.suggestion);
-    setStatus("AI yanıt önerisi dry-run olarak hazırlandı");
+    setStatus(uiMessage("aiSuggestionPrepared"));
   }
 
   async function handleUpdateConversationState(input: {
@@ -731,7 +732,7 @@ export function useDashboardController() {
     const conversationId = selectedConversation?.public_id;
     if (!conversationId) return;
 
-    setStatus("Konuşma durumu backend API üzerinden güncelleniyor");
+    setStatus(uiMessage("conversationStatusUpdating"));
     const conversation = await domain.updateConversationState(conversationId, input);
     setData((current) => ({
       ...current,
@@ -741,7 +742,7 @@ export function useDashboardController() {
     }));
     setSelectedConversationId(conversation.public_id);
     selectedConversationIdRef.current = conversation.public_id;
-    setStatus("Konuşma durumu backend API üzerinden güncellendi");
+    setStatus(uiMessage("conversationStatusUpdated"));
   }
 
   async function handleApplyConversationFilters(nextChannel: string, nextStatus: string) {
@@ -749,7 +750,7 @@ export function useDashboardController() {
     conversationFilterRequestSeqRef.current = requestSeq;
     setConversationChannelFilter(nextChannel);
     setConversationStatusFilter(nextStatus);
-    setStatus("Konuşma filtreleri backend API üzerinden uygulanıyor");
+    setStatus(uiMessage("conversationFiltersApplying"));
     const filterParams: { channel?: string; status?: string; limit: number } = { limit: 20 };
     if (nextChannel !== "all") {
       filterParams.channel = nextChannel === "facebook" ? "facebook,messenger" : nextChannel;
@@ -771,7 +772,7 @@ export function useDashboardController() {
     } else {
       setData((current) => ({ ...current, messages: [] }));
     }
-    setStatus("Konuşma filtreleri backend API üzerinden uygulandı");
+    setStatus(uiMessage("conversationFiltersApplied"));
   }
 
   function orderListParams(overrides: Partial<{
@@ -823,7 +824,7 @@ export function useDashboardController() {
   async function refreshOrdersWithParams(params: Parameters<typeof domain.listOrders>[0]) {
     const requestSeq = orderFilterRequestSeqRef.current + 1;
     orderFilterRequestSeqRef.current = requestSeq;
-    setStatus("Sipariş filtreleri backend API üzerinden uygulanıyor");
+    setStatus(uiMessage("orderFiltersApplying"));
     const orders = await domain.listOrders(params);
     if (orderFilterRequestSeqRef.current !== requestSeq) return;
     setData((current) => ({
@@ -833,7 +834,7 @@ export function useDashboardController() {
     setOrderTotalCount(orders.meta?.total_count ?? orders.data.length);
     setSelectedOrderId(orders.data[0]?.public_id ?? null);
     setSelectedOrderIds(new Set());
-    setStatus("Sipariş filtreleri backend API üzerinden uygulandı");
+    setStatus(uiMessage("orderFiltersApplied"));
   }
 
   async function handleApplyOrderFilter(nextFilter: string) {
@@ -885,7 +886,7 @@ export function useDashboardController() {
     shipmentFilterRequestSeqRef.current = requestSeq;
     setShipmentFilter(nextFilter);
     setShipmentPage(0);
-    setStatus("Kargo filtreleri backend API üzerinden uygulanıyor");
+    setStatus(uiMessage("shipmentFiltersApplying"));
     const trimmedSearch = shipmentSearch.trim();
     const shipments = await domain.listShipments({
       ...shipmentFilterParams(nextFilter),
@@ -900,7 +901,7 @@ export function useDashboardController() {
     }));
     setShipmentTotalCount(shipments.meta?.total_count ?? shipments.data.length);
     setSelectedShipmentId(shipments.data[0]?.public_id ?? null);
-    setStatus("Kargo filtreleri backend API üzerinden uygulandı");
+    setStatus(uiMessage("shipmentFiltersApplied"));
   }
 
   async function handleSearchShipments(event: FormEvent<HTMLFormElement>) {
@@ -908,11 +909,11 @@ export function useDashboardController() {
     const requestSeq = shipmentFilterRequestSeqRef.current + 1;
     shipmentFilterRequestSeqRef.current = requestSeq;
     setShipmentPage(0);
-    setStatus("Kargo araması backend API üzerinden uygulanıyor");
+    setStatus(uiMessage("shipmentSearchApplying"));
     const shipments = await refreshShipments({ page: 0 });
     if (shipmentFilterRequestSeqRef.current !== requestSeq) return;
     setSelectedShipmentId(shipments.data[0]?.public_id ?? null);
-    setStatus("Kargo araması backend API üzerinden uygulandı");
+    setStatus(uiMessage("shipmentSearchApplied"));
   }
 
   async function handleShipmentPage(nextPage: number) {
@@ -920,39 +921,39 @@ export function useDashboardController() {
     const requestSeq = shipmentFilterRequestSeqRef.current + 1;
     shipmentFilterRequestSeqRef.current = requestSeq;
     setShipmentPage(boundedPage);
-    setStatus("Kargo sayfası backend API üzerinden yükleniyor");
+    setStatus(uiMessage("shipmentPageLoading"));
     const shipments = await refreshShipments({ page: boundedPage });
     if (shipmentFilterRequestSeqRef.current !== requestSeq) return;
     setSelectedShipmentId(shipments.data[0]?.public_id ?? null);
-    setStatus("Kargo sayfası backend API üzerinden yüklendi");
+    setStatus(uiMessage("shipmentPageLoaded"));
   }
 
   async function handleOpenShipmentDetail(shipmentPublicId: string) {
     setSelectedShipmentId(shipmentPublicId);
-    setStatus("Kargo detayı backend API üzerinden yükleniyor");
+    setStatus(uiMessage("shipmentDetailLoading"));
     try {
       const shipment = await domain.getShipment(shipmentPublicId);
       setData((current) => ({
         ...current,
         shipments: current.shipments.map((item) => (item.public_id === shipment.public_id ? shipment : item)),
       }));
-      setStatus("Kargo detayı ve hareket geçmişi backend API üzerinden yüklendi");
+      setStatus(uiMessage("shipmentDetailLoaded"));
     } catch {
-      setStatus("Kargo detayı listeden açıldı; backend detay yanıtı bekleniyor");
+      setStatus(uiMessage("shipmentDetailFromList"));
     }
   }
 
   function handleApplyShipmentPipelineFilter(nextFilter: ShipmentPipelineFilter) {
     setShipmentPipelineFilter(nextFilter);
-    setStatus("Kargo pipeline legacy sekmesi backend shipments verisiyle uygulandı");
+    setStatus(uiMessage("pipelineTabApplied"));
   }
 
   async function handleSelectConversation(conversationPublicId: string) {
     selectedConversationIdRef.current = conversationPublicId;
     setSelectedConversationId(conversationPublicId);
-    setStatus("Konuşma mesajları backend API üzerinden yükleniyor");
+    setStatus(uiMessage("conversationMessagesLoading"));
     await refreshMessages(conversationPublicId);
-    setStatus("Konuşma detayı backend API üzerinden yüklendi");
+    setStatus(uiMessage("conversationLoaded"));
   }
 
   function openOrderForm(source: "orders" | "conversation" = "orders") {
@@ -1016,35 +1017,36 @@ export function useDashboardController() {
       district: lookup.default_address?.district ?? current.district,
       country: lookup.default_address?.country ?? current.country,
     }));
-    setOrderFormMessage("Müşteri telefonla bulundu ve bilgiler dolduruldu.");
+    setOrderFormMessage(uiMessage("customerFoundByPhone"));
   }
 
   async function handleSubmitOrderForm() {
-    const validationError = !orderForm.customer_name.trim() ? "Müşteri adı gerekli"
-      : !orderForm.customer_phone.trim() ? "Müşteri telefonu gerekli"
-      : !orderForm.city.trim() ? "İl bilgisi gerekli"
-      : !orderForm.district.trim() ? "İlçe bilgisi gerekli"
-      : !orderForm.address_line.trim() ? "Adres bilgisi gerekli"
-      : !orderForm.cargo_provider ? "Kargo firması seçimi zorunlu (PTT veya Sürat)"
+    const validationKey: StatusKey | null = !orderForm.customer_name.trim() ? "customerNameRequired"
+      : !orderForm.customer_phone.trim() ? "customerPhoneRequired"
+      : !orderForm.city.trim() ? "cityRequired"
+      : !orderForm.district.trim() ? "districtRequired"
+      : !orderForm.address_line.trim() ? "addressRequired"
+      : !orderForm.cargo_provider ? "cargoProviderRequired"
       : null;
+    const validationError = validationKey ? uiMessage(validationKey) : null;
     if (validationError) {
       setOrderFormMessage(validationError);
       setStatus(validationError);
       return;
     }
     if (orderFormTotals(orderForm.items).genelToplam <= 0) {
-      setOrderFormMessage("Sipariş tutarı 0 TL olamaz. Lütfen fiyat bilgisini kontrol edin.");
-      setStatus("Sipariş tutarı 0 TL olamaz. Lütfen fiyat bilgisini kontrol edin.");
+      setOrderFormMessage(uiMessage("orderZeroTotal"));
+      setStatus(uiMessage("orderZeroTotal"));
       return;
     }
     if (!orderForm.items.some((item) => item.name.trim())) {
-      setOrderFormMessage("Ürün seçimi zorunlu.");
-      setStatus("Ürün seçimi zorunlu.");
+      setOrderFormMessage(uiMessage("productRequired"));
+      setStatus(uiMessage("productRequired"));
       return;
     }
 
     setOrderFormSubmitting(true);
-    setStatus("Sipariş backend API üzerinden oluşturuluyor");
+    setStatus(uiMessage("orderCreating"));
     try {
       const order = await domain.createOrder({
         customer_public_id: orderForm.customer_public_id,
@@ -1083,12 +1085,12 @@ export function useDashboardController() {
       setSelectedOrderId(order.public_id);
       setOrderFormOpen(false);
       setOrderFormMessage(null);
-      setStatus(`Sipariş oluşturuldu! (${order.order_number})`);
+      setStatus(uiMessage("orderCreated", { orderNumber: order.order_number }));
     } catch (error) {
       if (error instanceof BackendRequestError && error.status === 409 && isRecord(error.body)) {
         const bodyError = isRecord(error.body.error) ? error.body.error : null;
         const code = typeof bodyError?.code === "string" ? bodyError.code : "";
-        const message = typeof bodyError?.message === "string" ? bodyError.message : "Sipariş oluşturma uyarısı";
+        const message = typeof bodyError?.message === "string" ? rawMessage(bodyError.message) : uiMessage("orderCreateWarning");
         setOrderFormMessage(message);
         setStatus(message);
         if (code === "duplicate_phone_warning" || code === "duplicate_name_warning") {
@@ -1099,9 +1101,8 @@ export function useDashboardController() {
         }
         return;
       }
-      const message = error instanceof Error ? error.message : "Sipariş oluşturulurken hata oluştu";
-      setOrderFormMessage(`Sipariş oluşturulurken hata oluştu: ${message}`);
-      setStatus("Sipariş oluşturulurken hata oluştu");
+      setOrderFormMessage(error instanceof Error ? uiMessage("orderCreateFailedWith", { message: error.message }) : uiMessage("orderCreateFailed"));
+      setStatus(uiMessage("orderCreateFailed"));
     } finally {
       setOrderFormSubmitting(false);
     }
@@ -1161,24 +1162,24 @@ export function useDashboardController() {
     const selectedRows = data.orders.filter((order) => selectedOrderIds.has(order.public_id));
     if (scope === "selected") {
       downloadOrderExcel(selectedRows, "liste");
-      setStatus(`${selectedRows.length} seçili sipariş Excel olarak indirildi`);
+      setStatus(uiMessage("ordersExportedSelected", { count: selectedRows.length }));
       return;
     }
     if (scope === "current") {
       downloadOrderExcel(data.orders, "liste");
-      setStatus(`${data.orders.length} görünür sipariş Excel olarak indirildi`);
+      setStatus(uiMessage("ordersExportedVisible", { count: data.orders.length }));
       return;
     }
     const orders = await domain.listOrders(orderListParams({ page: 0, limit: 200, confirmation_status: orderFilter === "pending_confirmation" ? "pending" : "" }));
     downloadOrderExcel(orders.data, "liste");
-    setStatus(`${orders.data.length} filtrelenmiş sipariş Excel olarak indirildi`);
+    setStatus(uiMessage("ordersExportedFiltered", { count: orders.data.length }));
   }
 
   async function handleCancelSelectedOrder() {
     const order = selectedOrder;
     if (!order) return;
 
-    setStatus("İptal durumu backend API üzerinden güncelleniyor");
+    setStatus(uiMessage("cancellationUpdating"));
     const updated = await domain.updateOrderStatus(order.public_id, {
       status: "cancelled",
       notes: "Frontend iptal inceleme onayi",
@@ -1188,14 +1189,14 @@ export function useDashboardController() {
       orders: current.orders.map((item) => (item.public_id === updated.public_id ? updated : item)),
     }));
     setSelectedOrderId(updated.public_id);
-    setStatus("İptal durumu backend API üzerinden güncellendi");
+    setStatus(uiMessage("cancellationUpdated"));
   }
 
   async function handleUpdateShipment() {
     const shipment = selectedShipment;
     if (!shipment) return;
 
-    setStatus("Kargo durumu backend API üzerinden güncelleniyor");
+    setStatus(uiMessage("shipmentStatusUpdating"));
     const updated = await domain.updateShipmentStatus(shipment.public_id, {
       status: "delivered",
       last_event_text: "Frontend teslim kaniti",
@@ -1221,7 +1222,7 @@ export function useDashboardController() {
       }));
       setShipmentTotalCount(shipments.meta?.total_count ?? refreshedRows.length);
       setSelectedShipmentId(updatedStillVisible ? updated.public_id : refreshedRows[0]?.public_id ?? null);
-      setStatus("Kargo durumu backend API üzerinden güncellendi");
+      setStatus(uiMessage("shipmentStatusUpdated"));
       return;
     }
     setData((current) => ({
@@ -1230,33 +1231,33 @@ export function useDashboardController() {
       shipmentPipeline,
     }));
     setSelectedShipmentId(updated.public_id);
-    setStatus("Kargo durumu backend API üzerinden güncellendi");
+    setStatus(uiMessage("shipmentStatusUpdated"));
   }
 
   async function handleTrackShipment(shipment: ShipmentSummary) {
     if (trackingShipmentId) return;
 
-    setStatus("Takip güncelleme backend provider-delivery kuyruğuna gönderiliyor");
+    setStatus(uiMessage("trackingQueueing"));
     setTrackingShipmentId(shipment.public_id);
     try {
       const result = await domain.trackShipment(shipment.public_id, {
         idempotency_key: `track_${shipment.public_id}_${Date.now()}`,
       });
       setLastShipmentTrack(`${result.provider} ${result.operation} ${result.queued ? "queued" : "dry-run"} ${result.request_id}`);
-      setStatus(`Takip güncelleme ${result.live_gate} kapısına bağlı olarak kuyruğa alındı`);
+      setStatus(uiMessage("trackingQueued", { gate: result.live_gate }));
     } finally {
       setTrackingShipmentId(null);
     }
   }
 
   async function handleSaveProviderLiveGate() {
-    setStatus("Provider live gate backend API üzerinden kapalı kaydediliyor");
+    setStatus(uiMessage("liveGateSaving"));
     const setting = await admin.upsertSetting("providers.ptt.live_mode", false, false, "global");
     setData((current) => ({
       ...current,
       settings: [setting, ...current.settings.filter((item) => item.key !== setting.key)],
     }));
-    setStatus("Provider live gate kapalı olarak kaydedildi");
+    setStatus(uiMessage("liveGateSaved"));
   }
 
   async function handleSaveSipConfig() {
@@ -1274,11 +1275,11 @@ export function useDashboardController() {
       ...current,
       settings: [setting, ...current.settings.filter((item) => item.key !== setting.key)],
     }));
-    setStatus("Santral SIP ayarı backend admin settings üzerinden kaydedildi");
+    setStatus(uiMessage("sipSaved"));
   }
 
   async function handleSaveOperationalPolicy() {
-    setStatus("Operasyon politikaları backend admin settings üzerinden kaydediliyor");
+    setStatus(uiMessage("policySaving"));
     const setting = await admin.upsertSetting(
       "operations.policy",
       {
@@ -1299,11 +1300,11 @@ export function useDashboardController() {
       ...current,
       settings: [setting, ...current.settings.filter((item) => item.key !== setting.key)],
     }));
-    setStatus("Operasyon politikaları backend admin settings üzerinden kaydedildi");
+    setStatus(uiMessage("policySaved"));
   }
 
   async function handleUpsertIntegrationAccount() {
-    setStatus("Entegrasyon hesabı backend API üzerinden kaydediliyor");
+    setStatus(uiMessage("integrationAccountSaving"));
     const account = await admin.upsertIntegrationAccount({
       provider_key: "instagram",
       display_name: "Instagram Playwright",
@@ -1317,25 +1318,25 @@ export function useDashboardController() {
         ...current.integrationAccounts.filter((item) => item.public_id !== account.public_id),
       ],
     }));
-    setStatus("Entegrasyon hesabı backend API üzerinden kaydedildi");
+    setStatus(uiMessage("integrationAccountSaved"));
   }
 
   async function handleOpenIntegrationAccount(accountPublicId: string) {
-    setStatus("Entegrasyon hesabı detayları backend API üzerinden yükleniyor");
+    setStatus(uiMessage("integrationAccountLoading"));
     const [snapshot, instagramAnalytics] = await Promise.all([
       admin.getIntegrationAccount(accountPublicId),
       admin.getInstagramAnalyticsSummary(accountPublicId),
     ]);
     setIntegrationSnapshot(snapshot);
     setData((current) => ({ ...current, instagramAnalytics }));
-    setStatus("Entegrasyon hesabı detayları backend API üzerinden yüklendi");
+    setStatus(uiMessage("integrationAccountLoaded"));
   }
 
   async function handleCreateInstagramPublishPreview() {
     if (instagramPublishPreviewing) return;
 
     const accountPublicId = integrationSnapshot?.account.public_id ?? data.integrationAccounts[0]?.public_id ?? null;
-    setStatus("Instagram yayın önizlemesi backend API üzerinden hazırlanıyor");
+    setStatus(uiMessage("instagramPreviewPreparing"));
     setInstagramPublishPreviewing(true);
     try {
       const attempt = await admin.createInstagramPublishPreview({
@@ -1352,7 +1353,7 @@ export function useDashboardController() {
         ],
       }));
       setLastInstagramPublishPreview(`${attempt.operation} ${attempt.request_id}`);
-      setStatus("Instagram yayın önizlemesi canlı provider kapalıyken kaydedildi");
+      setStatus(uiMessage("instagramPreviewSaved"));
     } finally {
       setInstagramPublishPreviewing(false);
     }
@@ -1362,7 +1363,7 @@ export function useDashboardController() {
     const accountPublicId = integrationSnapshot?.account.public_id ?? data.integrationAccounts[0]?.public_id;
     if (!accountPublicId) return;
 
-    setStatus("Entegrasyon token bilgisi backend API üzerinden kaydediliyor");
+    setStatus(uiMessage("integrationTokenSaving"));
     await admin.upsertIntegrationToken(accountPublicId, "access_token", {
       secret: "frontend-playwright-token",
       source: "admin-ui",
@@ -1373,14 +1374,14 @@ export function useDashboardController() {
     ]);
     setIntegrationSnapshot(snapshot);
     setData((current) => ({ ...current, instagramAnalytics }));
-    setStatus("Entegrasyon token bilgisi maskeli backend API üzerinden kaydedildi");
+    setStatus(uiMessage("integrationTokenSaved"));
   }
 
   async function handleSaveIntegrationSetting() {
     const accountPublicId = integrationSnapshot?.account.public_id ?? data.integrationAccounts[0]?.public_id;
     if (!accountPublicId) return;
 
-    setStatus("Entegrasyon ayarı backend API üzerinden kaydediliyor");
+    setStatus(uiMessage("integrationSettingSaving"));
     await admin.upsertIntegrationSetting(accountPublicId, "webhook.enabled", true, false);
     const [snapshot, instagramAnalytics] = await Promise.all([
       admin.getIntegrationAccount(accountPublicId),
@@ -1388,7 +1389,7 @@ export function useDashboardController() {
     ]);
     setIntegrationSnapshot(snapshot);
     setData((current) => ({ ...current, instagramAnalytics }));
-    setStatus("Entegrasyon ayarı backend API üzerinden kaydedildi");
+    setStatus(uiMessage("integrationSettingSaved"));
   }
 
   async function handleTogglePresence() {
@@ -1396,11 +1397,11 @@ export function useDashboardController() {
 
     const nextPresence = !user.is_online;
     setPresenceUpdating(true);
-    setStatus(nextPresence ? "Çevrimiçi duruma geçiliyor" : "Çevrimdışı duruma geçiliyor");
+    setStatus(uiMessage(nextPresence ? "presenceGoingOnline" : "presenceGoingOffline"));
     try {
       const updatedUser = await auth.setPresence(nextPresence);
       setUser(updatedUser);
-      setStatus(updatedUser.is_online ? "Çevrimiçi durum backend auth üzerinden güncellendi" : "Çevrimdışı durum backend auth üzerinden güncellendi");
+      setStatus(uiMessage(updatedUser.is_online ? "presenceOnlineUpdated" : "presenceOfflineUpdated"));
     } finally {
       setPresenceUpdating(false);
     }

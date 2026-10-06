@@ -4,6 +4,8 @@ import { useDashboardController } from "./app/useDashboardController.js";
 import type { AppNotification } from "./app/notifications.js";
 import { flowFromPath, navigationItems } from "./app/shared.js";
 import { AppLayout, homePathForRole } from "./layout/AppLayout.js";
+import { useT } from "./i18n/index.js";
+import { layoutMessages } from "./i18n/messages/layout.js";
 import { LoginScreen, PublicPage, ResetPasswordScreen } from "./pages/AuthScreens.js";
 import { OrderCreateModal } from "./pages/flows/OrderCreateModal.js";
 import {
@@ -45,8 +47,9 @@ function redirectTargetFrom(state: unknown) {
 }
 
 function PageFallback() {
+  const t = useT(layoutMessages);
   return (
-    <div className="page-fallback" data-testid="page-loading" role="status" aria-label="Sayfa yükleniyor">
+    <div className="page-fallback" data-testid="page-loading" role="status" aria-label={t("pageLoading")}>
       <span className="page-fallback-spinner" aria-hidden="true" />
     </div>
   );
@@ -55,6 +58,7 @@ function PageFallback() {
 export function App() {
   const ctx = useDashboardController();
   const navigate = useNavigate();
+  const t = useT(layoutMessages);
   // Set while the user signs out so the guard sends them to /giris without remembering the last page.
   const signingOutRef = useRef(false);
   const {
@@ -102,7 +106,7 @@ export function App() {
             <span className="brand-mark">G</span>
             <span>Garanti Kuluçka</span>
           </div>
-          <p>Oturum backend üzerinden doğrulanıyor</p>
+          <p>{t("sessionChecking")}</p>
         </div>
       </main>
     );

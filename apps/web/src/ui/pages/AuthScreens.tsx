@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { NavLink } from "react-router-dom";
 import { ArrowLeft, CheckCircle, FileText, LogIn, Shield, Trash2 } from "lucide-react";
 import { DataRows } from "../app/shared.js";
+import { useUiMessageText, type UiMessage } from "../i18n/messages/status.js";
 
 export function publicPageFromPath(pathname: string): "privacy" | "terms" | "deletion" | null {
   if (pathname === "/gizlilik-politikasi") return "privacy";
@@ -104,7 +105,8 @@ export function ResetPasswordScreen() {
   );
 }
 
-export function LoginScreen(props: { onLogin: (event: FormEvent<HTMLFormElement>) => void; status: string }) {
+export function LoginScreen(props: { onLogin: (event: FormEvent<HTMLFormElement>) => void; status: UiMessage }) {
+  const messageText = useUiMessageText();
   return (
     <main className="login-screen">
       <form className="login-card" onSubmit={props.onLogin}>
@@ -130,7 +132,7 @@ export function LoginScreen(props: { onLogin: (event: FormEvent<HTMLFormElement>
           <NavLink to="/kullanim-kosullari">Kullanım Koşulları</NavLink>
           <NavLink to="/veri-silme">Veri Silme Talebi</NavLink>
         </div>
-        <p aria-live="polite">{props.status}</p>
+        <p aria-live="polite">{messageText(props.status)}</p>
       </form>
     </main>
   );

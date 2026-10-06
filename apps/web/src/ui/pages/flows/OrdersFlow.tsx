@@ -3,8 +3,10 @@ import { SiparisAksiyonlari, SiparisTopluAksiyonlar } from "../SiparisAksiyonlar
 import { KargoSiparisAksiyonlari, KargoTopluAktar } from "../KargoOlusturModal.js";
 import { cx, orderStatusLabel, cargoProviderLabel, formatMoney, parseMoneyInput, FlowPanel, DetailPanel, Metric, DataRows } from "../../app/shared.js";
 import type { DashboardController } from "../../app/useDashboardController.js";
+import { useUiMessageText } from "../../i18n/messages/status.js";
 
 export function OrdersFlow({ ctx }: { ctx: DashboardController }) {
+  const orderFormText = useUiMessageText();
   const {
     addOrderFormItem,
     allVisibleOrdersSelected,
@@ -196,7 +198,7 @@ export function OrdersFlow({ ctx }: { ctx: DashboardController }) {
                   </div>
                   {orderFormMessage && (
                     <div className="order-form-message" data-testid="order-form-message">
-                      {orderFormMessage}
+                      {orderFormText(orderFormMessage)}
                     </div>
                   )}
                   <div className="order-form-grid">

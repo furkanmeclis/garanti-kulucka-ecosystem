@@ -1,8 +1,10 @@
 import { XCircle } from "lucide-react";
 import { cx } from "../../app/shared.js";
 import type { DashboardController } from "../../app/useDashboardController.js";
+import { useUiMessageText } from "../../i18n/messages/status.js";
 
 export function OrderCreateModal({ ctx }: { ctx: DashboardController }) {
+  const orderFormText = useUiMessageText();
   const {
     handleSubmitOrderForm,
     orderForm,
@@ -27,7 +29,7 @@ export function OrderCreateModal({ ctx }: { ctx: DashboardController }) {
                   <XCircle size={16} aria-hidden="true" />
                 </button>
               </div>
-              {orderFormMessage && <div className="order-form-message" data-testid="order-form-message">{orderFormMessage}</div>}
+              {orderFormMessage && <div className="order-form-message" data-testid="order-form-message">{orderFormText(orderFormMessage)}</div>}
               <div className="order-form-grid">
                 <label>
                   <span>İsim</span>
