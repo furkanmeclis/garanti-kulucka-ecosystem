@@ -100,5 +100,14 @@
   "POST /api/orders/{order_public_id}/shipments": { "anonymous": "deny", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" },
   "POST /api/shipments/bulk-create": { "anonymous": "deny", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" },
   "GET /api/shipments/{shipment_public_id}/print": { "anonymous": "deny", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" },
-  "POST /api/shipments/{shipment_public_id}/printed": { "anonymous": "deny", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" }
+  "POST /api/shipments/{shipment_public_id}/printed": { "anonymous": "deny", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" },
+  "GET /admin/users": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "deny", "admin": "allow" },
+  "POST /admin/users": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "deny", "admin": "allow" },
+  "PATCH /admin/users/{user_public_id}": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "deny", "admin": "allow" },
+  "DELETE /admin/users/{user_public_id}": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "deny", "admin": "allow" },
+  "GET /admin/logs": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "deny", "admin": "allow" },
+  "GET /admin/integrations/netgsm/balance": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "deny", "admin": "allow" },
+  "PATCH /auth/account/profile": { "anonymous": "deny", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" },
+  "POST /auth/account/password": { "anonymous": "deny", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" },
+  "GET /api/app-settings/ai-status": { "anonymous": "deny", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" }
 }

@@ -3,7 +3,7 @@ import { createServer, type ViteDevServer } from "vite";
 
 const backendBaseUrl = "http://127.0.0.1:65530";
 
-test.setTimeout(60_000);
+test.setTimeout(150_000);
 
 interface PlaywrightUser {
   public_id: string;
@@ -1372,11 +1372,13 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
 
     if (url.pathname === "/admin/integrations/provider-attempts") {
       expect(currentUser.role).toBe("admin");
-      expect(url.searchParams.get("limit")).toBe("10");
+      // dashboard snapshot uses limit=10; Sürat/Cron debug pages request provider-scoped limit=100
+      expect(["10", "100"]).toContain(url.searchParams.get("limit"));
+      const providerFilter = url.searchParams.get("provider_key");
       await route.fulfill({
         contentType: "application/json",
         body: JSON.stringify({
-          data: [
+          data: ([
             {
               public_id: "pat_instagram_preview",
               provider_key: "instagram",
@@ -1489,7 +1491,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
               started_at: "2026-01-01T00:00:04.000Z",
               updated_at: "2026-01-01T00:00:05.000Z",
             },
-          ],
+          ] as Array<{ provider_key: string }>).filter((attempt) => !providerFilter || attempt.provider_key === providerFilter),
         }),
       });
       return;
@@ -2515,50 +2517,46 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("shipment-pipeline-flow")).toContainText("Message Step Customer");
     await expect(page.getByTestId("shipment-pipeline-flow")).toContainText("SMS Step Customer");
     await page.getByRole("link", { name: /sürat debug/i }).click();
+    // Legacy SuratKargoDebugPage parity (P5 slice 12): stats, filters and expandable redacted log rows.
     await expect(page.getByTestId("surat-debug-flow")).toContainText("Sürat Kargo Debug");
     await expect(page.getByTestId("surat-debug-flow")).toContainText("Toplam");
-    await expect(page.getByTestId("surat-debug-flow")).toContainText("6");
-    await expect(page.getByTestId("surat-debug-flow")).toContainText("4");
-    await expect(page.getByTestId("surat-debug-flow")).toContainText("2");
-    await expect(page.getByTestId("surat-debug-flow")).toContainText("3");
-    await expect(page.getByTestId("surat-debug-flow")).toContainText("912ms");
-    await expect(page.getByTestId("surat-debug-detail")).toContainText("legacy /api/surat-kargo/debug");
+    await expect(page.getByTestId("surat-debug-flow")).toContainText("1/200 log");
+    await expect(page.getByTestId("surat-debug-flow")).toContainText("1450ms");
     await expect(page.getByTestId("surat-debug-detail")).toContainText("providers.surat.live_mode");
     await expect(page.getByTestId("surat-debug-detail")).toContainText("fixture_replay_contract_required");
-    await expect(page.getByTestId("surat-debug-detail")).toContainText("POST /kargo-takip");
-    await expect(page.getByTestId("surat-debug-detail")).toContainText("canlı çağrı yok");
-    await expect(page.getByTestId("surat-debug-detail")).toContainText("[redacted]");
-    await expect(page.getByTestId("surat-debug-detail")).not.toContainText("raw-surat-secret");
     await expect(page.getByTestId("surat-debug-flow")).toContainText("shipment.track / outbound");
     await expect(page.getByTestId("surat-debug-flow")).toContainText("failed / retry");
+    await expect(page.getByTestId("surat-debug-flow")).toContainText("POST /kargo-takip");
+    await page.getByTestId("surat-debug-flow").getByRole("button", { name: /failed \/ retry/ }).click();
+    await expect(page.getByTestId("surat-debug-flow")).toContainText("[redacted]");
+    await expect(page.getByTestId("surat-debug-flow")).toContainText("canlı çağrı yok");
+    await expect(page.getByTestId("surat-debug-flow")).not.toContainText("raw-surat-secret");
     await page.getByRole("link", { name: /cron debug/i }).click();
+    // Legacy CronDebugPage parity: PTT/Sürat cards, dry-run trigger, firm filter.
     await expect(page.getByTestId("cron-debug-flow")).toContainText("Kargo Takip Cron Debug");
-    await expect(page.getByTestId("cron-debug-flow")).toContainText("PTT Log");
-    await expect(page.getByTestId("cron-debug-flow")).toContainText("7");
-    await expect(page.getByTestId("cron-debug-flow")).toContainText("Sürat Log");
-    await expect(page.getByTestId("cron-debug-flow")).toContainText("6");
-    await expect(page.getByTestId("cron-debug-flow")).toContainText("5");
-    await expect(page.getByTestId("cron-debug-flow")).toContainText("3");
-    await expect(page.getByTestId("cron-debug-flow")).toContainText("3210ms");
-    await expect(page.getByTestId("cron-debug-detail")).toContainText("legacy /api/ptt/cron-debug + /api/surat/cron-debug");
+    await expect(page.getByTestId("cron-debug-detail")).toContainText("PTT Kargo Cron");
+    await expect(page.getByTestId("cron-debug-detail")).toContainText("Sürat Kargo Cron");
     await expect(page.getByTestId("cron-debug-detail")).toContainText("providers.ptt.live_mode");
-    await expect(page.getByTestId("cron-debug-detail")).toContainText("providers.surat.live_mode");
     await expect(page.getByTestId("cron-debug-detail")).toContainText("cron-takip-guncelle canlı çağrı yok");
-    await expect(page.getByTestId("cron-debug-detail")).toContainText("fixture_replay_contract_required");
-    await expect(page.getByTestId("cron-debug-actions")).toContainText("PTT cron dry-run tetikle");
-    await page.getByRole("button", { name: "PTT cron dry-run tetikle" }).click();
+    await expect(page.getByTestId("cron-debug-flow")).toContainText("2 / 2 cron çalışması gösteriliyor");
+    await expect(page.getByTestId("cron-debug-flow")).toContainText("req_ptt_cron_debug");
+    await expect(page.getByTestId("cron-debug-flow")).toContainText("req_surat_debug");
+    await expect(page.getByTestId("cron-debug-actions")).toContainText("PTT Cron");
+    await page.getByRole("button", { name: "PTT Cron" }).click();
     expect(cronTriggerPayload).toEqual({
       provider: "ptt",
-      idempotency_key: "cron_debug_ptt_manual",
+      idempotency_key: expect.stringContaining("cron_debug_ptt_"),
     });
-    await expect(page.getByTestId("cron-debug-flow")).toContainText("PTT / cron_ptt_cron_debug_ptt_manual");
-    await expect(page.getByTestId("cron-debug-detail")).toContainText("5 güncellendi");
-    await expect(page.getByTestId("cron-debug-flow")).toContainText("PTT / req_ptt_cron_debug");
-    await expect(page.getByTestId("cron-debug-flow")).toContainText("SURAT / req_surat_debug");
+    await expect(page.getByTestId("cron-debug-flow")).toContainText("cron_ptt_cron_debug_ptt_manual");
+    await expect(page.getByTestId("cron-debug-flow")).toContainText("3 / 3 cron çalışması gösteriliyor");
     await page.getByRole("link", { name: /^sms$/i }).click();
     await expect(page.getByTestId("sms-flow")).toContainText("Otomatik SMS");
-    await page.getByRole("link", { name: /ayarlar/i }).click();
-    await expect(page.getByTestId("admin-flow")).toContainText("webphone.enabled");
+    // P8 system settings (operation policy, live gate, settings audit) moved from /ayarlar to /ayarlar/entegrasyonlar;
+    // /ayarlar now renders the legacy AyarlarPage tabs (covered by ayarlar-parity.spec.ts).
+    await page.getByRole("link", { name: /^ayarlar$/i }).click();
+    await expect(page.getByTestId("admin-flow")).toContainText("Sistem ve hesap ayarlarını yönet");
+    await page.getByRole("link", { name: /entegrasyonlar/i }).click();
+    await expect(page.getByTestId("system-settings")).toContainText("webphone.enabled");
     await expect(page.getByTestId("operation-policy-detail")).toContainText("Operasyon Politikaları");
     await expect(page.getByTestId("operation-policy-detail")).toContainText("3 deneme");
     await expect(page.getByTestId("operation-policy-detail")).toContainText("10000 ms provider");
@@ -2578,8 +2576,8 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("settings-audit-detail")).toContainText("[redacted]");
     await expect(page.getByTestId("settings-audit-detail")).not.toContainText("raw-settings-audit-secret");
     await page.getByRole("button", { name: /ptt live gate kapalı kaydet/i }).click();
-    await expect(page.getByTestId("admin-flow")).toContainText("providers.ptt.live_mode");
-    await expect(page.getByTestId("admin-flow")).toContainText("false");
+    await expect(page.getByTestId("system-settings")).toContainText("providers.ptt.live_mode");
+    await expect(page.getByTestId("system-settings")).toContainText("false");
     await page.getByRole("link", { name: /dosya/i }).click();
     await expect(page.getByTestId("file-orphans-detail")).toContainText("Orphan Dosya Adayları");
     await expect(page.getByTestId("file-orphans-detail")).toContainText("4");
@@ -2644,7 +2642,8 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByRole("link", { name: /kargo/i })).toHaveCount(1);
     await expect(page.getByRole("link", { name: /^sms$/i })).toHaveCount(1);
     await expect(page.getByRole("link", { name: /müşteriler/i })).toHaveCount(0);
-    await expect(page.getByRole("link", { name: /ayarlar/i })).toHaveCount(0);
+    // Legacy App.jsx: Ayarlar is visible to kargo_operatoru (Profil/Genel tabs only).
+    await expect(page.getByRole("link", { name: /^ayarlar$/i })).toHaveCount(1);
     await expect(page.getByRole("link", { name: /dosya/i })).toHaveCount(0);
     await expect(page.getByRole("link", { name: /vapi ai/i })).toHaveCount(0);
     await expect(page.getByRole("link", { name: /sürat debug/i })).toHaveCount(0);

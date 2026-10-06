@@ -15,6 +15,7 @@ import { createIntegrationRoutes } from "./http/integration-routes.js";
 import { createSmsRoutes } from "./http/sms-routes.js";
 import { createSettingsRoutes } from "./http/settings-routes.js";
 import { createShipmentCreateRoutes } from "./http/shipment-create-routes.js";
+import { createAccountRoutes, createAdminUserRoutes, createAppSettingsRoutes } from "./http/admin-user-routes.js";
 import { createWebhookRoutes } from "./http/webhook-routes.js";
 import { createWebphoneRoutes } from "./http/webphone-routes.js";
 import { createRateLimitStore, type RateLimitStore } from "./http/rate-limit.js";
@@ -163,6 +164,7 @@ export function createApp(options: CreateAppOptions = {}) {
   app.get("/metrics", metricsRouteHandler(metrics, metricsExposure));
 
   app.route("/auth", createAuthRoutes());
+  app.route("/auth/account", createAccountRoutes());
   app.route("/api", createDomainRoutes());
   app.route("/api", createShipmentCreateRoutes());
   app.route("/api/comments", createCommentRoutes());
@@ -170,6 +172,7 @@ export function createApp(options: CreateAppOptions = {}) {
   app.route("/api/balances", createBalanceRoutes());
   app.route("/api/files", createFileRoutes());
   app.route("/api/webphone", createWebphoneRoutes());
+  app.route("/api/app-settings", createAppSettingsRoutes());
   app.route(
     "/webhooks",
     createWebhookRoutes(
@@ -180,6 +183,7 @@ export function createApp(options: CreateAppOptions = {}) {
   );
   app.route("/admin/settings", createSettingsRoutes());
   app.route("/admin/integrations", createIntegrationRoutes());
+  app.route("/admin", createAdminUserRoutes());
 
   return app;
 }

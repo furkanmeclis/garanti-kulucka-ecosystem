@@ -151,9 +151,11 @@ test("browser role denial keeps kargo operator away from admin routes but reads 
     await page.goto(`${app.url}/ayarlar`);
     await page.getByLabel("E-posta").fill("cargo@example.com");
     await page.getByRole("button", { name: "Giriş yap" }).click();
-    await expect(page.getByTestId("inbox-flow")).toBeVisible();
-    await expect(page.getByTestId("admin-flow")).toHaveCount(0);
-    await expect(page.getByRole("link", { name: "Ayarlar" })).toHaveCount(0);
+    // Legacy App.jsx allows kargo_operatoru into /ayarlar, but only the Profil/Genel tabs and no admin settings API.
+    await expect(page.getByRole("link", { name: "Ayarlar" })).toHaveCount(1);
+    await page.getByRole("link", { name: "Ayarlar" }).click();
+    await expect(page.getByTestId("ayarlar-tabs").getByRole("tab")).toHaveText(["Profil", "Genel"]);
+    await expect(page.getByRole("tab", { name: "Santral / Softphone" })).toHaveCount(0);
     await expect(page.getByRole("link", { name: "Santral" })).toHaveCount(0);
     expect(requestedPaths).not.toContain("/admin/settings");
     await expect.poll(() => requestedPaths).toContain("/api/webphone/config");

@@ -3436,6 +3436,327 @@
           }
         }
       }
+    },
+    "/admin/users": {
+      "get": {
+        "operationId": "listAdminUsers",
+        "responses": {
+          "200": {
+            "description": "Panel users (legacy /api/admin/kullanicilar)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminUserList"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createAdminUser",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAdminUserRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminUserResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/admin/users/{user_public_id}": {
+      "patch": {
+        "operationId": "updateAdminUser",
+        "parameters": [
+          {
+            "name": "user_public_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAdminUserRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminUserResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deactivateAdminUser",
+        "parameters": [
+          {
+            "name": "user_public_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Soft-deleted (deactivated) user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminUserResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/admin/logs": {
+      "get": {
+        "operationId": "listAdminLogs",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "İşlem logları (audit_logs)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminLogList"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/admin/integrations/netgsm/balance": {
+      "get": {
+        "operationId": "getNetgsmBalance",
+        "responses": {
+          "200": {
+            "description": "NetGSM balance backend dry-run boundary",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NetgsmBalance"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/auth/account/profile": {
+      "patch": {
+        "operationId": "updateOwnProfile",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateOwnProfileRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated profile",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "first_name",
+                    "last_name"
+                  ],
+                  "properties": {
+                    "first_name": {
+                      "type": "string"
+                    },
+                    "last_name": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/auth/account/password": {
+      "post": {
+        "operationId": "changeOwnPassword",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeOwnPasswordRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Password updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "updated"
+                  ],
+                  "properties": {
+                    "updated": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/app-settings/ai-status": {
+      "get": {
+        "operationId": "getAiAutoReplyStatus",
+        "responses": {
+          "200": {
+            "description": "AI auto reply status (legacy /api/whatsapp/ai-status)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "ai_enabled"
+                  ],
+                  "properties": {
+                    "ai_enabled": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -8798,6 +9119,347 @@
           },
           "label_printed_at": {
             "type": "string"
+          }
+        }
+      },
+      "AdminUser": {
+        "type": "object",
+        "required": [
+          "public_id",
+          "email",
+          "first_name",
+          "last_name",
+          "phone",
+          "role",
+          "is_active",
+          "is_online",
+          "last_seen_at",
+          "sip_username",
+          "sip_password_configured",
+          "created_at"
+        ],
+        "properties": {
+          "public_id": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "first_name": {
+            "type": "string"
+          },
+          "last_name": {
+            "type": "string"
+          },
+          "phone": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "role": {
+            "type": "string"
+          },
+          "is_active": {
+            "type": "boolean"
+          },
+          "is_online": {
+            "type": "boolean"
+          },
+          "last_seen_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "sip_username": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sip_password_configured": {
+            "type": "boolean",
+            "description": "SIP password is encrypted at rest and never returned"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "AdminUserList": {
+        "type": "object",
+        "required": [
+          "data",
+          "roles"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminUser"
+            }
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "admin",
+                "calisan",
+                "kargo_operatoru"
+              ]
+            }
+          }
+        }
+      },
+      "AdminUserResponse": {
+        "type": "object",
+        "required": [
+          "user"
+        ],
+        "properties": {
+          "user": {
+            "$ref": "#/components/schemas/AdminUser"
+          },
+          "deactivated": {
+            "type": "boolean"
+          }
+        }
+      },
+      "CreateAdminUserRequest": {
+        "type": "object",
+        "required": [
+          "email",
+          "first_name",
+          "password"
+        ],
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "first_name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "last_name": {
+            "type": "string"
+          },
+          "phone": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "password": {
+            "type": "string",
+            "minLength": 6,
+            "writeOnly": true
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "admin",
+              "calisan",
+              "kargo_operatoru"
+            ]
+          }
+        }
+      },
+      "UpdateAdminUserRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "first_name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "last_name": {
+            "type": "string"
+          },
+          "phone": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "admin",
+              "calisan",
+              "kargo_operatoru"
+            ]
+          },
+          "is_active": {
+            "type": "boolean"
+          },
+          "password": {
+            "type": "string",
+            "minLength": 6,
+            "writeOnly": true
+          },
+          "sip_username": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sip_password": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "writeOnly": true
+          }
+        }
+      },
+      "AdminLog": {
+        "type": "object",
+        "required": [
+          "id",
+          "actor_name",
+          "action",
+          "module",
+          "entity_id",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "actor_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "action": {
+            "type": "string"
+          },
+          "module": {
+            "type": "string"
+          },
+          "entity_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "AdminLogList": {
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminLog"
+            }
+          }
+        }
+      },
+      "NetgsmBalance": {
+        "type": "object",
+        "required": [
+          "provider",
+          "operation",
+          "balance",
+          "currency",
+          "sms_credit",
+          "status",
+          "live_call_permitted",
+          "live_gate",
+          "block_reason",
+          "checked_at"
+        ],
+        "properties": {
+          "provider": {
+            "const": "netgsm"
+          },
+          "operation": {
+            "const": "account.balance"
+          },
+          "balance": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "currency": {
+            "type": "string"
+          },
+          "sms_credit": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "dry_run",
+              "live"
+            ]
+          },
+          "live_call_permitted": {
+            "type": "boolean"
+          },
+          "live_gate": {
+            "type": "string"
+          },
+          "block_reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "checked_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "UpdateOwnProfileRequest": {
+        "type": "object",
+        "required": [
+          "first_name"
+        ],
+        "properties": {
+          "first_name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "last_name": {
+            "type": "string"
+          }
+        }
+      },
+      "ChangeOwnPasswordRequest": {
+        "type": "object",
+        "required": [
+          "password",
+          "password_confirmation"
+        ],
+        "properties": {
+          "password": {
+            "type": "string",
+            "minLength": 6,
+            "writeOnly": true
+          },
+          "password_confirmation": {
+            "type": "string",
+            "writeOnly": true
           }
         }
       }

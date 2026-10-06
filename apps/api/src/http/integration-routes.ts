@@ -128,6 +128,24 @@ export function createIntegrationRoutes() {
     return context.json(serializeProviderDebugSummary(summary));
   });
 
+  // NetGSM bakiye: tarayıcı NetGSM'e asla gitmez. Canlı provider kapısı kapalıyken
+  // backend dry-run sınırı döner; canlı bakiye sorgusu worker/provider op ile açılacak.
+  routes.get("/netgsm/balance", (context) => {
+    const catalogItem = apiProviderCatalog.find((item) => item.provider === "netgsm");
+    return context.json({
+      provider: "netgsm",
+      operation: "account.balance",
+      balance: null,
+      currency: "TRY",
+      sms_credit: null,
+      status: "dry_run",
+      live_call_permitted: false,
+      live_gate: catalogItem?.live_feature_flag_key ?? "providers.netgsm.live_mode",
+      block_reason: catalogItem?.live_block_reason ?? "fixture_replay_contract_required",
+      checked_at: new Date().toISOString(),
+    });
+  });
+
   routes.post("/provider-cron-triggers/:provider_key", async (context) => {
     const providerKey = context.req.param("provider_key");
     if (providerKey !== "ptt" && providerKey !== "surat") {

@@ -41,6 +41,33 @@ const storageMalwareScanPolicySchema = z.object({
   allow_skipped_downloads: z.boolean(),
 });
 
+const timeOfDay = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
+
+const cargoPipelineSettingsSchema = z.object({
+  aktif: z.boolean(),
+  baslangic_saati: timeOfDay,
+  bitis_saati: timeOfDay,
+  mesaj_gecikme_dk: nonnegativeInteger,
+  sms_gecikme_dk: nonnegativeInteger,
+  vapi_gecikme_dk: nonnegativeInteger,
+  max_deneme: positiveInteger,
+  mesaj_sablonu: z.string().max(2000),
+});
+
+const vapiSettingsSchema = z.object({
+  enabled: z.boolean(),
+  assistant_id: z.string(),
+  phone_number_id: z.string(),
+  tts_provider: z.enum(["azure", "elevenlabs", "google"]),
+  tts_voice: z.string(),
+  arama_baslangic_saati: timeOfDay,
+  arama_bitis_saati: timeOfDay,
+  max_deneme: positiveInteger,
+  tekrar_arama_saat: positiveInteger,
+  otomatik_arama: z.boolean(),
+  system_prompt: z.string(),
+});
+
 const providerLiveModeKeySchema = z.templateLiteral([
   "providers.",
   z.enum(["ptt", "surat", "kolaybi", "meta", "whatsapp", "instagram", "messenger", "netgsm", "vapi", "sip"]),
@@ -59,7 +86,18 @@ const literalGlobalSettingSchemas = {
   "webphone.sip_domain": { schema: z.string(), secret: false },
   "ai.model": { schema: nonblankString, secret: false },
   "ai.system_prompt": { schema: z.string(), secret: false },
+  "ai.auto_reply_enabled": { schema: z.boolean(), secret: false },
+  "kargo_pipeline_ayarlar": { schema: cargoPipelineSettingsSchema, secret: false },
+  "vapi_ayarlar": { schema: vapiSettingsSchema, secret: false },
+  "vapi.api_key": { schema: nonblankString, secret: true },
+  "netgsm.teyit_voice_usercode": { schema: z.string(), secret: false },
+  "netgsm.teyit_voice_password": { schema: nonblankString, secret: true },
 } as const;
+
+/** Global setting keys whose values are always stored encrypted and never returned to clients. */
+export const secretGlobalSettingKeys = Object.entries(literalGlobalSettingSchemas)
+  .filter(([, definition]) => definition.secret)
+  .map(([key]) => key);
 
 const integrationSettingSchemas = {
   "webhook.enabled": { schema: z.boolean(), secret: false },

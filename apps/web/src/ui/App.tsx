@@ -83,6 +83,9 @@ import { createRealtimeClient, type RealtimeClient } from "../api/realtime-clien
 import { createWebphoneClient, type WebphoneConfig } from "../api/webphone-client.js";
 import { SmsPage } from "./pages/SmsPage.js";
 import { BakiyePage } from "./pages/BakiyePage.js";
+import { AyarlarPage } from "./pages/AyarlarPage.js";
+import { SuratDebugPage } from "./pages/SuratDebugPage.js";
+import { CronDebugPage } from "./pages/CronDebugPage.js";
 import { YorumlarPage } from "./pages/YorumlarPage.js";
 import { KargoSiparisAksiyonlari, KargoTopluAktar } from "./pages/KargoOlusturModal.js";
 import { KargoPrintView } from "./pages/KargoPrintView.js";
@@ -223,7 +226,7 @@ const navigationItems: NavigationItem[] = [
   { key: "vapi", label: "VAPI AI", icon: Bot, roles: ["admin"], path: "/sesli-asistan/vapi" },
   { key: "reports", label: "İş Analizi", icon: BarChart3, roles: ["admin"], path: "/raporlar" },
   { key: "integrations", label: "Entegrasyonlar", icon: Settings, roles: ["admin"], path: "/ayarlar/entegrasyonlar" },
-  { key: "admin", label: "Ayarlar", icon: Settings, roles: ["admin"], path: "/ayarlar" },
+  { key: "admin", label: "Ayarlar", icon: Settings, roles: ["admin", "calisan", "kargo_operatoru"], path: "/ayarlar" },
   { key: "files", label: "Dosya", icon: FileUp, roles: ["admin", "calisan"], path: "/dosya" },
   { key: "webphone", label: "Santral", icon: Phone, roles: ["admin"], path: "/santral" },
 ];
@@ -537,18 +540,6 @@ const defaultProviderDebugSummary: ProviderDebugSummary = {
   },
 };
 
-function emptyProviderDebug(providerKey: string) {
-  return {
-    provider_key: providerKey,
-    total_attempts: 0,
-    success_count: 0,
-    failure_count: 0,
-    retry_count: 0,
-    average_duration_ms: 0,
-    latest_attempt: null,
-  };
-}
-
 const defaultShipmentPipelineSummary: ShipmentPipelineSummary = {
   counts: {
     all: 0,
@@ -719,7 +710,6 @@ export function App() {
   const [orphanCleanupPreviewing, setOrphanCleanupPreviewing] = useState(false);
   const [vapiTestCustomerName, setVapiTestCustomerName] = useState("Test Müşteri");
   const [vapiTestPhone, setVapiTestPhone] = useState("05051234567");
-  const [cronTriggeringProvider, setCronTriggeringProvider] = useState<"ptt" | "surat" | null>(null);
   const [presenceUpdating, setPresenceUpdating] = useState(false);
   const [integrationSnapshot, setIntegrationSnapshot] = useState<IntegrationAccountSnapshot | null>(null);
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
@@ -1853,28 +1843,6 @@ export function App() {
     setStatus("İptal durumu backend API üzerinden güncellendi");
   }
 
-  async function handleTriggerProviderCron(providerKey: "ptt" | "surat") {
-    if (cronTriggeringProvider) return;
-
-    setStatus(`${providerKey.toUpperCase()} cron debug backend API üzerinden hazırlanıyor`);
-    setCronTriggeringProvider(providerKey);
-    try {
-      const attempt = await admin.triggerProviderCronDebug(providerKey, {
-        idempotency_key: `cron_debug_${providerKey}_manual`,
-      });
-      setData((current) => ({
-        ...current,
-        providerAttempts: [
-          toProviderAttemptViewModel(attempt),
-          ...current.providerAttempts.filter((item) => item.public_id !== attempt.public_id),
-        ],
-      }));
-      setStatus(`${providerKey.toUpperCase()} cron debug canlı provider kapalıyken kaydedildi`);
-    } finally {
-      setCronTriggeringProvider(null);
-    }
-  }
-
   async function handleUpdateShipment() {
     const shipment = selectedShipment;
     if (!shipment) return;
@@ -2237,37 +2205,16 @@ export function App() {
   const selectedProviderAttempt = data.providerAttempts[0] ?? null;
   const selectedProviderPreview = selectedProviderAttempt?.provider_request_preview ?? null;
   const selectedProviderCatalogItem = data.providerCatalog[0] ?? null;
-  const suratProviderCatalogItem = data.providerCatalog.find((item) => item.provider === "surat") ?? null;
-  const pttProviderCatalogItem = data.providerCatalog.find((item) => item.provider === "ptt") ?? null;
   const currentOrderFormTotals = orderFormTotals(orderForm.items);
-  const providerDebugSummaries = new Map(data.providerDebugSummary.providers.map((summary) => [summary.provider_key, summary]));
-  const pttProviderDebug = providerDebugSummaries.get("ptt") ?? emptyProviderDebug("ptt");
-  const suratProviderDebug = providerDebugSummaries.get("surat") ?? emptyProviderDebug("surat");
   const providerAttemptTotal = data.providerDebugSummary.providers.reduce(
     (total, summary) => total + summary.total_attempts,
     0,
   );
   const pttProviderAttempts = data.providerAttempts.filter((attempt) => attempt.provider_key === "ptt");
-  const suratProviderAttempts = data.providerAttempts.filter((attempt) => attempt.provider_key === "surat");
-  const latestSuratAttempt = suratProviderAttempts[0] ?? null;
-  const latestSuratPreview = latestSuratAttempt?.provider_request_preview ?? null;
-  const trackingCronAttempts = data.providerAttempts.filter(
-    (attempt) =>
-      (attempt.provider_key === "ptt" || attempt.provider_key === "surat") &&
-      attempt.operation === "shipment.track",
-  );
-  const cronUpdatedCount = data.providerDebugSummary.cron.success_count;
-  const cronErrorCount = data.providerDebugSummary.cron.failure_count;
-  const cronTotalDuration = data.providerDebugSummary.cron.total_duration_ms;
-  const suratRetryCount = suratProviderDebug.retry_count;
-  const suratFailureCount = suratProviderDebug.failure_count;
-  const suratSuccessCount = suratProviderDebug.success_count;
-  const suratAverageDuration = suratProviderDebug.average_duration_ms;
   const latestSettingsAudit = data.settingsAudit[0] ?? null;
   const latestIntegrationAudit = data.integrationAudit[0] ?? null;
   const deliveredShipmentCount = data.shipmentSummary.delivered_count;
   const activeShipmentCount = data.shipmentSummary.active_count;
-  const cronSkippedCount = Math.max(activeShipmentCount - data.providerDebugSummary.cron.total_attempts, 0);
   const pttShipmentCount = data.shipmentSummary.provider_counts.ptt;
   const suratShipmentCount = data.shipmentSummary.provider_counts.surat;
   const pttNotDeliveredCount = data.shipmentSummary.exception_counts.ptt_not_delivered;
@@ -3536,171 +3483,76 @@ export function App() {
           </FlowPanel>
         )}
 
-        {activeFlow === "suratDebug" && (
-          <FlowPanel title="Sürat Kargo Debug" icon={<Bug size={18} />} testId="surat-debug-flow">
-            <div className="metrics-grid">
-              <Metric title="Toplam" value={String(suratProviderDebug.total_attempts)} />
-              <Metric title="Başarılı" value={String(suratSuccessCount)} />
-              <Metric title="Hata" value={String(suratFailureCount)} />
-              <Metric title="Retry" value={String(suratRetryCount)} />
-              <Metric title="Ort. Süre" value={`${suratAverageDuration}ms`} />
-            </div>
-            <DetailPanel title="Sürat Kargo Debug Akışı" testId="surat-debug-detail">
-              <DataRows
-                rows={[
-                  ["Kaynak", "provider attempts API", "legacy /api/surat-kargo/debug"],
-                  [
-                    "Canlı gate",
-                    suratProviderCatalogItem?.live_call_permitted === false ? "kapalı" : "-",
-                    suratProviderCatalogItem?.live_feature_flag_key ?? "-",
-                  ],
-                  [
-                    "Sözleşme modu",
-                    suratProviderCatalogItem?.contract_mode ?? "-",
-                    suratProviderCatalogItem?.live_block_reason ?? "-",
-                  ],
-                  [
-                    "Son endpoint",
-                    latestSuratPreview ? `${latestSuratPreview.method} ${latestSuratPreview.path}` : "-",
-                    latestSuratPreview?.live_call_performed === false ? "canlı çağrı yok" : "-",
-                  ],
-                  [
-                    "Son durum",
-                    latestSuratAttempt ? `${latestSuratAttempt.status} / ${latestSuratAttempt.retry_decision}` : "deneme yok",
-                    latestSuratAttempt ? `${latestSuratAttempt.duration_ms}ms` : "-",
-                  ],
-                  ["Header", compactJson(latestSuratPreview?.headers), "redacted"],
-                  ["Body", compactJson(latestSuratPreview?.body), "redacted"],
-                ]}
-              />
-            </DetailPanel>
-            <DataRows
-              rows={suratProviderAttempts.map((attempt) => [
-                `${attempt.operation} / ${attempt.direction}`,
-                `${attempt.status} / ${attempt.retry_decision}`,
-                `${attempt.provider_request_preview?.path ?? "-"} / ${attempt.duration_ms}ms`,
-              ])}
-            />
-          </FlowPanel>
-        )}
+        {activeFlow === "suratDebug" && <SuratDebugPage http={http} />}
 
-        {activeFlow === "cronDebug" && (
-          <FlowPanel title="Kargo Takip Cron Debug" icon={<Bug size={18} />} testId="cron-debug-flow">
-            <div className="metrics-grid">
-              <Metric title="PTT Log" value={String(pttProviderDebug.total_attempts)} />
-              <Metric title="Sürat Log" value={String(suratProviderDebug.total_attempts)} />
-              <Metric title="Güncellenen" value={String(cronUpdatedCount)} />
-              <Metric title="Hata" value={String(cronErrorCount)} />
-              <Metric title="Atlanan" value={String(cronSkippedCount)} />
-              <Metric title="Toplam Süre" value={`${cronTotalDuration}ms`} />
-            </div>
-            <div className="detail-actions" data-testid="cron-debug-actions">
-              <button
-                className="secondary-action"
-                type="button"
-                disabled={cronTriggeringProvider !== null}
-                onClick={() => void handleTriggerProviderCron("ptt")}
-              >
-                {cronTriggeringProvider === "ptt" ? "PTT dry-run hazırlanıyor" : "PTT cron dry-run tetikle"}
-              </button>
-              <button
-                className="secondary-action"
-                type="button"
-                disabled={cronTriggeringProvider !== null}
-                onClick={() => void handleTriggerProviderCron("surat")}
-              >
-                {cronTriggeringProvider === "surat" ? "Sürat dry-run hazırlanıyor" : "Sürat cron dry-run tetikle"}
-              </button>
-            </div>
-            <DetailPanel title="PTT + Sürat Cron Akışı" testId="cron-debug-detail">
-              <DataRows
-                rows={[
-                  ["Kaynak", "provider attempts API", "legacy /api/ptt/cron-debug + /api/surat/cron-debug"],
-                  [
-                    "PTT gate",
-                    pttProviderCatalogItem?.live_call_permitted === false ? "kapalı" : "-",
-                    pttProviderCatalogItem?.live_feature_flag_key ?? "-",
-                  ],
-                  [
-                    "Sürat gate",
-                    suratProviderCatalogItem?.live_call_permitted === false ? "kapalı" : "-",
-                    suratProviderCatalogItem?.live_feature_flag_key ?? "-",
-                  ],
-                  ["İşlem", "shipment.track", "cron-takip-guncelle canlı çağrı yok"],
-                  ["Durum", `${cronUpdatedCount} güncellendi`, `${cronErrorCount} hata / ${cronSkippedCount} atlanan`],
-                  ["Blok nedeni", "fixture_replay_contract_required", "live HTTP adapter kapalı"],
-                ]}
-              />
-            </DetailPanel>
-            <DataRows
-              rows={trackingCronAttempts.map((attempt) => [
-                `${attempt.provider_key.toUpperCase()} / ${attempt.request_id}`,
-                `${attempt.status} / ${attempt.retry_decision}`,
-                `${attempt.provider_request_preview?.path ?? "-"} / ${attempt.duration_ms}ms`,
-              ])}
-            />
-          </FlowPanel>
-        )}
+        {activeFlow === "cronDebug" && <CronDebugPage http={http} />}
 
-        {activeFlow === "admin" && (
-          <FlowPanel title="Admin Ayarları" icon={<Settings size={18} />} testId="admin-flow">
-            <button className="primary-action" type="button" onClick={handleSaveProviderLiveGate}>
-              PTT live gate kapalı kaydet
-            </button>
-            <button className="secondary-action" type="button" onClick={handleSaveOperationalPolicy}>
-              Operasyon politikasını kaydet
-            </button>
-            <DataRows rows={activeSettings.map((setting) => [setting.key, setting.scope, JSON.stringify(setting.value)])} />
-            <DetailPanel title="Operasyon Politikaları" testId="operation-policy-detail">
-              <DataRows
-                rows={[
-                  ["Retry", `${operationalPolicy.max_attempts} deneme`, `${operationalPolicy.retry_delay_ms} ms bekleme`],
-                  [
-                    "Timeout",
-                    `${operationalPolicy.request_timeout_ms} ms provider`,
-                    `${operationalPolicy.webhook_timeout_ms} ms webhook`,
-                  ],
-                  [
-                    "Rate Limit",
-                    `${operationalPolicy.provider_rate_limit_per_minute}/dk`,
-                    `queue concurrency ${operationalPolicy.queue_concurrency}`,
-                  ],
-                  [
-                    "Storage",
-                    operationalPolicy.storage_bucket,
-                    `${operationalPolicy.lifecycle_days} gün / orphan cleanup ${
-                      operationalPolicy.orphan_cleanup_enabled ? "açık" : "kapalı"
-                    }`,
-                  ],
-                ]}
-              />
-            </DetailPanel>
-            <DetailPanel title="Ayar Denetim Kayıtları" testId="settings-audit-detail">
-              <DataRows
-                rows={[
-                  ["Kayıt", String(data.settingsAuditSummary.total_count), "settings audit summary"],
-                  [
-                    "Son işlem",
-                    latestSettingsAudit ? `${latestSettingsAudit.action} / ${latestSettingsAudit.entity_type}` : "denetim yok",
-                    latestSettingsAudit?.entity_id ?? "-",
-                  ],
-                  [
-                    "Aktör",
-                    latestSettingsAudit?.actor_user_id === null || latestSettingsAudit?.actor_user_id === undefined
-                      ? "sistem"
-                      : String(latestSettingsAudit.actor_user_id),
-                    latestSettingsAudit?.created_at ?? "-",
-                  ],
-                  ["Eski", compactJson(latestSettingsAudit?.old_value), "redacted"],
-                  ["Yeni", compactJson(latestSettingsAudit?.new_value), "redacted"],
-                ]}
-              />
-            </DetailPanel>
-          </FlowPanel>
+        {activeFlow === "admin" && user && (
+          <AyarlarPage
+            http={http}
+            user={user}
+            onProfileUpdated={(firstName, lastName) =>
+              setUser((current) => (current ? { ...current, first_name: firstName, last_name: lastName } : current))
+            }
+          />
         )}
 
         {activeFlow === "integrations" && (
           <FlowPanel title="Entegrasyon Hesapları" icon={<Settings size={18} />} testId="integrations-flow">
+            <div className="system-settings" data-testid="system-settings">
+              <button className="primary-action" type="button" onClick={handleSaveProviderLiveGate}>
+                PTT live gate kapalı kaydet
+              </button>
+              <button className="secondary-action" type="button" onClick={handleSaveOperationalPolicy}>
+                Operasyon politikasını kaydet
+              </button>
+              <DataRows rows={activeSettings.map((setting) => [setting.key, setting.scope, JSON.stringify(setting.value)])} />
+              <DetailPanel title="Operasyon Politikaları" testId="operation-policy-detail">
+                <DataRows
+                  rows={[
+                    ["Retry", `${operationalPolicy.max_attempts} deneme`, `${operationalPolicy.retry_delay_ms} ms bekleme`],
+                    [
+                      "Timeout",
+                      `${operationalPolicy.request_timeout_ms} ms provider`,
+                      `${operationalPolicy.webhook_timeout_ms} ms webhook`,
+                    ],
+                    [
+                      "Rate Limit",
+                      `${operationalPolicy.provider_rate_limit_per_minute}/dk`,
+                      `queue concurrency ${operationalPolicy.queue_concurrency}`,
+                    ],
+                    [
+                      "Storage",
+                      operationalPolicy.storage_bucket,
+                      `${operationalPolicy.lifecycle_days} gün / orphan cleanup ${
+                        operationalPolicy.orphan_cleanup_enabled ? "açık" : "kapalı"
+                      }`,
+                    ],
+                  ]}
+                />
+              </DetailPanel>
+              <DetailPanel title="Ayar Denetim Kayıtları" testId="settings-audit-detail">
+                <DataRows
+                  rows={[
+                    ["Kayıt", String(data.settingsAuditSummary.total_count), "settings audit summary"],
+                    [
+                      "Son işlem",
+                      latestSettingsAudit ? `${latestSettingsAudit.action} / ${latestSettingsAudit.entity_type}` : "denetim yok",
+                      latestSettingsAudit?.entity_id ?? "-",
+                    ],
+                    [
+                      "Aktör",
+                      latestSettingsAudit?.actor_user_id === null || latestSettingsAudit?.actor_user_id === undefined
+                        ? "sistem"
+                        : String(latestSettingsAudit.actor_user_id),
+                      latestSettingsAudit?.created_at ?? "-",
+                    ],
+                    ["Eski", compactJson(latestSettingsAudit?.old_value), "redacted"],
+                    ["Yeni", compactJson(latestSettingsAudit?.new_value), "redacted"],
+                  ]}
+                />
+              </DetailPanel>
+            </div>
             <button className="primary-action" type="button" onClick={handleUpsertIntegrationAccount}>
               Instagram hesabı kaydet
             </button>

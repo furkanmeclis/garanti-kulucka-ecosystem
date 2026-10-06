@@ -105,6 +105,13 @@ const expectedOperations = new Map<string, string[]>([
   ["/admin/integrations/provider-debug-summary", ["get"]],
   ["/admin/integrations/provider-cron-triggers/{provider_key}", ["post"]],
   ["/admin/integrations/instagram-publish-previews", ["post"]],
+  ["/admin/integrations/netgsm/balance", ["get"]],
+  ["/admin/users", ["get", "post"]],
+  ["/admin/users/{user_public_id}", ["patch", "delete"]],
+  ["/admin/logs", ["get"]],
+  ["/auth/account/profile", ["patch"]],
+  ["/auth/account/password", ["post"]],
+  ["/api/app-settings/ai-status", ["get"]],
 ]);
 
 describe("backend OpenAPI contract", () => {
@@ -138,6 +145,10 @@ describe("backend OpenAPI contract", () => {
         "CommentActionRequest",
         "CommentActionResponse",
         "CommentAiSuggestionResponse",
+        "AdminUser",
+        "AdminUserList",
+        "AdminLogList",
+        "NetgsmBalance",
         "BalanceSummary",
         "StaffBalanceList",
         "BalanceMovementList",
