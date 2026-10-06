@@ -185,7 +185,11 @@ for (const role of ["kargo_operatoru", "calisan"] as const) {
       await expect(page.getByTestId("shipment-track-result")).toContainText("ptt shipment.track queued");
       expect(trackPayloads).toHaveLength(1);
 
-      await page.getByTestId("shipment-status-action").first().click();
+      // Wait for the status PATCH to reach the mocked route before asserting its payload (was racing the click).
+      await Promise.all([
+        page.waitForResponse((response) => new URL(response.url()).pathname === "/api/shipments/shp_slice6/status"),
+        page.getByTestId("shipment-status-action").first().click(),
+      ]);
       expect(statusPayloads).toEqual([expect.objectContaining({ status: "delivered" })]);
       await expect(page.getByTestId("shipment-detail")).toContainText("Teslim edildi");
 
