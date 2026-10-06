@@ -100,10 +100,14 @@ export interface BackendState {
   conversations: ReturnType<typeof conversation>[];
   customers: ReturnType<typeof customer>[];
   fail: Set<string>;
+  bodies: Array<{ method: string; path: string; body: unknown }>;
 }
 
+/** Extra per-spec routes: return `{ status, body }` to answer, or undefined to fall through to the built-in mocks. */
+export type ExtraRoute = (request: { method: string; path: string; url: URL; body: unknown }, state: BackendState) => { status: number; body: unknown } | undefined;
+
 /** Mocks the beta panel's backend calls (cross-origin, so CORS and preflights are answered too). */
-export async function mockBackend(page: Page, user: MockUser, options: { orderCount?: number } = {}) {
+export async function mockBackend(page: Page, user: MockUser, options: { orderCount?: number; extra?: ExtraRoute } = {}) {
   const state: BackendState = {
     user,
     password: "dogru-sifre",
@@ -113,6 +117,7 @@ export async function mockBackend(page: Page, user: MockUser, options: { orderCo
     conversations: Array.from({ length: 27 }, (_, index) => conversation(index + 1)),
     customers: Array.from({ length: 31 }, (_, index) => customer(index + 1)),
     fail: new Set(),
+    bodies: [],
   };
 
   await page.route(`${backendBaseUrl}/**`, async (route: Route) => {
@@ -125,6 +130,19 @@ export async function mockBackend(page: Page, user: MockUser, options: { orderCo
       route.fulfill({ status, headers: { ...corsHeaders, "Content-Type": "application/json" }, body: JSON.stringify(body) });
     const authed = request.headers()["authorization"] === "Bearer beta-access";
     if (state.fail.has(url.pathname)) return json(500, { error: { code: "boom", message: "fail" } });
+
+    const parsedBody = (() => {
+      try {
+        return request.postData() ? (JSON.parse(request.postData() ?? "") as unknown) : undefined;
+      } catch {
+        return request.postData();
+      }
+    })();
+    if (method !== "GET") state.bodies.push({ method, path: url.pathname, body: parsedBody });
+    if (url.pathname !== "/auth/login" && authed && options.extra) {
+      const answer = options.extra({ method, path: url.pathname, url, body: parsedBody }, state);
+      if (answer) return json(answer.status, answer.body);
+    }
 
     if (url.pathname === "/auth/login") {
       const body = JSON.parse(request.postData() ?? "{}") as { email?: string; password?: string };
@@ -180,6 +198,23 @@ export async function mockBackend(page: Page, user: MockUser, options: { orderCo
     if (url.pathname === "/api/customers") {
       if (state.user.role === "kargo_operatoru") return json(403, { error: { code: "forbidden", message: "Forbidden" } });
       return page_(state.customers);
+    }
+    const customerMatch = /^\/api\/customers\/([^/]+)(\/notes)?$/.exec(url.pathname);
+    if (customerMatch) {
+      if (state.user.role === "kargo_operatoru") return json(403, { error: { code: "forbidden", message: "Forbidden" } });
+      const index = state.customers.findIndex((row) => row.public_id === decodeURIComponent(customerMatch[1] ?? ""));
+      if (index < 0) return json(404, { error: { code: "not_found", message: "Müşteri bulunamadı" } });
+      if (method === "PATCH") {
+        state.customers[index] = { ...state.customers[index]!, ...(parsedBody as Record<string, unknown>), updated_at: new Date(Date.UTC(2026, 9, 6, 9)).toISOString() };
+        return json(200, state.customers[index]);
+      }
+      const row = state.customers[index]!;
+      return json(200, {
+        customer: { ...row, username: null, created_at: new Date(Date.UTC(2026, 0, 2, 9)).toISOString() },
+        addresses: [{ public_id: "adr_1", label: "Ev", address_line: "Atatürk Cd. No:1", city: "Konya", district: "Selçuklu", country: "TR", postal_code: "42000", is_default: true }],
+        orders: state.orders.slice(0, 3).map((item) => ({ ...item, customer_full_name: row.full_name })),
+        conversations: state.conversations.slice(0, 2).map((item) => ({ ...item, customer: { full_name: row.full_name, phone: row.phone } })),
+      });
     }
     return json(404, { error: { code: "not_found", message: `not mocked: ${url.pathname}` } });
   });

@@ -29,6 +29,31 @@ export interface CustomerSummary {
   updated_at: string;
 }
 
+export interface CustomerAddress {
+  public_id: string;
+  label: string | null;
+  address_line: string;
+  city: string | null;
+  district: string | null;
+  country: string;
+  postal_code: string | null;
+  is_default: boolean;
+}
+
+export interface CustomerDetail {
+  customer: CustomerSummary & { created_at: string };
+  addresses: CustomerAddress[];
+  orders: OrderSummary[];
+  conversations: ConversationSummary[];
+}
+
+export interface UpdateCustomerInput {
+  full_name?: string;
+  phone?: string | null;
+  email?: string | null;
+  username?: string | null;
+}
+
 export interface CustomerLookupResult {
   customer: CustomerSummary | null;
   default_address: {
@@ -394,6 +419,18 @@ export function createDomainClient(http: BackendHttpClient) {
       http.request<CustomerLookupResult>(`/api/orders/customer-lookup?phone=${encodeURIComponent(phone)}`),
     getCustomerSummary: () =>
       http.request<CustomerSummaryStats>("/api/customers/summary"),
+    getCustomer: (customerPublicId: string) =>
+      http.request<CustomerDetail>(`/api/customers/${encodeURIComponent(customerPublicId)}`),
+    updateCustomer: (customerPublicId: string, input: UpdateCustomerInput) =>
+      http.request<CustomerSummary>(`/api/customers/${encodeURIComponent(customerPublicId)}`, {
+        method: "PATCH",
+        body: input,
+      }),
+    saveCustomerProfileNotes: (customerPublicId: string, notes: string | null) =>
+      http.request<CustomerSummary>(`/api/customers/${encodeURIComponent(customerPublicId)}/notes`, {
+        method: "PATCH",
+        body: { notes },
+      }),
     getCommentModerationSummary: () =>
       http.request<CommentModerationSummary>("/api/comments/moderation-summary"),
     listMessages: (conversationPublicId: string, limit = 100) =>

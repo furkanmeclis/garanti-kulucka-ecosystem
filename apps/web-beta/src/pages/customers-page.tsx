@@ -1,6 +1,7 @@
 import type { CustomerSummary } from "@garanti-kulucka/shared";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
+import { Link } from "react-router-dom";
 import { useAuth } from "@/app/auth";
 import { DataList, ErrorState, Pagination, type Column } from "@/components/data-list";
 import { FilterSelect, ListToolbar } from "@/components/list-toolbar";
@@ -33,7 +34,17 @@ export function CustomersPage() {
   const paged = paginate(filtered, list.page);
 
   const columns: Column<CustomerSummary>[] = [
-    { key: "name", header: t("customers.name"), mobile: "title", cell: (row) => <span className="font-medium">{row.full_name}</span> },
+    { key: "name", header: t("customers.name"), mobile: "title", cell: (row) => (
+        <Link
+          to={`/musteriler/${encodeURIComponent(row.public_id)}`}
+          className="inline-flex min-h-11 items-center font-medium text-primary underline-offset-4 hover:underline md:min-h-0"
+          aria-label={t("customerDetail.openDetail", { name: row.full_name })}
+          data-testid="customer-link"
+        >
+          {row.full_name}
+        </Link>
+      ),
+    },
     { key: "phone", header: t("customers.phone"), cell: (row) => row.phone ?? t("common.none") },
     { key: "email", header: t("customers.email"), cell: (row) => row.email ?? t("common.none") },
     { key: "notes", header: t("customers.notes"), cell: (row) => <span title={row.notes ?? undefined}>{row.notes?.trim() || t("common.none")}</span> },

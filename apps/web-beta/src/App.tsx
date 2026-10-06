@@ -5,6 +5,7 @@ import { canAccessPath, homePathFor } from "@/app/navigation";
 import { AppShell } from "@/layout/app-shell";
 import { OfflineScreen, SplashScreen } from "@/layout/status-screens";
 import { LoginPage, redirectTarget } from "@/pages/login-page";
+import { CustomerDetailPage } from "@/pages/customer-detail-page";
 import { CustomersPage } from "@/pages/customers-page";
 import { DashboardPage } from "@/pages/dashboard-page";
 import { MessagesPage } from "@/pages/messages-page";
@@ -42,6 +43,7 @@ export function App() {
       <Route path="/siparisler" element={<Protected><OrdersPage /></Protected>} />
       <Route path="/mesajlar" element={<Protected><MessagesPage /></Protected>} />
       <Route path="/musteriler" element={<Protected><CustomersPage /></Protected>} />
+      <Route path="/musteriler/:id" element={<Protected><CustomerDetailPage /></Protected>} />
       <Route path="/kargolar" element={<Protected><ShipmentsPage /></Protected>} />
       <Route path="/ayarlar" element={<Protected><SettingsPage /></Protected>} />
       <Route path="*" element={<Protected><Navigate to="/" replace /></Protected>} />

@@ -199,5 +199,33 @@
     "active": "Active",
     "exception": "Exception",
     "unreachable": "Unreachable"
+  },
+  "customerDetail": {
+    "back": "Back to customers",
+    "notFound": "Customer not found.",
+    "profile": "Customer information",
+    "fullName": "Full name",
+    "phone": "Phone",
+    "email": "Email",
+    "username": "Username",
+    "created": "Created",
+    "updated": "Last updated",
+    "edit": "Edit",
+    "cancel": "Cancel",
+    "saved": "Customer saved.",
+    "saveFailed": "Could not save: {{message}}",
+    "notes": "Notes",
+    "notesPlaceholder": "Add a note about this customer…",
+    "saveNotes": "Save note",
+    "notesSaved": "Note saved.",
+    "addresses": "Addresses",
+    "defaultAddress": "Default",
+    "noAddresses": "No saved addresses.",
+    "orders": "Orders ({{count}})",
+    "noOrders": "This customer has no orders.",
+    "conversations": "Conversations ({{count}})",
+    "noConversations": "No conversations with this customer.",
+    "unread": "{{count}} unread",
+    "openDetail": "Open {{name}} details"
   }
 }

@@ -199,5 +199,33 @@
     "active": "Aktif",
     "exception": "Sorunlu",
     "unreachable": "Ulaşılamadı"
+  },
+  "customerDetail": {
+    "back": "Müşterilere dön",
+    "notFound": "Müşteri bulunamadı.",
+    "profile": "Müşteri bilgileri",
+    "fullName": "Ad soyad",
+    "phone": "Telefon",
+    "email": "E-posta",
+    "username": "Kullanıcı adı",
+    "created": "Kayıt tarihi",
+    "updated": "Son güncelleme",
+    "edit": "Düzenle",
+    "cancel": "Vazgeç",
+    "saved": "Müşteri bilgileri kaydedildi.",
+    "saveFailed": "Kaydedilemedi: {{message}}",
+    "notes": "Notlar",
+    "notesPlaceholder": "Müşteriyle ilgili not ekleyin…",
+    "saveNotes": "Notu kaydet",
+    "notesSaved": "Not kaydedildi.",
+    "addresses": "Adresler",
+    "defaultAddress": "Varsayılan",
+    "noAddresses": "Kayıtlı adres yok.",
+    "orders": "Siparişler ({{count}})",
+    "noOrders": "Bu müşterinin siparişi yok.",
+    "conversations": "Konuşmalar ({{count}})",
+    "noConversations": "Bu müşteriyle konuşma yok.",
+    "unread": "{{count}} okunmamış",
+    "openDetail": "{{name}} detayını aç"
   }
 }

@@ -116,6 +116,32 @@ export interface CustomerSummary {
   updated_at: string;
 }
 
+export interface CustomerAddress {
+  public_id: string;
+  label?: string | null;
+  address_line: string;
+  city?: string | null;
+  district?: string | null;
+  country: string;
+  postal_code?: string | null;
+  is_default: boolean;
+}
+
+export interface CustomerDetail {
+  customer: CustomerSummary & { created_at?: string };
+  addresses: CustomerAddress[];
+  orders: OrderSummary[];
+  conversations: ConversationSummary[];
+}
+
+export interface UpdateCustomerRequest {
+  full_name?: string;
+  phone?: string | null;
+  email?: string | null;
+  username?: string | null;
+  notes?: string | null;
+}
+
 export interface CustomerSummaryStats {
   total_count: number;
   with_phone_count: number;

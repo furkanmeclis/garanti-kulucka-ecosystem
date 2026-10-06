@@ -15,6 +15,7 @@ import {
   serializeConversation,
   serializeConversationSummary,
   serializeCustomer,
+  serializeCustomerDetail,
   serializeCustomerSummary,
   serializeMessage,
   serializeMessageShortcut,
@@ -64,6 +65,29 @@ const updateConversationStateSchema = z
 const updateNoteSchema = z.object({
   notes: z.string().max(10_000).nullable().default(null),
 });
+
+const optionalTrimmed = (max: number) =>
+  z
+    .string()
+    .max(max)
+    .nullable()
+    .optional()
+    .transform((value) => (value === undefined ? undefined : value === null || value.trim() === "" ? null : value.trim()));
+
+const updateCustomerSchema = z
+  .object({
+    full_name: z.string().trim().min(1, "Müşteri adı gerekli").max(200).optional(),
+    phone: optionalTrimmed(40),
+    email: optionalTrimmed(320).refine((value) => value == null || z.string().email().safeParse(value).success, {
+      message: "Geçersiz e-posta",
+    }),
+    username: optionalTrimmed(200),
+    notes: z.string().max(10_000).nullable().optional(),
+  })
+  .strict()
+  .refine((payload) => Object.values(payload).some((value) => value !== undefined), {
+    message: "En az bir alan gerekli",
+  });
 
 const createShortcutSchema = z.object({
   code: z.string().trim().min(1).max(64),
@@ -466,6 +490,88 @@ export function createDomainRoutes() {
 
     const summary = await new DomainRepository(db).getCustomerSummary();
     return context.json(serializeCustomerSummary(summary));
+  });
+
+  routes.get("/customers/:customer_public_id", async (context) => {
+    if (!canReadCustomers(context.get("auth")?.role)) {
+      return context.json({ error: { code: "forbidden", message: "Customer directory access is not allowed" } }, 403);
+    }
+
+    const db = context.get("db");
+    if (!db) {
+      return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
+    }
+
+    const detail = await new DomainRepository(db).getCustomerDetail(context.req.param("customer_public_id"));
+    if (!detail) {
+      return context.json({ error: { code: "not_found", message: "Müşteri bulunamadı" } }, 404);
+    }
+    return context.json(serializeCustomerDetail(detail));
+  });
+
+  routes.patch("/customers/:customer_public_id", async (context) => {
+    if (!canReadCustomers(context.get("auth")?.role)) {
+      return context.json({ error: { code: "forbidden", message: "Customer update is not allowed" } }, 403);
+    }
+
+    const payload = updateCustomerSchema.safeParse(await readJsonBody(context.req.raw));
+    if (!payload.success) {
+      const message = payload.error.issues[0]?.message;
+      return context.json(
+        {
+          error: {
+            code: "invalid_request",
+            message: message === "Müşteri adı gerekli" || message === "Geçersiz e-posta" || message === "En az bir alan gerekli"
+              ? message
+              : "Invalid customer payload",
+          },
+        },
+        400,
+      );
+    }
+
+    const db = context.get("db");
+    if (!db) {
+      return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
+    }
+
+    const customer = await new DomainRepository(db).updateCustomer({
+      customerPublicId: context.req.param("customer_public_id"),
+      fullName: payload.data.full_name,
+      phone: payload.data.phone,
+      email: payload.data.email,
+      username: payload.data.username,
+      notes: payload.data.notes,
+    });
+    if (!customer) {
+      return context.json({ error: { code: "not_found", message: "Müşteri bulunamadı" } }, 404);
+    }
+    return context.json(serializeCustomer(customer));
+  });
+
+  routes.patch("/customers/:customer_public_id/notes", async (context) => {
+    if (!canReadCustomers(context.get("auth")?.role)) {
+      return context.json({ error: { code: "forbidden", message: "Customer notes access is not allowed" } }, 403);
+    }
+
+    const payload = updateNoteSchema.safeParse(await readJsonBody(context.req.raw));
+    if (!payload.success) {
+      return context.json({ error: { code: "invalid_request", message: "Invalid customer note payload" } }, 400);
+    }
+
+    const db = context.get("db");
+    if (!db) {
+      return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
+    }
+
+    const customer = await new DomainRepository(db).updateCustomer({
+      customerPublicId: context.req.param("customer_public_id"),
+      notes: payload.data.notes,
+    });
+    if (!customer) {
+      return context.json({ error: { code: "not_found", message: "Müşteri bulunamadı" } }, 404);
+    }
+    return context.json(serializeCustomer(customer));
   });
 
   routes.get("/orders/customer-lookup", async (context) => {

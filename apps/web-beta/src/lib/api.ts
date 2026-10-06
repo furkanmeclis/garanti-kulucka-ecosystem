@@ -4,6 +4,7 @@ import type {
   BackendErrorBody,
   ConversationSummary,
   ConversationSummaryStats,
+  CustomerDetail,
   CustomerSummary,
   CustomerSummaryStats,
   ListEnvelope,
@@ -12,6 +13,7 @@ import type {
   ShipmentSummary,
   ShipmentSummaryStats,
   TokenPair,
+  UpdateCustomerRequest,
 } from "@garanti-kulucka/shared";
 import type { StoredTokens } from "./session-storage";
 
@@ -168,6 +170,11 @@ export function createApiClient(options: ApiClientOptions) {
     listConversations: (query: ConversationListQuery = {}) =>
       request<ListEnvelope<ConversationSummary>>("/api/conversations", { query: { ...query } }),
     listCustomers: (limit = 200) => request<ListEnvelope<CustomerSummary>>("/api/customers", { query: { limit } }),
+    getCustomer: (publicId: string) => request<CustomerDetail>(`/api/customers/${encodeURIComponent(publicId)}`),
+    updateCustomer: (publicId: string, input: UpdateCustomerRequest) =>
+      request<CustomerSummary>(`/api/customers/${encodeURIComponent(publicId)}`, { method: "PATCH", body: input }),
+    saveCustomerNotes: (publicId: string, notes: string | null) =>
+      request<CustomerSummary>(`/api/customers/${encodeURIComponent(publicId)}/notes`, { method: "PATCH", body: { notes } }),
   };
 }
 

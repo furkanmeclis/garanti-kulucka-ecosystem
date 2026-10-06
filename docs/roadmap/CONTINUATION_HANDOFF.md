@@ -2,6 +2,16 @@
 
 Bu belge, projeye yeni bir sohbetten veya bağlamsız bir çalışma oturumundan devam etmek için tek devam kaynağıdır. Önce bu dosya, ardından `MASTER_ROADMAP.md` ve yalnız çalışılacak fazın ilgili teknik belgeleri okunmalıdır. Buradaki yayımlanmış durum ile çalışma ağacındaki yayımlanmamış durum birbirine karıştırılmamalıdır.
 
+## 0. 2026-10-06 TRT Koordinatör Görev Listesi (parça parça ilerleme)
+
+Sıra: 1) müşteri detayı, 2) fatura/cari/KolayBi, 3) sağlayıcı ayar sayfaları, 4) JsSIP tarayıcı telefonu, 5) hata ayıklama sayfaları, 6) ertelenmiş küçük işler, 7) izleme, 8) beta panel eşitliği. Canlıya geçiş bu listenin parçası değildir.
+
+| # | Parça | Durum | Not |
+| --- | --- | --- | --- |
+| 1 | Müşteri detayı `/musteriler/:id` | tamam | `GET/PATCH /api/customers/{customer_public_id}`, `PATCH .../notes` (owner/admin/calisan); mevcut panelde `CustomerDetailPage`, betada `customer-detail-page`; testler `apps/api/test/customer-detail-routes.test.ts`, `tests/playwright/customer-detail-parity.spec.ts`, `tests/playwright-beta/customer-detail.beta.ts` |
+
+Not: `8ef5709` koşusunda (`37524984748`) testler ve imajlar yeşildi; yalnız tag push'u, main o sırada iş akışını değiştiren `4646638`'e ilerlediği için reddedildi. `v0.1.342` `4646638`'e verildi (`37525429376`, `playwright-report-<sha>` artifact'ı mevcut).
+
 ## 0. 2026-10-06 TRT Beta Panel Notu (`apps/web-beta`)
 
 Mevcut panel (`apps/web`, testleri, Dockerfile'ı ve compose `web` servisi) bu işte hiç değişmedi. Yeni beta panel ayrı bir workspace'tir:

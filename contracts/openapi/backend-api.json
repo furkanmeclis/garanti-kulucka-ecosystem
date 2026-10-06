@@ -5246,6 +5246,114 @@
           }
         }
       }
+    },
+    "/api/customers/{customer_public_id}": {
+      "get": {
+        "operationId": "getCustomerDetail",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CustomerPublicId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Customer card with addresses, latest orders and conversations",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerDetail"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateCustomer",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CustomerPublicId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCustomerRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated customer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Customer"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/customers/{customer_public_id}/notes": {
+      "patch": {
+        "operationId": "updateCustomerNotes",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CustomerPublicId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateNoteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated customer note",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Customer"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -5317,6 +5425,14 @@
       },
       "ProductPublicId": {
         "name": "product_public_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "CustomerPublicId": {
+        "name": "customer_public_id",
         "in": "path",
         "required": true,
         "schema": {
@@ -13198,6 +13314,125 @@
           "data"
         ],
         "additionalProperties": true
+      },
+      "CustomerAddress": {
+        "type": "object",
+        "required": [
+          "public_id",
+          "address_line",
+          "country",
+          "is_default"
+        ],
+        "properties": {
+          "public_id": {
+            "type": "string"
+          },
+          "label": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "address_line": {
+            "type": "string"
+          },
+          "city": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "district": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "country": {
+            "type": "string"
+          },
+          "postal_code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "is_default": {
+            "type": "boolean"
+          }
+        }
+      },
+      "CustomerDetail": {
+        "type": "object",
+        "required": [
+          "customer",
+          "addresses",
+          "orders",
+          "conversations"
+        ],
+        "properties": {
+          "customer": {
+            "$ref": "#/components/schemas/Customer"
+          },
+          "addresses": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CustomerAddress"
+            }
+          },
+          "orders": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Order"
+            }
+          },
+          "conversations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Conversation"
+            }
+          }
+        }
+      },
+      "UpdateCustomerRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "minProperties": 1,
+        "properties": {
+          "full_name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "phone": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 40
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 320
+          },
+          "username": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 200
+          },
+          "notes": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 10000
+          }
+        }
       }
     }
   }

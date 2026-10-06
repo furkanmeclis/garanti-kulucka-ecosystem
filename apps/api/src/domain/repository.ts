@@ -148,6 +148,7 @@ export interface ListConversationsFilter {
   channels?: string[];
   status?: string;
   assignedUserId?: number | null;
+  customerPublicId?: string;
   limit: number;
 }
 
@@ -184,6 +185,24 @@ export interface UpdateCustomerNotesInput {
   conversationPublicId: string;
   notes: string | null;
 }
+
+export interface UpdateCustomerInput {
+  customerPublicId: string;
+  fullName?: string | undefined;
+  phone?: string | null | undefined;
+  email?: string | null | undefined;
+  username?: string | null | undefined;
+  notes?: string | null | undefined;
+}
+
+export interface CustomerDetailRecord {
+  customer: CustomerRecord;
+  addresses: CustomerAddressRecord[];
+  orders: OrderRecord[];
+  conversations: ConversationRecord[];
+}
+
+export const customerDetailRelationLimit = 50;
 
 export interface CreateMessageShortcutInput {
   code: string;
@@ -235,6 +254,7 @@ export interface ListOrdersFilter {
   createdByUserPublicId?: string;
   createdFrom?: Date;
   createdTo?: Date;
+  customerPublicId?: string;
   sortBy?: "created_at" | "order_number" | "status" | "total_amount";
   sortDirection?: "asc" | "desc";
   offset?: number;
@@ -601,7 +621,10 @@ export class DomainRepository {
         builder.where("conversations.channel", "in", filter.channels as string[]),
       )
       .$if(Boolean(filter.channel), (builder) => builder.where("conversations.channel", "=", filter.channel as string))
-      .$if(Boolean(filter.status), (builder) => builder.where("conversations.status", "=", filter.status as string));
+      .$if(Boolean(filter.status), (builder) => builder.where("conversations.status", "=", filter.status as string))
+      .$if(Boolean(filter.customerPublicId), (builder) =>
+        builder.where("customers.public_id", "=", filter.customerPublicId as string),
+      );
 
     if (filter.assignedUserId !== undefined) {
       query =
@@ -689,6 +712,46 @@ export class DomainRepository {
       .orderBy("full_name", "asc")
       .limit(limit)
       .execute();
+  }
+
+  async getCustomerDetail(customerPublicId: string): Promise<CustomerDetailRecord | null> {
+    const customer = await this.db
+      .selectFrom("customers")
+      .selectAll()
+      .where("public_id", "=", customerPublicId)
+      .executeTakeFirst();
+    if (!customer) return null;
+
+    const [addresses, orders, conversations] = await Promise.all([
+      this.db
+        .selectFrom("customer_addresses")
+        .selectAll()
+        .where("customer_id", "=", customer.id)
+        .orderBy("is_default", "desc")
+        .orderBy("updated_at", "desc")
+        .execute(),
+      this.listOrders({ customerPublicId, limit: customerDetailRelationLimit }),
+      this.listConversations({ customerPublicId, limit: customerDetailRelationLimit }),
+    ]);
+    return { customer, addresses, orders, conversations };
+  }
+
+  /** Partial update; `undefined` fields are left untouched. Returns null when the customer does not exist. */
+  async updateCustomer(input: UpdateCustomerInput): Promise<CustomerRecord | null> {
+    const changes: Partial<Pick<CustomerRecord, "full_name" | "phone" | "email" | "username" | "notes">> = {};
+    if (input.fullName !== undefined) changes.full_name = input.fullName;
+    if (input.phone !== undefined) changes.phone = input.phone;
+    if (input.email !== undefined) changes.email = input.email;
+    if (input.username !== undefined) changes.username = input.username;
+    if (input.notes !== undefined) changes.notes = input.notes;
+
+    const updated = await this.db
+      .updateTable("customers")
+      .set({ ...changes, updated_at: new Date() })
+      .where("public_id", "=", input.customerPublicId)
+      .returningAll()
+      .executeTakeFirst();
+    return updated ?? null;
   }
 
   async lookupCustomerByPhone(phone: string): Promise<{ customer: CustomerRecord | null; defaultAddress: CustomerAddressRecord | null }> {
@@ -1135,6 +1198,9 @@ export class DomainRepository {
         builder.where("orders.confirmation_status", "=", filter.confirmationStatus as string),
       )
       .$if(Boolean(filter.source), (builder) => builder.where("orders.source", "=", filter.source as string))
+      .$if(Boolean(filter.customerPublicId), (builder) =>
+        builder.where("customers.public_id", "=", filter.customerPublicId as string),
+      )
       .$if(Boolean(filter.createdByUserPublicId), (builder) =>
         builder.where("users.public_id", "=", filter.createdByUserPublicId as string),
       )
@@ -2074,6 +2140,28 @@ export function serializeCustomer(customer: CustomerRecord) {
     username: customer.username,
     notes: customer.notes,
     updated_at: customer.updated_at,
+  };
+}
+
+export function serializeCustomerAddress(address: CustomerAddressRecord) {
+  return {
+    public_id: address.public_id,
+    label: address.label,
+    address_line: address.address_line,
+    city: address.city,
+    district: address.district,
+    country: address.country,
+    postal_code: address.postal_code,
+    is_default: address.is_default,
+  };
+}
+
+export function serializeCustomerDetail(detail: CustomerDetailRecord) {
+  return {
+    customer: { ...serializeCustomer(detail.customer), created_at: detail.customer.created_at },
+    addresses: detail.addresses.map(serializeCustomerAddress),
+    orders: detail.orders.map(serializeOrder),
+    conversations: detail.conversations.map(serializeConversation),
   };
 }
 
