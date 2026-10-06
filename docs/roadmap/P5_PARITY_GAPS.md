@@ -75,9 +75,10 @@ Durum anahtari: `yes` = yeni appte gercek akista var; `partial` = ozet/smoke vey
    Files: `flows/shipments`, domain shipments routes/repository.  
    Tests: `/kargo` filters match legacy, edit shipment/order customer fields, tracking update, detail/takip modal, realtime update.
 
-7. **Kargo olusturma + barkod/fatura print (L)**  
+7. **Kargo olusturma + barkod/fatura print (L)** - done (slice 7)  
    Files: shipment provider endpoints, label/download helpers, print views.  
-   Tests: single and bulk PTT/Sürat create, missing tracking guard, barcode/PDF/ZPL/EPL print/download, popup marks printed.
+   Tests: single and bulk PTT/Sürat create, missing tracking guard, barcode/PDF/ZPL/EPL print/download, popup marks printed.  
+   Done: `GET /api/orders/{id}/shipment-draft`, `POST /api/orders/{id}/shipments`, `POST /api/shipments/bulk-create`, `GET /api/shipments/{id}/print`, `POST /api/shipments/{id}/printed`; migration `016` (create idempotency key, payment type, label printed time); canonical shipment row `pending` + `<provider>.shipment.create` provider-delivery job (live gated by `providers.<p>.live_mode`); PTT barcode range + Mod10 + highest-sequence allocation with reserve limit 9990 under `pg_advisory_xact_lock`; web `KargoOlusturModal` (onay modal, Sürat'e/PTT'ye Aktar, toplu bar) and `KargoPrintView` (JsBarcode CODE128, beforeprint marks printed). Deferred: KolayBi e-fatura PDF merge, PTT/Sürat provider label PDF/ZPL/EPL download, worker write-back of provider tracking number to the shipment row, il/ilce searchable selects.
 
 8. **SMS merkezi (M)**  
    Files: `flows/sms`, domain SMS routes, templates/history tables.  

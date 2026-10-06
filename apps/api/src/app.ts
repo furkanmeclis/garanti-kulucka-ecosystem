@@ -14,6 +14,7 @@ import { createFileRoutes } from "./http/file-routes.js";
 import { createIntegrationRoutes } from "./http/integration-routes.js";
 import { createSmsRoutes } from "./http/sms-routes.js";
 import { createSettingsRoutes } from "./http/settings-routes.js";
+import { createShipmentCreateRoutes } from "./http/shipment-create-routes.js";
 import { createWebhookRoutes } from "./http/webhook-routes.js";
 import { createWebphoneRoutes } from "./http/webphone-routes.js";
 import { createRateLimitStore, type RateLimitStore } from "./http/rate-limit.js";
@@ -163,6 +164,7 @@ export function createApp(options: CreateAppOptions = {}) {
 
   app.route("/auth", createAuthRoutes());
   app.route("/api", createDomainRoutes());
+  app.route("/api", createShipmentCreateRoutes());
   app.route("/api/comments", createCommentRoutes());
   app.route("/api/sms", createSmsRoutes());
   app.route("/api/balances", createBalanceRoutes());

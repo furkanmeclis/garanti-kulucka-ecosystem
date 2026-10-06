@@ -3113,8 +3113,8 @@
           }
         },
         "responses": {
-          "201": {
-            "description": "Created payment request",
+          "200": {
+            "description": "Replayed payment request",
             "content": {
               "application/json": {
                 "schema": {
@@ -3123,8 +3123,8 @@
               }
             }
           },
-          "200": {
-            "description": "Replayed payment request",
+          "201": {
+            "description": "Created payment request",
             "content": {
               "application/json": {
                 "schema": {
@@ -3234,6 +3234,204 @@
             "$ref": "#/components/responses/Error"
           },
           "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/orders/{order_public_id}/shipment-draft": {
+      "get": {
+        "operationId": "getOrderShipmentDraft",
+        "summary": "Legacy kargo onay modal data (recipient, items, weight/desi, existing shipment guard)",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OrderPublicId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Shipment create draft",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShipmentDraft"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/orders/{order_public_id}/shipments": {
+      "post": {
+        "operationId": "createOrderShipment",
+        "summary": "Create the canonical shipment (status pending) and queue <provider>.shipment.create; PTT barcode allocated server-side",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OrderPublicId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateShipmentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Idempotent replay of an existing create",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateShipmentResponse"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Shipment created and provider job queued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateShipmentResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/shipments/bulk-create": {
+      "post": {
+        "operationId": "bulkCreateShipments",
+        "summary": "Legacy topluKargoAktar (Sürat'e Aktar / PTT'ye Aktar)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkCreateShipmentsRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Per-order bulk create results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkCreateShipmentsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/shipments/{shipment_public_id}/print": {
+      "get": {
+        "operationId": "getShipmentPrint",
+        "summary": "Barkodlu fatura print view data",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ShipmentPublicId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Print data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShipmentPrint"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/shipments/{shipment_public_id}/printed": {
+      "post": {
+        "operationId": "markShipmentPrinted",
+        "summary": "Legacy kargo-yazdirildi: marks the label as printed (first mark wins)",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ShipmentPublicId"
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MarkShipmentPrintedRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Printed mark",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarkShipmentPrintedResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
             "$ref": "#/components/responses/Error"
           }
         }
@@ -8037,6 +8235,569 @@
             "items": {
               "$ref": "#/components/schemas/StaffOrder"
             }
+          }
+        }
+      },
+      "ShipmentDraftItem": {
+        "type": "object",
+        "required": [
+          "name",
+          "quantity",
+          "unit_price",
+          "total_amount"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "integer"
+          },
+          "unit_price": {
+            "type": "string"
+          },
+          "total_amount": {
+            "type": "string"
+          }
+        }
+      },
+      "ShipmentMeasurements": {
+        "type": "object",
+        "required": [
+          "weight_kg",
+          "desi"
+        ],
+        "properties": {
+          "weight_kg": {
+            "type": "number"
+          },
+          "desi": {
+            "type": "number"
+          }
+        }
+      },
+      "ShipmentDraft": {
+        "type": "object",
+        "required": [
+          "order_public_id",
+          "order_number",
+          "total_amount",
+          "recipient",
+          "items",
+          "measurements"
+        ],
+        "properties": {
+          "order_public_id": {
+            "type": "string"
+          },
+          "order_number": {
+            "type": "string"
+          },
+          "order_status": {
+            "type": "string"
+          },
+          "total_amount": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "cargo_provider": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "recipient": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "phone": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "address": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "city": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "district": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ShipmentDraftItem"
+            }
+          },
+          "missing_field": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "measurements": {
+            "type": "object",
+            "properties": {
+              "ptt": {
+                "$ref": "#/components/schemas/ShipmentMeasurements"
+              },
+              "surat": {
+                "$ref": "#/components/schemas/ShipmentMeasurements"
+              }
+            }
+          },
+          "existing_shipment": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "public_id": {
+                "type": "string"
+              },
+              "provider": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string"
+              },
+              "tracking_number": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "barcode_number": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          }
+        }
+      },
+      "CreateShipmentRequest": {
+        "type": "object",
+        "required": [
+          "provider",
+          "idempotency_key"
+        ],
+        "properties": {
+          "provider": {
+            "type": "string",
+            "enum": [
+              "ptt",
+              "surat"
+            ]
+          },
+          "payment_status": {
+            "type": "string",
+            "enum": [
+              "karsi_odemeli",
+              "odeme_alindi"
+            ],
+            "default": "karsi_odemeli"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "recipient_address": {
+            "type": "string"
+          },
+          "recipient_city": {
+            "type": "string"
+          },
+          "recipient_district": {
+            "type": "string"
+          }
+        }
+      },
+      "CreateShipmentResponse": {
+        "type": "object",
+        "required": [
+          "provider",
+          "operation",
+          "queued",
+          "replayed",
+          "live_call_permitted",
+          "live_gate"
+        ],
+        "properties": {
+          "provider": {
+            "type": "string",
+            "enum": [
+              "ptt",
+              "surat"
+            ]
+          },
+          "operation": {
+            "type": "string",
+            "enum": [
+              "shipment.create"
+            ]
+          },
+          "request_id": {
+            "type": "string"
+          },
+          "job_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "queued": {
+            "type": "boolean"
+          },
+          "replayed": {
+            "type": "boolean"
+          },
+          "live_call_permitted": {
+            "type": "boolean"
+          },
+          "live_gate": {
+            "type": "string"
+          },
+          "order_public_id": {
+            "type": "string"
+          },
+          "order_number": {
+            "type": "string"
+          },
+          "barcode_number": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "barcode_range": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "barcode_pool_exhausted": {
+            "type": "boolean"
+          },
+          "weight_kg": {
+            "type": "number"
+          },
+          "desi": {
+            "type": "number"
+          },
+          "payment_status": {
+            "type": "string",
+            "enum": [
+              "karsi_odemeli",
+              "odeme_alindi"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "shipment": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Shipment"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "BulkCreateShipmentsRequest": {
+        "type": "object",
+        "required": [
+          "provider",
+          "order_public_ids",
+          "idempotency_key"
+        ],
+        "properties": {
+          "provider": {
+            "type": "string",
+            "enum": [
+              "ptt",
+              "surat"
+            ]
+          },
+          "order_public_ids": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 200,
+            "items": {
+              "type": "string"
+            }
+          },
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          }
+        }
+      },
+      "BulkCreateShipmentsResponse": {
+        "type": "object",
+        "required": [
+          "provider",
+          "created_count",
+          "skipped_count",
+          "failed_count",
+          "results"
+        ],
+        "properties": {
+          "provider": {
+            "type": "string"
+          },
+          "created_count": {
+            "type": "integer"
+          },
+          "skipped_count": {
+            "type": "integer"
+          },
+          "failed_count": {
+            "type": "integer"
+          },
+          "message": {
+            "type": "string"
+          },
+          "results": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "order_public_id",
+                "status"
+              ],
+              "properties": {
+                "order_public_id": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "created",
+                    "skipped",
+                    "failed"
+                  ]
+                },
+                "reason": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "message": {
+                  "type": "string"
+                },
+                "barcode_number": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "shipment": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/Shipment"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "ShipmentPrint": {
+        "type": "object",
+        "required": [
+          "shipment_public_id",
+          "provider",
+          "provider_label",
+          "barcode_format",
+          "invoice_title",
+          "recipient",
+          "items"
+        ],
+        "properties": {
+          "shipment_public_id": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "provider_label": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "tracking_number": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "barcode_number": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "barcode_value": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "barcode_format": {
+            "type": "string",
+            "enum": [
+              "CODE128"
+            ]
+          },
+          "payment_type": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "label_printed_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "invoice_title": {
+            "type": "string"
+          },
+          "recipient": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "phone": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "address": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "city": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "district": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          },
+          "order": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "public_id": {
+                "type": "string"
+              },
+              "order_number": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "total_amount": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "currency": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "created_at": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ShipmentDraftItem"
+            }
+          },
+          "created_at": {
+            "type": "string"
+          }
+        }
+      },
+      "MarkShipmentPrintedRequest": {
+        "type": "object",
+        "properties": {
+          "idempotency_key": {
+            "type": "string"
+          }
+        }
+      },
+      "MarkShipmentPrintedResponse": {
+        "type": "object",
+        "required": [
+          "shipment_public_id",
+          "label_printed_at"
+        ],
+        "properties": {
+          "shipment_public_id": {
+            "type": "string"
+          },
+          "label_printed_at": {
+            "type": "string"
           }
         }
       }

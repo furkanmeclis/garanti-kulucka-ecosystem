@@ -95,5 +95,10 @@
   "GET /api/balances/payment-requests": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "allow", "admin": "allow" },
   "POST /api/balances/payment-requests": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "allow", "admin": "allow" },
   "POST /api/balances/payment-requests/{payment_request_public_id}/approve": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "deny", "admin": "allow" },
-  "POST /api/balances/payment-requests/{payment_request_public_id}/reject": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "deny", "admin": "allow" }
+  "POST /api/balances/payment-requests/{payment_request_public_id}/reject": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "deny", "admin": "allow" },
+  "GET /api/orders/{order_public_id}/shipment-draft": { "anonymous": "deny", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" },
+  "POST /api/orders/{order_public_id}/shipments": { "anonymous": "deny", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" },
+  "POST /api/shipments/bulk-create": { "anonymous": "deny", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" },
+  "GET /api/shipments/{shipment_public_id}/print": { "anonymous": "deny", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" },
+  "POST /api/shipments/{shipment_public_id}/printed": { "anonymous": "deny", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" }
 }

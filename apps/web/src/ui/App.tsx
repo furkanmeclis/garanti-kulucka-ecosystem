@@ -24,6 +24,7 @@ import {
   Pencil,
   Phone,
   Plus,
+  Printer,
   RefreshCw,
   Settings,
   Search,
@@ -83,6 +84,8 @@ import { createWebphoneClient, type WebphoneConfig } from "../api/webphone-clien
 import { SmsPage } from "./pages/SmsPage.js";
 import { BakiyePage } from "./pages/BakiyePage.js";
 import { YorumlarPage } from "./pages/YorumlarPage.js";
+import { KargoSiparisAksiyonlari, KargoTopluAktar } from "./pages/KargoOlusturModal.js";
+import { KargoPrintView } from "./pages/KargoPrintView.js";
 
 const backendBaseUrl = import.meta.env.VITE_BACKEND_BASE_URL ?? "/backend";
 const tokenStorageKey = "garanti.web.access_token";
@@ -747,6 +750,7 @@ export function App() {
   const [orderPage, setOrderPage] = useState(0);
   const [orderTotalCount, setOrderTotalCount] = useState(0);
   const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(() => new Set());
+  const [printShipmentId, setPrintShipmentId] = useState<string | null>(null);
   const [orderFormOpen, setOrderFormOpen] = useState(false);
   const [orderFormSubmitting, setOrderFormSubmitting] = useState(false);
   const [orderFormMessage, setOrderFormMessage] = useState<string | null>(null);
@@ -2971,6 +2975,7 @@ export function App() {
                 Toplu KolayBi aktar
               </button>
             </div>
+            <KargoTopluAktar http={http} selectedOrderPublicIds={[...selectedOrderIds]} onChanged={() => void refreshOrders()} />
             {orderFormOpen && (
               <div className="order-form-backdrop" data-testid="order-create-modal">
                 <form
@@ -3220,6 +3225,11 @@ export function App() {
                     ["Not", selectedOrder.notes ?? "-", selectedOrder.updated_at],
                   ]}
                 />
+                <KargoSiparisAksiyonlari
+                  http={http}
+                  orderPublicId={selectedOrder.public_id}
+                  onChanged={(result) => void refreshOrders().then(() => setSelectedOrderId(result.order_public_id))}
+                />
               </DetailPanel>
             )}
           </FlowPanel>
@@ -3447,6 +3457,21 @@ export function App() {
                     ["Barkod", selectedShipment.barcode_number ?? "barkod bekliyor", "shipments API"],
                   ]}
                 />
+                <div className="detail-actions">
+                  {selectedShipment.tracking_number || selectedShipment.barcode_number ? (
+                    <button
+                      className="kargo-yazdir-button"
+                      data-testid="kargo-yazdir"
+                      title="Barkodlu Fatura Yazdır"
+                      type="button"
+                      onClick={() => setPrintShipmentId(selectedShipment.public_id)}
+                    >
+                      <Printer size={14} aria-hidden="true" /> Yazdır
+                    </button>
+                  ) : (
+                    <span className="kargo-muted">Önce kargoya aktarın</span>
+                  )}
+                </div>
                 <div className="timeline" data-testid="shipment-tracking-history">
                   <h3>Hareket Geçmişi</h3>
                   {(selectedShipment.tracking_events ?? []).length === 0 ? (
@@ -3465,6 +3490,8 @@ export function App() {
             )}
           </FlowPanel>
         )}
+
+        {printShipmentId && <KargoPrintView http={http} shipmentPublicId={printShipmentId} onClose={() => setPrintShipmentId(null)} />}
 
         {activeFlow === "shipmentPipeline" && (
           <FlowPanel title="Teslim Alınmayan Kargo Pipeline" icon={<Zap size={18} />} testId="shipment-pipeline-flow">

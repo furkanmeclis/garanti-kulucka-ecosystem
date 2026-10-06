@@ -344,6 +344,10 @@ export interface ShipmentsTable extends BaseTable {
   shipped_at: Timestamp | null;
   delivered_at: Timestamp | null;
   raw_payload: Json | null;
+  create_idempotency_key: string | null;
+  payment_type: string | null;
+  label_printed_at: Timestamp | null;
+  created_by_user_id: number | null;
 }
 
 export interface ShipmentTrackingEventsTable extends BaseTable {
