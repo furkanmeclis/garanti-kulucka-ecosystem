@@ -4110,3 +4110,223 @@ nav {
     bottom: 12px;
   }
 }
+
+/* Admin debug pages (/ayarlar/*-debug, /ayarlar/ai-egitim) */
+.debug-page {
+  display: grid;
+  gap: 16px;
+}
+
+.debug-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  color: #60a5fa;
+  text-decoration: none;
+}
+
+.debug-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.debug-header h1 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+
+.debug-header-actions,
+.debug-pager,
+.debug-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.debug-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 44px;
+}
+
+.debug-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  color: #cbd5e1;
+}
+
+.debug-check input {
+  width: 20px;
+  height: 20px;
+}
+
+.debug-notice {
+  margin: 0;
+  border-radius: 8px;
+  padding: 8px 12px;
+  overflow-wrap: anywhere;
+}
+
+.debug-notice.success {
+  color: #bbf7d0;
+  background: rgba(34, 197, 94, 0.12);
+}
+
+.debug-notice.error {
+  color: #fecaca;
+  background: rgba(239, 68, 68, 0.12);
+}
+
+.debug-kv {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 12px;
+}
+
+.debug-kv > div {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.6fr) minmax(0, 1fr);
+  gap: 12px;
+}
+
+.debug-kv dt {
+  color: #94a3b8;
+}
+
+.debug-kv dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.debug-flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 700;
+}
+
+.debug-flag.ok {
+  color: #86efac;
+}
+
+.debug-flag.bad {
+  color: #fca5a5;
+}
+
+.debug-copy {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.debug-copy code,
+.debug-code {
+  display: block;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  border-radius: 6px;
+  padding: 6px 8px;
+  color: #cbd5e1;
+  background: #0f172a;
+  font-size: 12px;
+}
+
+.debug-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.debug-list li {
+  display: grid;
+  gap: 6px;
+  border-bottom: 1px solid #1e293b;
+  padding-bottom: 8px;
+}
+
+.debug-list-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.debug-bad {
+  color: #fecaca !important;
+}
+
+.debug-text {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.debug-section-title {
+  margin: 0;
+  font-size: 15px;
+}
+
+.debug-form {
+  display: grid;
+  gap: 10px;
+}
+
+.debug-form label {
+  display: grid;
+  gap: 4px;
+}
+
+.debug-form input:not([type="checkbox"]),
+.debug-form select,
+.debug-form textarea {
+  min-width: 0;
+  min-height: 44px;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 8px 12px;
+  color: #e2e8f0;
+  background: #0f172a;
+  font: inherit;
+}
+
+.debug-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
+  gap: 10px;
+}
+
+.debug-strong {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.debug-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 0 12px;
+  color: #bfdbfe;
+  text-decoration: none;
+}
+
+.debug-link:hover {
+  background: #1e293b;
+}

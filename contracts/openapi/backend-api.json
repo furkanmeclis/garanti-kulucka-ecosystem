@@ -5880,6 +5880,268 @@
           }
         }
       }
+    },
+    "/api/debug/whatsapp": {
+      "get": {
+        "operationId": "getWhatsappDebug",
+        "responses": {
+          "200": {
+            "description": "WhatsApp config state, today's counters, recent webhooks and provider attempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhatsappDebug"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/debug/whatsapp/test-send": {
+      "post": {
+        "operationId": "queueWhatsappDebugTestSend",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WhatsappDebugTestSendRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Queued provider-delivery job (live call gated by providers.whatsapp.live_mode)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhatsappDebugTestSendResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/debug/instagram": {
+      "get": {
+        "operationId": "getInstagramDebug",
+        "responses": {
+          "200": {
+            "description": "Instagram/Messenger account state, counters, webhooks and attempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstagramDebug"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/debug/ai": {
+      "get": {
+        "operationId": "getAiDebug",
+        "responses": {
+          "200": {
+            "description": "AI auto-reply config, counters and recent AI messages",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiDebug"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/debug/ai/test": {
+      "post": {
+        "operationId": "testAiDebug",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiDebugTestRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Dry-run AI reply",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiDebugTestResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/debug/ai-training/stats": {
+      "get": {
+        "operationId": "getAiTrainingStats",
+        "parameters": [
+          {
+            "name": "answered_only",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Exportable conversations per channel",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiTrainingStats"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/debug/ai-training/export": {
+      "get": {
+        "operationId": "exportAiTraining",
+        "parameters": [
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "text",
+                "jsonl",
+                "json"
+              ]
+            }
+          },
+          {
+            "name": "channel",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "whatsapp",
+                "instagram",
+                "messenger"
+              ]
+            }
+          },
+          {
+            "name": "answered_only",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ]
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500
+            }
+          },
+          {
+            "name": "min_messages",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 2,
+              "maximum": 50
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Training data file",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/x-ndjson": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -14879,6 +15141,428 @@
                 }
               }
             }
+          }
+        }
+      },
+      "DebugWebhookEvent": {
+        "type": "object",
+        "properties": {
+          "public_id": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "event_type": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "received_at": {
+            "type": "string"
+          },
+          "processed_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "preview": {
+            "type": "string",
+            "description": "Redacted, truncated payload JSON"
+          }
+        }
+      },
+      "DebugProviderAttempt": {
+        "type": "object",
+        "properties": {
+          "request_id": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "operation": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "status_code": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "duration_ms": {
+            "type": "integer"
+          },
+          "error_message": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "started_at": {
+            "type": "string"
+          }
+        }
+      },
+      "DebugProviderAccount": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "provider": {
+            "type": "string"
+          },
+          "account_public_id": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "external_account_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "access_token_configured": {
+            "type": "boolean"
+          },
+          "verify_token_configured": {
+            "type": "boolean"
+          },
+          "account_live_mode": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "live_call_permitted": {
+            "type": "boolean"
+          },
+          "phone_number_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "waba_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "display_phone_number": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "WhatsappDebug": {
+        "type": "object",
+        "required": [
+          "live_gate",
+          "callback_path",
+          "stats",
+          "webhooks",
+          "attempts"
+        ],
+        "properties": {
+          "live_gate": {
+            "type": "string"
+          },
+          "provider_live_mode": {
+            "type": "boolean"
+          },
+          "callback_path": {
+            "type": "string"
+          },
+          "config": {
+            "$ref": "#/components/schemas/DebugProviderAccount"
+          },
+          "stats": {
+            "type": "object",
+            "properties": {
+              "conversation_count": {
+                "type": "integer"
+              },
+              "today_inbound": {
+                "type": "integer"
+              },
+              "today_outbound": {
+                "type": "integer"
+              }
+            }
+          },
+          "webhooks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DebugWebhookEvent"
+            }
+          },
+          "attempts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DebugProviderAttempt"
+            }
+          }
+        }
+      },
+      "WhatsappDebugTestSendRequest": {
+        "type": "object",
+        "required": [
+          "to",
+          "idempotency_key"
+        ],
+        "properties": {
+          "to": {
+            "type": "string"
+          },
+          "idempotency_key": {
+            "type": "string"
+          }
+        }
+      },
+      "WhatsappDebugTestSendResult": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "const": "whatsapp"
+          },
+          "operation": {
+            "const": "message.send"
+          },
+          "request_id": {
+            "type": "string"
+          },
+          "job_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "queued": {
+            "type": "boolean"
+          },
+          "to": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "account_public_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "live_gate": {
+            "type": "string"
+          },
+          "live_call_permitted": {
+            "type": "boolean"
+          }
+        }
+      },
+      "InstagramDebug": {
+        "type": "object",
+        "properties": {
+          "live_gates": {
+            "type": "object"
+          },
+          "provider_live_mode": {
+            "type": "object"
+          },
+          "callback_paths": {
+            "type": "object"
+          },
+          "accounts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DebugProviderAccount"
+            }
+          },
+          "stats": {
+            "type": "object",
+            "properties": {
+              "conversation_count": {
+                "type": "integer"
+              },
+              "today_inbound": {
+                "type": "integer"
+              },
+              "today_outbound": {
+                "type": "integer"
+              }
+            }
+          },
+          "webhooks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DebugWebhookEvent"
+            }
+          },
+          "attempts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DebugProviderAttempt"
+            }
+          }
+        }
+      },
+      "AiDebug": {
+        "type": "object",
+        "properties": {
+          "config": {
+            "type": "object",
+            "properties": {
+              "provider": {
+                "type": "string"
+              },
+              "auto_reply_enabled": {
+                "type": "boolean"
+              },
+              "model": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "system_prompt_source": {
+                "type": "string",
+                "enum": [
+                  "database",
+                  "default"
+                ]
+              },
+              "system_prompt_length": {
+                "type": "integer"
+              },
+              "live_call_permitted": {
+                "type": "boolean"
+              },
+              "dry_run": {
+                "type": "boolean"
+              }
+            }
+          },
+          "stats": {
+            "type": "object",
+            "properties": {
+              "today_ai_replies": {
+                "type": "integer"
+              },
+              "total_ai_replies": {
+                "type": "integer"
+              }
+            }
+          },
+          "recent": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "public_id": {
+                  "type": "string"
+                },
+                "body": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "sent_at": {
+                  "type": "string"
+                },
+                "conversation_public_id": {
+                  "type": "string"
+                },
+                "channel": {
+                  "type": "string"
+                },
+                "customer_name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "customer_phone": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "AiDebugTestRequest": {
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "properties": {
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          }
+        }
+      },
+      "AiDebugTestResult": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "type": "string"
+          },
+          "operation": {
+            "type": "string"
+          },
+          "dry_run": {
+            "type": "boolean"
+          },
+          "live_call_permitted": {
+            "type": "boolean"
+          },
+          "system_prompt_source": {
+            "type": "string"
+          },
+          "system_prompt_preview": {
+            "type": "string"
+          },
+          "test_message": {
+            "type": "string"
+          },
+          "reply": {
+            "type": "string"
+          }
+        }
+      },
+      "AiTrainingStats": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "integer"
+          },
+          "by_channel": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer"
+            }
+          },
+          "answered_only": {
+            "type": "boolean"
           }
         }
       }

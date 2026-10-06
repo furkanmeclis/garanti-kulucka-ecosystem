@@ -10,6 +10,8 @@ import { LoginScreen, PublicPage, ResetPasswordScreen } from "./pages/AuthScreen
 import { OrderCreateModal } from "./pages/flows/OrderCreateModal.js";
 import { SoftphoneProvider } from "./softphone/Softphone.js";
 import {
+  AiDebugPage,
+  AiTrainingPage,
   AramaPage,
   AyarlarPage,
   BakiyePage,
@@ -20,6 +22,7 @@ import {
   FaturalarPage,
   FilesFlow,
   InboxFlow,
+  InstagramDebugPage,
   InstagramAnalitikPage,
   InstagramYayinlaPage,
   IntegrationsFlow,
@@ -32,6 +35,7 @@ import {
   StokPage,
   SuratDebugPage,
   VapiAramalarPage,
+  WhatsAppDebugPage,
   WebphoneFlow,
   YorumlarPage,
 } from "./routes.js";
@@ -208,6 +212,10 @@ export function App() {
         {activeFlow === "reports" && <RaporlarPage http={http} />}
         {activeFlow === "invoices" && <FaturalarPage http={http} />}
         {activeFlow === "accounts" && <CariHesaplarPage http={http} />}
+        {activeFlow === "whatsappDebug" && <WhatsAppDebugPage http={http} />}
+        {activeFlow === "instagramDebug" && <InstagramDebugPage http={http} />}
+        {activeFlow === "aiDebug" && <AiDebugPage http={http} />}
+        {activeFlow === "aiTraining" && <AiTrainingPage http={http} />}
         {activeFlow === "instagramPublish" && <InstagramYayinlaPage http={http} />}
         {activeFlow === "instagramAnalytics" && <InstagramAnalitikPage http={http} />}
         {activeFlow === "files" && <FilesFlow ctx={ctx} />}

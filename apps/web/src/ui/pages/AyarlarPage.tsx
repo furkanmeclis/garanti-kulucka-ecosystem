@@ -30,6 +30,7 @@ import { MesajBanner, hataMetni, tarihSaatFormatla, useMesaj } from "./AyarlarSh
 import { EntegrasyonAyarlar, KullanicilarSekmesi } from "./AyarlarAdminTabs.js";
 import { KargoPipelineAyarlar, SantralAyarlar, VapiAyarlar } from "./AyarlarProviderTabs.js";
 import { NetgsmAyarlar, WhatsAppAyarlar } from "./AyarlarMessagingTabs.js";
+import { DebugLinks } from "./DebugPages.js";
 
 /**
  * Legacy parity: garanti-kulucka/frontend/src/pages/ayarlar/AyarlarPage.jsx.
@@ -585,6 +586,7 @@ export function AyarlarPage({
           </div>
         )}
 
+        {aktifSekme === "genel" && isAdmin && <DebugLinks />}
         {aktifSekme === "santral" && isAdmin && <SantralAyarlar http={http} />}
         {aktifSekme === "vapi" && isAdmin && <VapiAyarlar http={http} />}
         {aktifSekme === "kargo-pipeline" && isAdmin && <KargoPipelineAyarlar http={http} />}
