@@ -2,6 +2,20 @@
 
 Bu belge, projeye yeni bir sohbetten veya bağlamsız bir çalışma oturumundan devam etmek için tek devam kaynağıdır. Önce bu dosya, ardından `MASTER_ROADMAP.md` ve yalnız çalışılacak fazın ilgili teknik belgeleri okunmalıdır. Buradaki yayımlanmış durum ile çalışma ağacındaki yayımlanmamış durum birbirine karıştırılmamalıdır.
 
+## 0. 2026-10-06 TRT Beta Panel Notu (`apps/web-beta`)
+
+Mevcut panel (`apps/web`, testleri, Dockerfile'ı ve compose `web` servisi) bu işte hiç değişmedi. Yeni beta panel ayrı bir workspace'tir:
+
+- `apps/web-beta` (`@garanti-kulucka/web-beta`): Vite 8 + React 18 + TypeScript + Tailwind v4 + shadcn/ui (Radix), lucide-react, react-router, react-i18next (TR varsayılan / EN, `garanti-beta-lang`), vite-plugin-pwa (yalnız statik precache; API hiç önbelleğe alınmaz).
+- Yerleşim: yan menü yok; üst menü (logo, ana menü, arama, bildirim zili, dil, tema, profil menüsü). Mobilde hamburger Sheet menü + alt gezinme çubuğu; 360px'ten itibaren yatay kaydırma yok, dokunma hedefleri ≥44px, listeler mobilde kart.
+- Sayfalar: Pano (summary uçları), Siparişler ve Kargolar (sunucu tarafı arama/filtre/sayfalama), Mesajlar ve Müşteriler (API'de arama/offset olmadığı için son 200 kayıt üzerinde istemci tarafı), Ayarlar/Profil (profil ve şifre uçları, dil/tema, ana ekrana ekle).
+- Rol menüsü: owner/admin = yönetici; calisan; kargo_operatoru (Siparişler/Mesajlar/Kargolar/Ayarlar, ana sayfa `/siparisler`).
+- `@garanti-kulucka/shared`: yalnız tip ekleri (`contracts/http/panel.ts`, `panelRoleOf`). Backend değişmedi.
+- Compose: `beta-frontend` servisi 8081'de (nginx, `/backend` → `api:3000`, sw.js/manifest/index.html no-cache). `web` 8080'de aynen.
+- Testler: `apps/web-beta/test` (vitest) ve `tests/playwright-beta` (`*.beta.ts`, ayrı config; mevcut `playwright test tests/playwright` bunları görmez). `npm run test:e2e:beta` `npm run check` içinde.
+- Sürümler: `v0.1.337` (iskelet + compose + PWA), `v0.1.338` (giriş + üst menü + i18n), 3. parça (sayfalar) `d94dbb1`.
+- Bilinen kararsız test (mevcut panel, bu işten bağımsız): `tests/playwright/shipments-slice6-parity.spec.ts` kargo_operatoru koşusu tıklamadan hemen sonra isteği beklemeden `statusPayloads` kontrol ettiği için nadiren düşüyor; tekrar koşularda geçiyor.
+
 ## 0. 2026-10-06 TRT Aktif Devam Notu
 
 Bu bölüm en güncel devam noktasıdır; altındaki 2026-10-04 notu ve eski release listesi tarihsel arka plandır.
@@ -787,7 +801,7 @@ Her bağımsız dilim için:
 8. Küçük ve açıklayıcı commit oluştur.
 9. `main` dalına pushla.
 10. GitHub Actions tamamlanana kadar izle.
-11. Otomatik tag’in bir kez oluştuğunu ve API, worker, migrator ile web için dört `.tar.gz` arşivi içeren tek `container-images-vX.Y.Z` artifact’inin mevcut olduğunu doğrula.
+11. Otomatik tag’in bir kez oluştuğunu ve API, worker, migrator, web ile web-beta için beş `.tar.gz` arşivi içeren tek `container-images-vX.Y.Z` artifact’inin mevcut olduğunu doğrula (web-beta `v0.1.337` ile eklendi).
 12. Roadmap/handoff durumunu ayrı docs checkpoint’iyle güncelle; docs commit’inin CI ve tag sonucunu da doğrula.
 
 Branch veya PR oluşturma. Başarısız CI commit’ini taglenmiş gibi kaydetme. Çalışma ağacındaki yayımlanmamış işi roadmapte release olarak gösterme.
@@ -842,7 +856,7 @@ Bu listenin tamamı işaretlenmeden `migrate --apply` açılmayacaktır:
 - Provider attempt persistence ve redacted admin görünürlüğü
 - Migrator manual container profili ve source-only dry-run güvenlik temeli
 - OpenAPI backend route contractı
-- Main-only CI, otomatik semantic tag ve API, worker, migrator ile web için dört `.tar.gz` arşivi içeren tek `container-images-vX.Y.Z` artifact’i
+- Main-only CI, otomatik semantic tag ve API, worker, migrator, web ile web-beta için beş `.tar.gz` arşivi içeren tek `container-images-vX.Y.Z` artifact’i
 
 Bu maddeler ihtiyaç varsa genişletilir; mevcut davranış sebepsiz yere yeniden yazılmaz.
 
