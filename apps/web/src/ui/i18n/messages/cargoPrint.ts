@@ -11,6 +11,8 @@ export const cargoPrintMessages = defineMessages({
     print: "Yazdir",
     close: "Kapat",
     transferFirst: "Önce kargoya aktarın",
+    download: "Etiketi {format} olarak indir",
+    downloadError: "Etiket indirilemedi: {message}",
   },
   en: {
     unknownError: "Unknown error",
@@ -21,5 +23,7 @@ export const cargoPrintMessages = defineMessages({
     print: "Print",
     close: "Close",
     transferFirst: "Transfer to carrier first",
+    download: "Download label as {format}",
+    downloadError: "Could not download the label: {message}",
   },
 });

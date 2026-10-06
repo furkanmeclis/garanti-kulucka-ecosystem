@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Printer, X } from "lucide-react";
+import { Download, Printer, X } from "lucide-react";
 import { BackendRequestError, type BackendHttpClient } from "../../api/http-client.js";
 import { createShipmentsClient, type ShipmentPrintData } from "../../api/shipments-client.js";
 import { translate, useLanguage, useT, type UiLanguage } from "../i18n/index.js";
@@ -133,6 +133,32 @@ export function KargoPrintView(props: {
         <button className="kargo-print-button" data-testid="kargo-print-button" disabled={!data} type="button" onClick={() => window.print()}>
           <Printer size={14} aria-hidden="true" /> {t("print")}
         </button>
+        {(["pdf", "zpl", "epl"] as const).map((format) => (
+          <button
+            key={format}
+            className="kargo-print-button"
+            data-testid={`kargo-label-${format}`}
+            disabled={!data?.barcode_value}
+            type="button"
+            aria-label={t("download", { format: format.toUpperCase() })}
+            onClick={() => {
+              if (!data) return;
+              client
+                .downloadShipmentLabel(data.shipment_public_id, format)
+                .then((blob) => {
+                  const url = URL.createObjectURL(blob);
+                  const link = document.createElement("a");
+                  link.href = url;
+                  link.download = `etiket-${data.barcode_value ?? data.shipment_public_id}.${format}`;
+                  link.click();
+                  window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
+                })
+                .catch((reason: unknown) => setError(t("downloadError", { message: errorMessage(reason, language) })));
+            }}
+          >
+            <Download size={14} aria-hidden="true" /> {format.toUpperCase()}
+          </button>
+        ))}
         <button className="kargo-print-close" data-testid="kargo-print-close" type="button" aria-label={t("close")} onClick={props.onClose}>
           <X size={16} aria-hidden="true" />
         </button>

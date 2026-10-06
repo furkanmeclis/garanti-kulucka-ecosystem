@@ -7,6 +7,7 @@ import type {
 } from "@garanti-kulucka/database";
 import { newPublicId } from "../auth/crypto.js";
 import type { InvoiceIssuer } from "./documents.js";
+import { loadDocumentSender } from "../documents/sender.js";
 import {
   fromKurus,
   invoiceNumberFor,
@@ -650,25 +651,7 @@ export class AccountingRepository {
   }
 
   async invoiceIssuer(): Promise<InvoiceIssuer> {
-    const db = this.db;
-    const rows = await db
-      .selectFrom("settings")
-      .select(["key", "value"])
-      .where("scope", "=", "global")
-      .where("is_secret", "=", false)
-      .where("key", "in", ["gonderici_adi", "gonderici_telefon", "gonderici_adres", "gonderici_il", "gonderici_ilce"])
-      .execute();
-    const value = (key: string) => {
-      const raw = rows.find((row) => row.key === key)?.value;
-      return typeof raw === "string" && raw.trim() ? raw.trim() : null;
-    };
-    return {
-      name: value("gonderici_adi") ?? "Garanti Kuluçka",
-      phone: value("gonderici_telefon"),
-      address: value("gonderici_adres"),
-      city: value("gonderici_il"),
-      district: value("gonderici_ilce"),
-    };
+    return loadDocumentSender(this.db);
   }
 }
 

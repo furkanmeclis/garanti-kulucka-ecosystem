@@ -128,6 +128,10 @@ export function createShipmentsClient(http: BackendHttpClient) {
       http.request<BulkCreateShipmentsResponse>("/api/shipments/bulk-create", { method: "POST", body: input }),
     getShipmentPrint: (shipmentPublicId: string) =>
       http.request<ShipmentPrintData>(`/api/shipments/${encodeURIComponent(shipmentPublicId)}/print`),
+    downloadShipmentLabel: async (shipmentPublicId: string, format: "pdf" | "zpl" | "epl") => {
+      if (!http.requestBlob) throw new Error("Label download is not supported by this client");
+      return http.requestBlob(`/api/shipments/${encodeURIComponent(shipmentPublicId)}/label?format=${format}`);
+    },
     markShipmentPrinted: (shipmentPublicId: string, idempotencyKey: string) =>
       http.request<{ shipment_public_id: string; label_printed_at: string }>(
         `/api/shipments/${encodeURIComponent(shipmentPublicId)}/printed`,

@@ -154,6 +154,7 @@ for (const role of ["admin", "calisan", "kargo_operatoru"] as const) {
     const createCalls: Array<{ path: string; body: Record<string, unknown> }> = [];
     const bulkCalls: Array<Record<string, unknown>> = [];
     const printedCalls: string[] = [];
+    const labelCalls: string[] = [];
 
     page.on("dialog", (dialog) => void dialog.accept());
     await installRealtimeShim(page);
@@ -245,6 +246,13 @@ for (const role of ["admin", "calisan", "kargo_operatoru"] as const) {
           created_at: "2026-01-01T00:00:00.000Z",
         });
       }
+      const labelMatch = /^\/api\/shipments\/([^/]+)\/label$/.exec(url.pathname);
+      if (labelMatch) {
+        const format = url.searchParams.get("format") ?? "pdf";
+        labelCalls.push(`${labelMatch[1]}:${format}`);
+        const body = format === "pdf" ? "%PDF-1.4\n%%EOF\n" : format === "zpl" ? "^XA\n^XZ\n" : "\nN\nP1\n";
+        return route.fulfill({ status: 200, contentType: format === "pdf" ? "application/pdf" : "text/plain", body });
+      }
       const printedMatch = /^\/api\/shipments\/([^/]+)\/printed$/.exec(url.pathname);
       if (printedMatch && method === "POST") {
         printedCalls.push(printedMatch[1]!);
@@ -331,6 +339,12 @@ for (const role of ["admin", "calisan", "kargo_operatoru"] as const) {
       await expect(page.getByTestId("kargo-print-takip-no")).toHaveText("SRT900000123");
       await expect(page.getByTestId("kargo-print-barcode-svg").locator("rect").first()).toBeAttached();
       await expect(page.getByTestId("kargo-print-barcode-svg")).toContainText("SRT900000123");
+
+      for (const format of ["pdf", "zpl", "epl"] as const) {
+        const [download] = await Promise.all([page.waitForEvent("download"), page.getByTestId(`kargo-label-${format}`).click()]);
+        expect(download.suggestedFilename()).toBe(`etiket-SRT900000123.${format}`);
+      }
+      expect(labelCalls).toEqual(["shp_1:pdf", "shp_1:zpl", "shp_1:epl"]);
 
       await page.emulateMedia({ media: "print" });
       await expect(page.locator("#root")).toBeHidden();

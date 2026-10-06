@@ -1,15 +1,10 @@
 import { PdfDocument, fitText, wrapText } from "../documents/pdf.js";
+import type { DocumentSender } from "../documents/sender.js";
 import type { InvoiceDetailRecord } from "./repository.js";
 import { openAmount, sqlDate } from "./rules.js";
 
 /** Seller block printed on invoices (global settings `gonderici_*`, the same values the cargo label uses). */
-export interface InvoiceIssuer {
-  name: string;
-  phone: string | null;
-  address: string | null;
-  city: string | null;
-  district: string | null;
-}
+export type InvoiceIssuer = DocumentSender;
 
 const statusLabels: Record<string, string> = {
   issued: "Düzenlendi",

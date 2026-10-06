@@ -1,6 +1,7 @@
 import { Hono, type Context } from "hono";
 import { z } from "zod";
 import { jobEnvelopeSchema, providerDeliveryJobPayloadSchema } from "@garanti-kulucka/shared";
+import { LabelBarcodeMissingError, labelFormats, renderLabel, type LabelFormat } from "../shipments/labels.js";
 import type { AppBindings } from "./types.js";
 import { authenticate, requireDatabase } from "./middleware.js";
 import { DomainRepository, serializeShipment } from "../domain/repository.js";
@@ -273,6 +274,7 @@ export function createShipmentCreateRoutes() {
   routes.use("/shipments/bulk-create", requireDatabase, authenticate);
   routes.use("/shipments/:shipment_public_id/print", requireDatabase, authenticate);
   routes.use("/shipments/:shipment_public_id/printed", requireDatabase, authenticate);
+  routes.use("/shipments/:shipment_public_id/label", requireDatabase, authenticate);
 
   routes.get("/orders/:order_public_id/shipment-draft", async (context) => {
     if (!canCreateShipments(context.get("auth")?.role)) {
@@ -427,6 +429,37 @@ export function createShipmentCreateRoutes() {
     const data = await new ShipmentCreateRepository(db).getPrintData(context.req.param("shipment_public_id"));
     if (!data) return context.json({ error: { code: "not_found", message: "Shipment was not found" } }, 404);
     return context.json(serializeShipmentPrint(data));
+  });
+
+  routes.get("/shipments/:shipment_public_id/label", async (context) => {
+    if (!canCreateShipments(context.get("auth")?.role)) {
+      return context.json({ error: { code: "forbidden", message: "Shipment print access is not allowed" } }, 403);
+    }
+    const format = context.req.query("format") ?? "pdf";
+    if (!(labelFormats as readonly string[]).includes(format)) {
+      return context.json({ error: { code: "invalid_request", message: "format pdf, zpl veya epl olmalı" } }, 400);
+    }
+    const db = context.get("db");
+    if (!db) return dbUnavailable(context);
+    const repository = new ShipmentCreateRepository(db);
+    const data = await repository.getPrintData(context.req.param("shipment_public_id"));
+    if (!data) return context.json({ error: { code: "not_found", message: "Shipment was not found" } }, 404);
+    try {
+      const label = renderLabel(format as LabelFormat, data, await repository.getSender());
+      return new Response(label.body, {
+        status: 200,
+        headers: {
+          "content-type": label.contentType,
+          "content-disposition": `attachment; filename="${label.filename.replace(/[^\w.-]/g, "_")}"`,
+          "cache-control": "no-store",
+        },
+      });
+    } catch (error) {
+      if (error instanceof LabelBarcodeMissingError) {
+        return context.json({ error: { code: "barcode_missing", message: error.message } }, 409);
+      }
+      throw error;
+    }
   });
 
   routes.post("/shipments/:shipment_public_id/printed", async (context) => {

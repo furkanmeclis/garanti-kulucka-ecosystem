@@ -1,5 +1,6 @@
 import { sql, type AppDatabase } from "@garanti-kulucka/database";
 import { newPublicId } from "../auth/crypto.js";
+import { loadDocumentSender, type DocumentSender } from "../documents/sender.js";
 import {
   PTT_BARCODE_DEFAULT_RANGE,
   isValidPttBarcodeRange,
@@ -157,6 +158,11 @@ function textValue(value: unknown): string | null {
 
 export class ShipmentCreateRepository {
   constructor(private readonly db: AppDatabase) {}
+
+  /** Sender block for printed labels (global `gonderici_*` settings). */
+  async getSender(): Promise<DocumentSender> {
+    return loadDocumentSender(this.db);
+  }
 
   private async loadDraft(db: Tx, orderPublicId: string): Promise<ShipmentDraft | null> {
     const order = await db

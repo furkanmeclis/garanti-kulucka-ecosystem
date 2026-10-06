@@ -6142,6 +6142,65 @@
           }
         }
       }
+    },
+    "/api/shipments/{shipment_public_id}/label": {
+      "get": {
+        "operationId": "downloadShipmentLabel",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ShipmentPublicId"
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pdf",
+                "zpl",
+                "epl"
+              ],
+              "default": "pdf"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Cargo label (100x150 mm PDF, or ZPL / EPL2 for 203 dpi 4x6in thermal printers) with a Code 128 barcode",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "application/zpl": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/epl": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
     }
   },
   "components": {

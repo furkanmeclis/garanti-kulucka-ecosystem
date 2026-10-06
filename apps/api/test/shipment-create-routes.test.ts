@@ -90,6 +90,7 @@ const routeMocks = vi.hoisted(() => {
       createShipment: vi.fn(),
       getPrintData: vi.fn(),
       markPrinted: vi.fn(),
+      getSender: vi.fn(async () => ({ name: "Garanti Kuluçka", phone: "03320000000", address: "Sanayi Mh.", city: "Konya", district: "Karatay" })),
     },
     domainRepository: {
       getShipmentByPublicId: vi.fn(async (publicId: string) => shipment(publicId)),
@@ -372,6 +373,59 @@ describe("shipment create routes", () => {
 
     routeMocks.shipmentRepository.getPrintData.mockResolvedValueOnce(null);
     expect((await request("/api/shipments/shp_none/print")).status).toBe(404);
+  });
+
+  it("downloads PDF, ZPL and EPL cargo labels with the Code 128 barcode", async () => {
+    const printData = {
+      shipment_public_id: "shp_1",
+      provider: "ptt",
+      status: "pending",
+      tracking_number: "KP123456789TR",
+      barcode_number: "2785001234567",
+      barcode_value: null,
+      payment_type: "prepaid",
+      label_printed_at: null,
+      recipient_name: "Ayşe Işık",
+      recipient_phone: "5551112233",
+      recipient_address: "Atatürk Cad. 1",
+      recipient_city: "Konya",
+      recipient_district: "Selçuklu",
+      order_public_id: "ord_1",
+      order_number: "ORD-1",
+      order_total_amount: "2550.00",
+      order_currency: "TRY",
+      order_created_at: routeMocks.now,
+      items: [{ name: "Kuluçka Makinesi", quantity: 1, unit_price: "2550.00", total_amount: "2550.00" }],
+      created_at: routeMocks.now,
+    };
+    routeMocks.shipmentRepository.getPrintData.mockResolvedValue(printData);
+
+    const pdf = await request("/api/shipments/shp_1/label?format=pdf", { role: "kargo_operatoru" });
+    expect(pdf.status).toBe(200);
+    expect(pdf.headers.get("content-type")).toBe("application/pdf");
+    expect(pdf.headers.get("content-disposition")).toBe('attachment; filename="etiket-2785001234567.pdf"');
+    expect(Buffer.from(await pdf.arrayBuffer()).subarray(0, 8).toString("latin1")).toBe("%PDF-1.4");
+
+    const zpl = await request("/api/shipments/shp_1/label?format=zpl");
+    const zplText = await zpl.text();
+    expect(zplText).toMatch(/^\^XA\n\^CI28/);
+    expect(zplText).toContain("^BCN,220,Y,N,N^FD2785001234567^FS");
+    expect(zplText).toContain("^FDAyşe Işık^FS");
+
+    const epl = await request("/api/shipments/shp_1/label?format=epl");
+    const eplText = await epl.text();
+    expect(eplText).toContain('B60,620,0,1,3,7,220,B,"2785001234567"');
+    expect(eplText).toContain('"Ayse Isik"');
+    expect(eplText).toContain("\nP1\n");
+
+    expect((await request("/api/shipments/shp_1/label?format=png")).status).toBe(400);
+    routeMocks.shipmentRepository.getPrintData.mockResolvedValueOnce({ ...printData, barcode_number: null, tracking_number: null });
+    const missing = await request("/api/shipments/shp_1/label");
+    expect(missing.status).toBe(409);
+    await expect(missing.json()).resolves.toMatchObject({ error: { code: "barcode_missing" } });
+    routeMocks.shipmentRepository.getPrintData.mockResolvedValueOnce(null);
+    expect((await request("/api/shipments/shp_none/label")).status).toBe(404);
+    routeMocks.shipmentRepository.getPrintData.mockReset();
   });
 
   it("denies anonymous callers and unknown roles", async () => {
