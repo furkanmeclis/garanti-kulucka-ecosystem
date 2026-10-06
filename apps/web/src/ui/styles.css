@@ -3790,3 +3790,42 @@ nav {
     flex: 1 1 140px;
   }
 }
+
+/* Ayarlar → Entegrasyonlar: WhatsApp QR and provider sub-tab wrapping */
+.ayarlar-wrap {
+  flex-wrap: wrap;
+}
+
+.ayarlar-integration-tab.active.whatsapp {
+  border-color: #22c55e;
+  color: #bbf7d0;
+}
+
+.ayarlar-integration-tab.active.netgsm {
+  border-color: #f59e0b;
+  color: #fde68a;
+}
+
+.ayarlar-qr {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+}
+
+.ayarlar-qr-image {
+  width: 160px;
+  height: 160px;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.ayarlar-qr a {
+  color: #60a5fa;
+  overflow-wrap: anywhere;
+}
+
+.ayarlar-log-search {
+  flex: 1 1 220px;
+  min-width: 0;
+}

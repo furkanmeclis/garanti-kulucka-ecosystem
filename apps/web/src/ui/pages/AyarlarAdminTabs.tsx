@@ -24,6 +24,7 @@ import { createSettingsClient, type ManagedRole, type ManagedUser } from "../../
 import { MesajBanner, hataMetni, tarihSaatFormatla, useMesaj } from "./AyarlarShared.js";
 import { useLanguage, useT, type Translator } from "../i18n/index.js";
 import { settingsAdminMessages, type SettingsAdminKey } from "../i18n/messages/settingsAdmin.js";
+import { settingsMessagingMessages } from "../i18n/messages/settingsMessaging.js";
 
 /** Legacy parity: pages/ayarlar/KullanicilarPage.jsx — `/admin/users` (admin-only RBAC). */
 
@@ -41,11 +42,12 @@ function rolAdiGetir(rol: string | undefined, t: Translator<SettingsAdminKey>) {
 }
 
 const BOSH_YENI = { email: "", ad: "", soyad: "", telefon: "", sifre: "", rol: "" as ManagedRole | "" };
-const BOSH_DUZENLE = { ad: "", soyad: "", telefon: "", rol: "" as ManagedRole | "" };
+const BOSH_DUZENLE = { ad: "", soyad: "", telefon: "", rol: "" as ManagedRole | "", sipKullanici: "", sipSifre: "" };
 
 export function KullanicilarSekmesi({ http, currentUserPublicId }: { http: BackendHttpClient; currentUserPublicId: string }) {
   const client = useMemo(() => createSettingsClient(http), [http]);
   const t = useT(settingsAdminMessages);
+  const ts = useT(settingsMessagingMessages);
   const { language } = useLanguage();
   const [kullanicilar, setKullanicilar] = useState<ManagedUser[]>([]);
   const [roller, setRoller] = useState<ManagedRole[]>(["admin", "calisan", "kargo_operatoru"]);
@@ -117,6 +119,9 @@ export function KullanicilarSekmesi({ http, currentUserPublicId }: { http: Backe
         last_name: duzenleForm.soyad,
         phone: duzenleForm.telefon || null,
         ...(duzenleForm.rol ? { role: duzenleForm.rol } : {}),
+        sip_username: duzenleForm.sipKullanici.trim() || null,
+        // A blank SIP password keeps the stored (encrypted) one.
+        ...(duzenleForm.sipSifre ? { sip_password: duzenleForm.sipSifre } : {}),
       });
       setKullanicilar((prev) => prev.map((item) => (item.public_id === publicId ? user : item)));
       setDuzenleId(null);
@@ -162,6 +167,8 @@ export function KullanicilarSekmesi({ http, currentUserPublicId }: { http: Backe
       soyad: kullanici.last_name,
       telefon: kullanici.phone ?? "",
       rol: (roller.includes(kullanici.role as ManagedRole) ? kullanici.role : "") as ManagedRole | "",
+      sipKullanici: kullanici.sip_username ?? "",
+      sipSifre: "",
     });
   }
 
@@ -205,6 +212,7 @@ export function KullanicilarSekmesi({ http, currentUserPublicId }: { http: Backe
                 <tr>
                   <th>{t("colUser")}</th>
                   <th>{t("colRole")}</th>
+                  <th>{ts("sipColumn")}</th>
                   <th>{t("colStatus")}</th>
                   <th>{t("colLastLogin")}</th>
                   <th className="right">{t("colAction")}</th>
@@ -226,6 +234,22 @@ export function KullanicilarSekmesi({ http, currentUserPublicId }: { http: Backe
                             placeholder={t("phone")}
                             value={duzenleForm.telefon}
                             onChange={(e) => setDuzenleForm((f) => ({ ...f, telefon: e.target.value }))}
+                          />
+                          <input
+                            placeholder={ts("sipUsername")}
+                            aria-label={ts("sipUsername")}
+                            name="sip_username"
+                            value={duzenleForm.sipKullanici}
+                            onChange={(e) => setDuzenleForm((f) => ({ ...f, sipKullanici: e.target.value }))}
+                          />
+                          <input
+                            type="password"
+                            autoComplete="new-password"
+                            placeholder={kullanici.sip_password_configured ? ts("sipPasswordPlaceholder") : ts("sipPassword")}
+                            aria-label={ts("sipPassword")}
+                            name="sip_password"
+                            value={duzenleForm.sipSifre}
+                            onChange={(e) => setDuzenleForm((f) => ({ ...f, sipSifre: e.target.value }))}
                           />
                           <select
                             aria-label={t("role")}
@@ -274,6 +298,16 @@ export function KullanicilarSekmesi({ http, currentUserPublicId }: { http: Backe
                         <Shield size={12} />
                         {rolAdiGetir(kullanici.role, t)}
                       </span>
+                    </td>
+                    <td data-testid="kullanici-sip">
+                      {kullanici.sip_username ? (
+                        <>
+                          <p className="ayarlar-strong">{kullanici.sip_username}</p>
+                          <p className="ayarlar-small">{kullanici.sip_password_configured ? ts("sipPasswordSet") : ts("sipPasswordMissing")}</p>
+                        </>
+                      ) : (
+                        "-"
+                      )}
                     </td>
                     <td>
                       <button

@@ -16,6 +16,8 @@ import {
   User,
   Users,
   Zap,
+  MessageSquare,
+  Smartphone,
   type LucideIcon,
 } from "lucide-react";
 import type { BackendHttpClient } from "../../api/http-client.js";
@@ -23,9 +25,11 @@ import { createAdminClient } from "../../api/admin-client.js";
 import { createSettingsClient, type AdminLogEntry } from "../../api/settings-client.js";
 import { useLanguage, useT } from "../i18n/index.js";
 import { settingsMessages } from "../i18n/messages/settings.js";
+import { settingsMessagingMessages } from "../i18n/messages/settingsMessaging.js";
 import { MesajBanner, hataMetni, tarihSaatFormatla, useMesaj } from "./AyarlarShared.js";
 import { EntegrasyonAyarlar, KullanicilarSekmesi } from "./AyarlarAdminTabs.js";
 import { KargoPipelineAyarlar, SantralAyarlar, VapiAyarlar } from "./AyarlarProviderTabs.js";
+import { NetgsmAyarlar, WhatsAppAyarlar } from "./AyarlarMessagingTabs.js";
 
 /**
  * Legacy parity: garanti-kulucka/frontend/src/pages/ayarlar/AyarlarPage.jsx.
@@ -69,6 +73,7 @@ export function AyarlarPage({
   const settingsClient = useMemo(() => createSettingsClient(http), [http]);
   const adminClient = useMemo(() => createAdminClient(http), [http]);
   const isAdmin = user.role === "admin" || user.role === "owner";
+  const ts = useT(settingsMessagingMessages);
   const t = useT(settingsMessages);
   const { language } = useLanguage();
 
@@ -88,9 +93,11 @@ export function AyarlarPage({
   const [aiPromptYukleniyor, setAiPromptYukleniyor] = useState(false);
   const [aiPromptKaydediliyor, setAiPromptKaydediliyor] = useState(false);
   const [loglar, setLoglar] = useState<AdminLogEntry[]>([]);
+  const [logArama, setLogArama] = useState("");
+  const [logModul, setLogModul] = useState("");
   const [loglarYuklendi, setLoglarYuklendi] = useState(false);
   const [loglarYukleniyor, setLoglarYukleniyor] = useState(false);
-  const [entegrasyonSekme, setEntegrasyonSekme] = useState<"instagram" | "messenger">("instagram");
+  const [entegrasyonSekme, setEntegrasyonSekme] = useState<"whatsapp" | "instagram" | "messenger" | "netgsm">("instagram");
 
   useEffect(() => {
     setProfilForm({ ad: user.first_name, soyad: user.last_name, email: user.email });
@@ -237,6 +244,13 @@ export function AyarlarPage({
       setAiPromptKaydediliyor(false);
     }
   }
+
+  const logAramaKucuk = logArama.trim().toLocaleLowerCase("tr-TR");
+  const filtreliLoglar = loglar.filter(
+    (log) =>
+      (!logModul || log.module === logModul) &&
+      (!logAramaKucuk || [log.actor_name, log.action, log.module, log.entity_id].some((value) => value?.toLocaleLowerCase("tr-TR").includes(logAramaKucuk))),
+  );
 
   const sekmeler: Array<{ id: SekmeId; baslik: string; ikon: LucideIcon }> = [
     { id: "profil", baslik: t("tabProfile"), ikon: User },
@@ -465,10 +479,28 @@ export function AyarlarPage({
                 {t("refresh")}
               </button>
             </div>
+            <div className="ayarlar-row ayarlar-wrap" data-testid="ayarlar-log-filters">
+              <input
+                type="search"
+                className="ayarlar-log-search"
+                value={logArama}
+                placeholder={ts("logSearch")}
+                aria-label={ts("logSearch")}
+                onChange={(event) => setLogArama(event.target.value)}
+              />
+              <select value={logModul} aria-label={ts("logModule")} onChange={(event) => setLogModul(event.target.value)}>
+                <option value="">{ts("logAllModules")}</option>
+                {[...new Set(loglar.map((log) => log.module))].sort().map((module) => (
+                  <option key={module} value={module}>
+                    {module}
+                  </option>
+                ))}
+              </select>
+            </div>
             <div className="ayarlar-table-card">
               {loglarYukleniyor ? (
                 <div className="ayarlar-empty">{t("loading")}</div>
-              ) : loglar.length === 0 ? (
+              ) : filtreliLoglar.length === 0 ? (
                 <div className="ayarlar-empty">
                   <FileText size={48} />
                   <p>{t("noLogs")}</p>
@@ -486,7 +518,7 @@ export function AyarlarPage({
                       </tr>
                     </thead>
                     <tbody>
-                      {loglar.map((log) => (
+                      {filtreliLoglar.map((log) => (
                         <tr key={log.id}>
                           <td className="ayarlar-nowrap">{tarihSaatFormatla(log.created_at, language)}</td>
                           <td>{log.actor_name ?? "-"}</td>
@@ -511,7 +543,15 @@ export function AyarlarPage({
               <h2 className="ayarlar-h2">{t("integrationsTitle")}</h2>
               <p className="ayarlar-muted">{t("integrationsSubtitle")}</p>
             </div>
-            <div className="ayarlar-row">
+            <div className="ayarlar-row ayarlar-wrap" role="tablist" data-testid="ayarlar-provider-tabs">
+              <button
+                type="button"
+                className={`ayarlar-integration-tab ${entegrasyonSekme === "whatsapp" ? "active whatsapp" : ""}`}
+                onClick={() => setEntegrasyonSekme("whatsapp")}
+              >
+                <MessageSquare size={16} />
+                WhatsApp
+              </button>
               <button
                 type="button"
                 className={`ayarlar-integration-tab ${entegrasyonSekme === "instagram" ? "active instagram" : ""}`}
@@ -528,8 +568,20 @@ export function AyarlarPage({
                 <MessageCircle size={16} />
                 Messenger
               </button>
+              <button
+                type="button"
+                className={`ayarlar-integration-tab ${entegrasyonSekme === "netgsm" ? "active netgsm" : ""}`}
+                onClick={() => setEntegrasyonSekme("netgsm")}
+              >
+                <Smartphone size={16} />
+                NetGSM
+              </button>
             </div>
-            <EntegrasyonAyarlar key={entegrasyonSekme} http={http} provider={entegrasyonSekme} />
+            {entegrasyonSekme === "whatsapp" && <WhatsAppAyarlar http={http} />}
+            {entegrasyonSekme === "netgsm" && <NetgsmAyarlar http={http} />}
+            {(entegrasyonSekme === "instagram" || entegrasyonSekme === "messenger") && (
+              <EntegrasyonAyarlar key={entegrasyonSekme} http={http} provider={entegrasyonSekme} />
+            )}
           </div>
         )}
 
