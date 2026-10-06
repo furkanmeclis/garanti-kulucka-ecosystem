@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { PostgresDialect, Kysely } from "kysely";
 import { describe, expect, it } from "vitest";
 import type { Database } from "@garanti-kulucka/database";
@@ -69,14 +69,17 @@ describe("security abuse guards", () => {
   });
 
   it("keeps stored message bodies rendered as React text and avoids raw HTML injection", () => {
-    const appSource = readFileSync("../../apps/web/src/ui/App.tsx", "utf8");
+    const inboxSource = readFileSync("../../apps/web/src/ui/pages/flows/InboxFlow.tsx", "utf8");
+    const webSources = readdirSync("../../apps/web/src", { recursive: true, encoding: "utf8" })
+      .filter((file) => file.endsWith(".tsx") || file.endsWith(".ts"))
+      .map((file) => readFileSync(`../../apps/web/src/${file}`, "utf8"));
     const xssPayload = "<img src=x onerror=alert(1)>";
 
     const commentsSource = readFileSync("../../apps/web/src/ui/pages/YorumlarPage.tsx", "utf8");
 
-    expect(appSource).not.toContain("dangerouslySetInnerHTML");
-    expect(commentsSource).not.toContain("dangerouslySetInnerHTML");
-    expect(appSource).toContain("{message.body ?? (attachments.length > 0 ? \"Medya\" : \"Boş mesaj\")}");
+    expect(webSources.length).toBeGreaterThan(10);
+    for (const source of webSources) expect(source).not.toContain("dangerouslySetInnerHTML");
+    expect(inboxSource).toContain("{message.body ?? (attachments.length > 0 ? \"Medya\" : \"Boş mesaj\")}");
     expect(commentsSource).toContain("{yorum.text || \"(boş)\"}");
     expect(xssPayload).toContain("onerror");
   });
