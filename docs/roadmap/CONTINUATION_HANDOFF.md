@@ -13,8 +13,8 @@ Mevcut panel (`apps/web`, testleri, Dockerfile'ı ve compose `web` servisi) bu i
 - `@garanti-kulucka/shared`: yalnız tip ekleri (`contracts/http/panel.ts`, `panelRoleOf`). Backend değişmedi.
 - Compose: `beta-frontend` servisi 8081'de (nginx, `/backend` → `api:3000`, sw.js/manifest/index.html no-cache). `web` 8080'de aynen.
 - Testler: `apps/web-beta/test` (vitest) ve `tests/playwright-beta` (`*.beta.ts`, ayrı config; mevcut `playwright test tests/playwright` bunları görmez). `npm run test:e2e:beta` `npm run check` içinde.
-- Sürümler: `v0.1.337` (iskelet + compose + PWA), `v0.1.338` (giriş + üst menü + i18n), 3. parça (sayfalar) `d94dbb1`.
-- Bilinen kararsız test (mevcut panel, bu işten bağımsız): `tests/playwright/shipments-slice6-parity.spec.ts` kargo_operatoru koşusu tıklamadan hemen sonra isteği beklemeden `statusPayloads` kontrol ettiği için nadiren düşüyor; tekrar koşularda geçiyor.
+- Sürümler: `v0.1.337` (iskelet + compose + PWA), `v0.1.338` (giriş + üst menü + i18n), `v0.1.339` (sayfalar), `v0.1.340` (handoff notu).
+- `tests/playwright/shipments-slice6-parity.spec.ts` kararsızlığı (durum isteği beklenmeden payload kontrolü) `21e5868` ile giderildi.
 
 ## 0. 2026-10-06 TRT Aktif Devam Notu
 
