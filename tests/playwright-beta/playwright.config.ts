@@ -15,8 +15,11 @@ export default defineConfig({
   outputDir: "../../test-results/playwright-beta",
   timeout: 60_000,
   fullyParallel: true,
-  reporter: "list",
+  reporter: [["list"], ["html", { outputFolder: "../../playwright-report/beta", open: "never" }]],
   use: {
+    screenshot: "on",
+    trace: "retain-on-failure",
+    video: "retain-on-failure",
     baseURL: `http://127.0.0.1:${port}`,
     ...devices["Desktop Chrome"],
     ...(executablePath ? { launchOptions: { executablePath } } : {}),
