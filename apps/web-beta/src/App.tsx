@@ -5,7 +5,12 @@ import { canAccessPath, homePathFor } from "@/app/navigation";
 import { AppShell } from "@/layout/app-shell";
 import { OfflineScreen, SplashScreen } from "@/layout/status-screens";
 import { LoginPage, redirectTarget } from "@/pages/login-page";
-import { PlaceholderPage } from "@/pages/placeholder-page";
+import { CustomersPage } from "@/pages/customers-page";
+import { DashboardPage } from "@/pages/dashboard-page";
+import { MessagesPage } from "@/pages/messages-page";
+import { OrdersPage } from "@/pages/orders-page";
+import { SettingsPage } from "@/pages/settings-page";
+import { ShipmentsPage } from "@/pages/shipments-page";
 
 /** Legacy ProtectedRoute: anonymous → /giris (and back after login); pages outside the role → role home. */
 function Protected({ children }: { children: ReactNode }) {
@@ -33,12 +38,12 @@ export function App() {
   return (
     <Routes>
       <Route path="/giris" element={<LoginRoute />} />
-      <Route path="/" element={<Protected><PlaceholderPage navKey="dashboard" /></Protected>} />
-      <Route path="/siparisler" element={<Protected><PlaceholderPage navKey="orders" /></Protected>} />
-      <Route path="/mesajlar" element={<Protected><PlaceholderPage navKey="messages" /></Protected>} />
-      <Route path="/musteriler" element={<Protected><PlaceholderPage navKey="customers" /></Protected>} />
-      <Route path="/kargolar" element={<Protected><PlaceholderPage navKey="shipments" /></Protected>} />
-      <Route path="/ayarlar" element={<Protected><PlaceholderPage navKey="settings" /></Protected>} />
+      <Route path="/" element={<Protected><DashboardPage /></Protected>} />
+      <Route path="/siparisler" element={<Protected><OrdersPage /></Protected>} />
+      <Route path="/mesajlar" element={<Protected><MessagesPage /></Protected>} />
+      <Route path="/musteriler" element={<Protected><CustomersPage /></Protected>} />
+      <Route path="/kargolar" element={<Protected><ShipmentsPage /></Protected>} />
+      <Route path="/ayarlar" element={<Protected><SettingsPage /></Protected>} />
       <Route path="*" element={<Protected><Navigate to="/" replace /></Protected>} />
     </Routes>
   );
