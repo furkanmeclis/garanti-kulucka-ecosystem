@@ -25,7 +25,7 @@ export interface LegacyMappingCatalog {
   readonly tables: readonly LegacyTableMapping[];
 }
 
-export const mappingCatalogVersion = "p2-live-production-drift-v2";
+export const mappingCatalogVersion = "p2-live-production-drift-v3";
 
 const canonicalMigrationEntitySet = new Set<string>(canonicalMigrationEntities);
 const targetMappingValues = new Set<string>(["direct", "synthetic"]);
@@ -108,8 +108,8 @@ export const legacyMappingCatalog = createLegacyMappingCatalog({
         // Live production stores canonical media in media_url/media_type. The older Turkish
         // medya_url/medya_tipi columns remain mapped as fallback only and conflicts are reported.
         column("media_url", "text", "text", true, false),
-        column("media_type", "character varying", "varchar", true, false),
-        column("gonderici_adi", "character varying", "varchar", true, false),
+        column("media_type", "text", "text", true, false),
+        column("gonderici_adi", "text", "text", true, false),
         column("medya_url", "text", "text", true),
         column("medya_tipi", "character varying", "varchar", true),
         column("kanal_mesaj_id", "character varying", "varchar", true),

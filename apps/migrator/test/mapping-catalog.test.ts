@@ -46,7 +46,7 @@ describe("legacy mapping catalog", () => {
       "guncelleme_tarihi",
       "username",
     ]);
-    expect(mappingCatalogVersion).toBe("p2-live-production-drift-v2");
+    expect(mappingCatalogVersion).toBe("p2-live-production-drift-v3");
   });
 
   it("declares konusmalar and mesajlar as direct dry-run tables after musteriler", () => {
@@ -134,8 +134,8 @@ describe("legacy mapping catalog", () => {
     expect(messageMapping.columns).toEqual([
       ...realMesajlarColumns().slice(0, 5).map(asRequiredContract),
       fullColumnContract("media_url", "text", "text", true, false),
-      fullColumnContract("media_type", "character varying", "varchar", true, false),
-      fullColumnContract("gonderici_adi", "character varying", "varchar", true, false),
+      fullColumnContract("media_type", "text", "text", true, false),
+      fullColumnContract("gonderici_adi", "text", "text", true, false),
       ...realMesajlarColumns().slice(5).map(asRequiredContract),
     ]);
   });
@@ -254,8 +254,8 @@ describe("legacy mapping catalog", () => {
     expect(() => validateLegacyTableColumns("public.mesajlar", [
       ...realMesajlarColumns(),
       { name: "media_url", ordinalPosition: 11, dataType: "text", udtName: "text", nullable: true },
-      { name: "media_type", ordinalPosition: 12, dataType: "character varying", udtName: "varchar", nullable: true },
-      { name: "gonderici_adi", ordinalPosition: 13, dataType: "character varying", udtName: "varchar", nullable: true },
+      { name: "media_type", ordinalPosition: 12, dataType: "text", udtName: "text", nullable: true },
+      { name: "gonderici_adi", ordinalPosition: 13, dataType: "text", udtName: "text", nullable: true },
     ], messageMapping)).not.toThrow();
     expect(() => validateLegacyTableColumns(
       "public.mesajlar",
