@@ -1,3 +1,5 @@
+-- Up Migration
+
 ALTER TABLE conversations
   ADD COLUMN notes TEXT;
 
