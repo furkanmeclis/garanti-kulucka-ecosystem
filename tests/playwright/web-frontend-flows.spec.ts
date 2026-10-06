@@ -2206,26 +2206,10 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("stok-product-prd_incubator")).toContainText("Kritik");
     await expect(page.getByTestId("stok-product-prd_incubator")).toContainText("1.250,00 ₺");
     await page.goto(`${app.url}/bakiye`);
-    await expect(page.getByTestId("balances-flow")).toContainText("admin settings");
-    await expect(page.getByTestId("balances-detail")).toContainText("125.50 TRY");
-    await expect(page.getByTestId("balances-detail")).toContainText("ORD-PLAYWRIGHT");
-    await expect(page.getByTestId("balance-payment-detail")).toContainText("Ödeme İsteği Kuyruğu");
-    await expect(page.getByTestId("balance-payment-detail")).toContainText("99.99 TRY");
-    await expect(page.getByTestId("balance-payment-detail")).toContainText("10.25 TRY");
-    await expect(page.getByTestId("balance-payment-detail")).toContainText("12.55 TRY");
-    await expect(page.getByTestId("balance-payment-detail")).toContainText("77.19 TRY");
-    await expect(page.getByTestId("balance-payment-detail")).toContainText("1 talep");
-    await expect(page.getByTestId("balance-payment-detail")).toContainText("Kullanılabilir bakiye");
-    await page.getByRole("button", { name: "Ödeme isteği oluştur" }).click();
-    await expect
-      .poll(() => paymentRequestPayload)
-      .toMatchObject({
-        amount: "12.55",
-        currency: "TRY",
-        idempotency_key: "payment_ord_playwright_12.55_TRY",
-      });
-    await expect(page.getByTestId("balance-payment-detail")).toContainText("balance.payment_request payreq_payment_ord_playwright_12_55_try");
-    await expect(page.getByTestId("balance-payment-detail")).toContainText("canlı ödeme provider kapalı");
+    await expect(page.getByTestId("balances-flow")).toContainText("Bakiye Yönetimi");
+    await expect(page.getByTestId("balances-flow")).toContainText("Personel Bakiyeleri");
+    await expect(page.getByRole("tab", { name: "Bakiye Hareketleri" })).toBeVisible();
+    await expect(page.getByRole("tab", { name: "Ödeme İstekleri" })).toBeVisible();
     await page.getByRole("link", { name: /^sms$/i }).click();
     await expect(page.getByTestId("sms-flow")).toContainText("Manuel gönderim, geçmiş kayıtlar, şablon yönetimi ve otomatik SMS ayarları");
     await expect(page.getByTestId("sms-tab-manuel")).toHaveAttribute("aria-selected", "true");

@@ -16,6 +16,7 @@ import type {
   ShipmentsTable,
   StockMovementsTable,
 } from "@garanti-kulucka/database";
+import { applyOrderBalanceRules } from "../balances/repository.js";
 import { newPublicId } from "../auth/crypto.js";
 
 export type ConversationRecord = Selectable<ConversationsTable> & {
@@ -316,6 +317,8 @@ export interface UpdateOrderStatusInput {
   orderPublicId: string;
   status: string;
   notes?: string | null;
+  actorRole?: string | null;
+  actorUserId?: number | null;
 }
 
 export interface RequestOrderPaymentInput {
@@ -330,14 +333,6 @@ export interface PaymentRequestRecord {
   order: OrderRecord;
   attempt: ProviderAttemptRecord;
   replayed: boolean;
-}
-
-export interface BalanceSummaryRecord {
-  total_commission: number;
-  total_deduction: number;
-  pending_payment: number;
-  available_balance: number;
-  pending_request_count: number;
 }
 
 export interface OrderSummaryRecord {
@@ -1216,23 +1211,6 @@ export class DomainRepository {
       .execute();
   }
 
-  async getBalanceSummary(): Promise<BalanceSummaryRecord> {
-    const orders = await this.listOrders({ limit: 200 });
-    const payableOrders = orders.filter((order) => !["cancelled", "returned"].includes(order.status));
-    const pendingOrders = payableOrders.filter((order) => order.confirmation_status === null);
-    const cancelledOrders = orders.filter((order) => ["cancelled", "returned"].includes(order.status));
-    const totalCommissionCents = payableOrders.reduce((sum, order) => sum + moneyCents(order.total_amount) * 0.1, 0);
-    const totalDeductionCents = cancelledOrders.reduce((sum, order) => sum + moneyCents(order.total_amount) * 0.1, 0);
-    const pendingPaymentCents = pendingOrders.reduce((sum, order) => sum + moneyCents(order.total_amount) * 0.1, 0);
-    return {
-      total_commission: centsToMoney(totalCommissionCents),
-      total_deduction: centsToMoney(totalDeductionCents),
-      pending_payment: centsToMoney(pendingPaymentCents),
-      available_balance: centsToMoney(Math.max(totalCommissionCents - totalDeductionCents - pendingPaymentCents, 0)),
-      pending_request_count: pendingOrders.length,
-    };
-  }
-
   async getOrderSummary(): Promise<OrderSummaryRecord> {
     const orders = await this.listOrders({ limit: 200 });
     return {
@@ -1716,6 +1694,13 @@ export class DomainRepository {
         }
       }
 
+      // Legacy siparis_kalem_komisyon_ekle trigger parity: incubator orders credit the creator once.
+      await applyOrderBalanceRules(transaction as AppDatabase, {
+        orderId: order.id,
+        actorRole: null,
+        actorUserId: input.createdByUserId,
+      });
+
       return (await this.getOrderByPublicId(transaction as AppDatabase, order.public_id)) ?? {
         ...order,
         customer_full_name: customer.full_name,
@@ -1743,6 +1728,12 @@ export class DomainRepository {
     if (!order) {
       throw new Error(`Unknown order: ${input.orderPublicId}`);
     }
+    // Legacy siparis_durum_degisimi trigger parity: iptal/iade deducts, revert credits back.
+    await applyOrderBalanceRules(this.db, {
+      orderId: order.id,
+      actorRole: input.actorRole ?? null,
+      actorUserId: input.actorUserId ?? null,
+    });
     return (await this.getOrderByPublicId(this.db, order.public_id)) ?? {
       ...order,
       customer_full_name: null,

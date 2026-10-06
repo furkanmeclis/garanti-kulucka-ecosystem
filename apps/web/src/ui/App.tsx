@@ -81,6 +81,7 @@ import { BackendRequestError, createBackendHttpClient } from "../api/http-client
 import { createRealtimeClient, type RealtimeClient } from "../api/realtime-client.js";
 import { createWebphoneClient, type WebphoneConfig } from "../api/webphone-client.js";
 import { SmsPage } from "./pages/SmsPage.js";
+import { BakiyePage } from "./pages/BakiyePage.js";
 import { YorumlarPage } from "./pages/YorumlarPage.js";
 
 const backendBaseUrl = import.meta.env.VITE_BACKEND_BASE_URL ?? "/backend";
@@ -146,14 +147,6 @@ interface OperationalPolicySettings {
   storage_bucket: string;
   lifecycle_days: number;
   orphan_cleanup_enabled: boolean;
-}
-
-interface BalanceSummary {
-  totalCommission: number;
-  totalDeduction: number;
-  pendingPayment: number;
-  availableBalance: number;
-  pendingRequestCount: number;
 }
 
 interface CommentModerationViewSummary {
@@ -635,16 +628,6 @@ function toCommentModerationView(summary: BackendCommentModerationSummary): Comm
   };
 }
 
-function toBalanceView(summary: BackendBalanceSummary): BalanceSummary {
-  return {
-    totalCommission: summary.total_commission,
-    totalDeduction: summary.total_deduction,
-    pendingPayment: summary.pending_payment,
-    availableBalance: summary.available_balance,
-    pendingRequestCount: summary.pending_request_count,
-  };
-}
-
 function readNumberSetting(value: unknown, fallback: number) {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
@@ -726,10 +709,8 @@ export function App() {
   const [uploadedFile, setUploadedFile] = useState<FileMetadata | null>(null);
   const [downloadInstruction, setDownloadInstruction] = useState<DownloadInstruction | null>(null);
   const [orphanCleanupPreview, setOrphanCleanupPreview] = useState<FileOrphanCleanupDryRun | null>(null);
-  const [lastPaymentRequest, setLastPaymentRequest] = useState<string | null>(null);
   const [lastInstagramPublishPreview, setLastInstagramPublishPreview] = useState<string | null>(null);
   const [lastVapiTestCall, setLastVapiTestCall] = useState<string | null>(null);
-  const [paymentRequesting, setPaymentRequesting] = useState(false);
   const [instagramPublishPreviewing, setInstagramPublishPreviewing] = useState(false);
   const [vapiTestCalling, setVapiTestCalling] = useState(false);
   const [orphanCleanupPreviewing, setOrphanCleanupPreviewing] = useState(false);
@@ -1868,30 +1849,6 @@ export function App() {
     setStatus("İptal durumu backend API üzerinden güncellendi");
   }
 
-  async function handleRequestPayment() {
-    const order = selectedOrder;
-    if (!order || paymentRequesting) return;
-
-    setStatus("Ödeme isteği backend API üzerinden hazırlanıyor");
-    setPaymentRequesting(true);
-    try {
-      const result = await domain.requestPayment(order.public_id, {
-        amount: balanceSummary.pendingPayment.toFixed(2),
-        currency: data.orderSummary.currency,
-        idempotency_key: `payment_${order.public_id}_${balanceSummary.pendingPayment.toFixed(2)}_${data.orderSummary.currency}`,
-      });
-      setData((current) => ({
-        ...current,
-        orders: current.orders.map((item) => (item.public_id === result.order.public_id ? result.order : item)),
-      }));
-      setSelectedOrderId(result.order.public_id);
-      setLastPaymentRequest(`${result.operation} ${result.request_id}${result.replayed ? " replay" : ""}`);
-      setStatus("Ödeme isteği backend API sınırında hazırlandı");
-    } finally {
-      setPaymentRequesting(false);
-    }
-  }
-
   async function handleTriggerProviderCron(providerKey: "ptt" | "surat") {
     if (cronTriggeringProvider) return;
 
@@ -2179,7 +2136,6 @@ export function App() {
   const orderPersonnel = [...new Map(data.orders
     .filter((order) => order.created_by_user_public_id && order.created_by_user_email)
     .map((order) => [order.created_by_user_public_id as string, order.created_by_user_email as string])).entries()];
-  const balanceSummary = toBalanceView(data.balanceSummary);
   const unreadConversationCount = data.conversationSummary.unread_count;
   const poolConversationCount = data.conversationSummary.pool_count;
   const humanAgentConversationCount = data.conversationSummary.human_agent_count;
@@ -3961,40 +3917,7 @@ export function App() {
 
         {activeFlow === "inventory" && <StokPage domain={domain} />}
 
-        {activeFlow === "balances" && (
-          <FlowPanel title="Bakiyeler" icon={<Wallet size={18} />} testId="balances-flow">
-            <div className="report-grid">
-              <Metric title="Görünür Ayar" value={String(activeSettings.length)} />
-              <Metric title="Sipariş Tutarı" value={formatMoney(data.orderSummary.total_revenue, data.orderSummary.currency)} />
-              <Metric title="Para Birimi" value={data.orderSummary.currency} />
-            </div>
-            <DetailPanel title="Bakiye Özeti" testId="balances-detail">
-              <DataRows
-                rows={[
-                  ["Görünür ayar", String(activeSettings.length), "admin settings"],
-                  ["Para birimi", data.orderSummary.currency, "orders summary API"],
-                  ["Son sipariş", selectedOrder?.order_number ?? "-", selectedOrder ? `${selectedOrder.total_amount} ${selectedOrder.currency}` : "-"],
-                  ["Teyit bekleyen", String(data.orderSummary.pending_confirmation_count), "orders summary API"],
-                ]}
-              />
-            </DetailPanel>
-            <DetailPanel title="Ödeme İsteği Kuyruğu" testId="balance-payment-detail">
-              <DataRows
-                rows={[
-                  ["Toplam komisyon", formatMoney(balanceSummary.totalCommission, data.orderSummary.currency), "legacy bakiye"],
-                  ["Kesinti", formatMoney(balanceSummary.totalDeduction, data.orderSummary.currency), "iptal/iade"],
-                  ["Bekleyen ödeme", formatMoney(balanceSummary.pendingPayment, data.orderSummary.currency), `${balanceSummary.pendingRequestCount} talep`],
-                  ["Kullanılabilir bakiye", formatMoney(balanceSummary.availableBalance, data.orderSummary.currency), "ödeme isteği sonrası"],
-                  ["Son ödeme isteği", selectedOrder?.order_number ?? "-", selectedOrder?.customer_full_name ?? "-"],
-                  ["Son backend isteği", lastPaymentRequest ?? "-", "canlı ödeme provider kapalı"],
-                ]}
-              />
-              <button className="primary-action" type="button" disabled={paymentRequesting} onClick={() => void handleRequestPayment()}>
-                {paymentRequesting ? "Ödeme isteği hazırlanıyor" : "Ödeme isteği oluştur"}
-              </button>
-            </DetailPanel>
-          </FlowPanel>
-        )}
+        {activeFlow === "balances" && <BakiyePage http={http} role={user?.role} />}
 
         {activeFlow === "sms" && <SmsPage http={http} />}
 

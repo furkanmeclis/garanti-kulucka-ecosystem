@@ -286,6 +286,9 @@ export interface CustomerSummaryStats {
 }
 
 export interface BalanceSummary {
+  scope?: "all" | "own";
+  balance?: number;
+  total_payment?: number;
   total_commission: number;
   total_deduction: number;
   pending_payment: number;

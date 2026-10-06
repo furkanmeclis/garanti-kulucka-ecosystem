@@ -87,5 +87,13 @@
   "DELETE /api/sms/templates/{template_public_id}": { "anonymous": "deny", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" },
   "GET /api/sms/history": { "anonymous": "deny", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" },
   "POST /api/sms/manual-send": { "anonymous": "deny", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" },
-  "POST /api/sms/automatic/trigger": { "anonymous": "deny", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" }
+  "POST /api/sms/automatic/trigger": { "anonymous": "deny", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" },
+  "GET /api/balances/staff": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "deny", "admin": "allow" },
+  "GET /api/balances/staff/{user_public_id}/orders": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "deny", "admin": "allow" },
+  "POST /api/balances/staff/{user_public_id}/reset": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "deny", "admin": "allow" },
+  "GET /api/balances/movements": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "allow", "admin": "allow" },
+  "GET /api/balances/payment-requests": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "allow", "admin": "allow" },
+  "POST /api/balances/payment-requests": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "allow", "admin": "allow" },
+  "POST /api/balances/payment-requests/{payment_request_public_id}/approve": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "deny", "admin": "allow" },
+  "POST /api/balances/payment-requests/{payment_request_public_id}/reject": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "deny", "admin": "allow" }
 }

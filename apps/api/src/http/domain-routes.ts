@@ -1,3 +1,4 @@
+import { BalanceRepository } from "../balances/repository.js";
 import { randomUUID } from "node:crypto";
 import { Hono, type Context } from "hono";
 import { z } from "zod";
@@ -855,7 +856,13 @@ export function createDomainRoutes() {
       return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
     }
 
-    const summary = await new DomainRepository(db).getBalanceSummary();
+    const role = context.get("auth")?.role;
+    const actorUserId = context.get("actorUserId");
+    const scopeUserId = role === "admin" || role === "owner" ? null : actorUserId;
+    if (scopeUserId === null && role !== "admin" && role !== "owner") {
+      return context.json({ error: { code: "forbidden", message: "Balance summary access is not allowed" } }, 403);
+    }
+    const summary = await new BalanceRepository(db).getSummary(scopeUserId);
     return context.json(summary);
   });
 
@@ -1155,6 +1162,8 @@ export function createDomainRoutes() {
       orderPublicId: context.req.param("order_public_id"),
       status: payload.data.status,
       ...(payload.data.notes !== undefined ? { notes: payload.data.notes } : {}),
+      actorRole: context.get("auth")?.role ?? null,
+      actorUserId: context.get("actorUserId"),
     });
 
     return context.json(serializeOrder(order));

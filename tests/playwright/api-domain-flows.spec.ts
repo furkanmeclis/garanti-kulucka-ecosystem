@@ -985,11 +985,14 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
 
     expect(balanceSummaryResponse.status()).toBe(200);
     expect(await balanceSummaryResponse.json()).toMatchObject({
-      total_commission: 20.05,
+      scope: "all",
+      balance: 0,
+      total_commission: 0,
       total_deduction: 0,
-      pending_payment: 12.55,
-      available_balance: 7.5,
-      pending_request_count: 1,
+      total_payment: 0,
+      pending_payment: 0,
+      available_balance: 0,
+      pending_request_count: 0,
     });
     const [ownerBalanceSummaryResponse, staffBalanceSummaryResponse] = await Promise.all([
       api.ownerClient.get("/api/balances/summary"),

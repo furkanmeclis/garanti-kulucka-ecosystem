@@ -37,6 +37,8 @@ export interface Database {
   products: ProductsTable;
   stock_movements: StockMovementsTable;
   orders: OrdersTable;
+  balance_movements: BalanceMovementsTable;
+  payment_requests: PaymentRequestsTable;
   order_items: OrderItemsTable;
   shipments: ShipmentsTable;
   shipment_tracking_events: ShipmentTrackingEventsTable;
@@ -252,6 +254,28 @@ export interface SmsMessagesTable extends BaseTable {
   job_id: string | null;
   queued: boolean;
   actor_user_id: number | null;
+}
+
+export interface BalanceMovementsTable extends BaseTable {
+  user_id: number;
+  order_id: number | null;
+  payment_request_id: number | null;
+  kind: string;
+  amount: string;
+  balance_after: string;
+  description: string | null;
+  idempotency_key: string;
+  actor_user_id: number | null;
+}
+
+export interface PaymentRequestsTable extends BaseTable {
+  user_id: number;
+  amount: string;
+  status: string;
+  processed_by_user_id: number | null;
+  processed_at: Timestamp | null;
+  note: string | null;
+  idempotency_key: string | null;
 }
 
 export interface ProductsTable extends BaseTable {
