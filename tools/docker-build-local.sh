@@ -105,3 +105,4 @@ build_image apps/api/Dockerfile garanti-kulucka-api:local
 build_image apps/worker/Dockerfile garanti-kulucka-worker:local
 build_image apps/migrator/Dockerfile garanti-kulucka-migrator:local
 build_image apps/web/Dockerfile garanti-kulucka-web:local
+build_image apps/web-beta/Dockerfile garanti-kulucka-web-beta:local

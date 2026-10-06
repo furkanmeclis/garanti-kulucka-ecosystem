@@ -8,3 +8,4 @@ coverage/
 *.log
 tmp/
 .turbo/
+dist-e2e/

@@ -100,11 +100,13 @@ jobs:
           docker tag garanti-kulucka-worker:local "$image_root/worker:$next_tag"
           docker tag garanti-kulucka-migrator:local "$image_root/migrator:$next_tag"
           docker tag garanti-kulucka-web:local "$image_root/web:$next_tag"
+          docker tag garanti-kulucka-web-beta:local "$image_root/web-beta:$next_tag"
 
           docker save "$image_root/api:$next_tag" | gzip > "artifacts/garanti-kulucka-api-$next_tag.tar.gz"
           docker save "$image_root/worker:$next_tag" | gzip > "artifacts/garanti-kulucka-worker-$next_tag.tar.gz"
           docker save "$image_root/migrator:$next_tag" | gzip > "artifacts/garanti-kulucka-migrator-$next_tag.tar.gz"
           docker save "$image_root/web:$next_tag" | gzip > "artifacts/garanti-kulucka-web-$next_tag.tar.gz"
+          docker save "$image_root/web-beta:$next_tag" | gzip > "artifacts/garanti-kulucka-web-beta-$next_tag.tar.gz"
 
       - name: Upload container image artifacts
         if: success()

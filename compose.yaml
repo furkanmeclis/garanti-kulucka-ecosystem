@@ -95,6 +95,16 @@ services:
       api:
         condition: service_started
 
+  beta-frontend:
+    build:
+      context: .
+      dockerfile: apps/web-beta/Dockerfile
+    ports:
+      - "8081:80"
+    depends_on:
+      api:
+        condition: service_started
+
   migrator:
     build:
       context: .
