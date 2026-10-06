@@ -38,6 +38,7 @@ export interface Database {
   stock_movements: StockMovementsTable;
   orders: OrdersTable;
   balance_movements: BalanceMovementsTable;
+  order_provider_steps: OrderProviderStepsTable;
   payment_requests: PaymentRequestsTable;
   order_items: OrderItemsTable;
   shipments: ShipmentsTable;
@@ -316,6 +317,36 @@ export interface OrdersTable extends BaseTable {
   confirmation_status: string | null;
   notes: string | null;
   external_order_id: string | null;
+  deleted_at: Timestamp | null;
+  deleted_by_user_id: number | null;
+  kolaybi_contact_id: string | null;
+  kolaybi_address_id: string | null;
+  kolaybi_invoice_id: string | null;
+  kolaybi_status: string | null;
+  kolaybi_error: string | null;
+  e_document_status: string | null;
+  confirmation_call_status: string | null;
+  confirmation_call_bulk_id: string | null;
+  confirmation_pressed_key: string | null;
+  confirmation_listen_seconds: number | null;
+  confirmation_call_count: ColumnType<number, number | undefined, number>;
+}
+
+export interface OrderProviderStepsTable extends BaseTable {
+  order_id: number;
+  action: string;
+  provider: string;
+  operation: string;
+  attempt: ColumnType<number, number | undefined, number>;
+  status: ColumnType<string, string | undefined, string>;
+  idempotency_key: string;
+  request_id: string;
+  job_id: string | null;
+  queued: ColumnType<boolean, boolean | undefined, boolean>;
+  request_payload: ColumnType<Json, Json | undefined, Json>;
+  result: Json | null;
+  error_message: string | null;
+  actor_user_id: number | null;
 }
 
 export interface OrderItemsTable extends BaseTable {

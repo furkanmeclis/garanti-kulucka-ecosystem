@@ -91,6 +91,8 @@ async function closeWebApp(server: ViteDevServer) {
 }
 
 test("real frontend shell uses backend auth, domain, file, and webphone APIs", async ({ page }) => {
+  // The full-shell walk already ran at ~58s of the 60s budget; the order detail now also loads order actions.
+  test.setTimeout(120_000);
   const app = await startWebApp();
   const requestedUrls: string[] = [];
   const allRequestUrls: string[] = [];

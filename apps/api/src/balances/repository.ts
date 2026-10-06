@@ -7,6 +7,7 @@ import {
   checkPaymentRequestAmount,
   moneyToCents,
   planOrderBalanceMovements,
+  planOrderDeleteMovement,
   type BalanceMovementKind,
   type PaymentRequestStatus,
 } from "./rules.js";
@@ -196,6 +197,47 @@ export async function applyOrderBalanceRules(
     }
   }
   return inserted;
+}
+
+/** Soft delete balance effect (legacy 073): see `planOrderDeleteMovement`. */
+export async function applyOrderDeleteBalanceRules(
+  db: Executor,
+  input: { orderId: number; actorRole: string | null | undefined; actorUserId: number | null },
+) {
+  const order = await db
+    .selectFrom("orders")
+    .select(["id", "public_id", "order_number", "created_by_user_id"])
+    .where("id", "=", input.orderId)
+    .executeTakeFirst();
+  if (!order || order.created_by_user_id === null || order.created_by_user_id === undefined) return null;
+  const existing = await db.selectFrom("balance_movements").select(["amount"]).where("order_id", "=", order.id).execute();
+  const netOrderCents = existing.reduce((sum, row) => sum + moneyToCents(row.amount), 0);
+  const movement = planOrderDeleteMovement({
+    orderPublicId: order.public_id,
+    orderNumber: order.order_number,
+    actorRole: input.actorRole,
+    netOrderCents,
+  });
+  if (!movement) return null;
+  await lockUser(db, order.created_by_user_id);
+  const balance = await userBalanceCents(db, order.created_by_user_id);
+  return db
+    .insertInto("balance_movements")
+    .values({
+      public_id: newPublicId("bmv"),
+      user_id: order.created_by_user_id,
+      order_id: order.id,
+      payment_request_id: null,
+      kind: movement.kind,
+      amount: centsToDecimalString(movement.amount_cents),
+      balance_after: centsToDecimalString(balance + movement.amount_cents),
+      description: movement.description,
+      idempotency_key: movement.idempotency_key,
+      actor_user_id: input.actorUserId,
+    })
+    .onConflict((oc) => oc.doNothing())
+    .returning(["public_id", "kind"])
+    .executeTakeFirst() ?? null;
 }
 
 export class BalanceRepository {

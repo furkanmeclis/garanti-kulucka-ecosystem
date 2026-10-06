@@ -427,15 +427,31 @@ export async function handleProviderDeliveryJobWithTransport(
     payload: liveResult.response_payload,
   });
 
+  // Order action workflows (KolayBi cari/fatura, NetGSM teyit) read the normalized provider result back
+  // from the persisted attempt to advance to their next atomic step.
+  const persistsResult = resultPersistingOperations.has(payload.envelope.operation);
   return {
     provider: payload.envelope.provider,
     request_id: payload.envelope.request_id,
     queue: "provider-delivery",
     status: "accepted_live",
     live_call_performed: true,
-    attempt: liveResult.attempt,
+    attempt: persistsResult
+      ? { ...liveResult.attempt, response_metadata: { ...liveResult.attempt.response_metadata, result: liveResult.response_payload } }
+      : liveResult.attempt,
   };
 }
+
+const resultPersistingOperations = new Set<string>([
+  "contact.find",
+  "contact.create",
+  "invoice.create",
+  "invoice.get",
+  "invoice.e_document.create",
+  "invoice.e_document.cancel",
+  "call.confirmation.create",
+  "call.confirmation.status",
+]);
 
 export function isProviderLiveTransportError(
   error: unknown,

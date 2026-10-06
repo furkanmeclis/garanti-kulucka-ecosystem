@@ -5,6 +5,7 @@ import { createBalancesClient } from "./api/balances-client.js";
 import { createCommentsClient } from "./api/comments-client.js";
 import { createDomainClient } from "./api/domain-client.js";
 import { createFileClient } from "./api/file-client.js";
+import { createOrderActionsClient } from "./api/order-actions-client.js";
 import { createSmsClient } from "./api/sms-client.js";
 import { createBackendHttpClient, type BackendHttpClientOptions } from "./api/http-client.js";
 import { createShipmentsClient } from "./api/shipments-client.js";
@@ -19,6 +20,7 @@ export type BackendApiClient = {
   sms: ReturnType<typeof createSmsClient>;
   balances: ReturnType<typeof createBalancesClient>;
   shipments: ReturnType<typeof createShipmentsClient>;
+  orderActions: ReturnType<typeof createOrderActionsClient>;
   files: ReturnType<typeof createFileClient>;
   webphone: ReturnType<typeof createWebphoneClient>;
 };
@@ -37,6 +39,7 @@ export function createApiClient(baseUrl: string, options: Omit<BackendHttpClient
     sms: createSmsClient(http),
     balances: createBalancesClient(http),
     shipments: createShipmentsClient(http),
+    orderActions: createOrderActionsClient(http),
     files: createFileClient(http),
     webphone: createWebphoneClient(http),
   };

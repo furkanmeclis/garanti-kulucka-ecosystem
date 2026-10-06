@@ -137,3 +137,24 @@ export function checkPaymentRequestAmount(input: { amountCents: number; balanceC
   }
   return { ok: true };
 }
+
+/**
+ * Legacy `siparis_sil` (073_kargo_sil_komisyon_koru) on a soft-deleted order: a cargo operator delete keeps
+ * the creator's commission (hakediş korunur, no movement); any other role removes the order's net balance
+ * effect. The ledger is append-only, so removal is one `adjustment` row that cancels the order's net sum.
+ */
+export function planOrderDeleteMovement(input: {
+  orderPublicId: string;
+  orderNumber: string;
+  actorRole: string | null | undefined;
+  netOrderCents: number;
+}): PlannedMovement | null {
+  if (input.actorRole === "kargo_operatoru") return null;
+  if (input.netOrderCents === 0) return null;
+  return {
+    kind: "adjustment",
+    amount_cents: -input.netOrderCents,
+    description: `Sipariş silindi: ${input.orderNumber || "N/A"}`,
+    idempotency_key: `order:${input.orderPublicId}:delete`,
+  };
+}

@@ -714,6 +714,7 @@ export class DomainRepository {
         ])
         .select(orderCargoProviderExpression().as("cargo_provider"))
         .where("orders.status", "not in", ["cancelled", "returned"])
+        .where("orders.deleted_at", "is", null)
         .orderBy("orders.created_at", "desc")
         .limit(200)
         .execute();
@@ -1120,6 +1121,7 @@ export class DomainRepository {
     };
     let next = query as OrderFilterBuilder;
     next = next
+      .where("orders.deleted_at", "is", null)
       .$if(filter.status === "active", (builder) =>
         builder.where("orders.status", "not in", ["cancelled", "returned", "delivered"]),
       )

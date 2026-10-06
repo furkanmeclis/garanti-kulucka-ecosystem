@@ -67,7 +67,7 @@ Durum anahtari: `yes` = yeni appte gercek akista var; `partial` = ozet/smoke vey
    Files: `flows/orders/OrderForm`, backend order detail/create line items, product lookup.  
    Tests: create order with customer/address/products/extra lines/cargo, duplicate warning, Sürat AT warning override, stock deduction visible.
 
-5. **Siparis aksiyonlari ve KolayBi boundary (L)**  
+5. **Siparis aksiyonlari ve KolayBi boundary (L)** — done (slice 5): migration `017` (orders soft delete + KolayBi/e-document/teyit IVR state, `order_provider_steps`), `/api/orders/{id}/actions|provider-sync|notes|confirmation|cancel|restore|kolaybi/*|confirmation-call*`, `DELETE /api/orders/{id}` (073 komisyon koruma), `/api/orders/bulk/*`; KolayBi cari-olustur server-side workflow (contact.find → contact.create ulke/ilce/adres/vergi dairesi retry → invoice.create) over worker provider-delivery jobs; `ui/pages/SiparisAksiyonlari.tsx`; `tests/playwright/siparis-aksiyon-parity.spec.ts`. Deferred: NetGSM IVR webhook ingestion, fatura PDF modal, kargo olusturma e-fatura otomatik gonderim, Iptaller sayfasi.  
    Files: orders flow, `apps/api/src/http/integration-routes.ts`, domain repository/provider job layer.  
    Tests: invoice create/view/e-invoice send, status change, cancel, restore, permanent delete, bulk KolayBi transfer, provider dry-run audit.
 

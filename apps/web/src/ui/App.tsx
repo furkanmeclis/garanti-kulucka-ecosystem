@@ -86,6 +86,7 @@ import { BakiyePage } from "./pages/BakiyePage.js";
 import { AyarlarPage } from "./pages/AyarlarPage.js";
 import { SuratDebugPage } from "./pages/SuratDebugPage.js";
 import { CronDebugPage } from "./pages/CronDebugPage.js";
+import { SiparisAksiyonlari, SiparisTopluAksiyonlar } from "./pages/SiparisAksiyonlari.js";
 import { YorumlarPage } from "./pages/YorumlarPage.js";
 import { KargoSiparisAksiyonlari, KargoTopluAktar } from "./pages/KargoOlusturModal.js";
 import { KargoPrintView } from "./pages/KargoPrintView.js";
@@ -2915,12 +2916,7 @@ export function App() {
               <button className="secondary-action" data-testid="orders-export-selected" disabled={selectedOrderIds.size === 0} type="button" onClick={() => void handleExportOrders("selected")}>
                 Seçilenleri indir ({selectedOrderIds.size})
               </button>
-              <button className="secondary-action" disabled type="button" title="P5 slice 5 provider boundary ile açılacak">
-                Toplu teyit ara
-              </button>
-              <button className="secondary-action" disabled type="button" title="P5 slice 5 KolayBi boundary ile açılacak">
-                Toplu KolayBi aktar
-              </button>
+              <SiparisTopluAksiyonlar http={http} selectedIds={[...selectedOrderIds]} onDone={() => refreshOrders({ page: orderPage })} />
             </div>
             <KargoTopluAktar http={http} selectedOrderPublicIds={[...selectedOrderIds]} onChanged={() => void refreshOrders()} />
             {orderFormOpen && (
@@ -3177,6 +3173,7 @@ export function App() {
                   orderPublicId={selectedOrder.public_id}
                   onChanged={(result) => void refreshOrders().then(() => setSelectedOrderId(result.order_public_id))}
                 />
+                <SiparisAksiyonlari http={http} orderPublicId={selectedOrder.public_id} onChanged={() => refreshOrders({ page: orderPage })} />
               </DetailPanel>
             )}
           </FlowPanel>

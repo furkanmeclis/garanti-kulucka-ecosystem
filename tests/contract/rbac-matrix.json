@@ -109,5 +109,19 @@
   "GET /admin/integrations/netgsm/balance": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "deny", "admin": "allow" },
   "PATCH /auth/account/profile": { "anonymous": "deny", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" },
   "POST /auth/account/password": { "anonymous": "deny", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" },
-  "GET /api/app-settings/ai-status": { "anonymous": "deny", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" }
+  "GET /api/app-settings/ai-status": { "anonymous": "deny", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" },
+  "POST /api/orders/bulk/confirmation-calls": { "anonymous": "deny", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" },
+  "POST /api/orders/bulk/kolaybi-transfer": { "anonymous": "deny", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" },
+  "DELETE /api/orders/{order_public_id}": { "anonymous": "deny", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" },
+  "GET /api/orders/{order_public_id}/actions": { "anonymous": "deny", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" },
+  "POST /api/orders/{order_public_id}/provider-sync": { "anonymous": "deny", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" },
+  "PATCH /api/orders/{order_public_id}/notes": { "anonymous": "deny", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" },
+  "PATCH /api/orders/{order_public_id}/confirmation": { "anonymous": "deny", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" },
+  "POST /api/orders/{order_public_id}/cancel": { "anonymous": "deny", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" },
+  "POST /api/orders/{order_public_id}/restore": { "anonymous": "deny", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" },
+  "POST /api/orders/{order_public_id}/kolaybi/transfer": { "anonymous": "deny", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" },
+  "POST /api/orders/{order_public_id}/kolaybi/e-document": { "anonymous": "deny", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" },
+  "POST /api/orders/{order_public_id}/kolaybi/invoice": { "anonymous": "deny", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" },
+  "POST /api/orders/{order_public_id}/confirmation-call": { "anonymous": "deny", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" },
+  "POST /api/orders/{order_public_id}/confirmation-call/status": { "anonymous": "deny", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" }
 }

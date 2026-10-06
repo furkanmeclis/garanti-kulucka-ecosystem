@@ -12,6 +12,7 @@ import { createCommentRoutes } from "./http/comment-routes.js";
 import { createDomainRoutes } from "./http/domain-routes.js";
 import { createFileRoutes } from "./http/file-routes.js";
 import { createIntegrationRoutes } from "./http/integration-routes.js";
+import { createOrderActionRoutes } from "./http/order-action-routes.js";
 import { createSmsRoutes } from "./http/sms-routes.js";
 import { createSettingsRoutes } from "./http/settings-routes.js";
 import { createShipmentCreateRoutes } from "./http/shipment-create-routes.js";
@@ -167,6 +168,7 @@ export function createApp(options: CreateAppOptions = {}) {
   app.route("/auth/account", createAccountRoutes());
   app.route("/api", createDomainRoutes());
   app.route("/api", createShipmentCreateRoutes());
+  app.route("/api/orders", createOrderActionRoutes());
   app.route("/api/comments", createCommentRoutes());
   app.route("/api/sms", createSmsRoutes());
   app.route("/api/balances", createBalanceRoutes());
