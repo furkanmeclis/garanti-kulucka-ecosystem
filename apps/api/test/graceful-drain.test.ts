@@ -4,7 +4,7 @@ import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { Server as SocketServer } from "socket.io";
 import { io as connectSocket } from "socket.io-client";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { drainHttpServer, InFlightRequestTracker } from "../src/http/graceful-drain.js";
 
 const cleanups: Array<() => Promise<void> | void> = [];
@@ -42,12 +42,11 @@ async function baseUrl(server: HttpServer): Promise<string> {
 
 describe("API graceful drain", () => {
   it("finishes in-flight requests and refuses new ones while draining", async () => {
-    const { tracker, server } = startServer(200);
+    const { tracker, server } = startServer(1_000);
     const url = await baseUrl(server);
 
     const inFlight = fetch(`${url}/slow`);
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    expect(tracker.activeCount).toBe(1);
+    await vi.waitFor(() => expect(tracker.activeCount).toBe(1), { timeout: 5_000, interval: 10 });
 
     const drain = drainHttpServer({ server, tracker, timeoutMs: 5_000 });
 
@@ -69,7 +68,7 @@ describe("API graceful drain", () => {
     const url = await baseUrl(server);
 
     const inFlight = fetch(`${url}/slow`).catch(() => null);
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await vi.waitFor(() => expect(tracker.activeCount).toBe(1), { timeout: 5_000, interval: 10 });
 
     const result = await drainHttpServer({ server, tracker, timeoutMs: 100 });
     expect(result).toEqual({ drained: false, abandonedRequests: 1 });
