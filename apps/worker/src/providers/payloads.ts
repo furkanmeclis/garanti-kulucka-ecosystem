@@ -101,6 +101,10 @@ function buildBody(envelope: ProviderRequestEnvelope): Record<string, unknown> {
         "last_event_text",
         "idempotency_key",
       ]);
+    case "call.get":
+      return pick(payload, ["vapi_call_id", "call_public_id"]);
+    case "call.report":
+      return pick(payload, ["start_date", "stop_date"]);
     case "call.webhook":
       return pick(payload, ["type", "call"]);
     case "sip.config.sync":

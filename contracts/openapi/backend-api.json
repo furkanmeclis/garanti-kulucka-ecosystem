@@ -4545,6 +4545,707 @@
           }
         }
       }
+    },
+    "/api/vapi/config": {
+      "get": {
+        "operationId": "getVapiConfig",
+        "responses": {
+          "200": {
+            "description": "Legacy vapi_config call policy plus provider readiness (secrets stay in the integration account)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VapiConfigResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "put": {
+        "operationId": "updateVapiConfig",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VapiCallPolicy"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated VAPI call policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VapiConfigUpdateResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/vapi/statistics": {
+      "get": {
+        "operationId": "getVapiStatistics",
+        "responses": {
+          "200": {
+            "description": "Legacy /api/vapi/istatistikler over the last 30 days",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VapiStatisticsResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/vapi/cargo-not-received": {
+      "get": {
+        "operationId": "listVapiCargoNotReceived",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "tumu",
+                "ptt",
+                "surat"
+              ]
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Legacy kargo-almayan list (KARGO_ALMAYAN_KEYWORDS) with queue/24h call markers",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VapiCargoNotReceivedList"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/vapi/queue": {
+      "get": {
+        "operationId": "listVapiQueue",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "tumu",
+                "bekliyor",
+                "araniyor",
+                "tamamlandi",
+                "basarisiz"
+              ]
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Arama kuyruğu ordered by priority desc, created_at asc",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VapiQueueList"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "operationId": "addVapiQueueItems",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VapiQueueAddRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Idempotent replay",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VapiQueueAddResponse"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Rows added (open shipment+phone rows are skipped)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VapiQueueAddResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/vapi/queue/{queue_public_id}": {
+      "delete": {
+        "operationId": "deleteVapiQueueItem",
+        "parameters": [
+          {
+            "name": "queue_public_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Queue row deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeletedResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/vapi/calls": {
+      "get": {
+        "operationId": "listVapiCalls",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "tumu",
+                "basladi",
+                "cevaplandi",
+                "cevapsiz",
+                "tamamlandi",
+                "hata",
+                "iptal"
+              ]
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Arama geçmişi reconciled from worker attempts, call.webhook events and call.get snapshots",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VapiCallList"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "operationId": "startVapiCall",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VapiStartCallRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Idempotent replay",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VapiStartCallResponse"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "vapi.call.create queued on provider-delivery (live gated by providers.vapi.live_mode)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VapiStartCallResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/vapi/calls/bulk": {
+      "post": {
+        "operationId": "startVapiBulkCalls",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IdempotentActionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Nothing waiting in the queue",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VapiBulkCallResponse"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Legacy toplu-arama: per queue row vapi.call.create jobs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VapiBulkCallResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/vapi/calls/{call_public_id}": {
+      "get": {
+        "operationId": "getVapiCall",
+        "parameters": [
+          {
+            "name": "call_public_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Call detail; queues vapi.call.get backfill when the webhook was missed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VapiCallDetailResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/vapi/webhooks": {
+      "get": {
+        "operationId": "listVapiWebhookEvents",
+        "parameters": [
+          {
+            "name": "call_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Webhook history from frozen vapi call.webhook ingestion",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VapiWebhookEventList"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/vapi/webhooks/{event_public_id}": {
+      "get": {
+        "operationId": "getVapiWebhookEvent",
+        "parameters": [
+          {
+            "name": "event_public_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Webhook event detail with payload",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VapiWebhookEventDetailResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/netgsm/status": {
+      "get": {
+        "operationId": "getNetgsmVoiceStatus",
+        "responses": {
+          "200": {
+            "description": "Whether a NetGSM integration account is configured",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NetgsmStatusResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/netgsm/teyit-settings": {
+      "get": {
+        "operationId": "getNetgsmTeyitSettings",
+        "responses": {
+          "200": {
+            "description": "Legacy netgsm_teyit_ayarlar",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NetgsmTeyitSettingsResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "put": {
+        "operationId": "updateNetgsmTeyitSettings",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NetgsmTeyitSettings"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated teyit settings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NetgsmTeyitSettingsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/netgsm/cdr/sync": {
+      "post": {
+        "operationId": "syncNetgsmCdr",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NetgsmCdrSyncRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "netgsm.call.report queued on provider-delivery",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NetgsmCdrSyncResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/netgsm/cdr": {
+      "get": {
+        "operationId": "listNetgsmCdr",
+        "parameters": [
+          {
+            "name": "yon",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "gelen",
+                "giden"
+              ]
+            }
+          },
+          {
+            "name": "sayfa",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "sayfa_boyutu",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Latest worker CDR snapshot in legacy shape",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NetgsmCdrListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/netgsm/cdr/istatistik": {
+      "get": {
+        "operationId": "getNetgsmCdrStatistics",
+        "responses": {
+          "200": {
+            "description": "Legacy /api/netgsm/cdr/istatistik",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NetgsmCdrStatisticsResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -11453,6 +12154,1050 @@
             "type": "boolean"
           }
         }
+      },
+      "VapiCallPolicy": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "max_deneme": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10
+          },
+          "arama_baslangic_saati": {
+            "type": "string",
+            "pattern": "^\\d{2}:\\d{2}$"
+          },
+          "arama_bitis_saati": {
+            "type": "string",
+            "pattern": "^\\d{2}:\\d{2}$"
+          },
+          "tekrar_arama_saat": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 720
+          }
+        },
+        "required": [
+          "enabled",
+          "max_deneme",
+          "arama_baslangic_saati",
+          "arama_bitis_saati",
+          "tekrar_arama_saat"
+        ],
+        "additionalProperties": false
+      },
+      "VapiConfigResponse": {
+        "type": "object",
+        "properties": {
+          "config": {
+            "$ref": "#/components/schemas/VapiCallPolicy"
+          },
+          "provider": {
+            "type": "object",
+            "properties": {
+              "account_configured": {
+                "type": "boolean"
+              },
+              "live_gate": {
+                "type": "string"
+              },
+              "live_call_permitted": {
+                "type": "boolean"
+              }
+            },
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "config",
+          "provider"
+        ],
+        "additionalProperties": true
+      },
+      "VapiConfigUpdateResponse": {
+        "type": "object",
+        "properties": {
+          "config": {
+            "$ref": "#/components/schemas/VapiCallPolicy"
+          }
+        },
+        "required": [
+          "config"
+        ],
+        "additionalProperties": true
+      },
+      "VapiStatistics": {
+        "type": "object",
+        "properties": {
+          "toplam_arama": {
+            "type": "integer"
+          },
+          "cevaplanan": {
+            "type": "integer"
+          },
+          "cevapsiz": {
+            "type": "integer"
+          },
+          "hatali": {
+            "type": "integer"
+          },
+          "toplam_sure_sn": {
+            "type": "integer"
+          },
+          "ortalama_sure_sn": {
+            "type": "integer"
+          },
+          "kuyruk_bekleyen": {
+            "type": "integer"
+          },
+          "basari_orani": {
+            "type": "integer"
+          },
+          "toplam_maliyet": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "toplam_arama",
+          "basari_orani",
+          "kuyruk_bekleyen"
+        ],
+        "additionalProperties": true
+      },
+      "VapiStatisticsResponse": {
+        "type": "object",
+        "properties": {
+          "statistics": {
+            "$ref": "#/components/schemas/VapiStatistics"
+          }
+        },
+        "required": [
+          "statistics"
+        ],
+        "additionalProperties": true
+      },
+      "VapiCargoNotReceivedItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "shipment_public_id": {
+            "type": "string"
+          },
+          "takip_no": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "alici_telefon": {
+            "type": "string"
+          },
+          "alici_ad": {
+            "type": "string"
+          },
+          "kargo_firmasi": {
+            "type": "string"
+          },
+          "son_hareket": {
+            "type": "string"
+          },
+          "son_hareket_tarihi": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "durum": {
+            "type": "string"
+          },
+          "kuyrukta": {
+            "type": "boolean"
+          },
+          "kuyruk_durumu": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "deneme_sayisi": {
+            "type": "integer"
+          },
+          "son_24s_arandi": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "alici_telefon",
+          "kargo_firmasi",
+          "kuyrukta",
+          "son_24s_arandi"
+        ],
+        "additionalProperties": true
+      },
+      "VapiCargoNotReceivedList": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VapiCargoNotReceivedItem"
+            }
+          },
+          "total": {
+            "type": "integer"
+          },
+          "page": {
+            "type": "integer"
+          },
+          "page_size": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "data",
+          "total"
+        ],
+        "additionalProperties": true
+      },
+      "VapiQueueItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "public_id": {
+            "type": "string"
+          },
+          "kargo_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "musteri_telefon": {
+            "type": "string"
+          },
+          "musteri_adi": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "kargo_firmasi": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "takip_no": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "son_hareket": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "durum": {
+            "type": "string",
+            "enum": [
+              "bekliyor",
+              "araniyor",
+              "tamamlandi",
+              "basarisiz"
+            ]
+          },
+          "oncelik": {
+            "type": "integer"
+          },
+          "deneme_sayisi": {
+            "type": "integer"
+          },
+          "max_deneme": {
+            "type": "integer"
+          },
+          "son_arama_zamani": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "olusturma_tarihi": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "musteri_telefon",
+          "durum",
+          "deneme_sayisi",
+          "max_deneme"
+        ],
+        "additionalProperties": true
+      },
+      "VapiQueueList": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VapiQueueItem"
+            }
+          },
+          "total": {
+            "type": "integer"
+          },
+          "page": {
+            "type": "integer"
+          },
+          "page_size": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "data",
+          "total"
+        ],
+        "additionalProperties": true
+      },
+      "VapiQueueAddRequest": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 500,
+            "items": {
+              "type": "object",
+              "properties": {
+                "shipment_public_id": {
+                  "type": "string"
+                },
+                "customer_phone": {
+                  "type": "string"
+                },
+                "customer_name": {
+                  "type": "string"
+                },
+                "cargo_provider": {
+                  "type": "string"
+                },
+                "tracking_number": {
+                  "type": "string"
+                },
+                "last_event_text": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "customer_phone"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          }
+        },
+        "required": [
+          "items",
+          "idempotency_key"
+        ],
+        "additionalProperties": false
+      },
+      "VapiQueueAddResponse": {
+        "type": "object",
+        "properties": {
+          "eklenen": {
+            "type": "integer"
+          },
+          "atlanan": {
+            "type": "integer"
+          },
+          "replayed": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "eklenen",
+          "atlanan"
+        ],
+        "additionalProperties": true
+      },
+      "VapiCall": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "public_id": {
+            "type": "string"
+          },
+          "vapi_call_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "kargo_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "musteri_telefon": {
+            "type": "string"
+          },
+          "musteri_adi": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "kargo_firmasi": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "takip_no": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "son_hareket": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "durum": {
+            "type": "string",
+            "enum": [
+              "basladi",
+              "cevaplandi",
+              "cevapsiz",
+              "tamamlandi",
+              "hata",
+              "iptal"
+            ]
+          },
+          "arama_ozeti": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "transkript": {},
+          "sure_sn": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "maliyet": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "bitis_nedeni": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "hata_mesaji": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "test_aramasi": {
+            "type": "boolean"
+          },
+          "request_id": {
+            "type": "string"
+          },
+          "job_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "queued": {
+            "type": "boolean"
+          },
+          "baslangic": {
+            "type": "string"
+          },
+          "bitis": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "musteri_telefon",
+          "durum",
+          "baslangic"
+        ],
+        "additionalProperties": true
+      },
+      "VapiCallList": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VapiCall"
+            }
+          },
+          "total": {
+            "type": "integer"
+          },
+          "page": {
+            "type": "integer"
+          },
+          "page_size": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "data",
+          "total"
+        ],
+        "additionalProperties": true
+      },
+      "VapiStartCallRequest": {
+        "type": "object",
+        "properties": {
+          "queue_public_id": {
+            "type": "string"
+          },
+          "shipment_public_id": {
+            "type": "string"
+          },
+          "customer_phone": {
+            "type": "string"
+          },
+          "customer_name": {
+            "type": "string"
+          },
+          "cargo_provider": {
+            "type": "string"
+          },
+          "tracking_number": {
+            "type": "string"
+          },
+          "last_event_text": {
+            "type": "string"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          }
+        },
+        "required": [
+          "customer_phone",
+          "idempotency_key"
+        ],
+        "additionalProperties": false
+      },
+      "VapiStartCallResponse": {
+        "type": "object",
+        "properties": {
+          "call": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VapiCall"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "call_id": {
+            "type": "string"
+          },
+          "job_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "replayed": {
+            "type": "boolean"
+          },
+          "live_gate": {
+            "type": "string"
+          },
+          "live_call_permitted": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "call",
+          "replayed",
+          "live_gate"
+        ],
+        "additionalProperties": true
+      },
+      "IdempotentActionRequest": {
+        "type": "object",
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          }
+        },
+        "required": [
+          "idempotency_key"
+        ],
+        "additionalProperties": false
+      },
+      "VapiBulkCallResponse": {
+        "type": "object",
+        "properties": {
+          "aranan": {
+            "type": "integer"
+          },
+          "hatali": {
+            "type": "integer"
+          },
+          "toplam_kuyruk": {
+            "type": "integer"
+          },
+          "mesaj": {
+            "type": "string"
+          },
+          "sonuclar": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "live_gate": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "aranan",
+          "hatali",
+          "toplam_kuyruk",
+          "sonuclar"
+        ],
+        "additionalProperties": true
+      },
+      "VapiCallDetailResponse": {
+        "type": "object",
+        "properties": {
+          "call": {
+            "$ref": "#/components/schemas/VapiCall"
+          },
+          "backfill_queued": {
+            "type": "boolean"
+          },
+          "backfill_job_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "call",
+          "backfill_queued"
+        ],
+        "additionalProperties": true
+      },
+      "VapiWebhookEvent": {
+        "type": "object",
+        "properties": {
+          "public_id": {
+            "type": "string"
+          },
+          "event_type": {
+            "type": "string"
+          },
+          "external_event_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "type": "string"
+          },
+          "received_at": {
+            "type": "string"
+          },
+          "vapi_call_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "call_status": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ended_reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "payload": {}
+        },
+        "required": [
+          "public_id",
+          "event_type",
+          "received_at"
+        ],
+        "additionalProperties": true
+      },
+      "VapiWebhookEventList": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VapiWebhookEvent"
+            }
+          },
+          "total": {
+            "type": "integer"
+          },
+          "page": {
+            "type": "integer"
+          },
+          "page_size": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "data",
+          "total"
+        ],
+        "additionalProperties": true
+      },
+      "VapiWebhookEventDetailResponse": {
+        "type": "object",
+        "properties": {
+          "event": {
+            "$ref": "#/components/schemas/VapiWebhookEvent"
+          }
+        },
+        "required": [
+          "event"
+        ],
+        "additionalProperties": true
+      },
+      "DeletedResponse": {
+        "type": "object",
+        "properties": {
+          "deleted": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "deleted"
+        ],
+        "additionalProperties": true
+      },
+      "NetgsmStatusResponse": {
+        "type": "object",
+        "properties": {
+          "configured": {
+            "type": "boolean"
+          },
+          "live_gate": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "configured"
+        ],
+        "additionalProperties": true
+      },
+      "NetgsmTeyitSettings": {
+        "type": "object",
+        "properties": {
+          "aktif": {
+            "type": "boolean"
+          },
+          "ilk_arama_dakika": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 60
+          },
+          "max_deneme": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10
+          },
+          "deneme_arasi_dakika": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 120
+          }
+        },
+        "required": [
+          "aktif",
+          "ilk_arama_dakika",
+          "max_deneme",
+          "deneme_arasi_dakika"
+        ],
+        "additionalProperties": false
+      },
+      "NetgsmTeyitSettingsResponse": {
+        "type": "object",
+        "properties": {
+          "settings": {
+            "$ref": "#/components/schemas/NetgsmTeyitSettings"
+          }
+        },
+        "required": [
+          "settings"
+        ],
+        "additionalProperties": true
+      },
+      "NetgsmCdrSyncRequest": {
+        "type": "object",
+        "properties": {
+          "baslangic_tarih": {
+            "type": "string",
+            "format": "date"
+          },
+          "bitis_tarih": {
+            "type": "string",
+            "format": "date"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          }
+        },
+        "required": [
+          "idempotency_key"
+        ],
+        "additionalProperties": false
+      },
+      "NetgsmCdrSyncResponse": {
+        "type": "object",
+        "properties": {
+          "request_id": {
+            "type": "string"
+          },
+          "job_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "queued": {
+            "type": "boolean"
+          },
+          "live_gate": {
+            "type": "string"
+          },
+          "live_call_permitted": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "request_id",
+          "queued"
+        ],
+        "additionalProperties": true
+      },
+      "NetgsmCdrRecord": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tarih": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "arayanNumara": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "arayanAdi": {
+            "type": "string"
+          },
+          "arananNumara": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "yontem": {
+            "type": "string"
+          },
+          "sure": {
+            "type": "string"
+          },
+          "sureSaniye": {
+            "type": "integer"
+          },
+          "yon": {
+            "type": "string"
+          },
+          "yonKod": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "sesKaydi": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "hat": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "sure",
+          "sureSaniye",
+          "yon"
+        ],
+        "additionalProperties": true
+      },
+      "NetgsmCdrListResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "kayitlar": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/NetgsmCdrRecord"
+                }
+              },
+              "toplamKayit": {
+                "type": "integer"
+              },
+              "toplamSure": {
+                "type": "string"
+              },
+              "sayfa": {
+                "type": "integer"
+              },
+              "sayfaBoyutu": {
+                "type": "integer"
+              }
+            },
+            "additionalProperties": true
+          },
+          "synced_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "request_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "success"
+        ],
+        "additionalProperties": true
+      },
+      "NetgsmCdrStatisticsResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "gelenArama": {
+                "type": "integer"
+              },
+              "gidenArama": {
+                "type": "integer"
+              },
+              "gelenCevapli": {
+                "type": "integer"
+              },
+              "gelenCevapsiz": {
+                "type": "integer"
+              },
+              "toplamGorisme": {
+                "type": "integer"
+              },
+              "cevaplananOran": {
+                "type": "integer"
+              },
+              "toplamSure": {
+                "type": "string"
+              },
+              "ortalamaSure": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": true
+          },
+          "synced_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "additionalProperties": true
       }
     }
   }

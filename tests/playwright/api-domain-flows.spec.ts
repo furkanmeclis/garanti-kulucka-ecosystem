@@ -1689,7 +1689,7 @@ test("backend domain flows serve inbox, order, shipment, settings, and webphone 
         }),
         expect.objectContaining({
           provider: "vapi",
-          supported_operations: ["call.webhook", "call.create"],
+          supported_operations: ["call.webhook", "call.create", "call.get"],
           live_call_permitted: false,
         }),
         expect.objectContaining({

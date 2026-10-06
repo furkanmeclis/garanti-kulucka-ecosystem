@@ -85,6 +85,7 @@ const explicitOptInOperations = new Set<ProviderOperation>([
   "product.list",
   "call.confirmation.create",
   "call.confirmation.status",
+  "call.report",
 ]);
 
 function liveModeEnabledFor(

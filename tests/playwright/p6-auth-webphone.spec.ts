@@ -232,19 +232,18 @@ test("browser webphone shows SIP boundary and persists VAPI call log without a r
     await page.getByRole("button", { name: "Giriş yap" }).click();
     await expect(page.getByTestId("webphone-flow")).toBeVisible();
     await expect(page.getByText("Santral aktif")).toBeVisible();
-    await expect(page.getByText("sip.example.com")).toBeVisible();
+    await expect(page.locator(".webphone-card")).toContainText("sip.example.com");
     await expect.poll(() => requestedPaths).toContain("/api/webphone/config");
 
-    await page.goto(`${app.url}/sesli-asistan`);
     await expect(page.getByTestId("sip-config-detail")).toContainText("direct_sip_over_webrtc");
     await page.goto(`${app.url}/sesli-asistan/vapi`);
     await expect(page.getByTestId("vapi-flow")).toBeVisible();
-    await expect(page.getByTestId("vapi-detail")).toContainText("sip.example.com");
-    await page.getByRole("button", { name: "VAPI test araması hazırla" }).click();
-    await expect(page.getByText("VAPI test araması canlı çağrı kapalıyken kaydedildi")).toBeVisible();
+    await page.getByTestId("vapi-tab-test").click();
+    await page.getByPlaceholder("Örn: 05051234567").fill("05051234567");
+    await page.getByRole("button", { name: "Ara", exact: true }).click();
+    await expect(page.getByTestId("vapi-toast")).toContainText("Test araması başlatıldı!");
     await expect(page.getByTestId("vapi-test-call-detail")).toContainText("call.test vapitest_vapi_test_05051234567");
-    await expect(page.getByTestId("vapi-test-call-detail")).toContainText("Canlı çağrı");
-    await expect(page.getByTestId("vapi-test-call-detail")).toContainText("kapalı");
+    await expect(page.getByTestId("vapi-test-call-detail")).toContainText("canlı çağrı kapalı");
     expect(vapiAttempts).toHaveLength(1);
     expect(requestedPaths).toContain("/api/webphone/test-call");
   } finally {

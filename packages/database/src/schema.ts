@@ -35,6 +35,8 @@ export interface Database {
   sms_templates: SmsTemplatesTable;
   sms_messages: SmsMessagesTable;
   instagram_publications: InstagramPublicationsTable;
+  vapi_call_queue: VapiCallQueueTable;
+  vapi_calls: VapiCallsTable;
   products: ProductsTable;
   stock_movements: StockMovementsTable;
   orders: OrdersTable;
@@ -270,6 +272,48 @@ export interface InstagramPublicationsTable extends BaseTable {
   job_id: string | null;
   queued: boolean;
   created_by_user_id: number | null;
+}
+
+export interface VapiCallQueueTable extends BaseTable {
+  shipment_id: number | null;
+  customer_phone: string;
+  customer_name: string | null;
+  cargo_provider: string | null;
+  tracking_number: string | null;
+  last_event_text: string | null;
+  status: string;
+  priority: number;
+  attempt_count: number;
+  max_attempts: number;
+  last_called_at: Timestamp | null;
+  idempotency_key: string | null;
+  actor_user_id: number | null;
+}
+
+export interface VapiCallsTable extends BaseTable {
+  queue_id: number | null;
+  shipment_id: number | null;
+  vapi_call_id: string | null;
+  customer_phone: string;
+  customer_name: string | null;
+  cargo_provider: string | null;
+  tracking_number: string | null;
+  last_event_text: string | null;
+  status: string;
+  summary: string | null;
+  transcript: Json | null;
+  duration_seconds: number | null;
+  cost: string | null;
+  ended_reason: string | null;
+  error_message: string | null;
+  is_test: boolean;
+  idempotency_key: string;
+  request_id: string;
+  job_id: string | null;
+  queued: boolean;
+  started_at: Timestamp;
+  ended_at: Timestamp | null;
+  actor_user_id: number | null;
 }
 
 export interface BalanceMovementsTable extends BaseTable {

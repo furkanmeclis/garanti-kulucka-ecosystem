@@ -18,7 +18,7 @@ export interface NetgsmTransportRequest {
   headers: Record<string, string>;
   body: string;
   timeout_ms: number;
-  netgsm_endpoint: "sms.send.xml" | "voicesms.send" | "voicesms.report";
+  netgsm_endpoint: "sms.send.xml" | "voicesms.send" | "voicesms.report" | "netsantral.report";
 }
 
 export type NetgsmFetchTransport = (request: NetgsmTransportRequest) => Promise<NetgsmTransportResponse>;
@@ -222,7 +222,8 @@ function parseResponse(body: string): { code: string; jobId: string | null } | n
 function redactXml(xml: string): string {
   return xml
     .replace(/<usercode>[\s\S]*?<\/usercode>/, "<usercode>[REDACTED]</usercode>")
-    .replace(/<password>[\s\S]*?<\/password>/, "<password>[REDACTED]</password>");
+    .replace(/<password>[\s\S]*?<\/password>/, "<password>[REDACTED]</password>")
+    .replace(/"(usercode|password)"\s*:\s*"[^"]*"/g, '"$1":"[REDACTED]"');
 }
 
 function redactRequest(request: NetgsmTransportRequest): Record<string, unknown> {
@@ -313,7 +314,12 @@ function createAttempt(input: {
       queue: input.job.queue,
       channel: input.envelope.channel,
       live_call_performed: true,
-      transport: input.request.netgsm_endpoint === "sms.send.xml" ? "netgsm-sms-xml" : "netgsm-voicesms",
+      transport:
+        input.request.netgsm_endpoint === "sms.send.xml"
+          ? "netgsm-sms-xml"
+          : input.request.netgsm_endpoint === "netsantral.report"
+            ? "netgsm-netsantral"
+            : "netgsm-voicesms",
       request: redactRequest(input.request),
       ...(input.retry ? { retry: input.retry } : {}),
     },
@@ -363,6 +369,9 @@ export async function sendNetgsmLiveRequest(input: NetgsmLiveAdapterInput): Prom
   const startedAt = input.now ?? new Date();
   if (input.envelope.operation === "call.confirmation.create" || input.envelope.operation === "call.confirmation.status") {
     return sendNetgsmConfirmationCall(input, startedAt);
+  }
+  if (input.envelope.operation === "call.report") {
+    return sendNetgsmCallReport(input, startedAt);
   }
   if (input.envelope.operation !== "sms.send") {
     throw new Error(`Unsupported NetGSM operation: ${input.envelope.operation}`);
@@ -696,6 +705,197 @@ async function sendNetgsmConfirmationCall(input: NetgsmLiveAdapterInput, started
       nextRetryAt: null,
       request,
       response: responseMetadata(response, parsed),
+      error: null,
+    }),
+  };
+}
+
+// ─── NetGSM santral CDR report (legacy GET /api/netgsm/cdr → POST /netsantral/report) ───
+
+const cdrErrorMessages: Record<string, string> = {
+  "30": "Geçersiz kullanıcı adı veya şifre veya API erişim izni yok",
+  "40": "Kayıt bulunamadı veya geçersiz santral bilgisi",
+  "70": "Parametre hatası",
+  "80": "Sorgu sınırı aşıldı",
+  "100": "Sistem hatası",
+};
+
+const cdrDirectionLabels: Record<number, string> = {
+  0: "Giden Arama",
+  1: "Gelen Arama",
+  2: "Gelen Cevapsız",
+  3: "Giden Cevapsız",
+  4: "İç Arama",
+  5: "İç Cevapsız",
+};
+
+/** Legacy formatNetgsmDate: YYYY-MM-DD → ddMMyyyyHHmm (0000 start, 2359 stop). */
+export function netgsmCdrDate(date: string, isEnd: boolean): string {
+  const [year = "", month = "", day = ""] = date.split("-");
+  return `${day}${month}${year}${isEnd ? "2359" : "0000"}`;
+}
+
+/** Legacy formatDuration: seconds → HH:MM:SS. */
+export function netgsmCdrDuration(seconds: number): string {
+  const s = Number.isFinite(seconds) ? Math.max(0, Math.trunc(seconds)) : 0;
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+}
+
+export interface NetgsmCdrRecord {
+  id: string | null;
+  tarih: string | null;
+  arayanNumara: string | null;
+  arayanAdi: string;
+  arananNumara: string | null;
+  yontem: string;
+  sure: string;
+  sureSaniye: number;
+  yon: string;
+  yonKod: number | null;
+  sesKaydi: string | null;
+  hat: string | null;
+}
+
+function cdrString(value: unknown): string | null {
+  if (typeof value === "string") return value;
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  return null;
+}
+
+/** Legacy CDR mapping: flatten `[{ uniqueid, values: [...] }]` into Görüşme Kayıtları rows. */
+export function parseNetgsmCdrReport(body: string):
+  | { ok: true; records: NetgsmCdrRecord[] }
+  | { ok: false; code: string | null; message: string } {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    const code = body.trim();
+    if (cdrErrorMessages[code]) return { ok: false, code, message: cdrErrorMessages[code] };
+    return { ok: false, code: null, message: "API yanıtı parse edilemedi" };
+  }
+  if (typeof parsed === "number" || typeof parsed === "string") {
+    const code = String(parsed).trim();
+    return { ok: false, code, message: cdrErrorMessages[code] ?? `Bilinmeyen hata kodu: ${code}` };
+  }
+  if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+    const record = parsed as Record<string, unknown>;
+    if (record.code || record.error) {
+      const message = cdrString(record.error) ?? cdrString(record.message) ?? "API hatası";
+      return { ok: false, code: cdrString(record.code), message };
+    }
+    return { ok: true, records: [] };
+  }
+  if (!Array.isArray(parsed)) return { ok: true, records: [] };
+  const records = parsed.flatMap((item: unknown) => {
+    if (!item || typeof item !== "object") return [];
+    const entry = item as Record<string, unknown>;
+    if (!Array.isArray(entry.values)) return [];
+    return entry.values.map((raw: unknown): NetgsmCdrRecord => {
+      const value = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+      const direction = typeof value.direction === "number" ? value.direction : Number.parseInt(cdrString(value.direction) ?? "", 10);
+      const seconds = Number.parseInt(cdrString(value.duration) ?? "0", 10) || 0;
+      const directory = cdrString(value.directory);
+      return {
+        id: cdrString(entry.uniqueid) ?? cdrString(value.commonID),
+        tarih: cdrString(value.date),
+        arayanNumara: cdrString(value.source),
+        arayanAdi: directory ? (directory.replace(/["<>]/g, "").split(" ")[0] ?? "") : "",
+        arananNumara: cdrString(value.destination),
+        yontem: "Sesli",
+        sure: netgsmCdrDuration(seconds),
+        sureSaniye: seconds,
+        yon: Number.isFinite(direction) ? (cdrDirectionLabels[direction] ?? "Bilinmiyor") : "Bilinmiyor",
+        yonKod: Number.isFinite(direction) ? direction : null,
+        sesKaydi: cdrString(value.recording),
+        hat: cdrString(value.line),
+      };
+    });
+  });
+  return { ok: true, records };
+}
+
+function callReportRequest(input: NetgsmLiveAdapterInput, now: Date): NetgsmTransportRequest {
+  const creds = credentials(input.accountConfig);
+  if (!creds.usercode || !creds.password) throw new Error("Net GSM API yapılandırılmamış");
+  const payload = input.envelope.payload;
+  const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const startDate = payloadString(payload, ["start_date", "baslangic_tarih"], weekAgo.toISOString().split("T")[0]);
+  const stopDate = payloadString(payload, ["stop_date", "bitis_tarih"], now.toISOString().split("T")[0]);
+  return {
+    method: "POST",
+    url: `${creds.apiUrl}/netsantral/report`,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      usercode: creds.usercode,
+      password: creds.password,
+      startdate: netgsmCdrDate(startDate, false),
+      stopdate: netgsmCdrDate(stopDate, true),
+    }),
+    timeout_ms: input.policy.timeout_ms,
+    netgsm_endpoint: "netsantral.report",
+  };
+}
+
+async function sendNetgsmCallReport(input: NetgsmLiveAdapterInput, startedAt: Date): Promise<NetgsmLiveAdapterResult> {
+  const request = callReportRequest(input, startedAt);
+  const transport = input.transport ?? defaultNetgsmFetchTransport;
+  let response: NetgsmTransportResponse;
+  try {
+    response = await transport(request);
+  } catch (error) {
+    const endedAt = input.now ? new Date(input.now) : new Date();
+    const decision = retryDecision(input, endedAt, null, failureCode(error));
+    throw new NetgsmLiveTransportError(
+      failureMessage(error, "NetGSM transport failed"),
+      createAttempt({
+        envelope: input.envelope,
+        job: input.job,
+        startedAt,
+        endedAt,
+        statusCode: null,
+        status: decision.status,
+        retryDecision: decision.retry_decision,
+        nextRetryAt: decision.next_retry_at,
+        request,
+        response: { live_call_performed: true, accepted: false },
+        error: { code: failureCode(error), message: failureMessage(error, "NetGSM transport failed") },
+        retry: retryMetadata(decision),
+      }),
+    );
+  }
+  if (response.status >= 400) {
+    throwFailure(input, startedAt, request, response, "provider_http_error", `NetGSM returned HTTP ${response.status}`, null);
+  }
+  const report = parseNetgsmCdrReport(response.body);
+  if (!report.ok) {
+    throwFailure(input, startedAt, request, response, "netgsm_error_code", report.message, report.code ? { code: report.code, jobId: null } : null);
+  }
+  const endedAt = input.now ? new Date(input.now) : new Date();
+  const totalSeconds = report.records.reduce((sum, record) => sum + record.sureSaniye, 0);
+  return {
+    response_payload: { success: true, record_count: report.records.length, records: report.records },
+    attempt: createAttempt({
+      envelope: input.envelope,
+      job: input.job,
+      startedAt,
+      endedAt,
+      statusCode: response.status,
+      status: "success",
+      retryDecision: "none",
+      nextRetryAt: null,
+      request,
+      response: {
+        live_call_performed: true,
+        accepted: true,
+        status_code: response.status,
+        body_bytes: Buffer.byteLength(response.body, "utf8"),
+        cdr_record_count: report.records.length,
+        cdr_total_seconds: totalSeconds,
+        cdr_records: report.records,
+      },
       error: null,
     }),
   };

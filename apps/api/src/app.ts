@@ -21,6 +21,8 @@ import { createShipmentCreateRoutes } from "./http/shipment-create-routes.js";
 import { createAccountRoutes, createAdminUserRoutes, createAppSettingsRoutes } from "./http/admin-user-routes.js";
 import { createWebhookRoutes } from "./http/webhook-routes.js";
 import { createWebphoneRoutes } from "./http/webphone-routes.js";
+import { createVapiRoutes } from "./http/vapi-routes.js";
+import { createNetgsmVoiceRoutes } from "./http/netgsm-voice-routes.js";
 import { createRateLimitStore, type RateLimitStore } from "./http/rate-limit.js";
 import type { ApiLogger, AppBindings } from "./http/types.js";
 import { getApiMetrics, httpMetricsMiddleware, metricsRouteHandler, type ApiMetrics } from "./observability/metrics.js";
@@ -179,6 +181,8 @@ export function createApp(options: CreateAppOptions = {}) {
   app.route("/api/files", createFileRoutes());
   app.route("/api/webphone", createWebphoneRoutes());
   app.route("/api/app-settings", createAppSettingsRoutes());
+  app.route("/api/vapi", createVapiRoutes());
+  app.route("/api/netgsm", createNetgsmVoiceRoutes());
   app.route(
     "/webhooks",
     createWebhookRoutes(

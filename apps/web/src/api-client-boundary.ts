@@ -10,6 +10,7 @@ import { createSmsClient } from "./api/sms-client.js";
 import { createBackendHttpClient, type BackendHttpClientOptions } from "./api/http-client.js";
 import { createShipmentsClient } from "./api/shipments-client.js";
 import { createWebphoneClient } from "./api/webphone-client.js";
+import { createVoiceClient } from "./api/voice-client.js";
 
 export type BackendApiClient = {
   health(): Promise<HealthStatus>;
@@ -23,6 +24,7 @@ export type BackendApiClient = {
   orderActions: ReturnType<typeof createOrderActionsClient>;
   files: ReturnType<typeof createFileClient>;
   webphone: ReturnType<typeof createWebphoneClient>;
+  voice: ReturnType<typeof createVoiceClient>;
 };
 
 export function createApiClient(baseUrl: string, options: Omit<BackendHttpClientOptions, "baseUrl"> = {}): BackendApiClient {
@@ -42,5 +44,6 @@ export function createApiClient(baseUrl: string, options: Omit<BackendHttpClient
     orderActions: createOrderActionsClient(http),
     files: createFileClient(http),
     webphone: createWebphoneClient(http),
+    voice: createVoiceClient(http),
   };
 }

@@ -50,8 +50,8 @@ export const apiProviderCatalog: ApiProviderCatalogItem[] = [
     "comment.delete",
   ]),
   catalogItem("messenger", ["messenger"], ["message.webhook", "message.send"]),
-  catalogItem("netgsm", ["sms", "voice"], ["sms.send", "call.confirmation.create", "call.confirmation.status"]),
-  catalogItem("vapi", ["voice"], ["call.webhook", "call.create"]),
+  catalogItem("netgsm", ["sms", "voice"], ["sms.send", "call.confirmation.create", "call.confirmation.status", "call.report"]),
+  catalogItem("vapi", ["voice"], ["call.webhook", "call.create", "call.get"]),
   catalogItem("sip", ["sip"], ["sip.config.sync"]),
 ];
 

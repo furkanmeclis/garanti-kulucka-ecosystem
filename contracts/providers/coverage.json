@@ -202,6 +202,20 @@
       "direction": "outbound",
       "status": "covered",
       "fixture_file": "netgsm/fixtures/call_confirmation_status_minimal.json"
+    },
+    {
+      "provider": "vapi",
+      "operation": "call.get",
+      "direction": "outbound",
+      "status": "covered",
+      "fixture_file": "vapi/fixtures/call_get_minimal.json"
+    },
+    {
+      "provider": "netgsm",
+      "operation": "call.report",
+      "direction": "outbound",
+      "status": "covered",
+      "fixture_file": "netgsm/fixtures/call_report_minimal.json"
     }
   ]
 }

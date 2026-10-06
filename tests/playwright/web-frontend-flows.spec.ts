@@ -1376,7 +1376,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
             {
               provider: "vapi",
               channels: ["voice"],
-              supported_operations: ["call.webhook", "call.create"],
+              supported_operations: ["call.webhook", "call.create", "call.get"],
               contract_mode: "fixture_only",
               live_feature_flag_key: "providers.vapi.live_mode",
               live_call_permitted: false,
@@ -2258,24 +2258,25 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       });
     await expect(page.getByTestId("sms-toast")).toContainText("1 SMS başarıyla gönderildi");
     await expect(page.getByTestId("sms-session")).toContainText("5550000000");
-    await page.goto(`${app.url}/sesli-asistan`);
+    await page.goto(`${app.url}/santral`);
     await expect(page.getByTestId("sip-config-detail")).toContainText("wss://sip.example.com/ws");
     await expect(page.getByTestId("sip-config-detail")).toContainText("stun:stun.l.google.com:19302");
     await page.getByRole("button", { name: /santral ayarını kaydet/i }).click();
     await expect(page.getByTestId("sip-config-detail")).toContainText("sip.example.com");
+    await page.goto(`${app.url}/sesli-asistan`);
+    await expect(page.getByTestId("calls-flow")).toContainText("NetGSM otomatik teyit araması ve görüşme kayıtları");
     await page.goto(`${app.url}/sesli-asistan/vapi`);
-    await expect(page.getByTestId("vapi-flow")).toContainText("webphone API");
-    await expect(page.getByTestId("vapi-detail")).toContainText("sip.example.com");
-    await expect(page.getByTestId("vapi-detail")).toContainText("1001");
-    await expect(page.getByTestId("vapi-detail")).toContainText("AI model ayarı tanımlı değil");
+    await expect(page.getByTestId("vapi-flow")).toContainText("VAPI AI Aramalar");
+    await page.getByTestId("vapi-tab-test").click();
     await expect(page.getByTestId("vapi-test-call-detail")).toContainText("Hızlı Test Araması");
-    await page.getByRole("button", { name: "VAPI test araması hazırla" }).click();
-    expect(vapiTestCallPayload).toMatchObject({
+    await page.getByPlaceholder("Örn: 05051234567").fill("05051234567");
+    await page.getByRole("button", { name: "Ara", exact: true }).click();
+    await expect.poll(() => vapiTestCallPayload).toMatchObject({
       customer_name: "Test Müşteri",
       customer_phone: "05051234567",
       cargo_provider: "PTT",
-      tracking_number: "TRK-PLAYWRIGHT",
-      last_event_text: "Accepted at branch",
+      tracking_number: "279172790012",
+      last_event_text: "şubede bekliyor",
       idempotency_key: "vapi_test_05051234567",
     });
     await expect(page.getByTestId("vapi-test-call-detail")).toContainText("call.test vapitest_vapi_test_05051234567");

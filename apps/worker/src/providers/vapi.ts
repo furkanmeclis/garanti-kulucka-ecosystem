@@ -13,12 +13,12 @@ export interface VapiTransportResponse {
 }
 
 export interface VapiTransportRequest {
-  method: "POST";
+  method: "POST" | "GET";
   url: string;
   headers: Record<string, string>;
   body: string;
   timeout_ms: number;
-  vapi_endpoint: "call.create";
+  vapi_endpoint: "call.create" | "call.get";
 }
 
 export type VapiFetchTransport = (request: VapiTransportRequest) => Promise<VapiTransportResponse>;
@@ -215,6 +215,58 @@ function createRequest(
   };
 }
 
+function getRequest(
+  envelope: ProviderRequestEnvelope,
+  accountConfig: ProviderAccountConfig,
+  policy: LiveProviderTransportPolicy,
+): VapiTransportRequest {
+  const creds = credentials(accountConfig);
+  if (!creds.apiKey) throw new Error("Vapi API key is missing");
+  const callId = payloadString(envelope.payload, ["vapi_call_id", "call_id"]);
+  if (!callId) throw new Error("Vapi call id is missing");
+  return {
+    method: "GET",
+    url: `${creds.apiUrl}/call/${encodeURIComponent(callId)}`,
+    headers: { Authorization: `Bearer ${creds.apiKey}` },
+    body: "",
+    timeout_ms: policy.timeout_ms,
+    vapi_endpoint: "call.get",
+  };
+}
+
+function numberOrNull(input: unknown): number | null {
+  if (typeof input === "number" && Number.isFinite(input)) return input;
+  if (typeof input === "string" && input.trim() && Number.isFinite(Number(input))) return Number(input);
+  return null;
+}
+
+/**
+ * Legacy GET /api/vapi/aramalar/:id backfill: when Vapi reports the call as ended, the call log gets
+ * durum=tamamlandi, bitis, arama_ozeti, transkript ({ text }), sure_sn (endedAt - startedAt) and maliyet.
+ */
+export function normalizeVapiCallSnapshot(call: Record<string, unknown>): Record<string, unknown> {
+  const status = typeof call.status === "string" ? call.status : null;
+  const startedAt = typeof call.startedAt === "string" ? call.startedAt : null;
+  const endedAt = typeof call.endedAt === "string" ? call.endedAt : null;
+  const analysis = call.analysis && typeof call.analysis === "object" ? (call.analysis as Record<string, unknown>) : {};
+  const summary = typeof call.summary === "string" ? call.summary : typeof analysis.summary === "string" ? analysis.summary : null;
+  const transcript = typeof call.transcript === "string" && call.transcript ? call.transcript : null;
+  const durationSeconds =
+    startedAt && endedAt ? Math.max(0, Math.round((new Date(endedAt).getTime() - new Date(startedAt).getTime()) / 1000)) : null;
+  return {
+    vapi_call_id: typeof call.id === "string" ? call.id : null,
+    status,
+    ended: status === "ended" || endedAt !== null,
+    started_at: startedAt,
+    ended_at: endedAt,
+    ended_reason: typeof call.endedReason === "string" ? call.endedReason : null,
+    summary,
+    transcript,
+    duration_seconds: Number.isFinite(durationSeconds) ? durationSeconds : null,
+    cost: numberOrNull(call.cost),
+  };
+}
+
 function parseJson(body: string): Record<string, unknown> | null {
   try {
     const parsed: unknown = JSON.parse(body);
@@ -241,12 +293,26 @@ function redactRequest(request: VapiTransportRequest): Record<string, unknown> {
     path: url.pathname,
     headers: redactHeaders(request.headers),
     body_bytes: Buffer.byteLength(request.body, "utf8"),
-    body: parseJson(request.body) ?? "[unparseable-json]",
+    body: request.method === "GET" ? null : parseJson(request.body) ?? "[unparseable-json]",
     timeout_ms: request.timeout_ms,
   };
 }
 
-function responseMetadata(response: VapiTransportResponse, parsed: Record<string, unknown> | null): Record<string, unknown> {
+function responseMetadata(
+  response: VapiTransportResponse,
+  parsed: Record<string, unknown> | null,
+  endpoint: VapiTransportRequest["vapi_endpoint"] = "call.create",
+): Record<string, unknown> {
+  if (endpoint === "call.get") {
+    return {
+      live_call_performed: true,
+      accepted: response.status >= 200 && response.status < 300 && typeof parsed?.id === "string",
+      status_code: response.status,
+      body_bytes: Buffer.byteLength(response.body, "utf8"),
+      vapi_call_id: typeof parsed?.id === "string" ? parsed.id : null,
+      call_snapshot: parsed ? normalizeVapiCallSnapshot(parsed) : null,
+    };
+  }
   return {
     live_call_performed: true,
     accepted: response.status >= 200 && response.status < 300 && typeof parsed?.id === "string",
@@ -357,7 +423,7 @@ function throwFailure(
     retryDecision: decision.retry_decision,
     nextRetryAt: decision.next_retry_at,
     request,
-    response: responseMetadata(response, parsed),
+    response: responseMetadata(response, parsed, request.vapi_endpoint),
     error: { code: errorCode, message },
     retry: retryMetadata(decision),
   });
@@ -366,11 +432,14 @@ function throwFailure(
 
 export async function sendVapiLiveRequest(input: VapiLiveAdapterInput): Promise<VapiLiveAdapterResult> {
   const startedAt = input.now ?? new Date();
-  if (input.envelope.operation !== "call.create") {
+  if (input.envelope.operation !== "call.create" && input.envelope.operation !== "call.get") {
     throw new Error(`Unsupported Vapi operation: ${input.envelope.operation}`);
   }
 
-  const request = createRequest(input.envelope, input.accountConfig, input.policy);
+  const request =
+    input.envelope.operation === "call.get"
+      ? getRequest(input.envelope, input.accountConfig, input.policy)
+      : createRequest(input.envelope, input.accountConfig, input.policy);
   const transport = input.transport ?? defaultVapiFetchTransport;
   let response: VapiTransportResponse;
   try {
@@ -405,12 +474,15 @@ export async function sendVapiLiveRequest(input: VapiLiveAdapterInput): Promise<
 
   const endedAt = input.now ? new Date(input.now) : new Date();
   return {
-    response_payload: {
-      success: true,
-      call_created: true,
-      call_id: parsed.id,
-      data: parsed,
-    },
+    response_payload:
+      request.vapi_endpoint === "call.get"
+        ? { success: true, call_id: parsed.id, call: normalizeVapiCallSnapshot(parsed) }
+        : {
+            success: true,
+            call_created: true,
+            call_id: parsed.id,
+            data: parsed,
+          },
     attempt: createAttempt({
       envelope: input.envelope,
       job: input.job,
@@ -421,7 +493,7 @@ export async function sendVapiLiveRequest(input: VapiLiveAdapterInput): Promise<
       retryDecision: "none",
       nextRetryAt: null,
       request,
-      response: responseMetadata(response, parsed),
+      response: responseMetadata(response, parsed, request.vapi_endpoint),
       error: null,
     }),
   };

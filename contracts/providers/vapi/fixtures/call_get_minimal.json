@@ -1,0 +1,16 @@
+{
+  "request_id": "req_vapi_call_get_fixture_1",
+  "provider": "vapi",
+  "operation": "call.get",
+  "direction": "outbound",
+  "channel": "voice",
+  "occurred_at": "2026-10-06T00:00:00.000Z",
+  "payload": {
+    "vapi_call_id": "call_fixture_123",
+    "call_public_id": "vcl_fixture"
+  },
+  "legacy_contract": {
+    "source": "server.js GET /api/vapi/aramalar/:id",
+    "fixture_name": "vapi_call_get_minimal"
+  }
+}

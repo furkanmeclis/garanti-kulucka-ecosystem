@@ -46,5 +46,8 @@ describe("API RBAC permission matrix", () => {
     expect(matrix["GET /api/instagram/insights/account"]).toMatchObject({ kargo_operatoru: "deny", calisan: "allow" });
     expect(matrix["GET /api/reports/summary"]).toMatchObject({ kargo_operatoru: "deny", calisan: "deny" });
     expect(matrix["GET /api/files/orphans"]).toMatchObject({ kargo_operatoru: "deny", calisan: "deny" });
+    // Legacy App.jsx: /sesli-asistan and /sesli-asistan/vapi are admin only.
+    expect(matrix["POST /api/vapi/calls"]).toMatchObject({ kargo_operatoru: "deny", calisan: "deny", admin: "allow" });
+    expect(matrix["GET /api/netgsm/cdr"]).toMatchObject({ kargo_operatoru: "deny", calisan: "deny", admin: "allow" });
   });
 });

@@ -65,6 +65,10 @@ function providerPath(envelope: ProviderRequestEnvelope): string {
       return "/netgsm/sms";
     case "vapi:call.create":
       return "/vapi/calls";
+    case "vapi:call.get":
+      return "/vapi/calls/show";
+    case "netgsm:call.report":
+      return "/netgsm/netsantral/report";
     case "sip:sip.config.sync":
       return "/sip/config/sync";
     case "meta:message.webhook":

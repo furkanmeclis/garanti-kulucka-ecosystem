@@ -90,6 +90,8 @@ import { SiparisAksiyonlari, SiparisTopluAksiyonlar } from "./pages/SiparisAksiy
 import { RaporlarPage } from "./pages/RaporlarPage.js";
 import { InstagramYayinlaPage } from "./pages/InstagramYayinlaPage.js";
 import { InstagramAnalitikPage } from "./pages/InstagramAnalitikPage.js";
+import { AramaPage } from "./pages/AramaPage.js";
+import { VapiAramalarPage } from "./pages/VapiAramalarPage.js";
 import { YorumlarPage } from "./pages/YorumlarPage.js";
 import { KargoSiparisAksiyonlari, KargoTopluAktar } from "./pages/KargoOlusturModal.js";
 import { KargoPrintView } from "./pages/KargoPrintView.js";
@@ -712,12 +714,8 @@ export function App() {
   const [downloadInstruction, setDownloadInstruction] = useState<DownloadInstruction | null>(null);
   const [orphanCleanupPreview, setOrphanCleanupPreview] = useState<FileOrphanCleanupDryRun | null>(null);
   const [lastInstagramPublishPreview, setLastInstagramPublishPreview] = useState<string | null>(null);
-  const [lastVapiTestCall, setLastVapiTestCall] = useState<string | null>(null);
   const [instagramPublishPreviewing, setInstagramPublishPreviewing] = useState(false);
-  const [vapiTestCalling, setVapiTestCalling] = useState(false);
   const [orphanCleanupPreviewing, setOrphanCleanupPreviewing] = useState(false);
-  const [vapiTestCustomerName, setVapiTestCustomerName] = useState("Test Müşteri");
-  const [vapiTestPhone, setVapiTestPhone] = useState("05051234567");
   const [presenceUpdating, setPresenceUpdating] = useState(false);
   const [integrationSnapshot, setIntegrationSnapshot] = useState<IntegrationAccountSnapshot | null>(null);
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
@@ -2015,34 +2013,6 @@ export function App() {
       setStatus("Instagram yayın önizlemesi canlı provider kapalıyken kaydedildi");
     } finally {
       setInstagramPublishPreviewing(false);
-    }
-  }
-
-  async function handleCreateVapiTestCall() {
-    if (vapiTestCalling || !vapiTestPhone.trim()) return;
-
-    setStatus("VAPI test araması backend dry-run üzerinden hazırlanıyor");
-    setVapiTestCalling(true);
-    try {
-      const attempt = await webphone.createTestCall({
-        customer_name: vapiTestCustomerName.trim() || "Test Müşteri",
-        customer_phone: vapiTestPhone.trim(),
-        cargo_provider: "PTT",
-        tracking_number: selectedShipment?.tracking_number ?? "279172790012",
-        last_event_text: selectedShipment?.last_event_text ?? "şubede bekliyor",
-        idempotency_key: `vapi_test_${vapiTestPhone.trim().replace(/[^0-9a-zA-Z_-]+/g, "_")}`,
-      });
-      setData((current) => ({
-        ...current,
-        providerAttempts: [
-          toProviderAttemptViewModel(attempt),
-          ...current.providerAttempts.filter((item) => item.public_id !== attempt.public_id),
-        ],
-      }));
-      setLastVapiTestCall(`${attempt.operation} ${attempt.request_id}`);
-      setStatus("VAPI test araması canlı çağrı kapalıyken kaydedildi");
-    } finally {
-      setVapiTestCalling(false);
     }
   }
 
@@ -3804,69 +3774,9 @@ export function App() {
 
         {activeFlow === "sms" && <SmsPage http={http} />}
 
-        {activeFlow === "calls" && (
-          <FlowPanel title="Arama" icon={<Phone size={18} />} testId="calls-flow">
-            <DetailPanel title="Santral Sunucu Bilgileri" testId="sip-config-detail">
-              <DataRows
-                rows={[
-                  ["WebSocket", sipServerSettings.ws_url || "-", "admin settings"],
-                  ["Domain", sipServerSettings.domain || "-", "webphone API"],
-                  ["STUN", sipServerSettings.stun, "browser WebRTC"],
-                  ["Transport", data.webphone?.transport ?? "-", data.webphone?.enabled ? "aktif" : "kapalı"],
-                ]}
-              />
-              <button className="primary-action" type="button" onClick={handleSaveSipConfig}>
-                Santral ayarını kaydet
-              </button>
-            </DetailPanel>
-          </FlowPanel>
-        )}
+        {activeFlow === "calls" && <AramaPage http={http} />}
 
-        {activeFlow === "vapi" && (
-          <FlowPanel title="VAPI AI" icon={<Bot size={18} />} testId="vapi-flow">
-            <DetailPanel title="AI ve SIP Sınırı" testId="vapi-detail">
-              <DataRows
-                rows={[
-                  ["SIP sınırı", data.webphone?.enabled ? "aktif" : "kapalı", "webphone API"],
-                  ["SIP domain", data.webphone?.sip_domain ?? "-", data.webphone?.transport ?? "-"],
-                  ["Kullanıcı", data.webphone?.sip_username ?? user?.sip_username ?? "-", "webphone API"],
-                  ["Model ayarı", activeSettings.find((setting) => setting.key.includes("ai"))?.key ?? "AI model ayarı tanımlı değil", "settings API"],
-                ]}
-              />
-            </DetailPanel>
-            <DetailPanel title="Hızlı Test Araması" testId="vapi-test-call-detail">
-              <div className="detail-actions">
-                <input
-                  aria-label="VAPI test müşteri adı"
-                  className="inline-input"
-                  value={vapiTestCustomerName}
-                  onChange={(event) => setVapiTestCustomerName(event.currentTarget.value)}
-                />
-                <input
-                  aria-label="VAPI test telefon"
-                  className="inline-input"
-                  value={vapiTestPhone}
-                  onChange={(event) => setVapiTestPhone(event.currentTarget.value)}
-                />
-                <button
-                  className="primary-action"
-                  type="button"
-                  disabled={vapiTestCalling || !vapiTestPhone.trim()}
-                  onClick={() => void handleCreateVapiTestCall()}
-                >
-                  {vapiTestCalling ? "Test araması hazırlanıyor" : "VAPI test araması hazırla"}
-                </button>
-              </div>
-              <DataRows
-                rows={[
-                  ["Senaryo", "PTT / şubede bekliyor", selectedShipment?.tracking_number ?? "279172790012"],
-                  ["Son backend isteği", lastVapiTestCall ?? "-", "provider attempt dry-run"],
-                  ["Canlı çağrı", "kapalı", "fixture replay gerekli"],
-                ]}
-              />
-            </DetailPanel>
-          </FlowPanel>
-        )}
+        {activeFlow === "vapi" && <VapiAramalarPage http={http} />}
 
         {activeFlow === "reports" && <RaporlarPage http={http} />}
 
@@ -3951,6 +3861,19 @@ export function App() {
                 <span>{data.webphone?.sip_domain ?? "SIP domain yok"}</span>
               </div>
             </div>
+            <DetailPanel title="Santral Sunucu Bilgileri" testId="sip-config-detail">
+              <DataRows
+                rows={[
+                  ["WebSocket", sipServerSettings.ws_url || "-", "admin settings"],
+                  ["Domain", sipServerSettings.domain || "-", "webphone API"],
+                  ["STUN", sipServerSettings.stun, "browser WebRTC"],
+                  ["Transport", data.webphone?.transport ?? "-", data.webphone?.enabled ? "aktif" : "kapalı"],
+                ]}
+              />
+              <button className="primary-action" type="button" onClick={handleSaveSipConfig}>
+                Santral ayarını kaydet
+              </button>
+            </DetailPanel>
           </FlowPanel>
         )}
       </main>

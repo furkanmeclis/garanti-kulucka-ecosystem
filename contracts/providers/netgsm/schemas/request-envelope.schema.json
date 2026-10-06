@@ -23,7 +23,8 @@
       "enum": [
         "sms.send",
         "call.confirmation.create",
-        "call.confirmation.status"
+        "call.confirmation.status",
+        "call.report"
       ]
     },
     "direction": {

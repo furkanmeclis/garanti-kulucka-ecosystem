@@ -91,7 +91,7 @@ export const providerAdapters: ProviderAdapterDefinition[] = [
     display_name: "NetGSM",
     channels: ["sms", "voice"],
     webhook_operations: [],
-    delivery_operations: ["sms.send", "call.confirmation.create", "call.confirmation.status"],
+    delivery_operations: ["sms.send", "call.confirmation.create", "call.confirmation.status", "call.report"],
     live_calls_enabled: true,
   },
   {
@@ -99,7 +99,7 @@ export const providerAdapters: ProviderAdapterDefinition[] = [
     display_name: "Vapi",
     channels: ["voice"],
     webhook_operations: ["call.webhook"],
-    delivery_operations: ["call.create"],
+    delivery_operations: ["call.create", "call.get"],
     live_calls_enabled: true,
   },
   {
