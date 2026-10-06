@@ -92,7 +92,8 @@ test("browser auth covers login, refresh rotation, logout, revoked and disabled 
       body: { error: { code: "invalid_refresh_token" } },
     });
 
-    await page.getByRole("button", { name: "Çıkış" }).click();
+    await page.getByTestId("profile-menu-trigger").click();
+    await page.getByRole("menuitem", { name: "Çıkış" }).click();
     await expect(page.getByRole("button", { name: "Giriş yap" })).toBeVisible();
     expect(await page.evaluate((key) => window.localStorage.getItem(key), tokenStorageKey)).toBeNull();
 

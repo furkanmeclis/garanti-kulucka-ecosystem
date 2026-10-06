@@ -9,6 +9,7 @@ import { createRealtimeClient, type RealtimeClient } from "../../api/realtime-cl
 import { createWebphoneClient } from "../../api/webphone-client.js";
 import { backendBaseUrl, tokenStorageKey, type DashboardData, type PendingAttachment, type ShortcutDraft, type ShipmentPipelineFilter, type ShipmentFilter, type OrderSortBy, type SortDirection, type OrderCargoProvider, type OrderFormItem, type OrderFormState, navigationItems, navigationRole, instagramDraftImageUrl, instagramDraftCaption, shipmentPageSize, flowFromPath, shipmentFilterParams, shipmentMatchesFilter, orderStatusLabel, cargoProviderLabel, readStoredToken, attachmentTypeFromFile, isRecord, defaultOrderForm, parseMoneyInput, orderFormTotals, defaultBalanceSummary, defaultConversationSummary, defaultCustomerSummary, defaultOrderSummary, defaultProductSummary, defaultProviderDebugSummary, defaultShipmentPipelineSummary, defaultShipmentSummary, defaultCommentModerationSummary, defaultInstagramAnalyticsSummary, defaultReportSummary, toInstagramAnalyticsView, sipServerSettingsFrom, operationalPolicyFrom } from "./shared.js";
 import { publicPageFromPath } from "../pages/AuthScreens.js";
+import { useNotifications } from "./notifications.js";
 
 export function useDashboardController() {
   const location = useLocation();
@@ -16,6 +17,8 @@ export function useDashboardController() {
   const [token, setToken] = useState<string | null>(() => readStoredToken());
   const [user, setUser] = useState<LoginResponse["user"] | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
+  const notifications = useNotifications(user?.public_id ?? null);
+  const pushNotification = notifications.pushEnvelope;
   const [data, setData] = useState<DashboardData>({
     conversations: [],
     customers: [],
@@ -174,6 +177,7 @@ export function useDashboardController() {
       getAccessToken: () => readStoredToken(),
     });
     const offMessageCreated = realtime.on("message.created", (envelope) => {
+      pushNotification(envelope);
       const conversationPublicId = String(envelope.payload.conversation_public_id ?? "");
       if (!conversationPublicId) return;
 
@@ -198,7 +202,8 @@ export function useDashboardController() {
         }
       })();
     });
-    const offShipmentUpdated = realtime.on("shipment.updated", () => {
+    const offShipmentUpdated = realtime.on("shipment.updated", (envelope) => {
+      pushNotification(envelope);
       void (async () => {
         await refreshShipments();
         setStatus("Kargo güncellemesi Socket.IO üzerinden yenilendi");
@@ -215,7 +220,7 @@ export function useDashboardController() {
       realtime.disconnect();
       setRealtimeClient((current) => (current === realtime ? null : current));
     };
-  }, [authChecked, refreshConversations, refreshMessages, refreshShipments, token, user]);
+  }, [authChecked, pushNotification, refreshConversations, refreshMessages, refreshShipments, token, user]);
 
   useEffect(() => {
     if (!realtimeClient || !selectedConversationId) return;
@@ -1716,6 +1721,7 @@ export function useDashboardController() {
     handleSaveIntegrationToken,
     handleSaveIntegrationSetting,
     handleTogglePresence,
+    notifications,
     activeSettings,
     visibleNavigation,
     requestedFlow,

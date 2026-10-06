@@ -2650,7 +2650,8 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await assertLegacyVisualFrame(page, app.url, "desktop", adminVisualRoutes);
     await assertLegacyVisualFrame(page, app.url, "mobile", adminVisualRoutes);
     await page.setViewportSize({ width: 1280, height: 720 });
-    await page.getByRole("button", { name: /çıkış/i }).click();
+    await page.getByTestId("profile-menu-trigger").click();
+    await page.getByRole("menuitem", { name: /çıkış/i }).click();
     await expect(page.getByRole("button", { name: /giriş yap/i })).toBeVisible();
     currentUser = loginUser({ email: "cargo@example.com", role: "kargo_operatoru" });
     await Promise.all([

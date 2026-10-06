@@ -1,6 +1,7 @@
 import { Suspense, useEffect, useRef } from "react";
-import { Navigate, type Location } from "react-router-dom";
+import { Navigate, useNavigate, type Location } from "react-router-dom";
 import { useDashboardController } from "./app/useDashboardController.js";
+import type { AppNotification } from "./app/notifications.js";
 import { flowFromPath, navigationItems } from "./app/shared.js";
 import { AppLayout, homePathForRole } from "./layout/AppLayout.js";
 import { LoginScreen, PublicPage, ResetPasswordScreen } from "./pages/AuthScreens.js";
@@ -53,6 +54,7 @@ function PageFallback() {
 
 export function App() {
   const ctx = useDashboardController();
+  const navigate = useNavigate();
   // Set while the user signs out so the guard sends them to /giris without remembering the last page.
   const signingOutRef = useRef(false);
   const {
@@ -75,6 +77,9 @@ export function App() {
     printShipmentId,
     setPrintShipmentId,
     setUser,
+    notifications,
+    handleSelectConversation,
+    setSelectedShipmentId,
   } = ctx;
 
   useEffect(() => {
@@ -136,11 +141,23 @@ export function App() {
     void handleLogout();
   }
 
+  function handleOpenNotification(notification: AppNotification) {
+    if (notification.kind === "message") {
+      navigate("/mesajlar");
+      void handleSelectConversation(notification.conversationPublicId);
+    } else {
+      navigate("/kargo");
+      setSelectedShipmentId(notification.shipmentPublicId);
+    }
+  }
+
   return (
     <AppLayout
       activeFlow={activeFlow}
       canTogglePresence={canTogglePresence}
       navigation={visibleNavigation}
+      notifications={notifications}
+      onOpenNotification={handleOpenNotification}
       onLogout={handleLayoutLogout}
       onTogglePresence={handleTogglePresence}
       presenceUpdating={presenceUpdating}

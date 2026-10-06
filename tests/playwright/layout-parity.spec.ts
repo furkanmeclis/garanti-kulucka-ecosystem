@@ -186,6 +186,12 @@ async function login(page: Page) {
   ]);
 }
 
+/** Logout now lives in the profile dropdown (legacy Sidebar profile menu). */
+async function logout(page: Page) {
+  await page.getByTestId("profile-menu-trigger").click();
+  await page.getByRole("menu", { name: "Profil menüsü" }).getByRole("menuitem", { name: /çıkış/i }).click();
+}
+
 function pathOf(page: Page) {
   return new URL(page.url()).pathname;
 }
@@ -236,7 +242,7 @@ async function measureLayout(page: Page, panelTestId: string): Promise<LayoutFra
         problems.push(`nav-text-clipped:${link.textContent ?? ""}`);
       }
     }
-    for (const selector of [".profile-name", ".profile-email", ".presence-toggle span", ".logout-button span"]) {
+    for (const selector of [".profile-name", ".profile-email", ".presence-toggle span"]) {
       const element = query(selector);
       if (!element || rect(element).width <= 1) continue;
       const style = getComputedStyle(element);
@@ -287,7 +293,7 @@ test("protected routes redirect to /giris and back, unknown and role-restricted 
     await expect.poll(() => pathOf(page)).toBe("/mesajlar");
 
     // Logout returns to /giris without remembering the last page.
-    await page.getByRole("button", { name: /çıkış/i }).click();
+    await logout(page);
     await expect(page.getByRole("button", { name: /giriş yap/i })).toBeVisible();
     await expect.poll(() => pathOf(page)).toBe("/giris");
     expect(backend.logoutCalls).toBe(1);
@@ -359,20 +365,52 @@ test("header shows brand, role nav, presence, profile, language and logout like 
     await expect(profile.getByTestId("profile-presence-dot")).not.toHaveClass(/online/);
     expect(backend.presenceCalls).toBe(1);
 
-    // Language switch: TR ↔ EN, persisted like legacy `garanti-lang`.
+    // Profile dropdown (legacy Sidebar): Profil → /ayarlar, TR/EN, Çıkış; closed by default.
+    const trigger = page.getByTestId("profile-menu-trigger");
+    await expect(trigger).toHaveAttribute("aria-expanded", "false");
+    await expect(page.getByTestId("profile-menu")).toHaveCount(0);
+    await trigger.click();
+    const menu = page.getByRole("menu", { name: "Profil menüsü" });
+    await expect(menu).toBeVisible();
+    await expect(menu).toContainText("calisan.layout.uzun.eposta.adresi@example.com");
+    await expect(menu.getByRole("menuitem")).toHaveText(["Profil", "Çıkış"]);
+    await menu.getByRole("menuitem", { name: "Profil" }).click();
+    await expect.poll(() => pathOf(page)).toBe("/ayarlar");
+    await expect(menu).toHaveCount(0);
+
+    // Outside click and Escape close the menu; Escape returns focus to the trigger.
+    await trigger.click();
+    await expect(menu).toBeVisible();
+    await page.getByTestId("app-brand").click();
+    await expect(menu).toHaveCount(0);
+    await trigger.focus();
+    await page.keyboard.press("Enter");
+    await expect(menu).toBeVisible();
+    await expect(menu.getByRole("menuitem", { name: "Profil" })).toBeFocused();
+    await page.keyboard.press("ArrowDown");
+    await expect(menu.getByRole("menuitemradio", { name: "TR" })).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(menu).toHaveCount(0);
+    await expect(trigger).toBeFocused();
+
+    // Language switch inside the menu: TR ↔ EN, persisted like legacy `garanti-lang`.
+    await trigger.click();
     const language = page.getByTestId("language-switch");
-    await expect(language.getByRole("button", { name: "TR" })).toHaveAttribute("aria-pressed", "true");
-    await language.getByRole("button", { name: "EN" }).click();
+    await expect(language.getByRole("menuitemradio", { name: "TR" })).toHaveAttribute("aria-checked", "true");
+    await language.getByRole("menuitemradio", { name: "EN" }).click();
+    await expect(menu).toHaveCount(0);
     await expect(page.getByRole("navigation", { name: "Main navigation" }).getByRole("link", { name: "Orders" })).toBeVisible();
     await expect(presence).toHaveText("Offline");
     await expect(profile.locator(".profile-role")).toHaveText("Personnel");
     await page.reload();
     await expect(page.getByRole("navigation", { name: "Main navigation" }).getByRole("link", { name: "Shipments" })).toBeVisible();
-    await page.getByTestId("language-switch").getByRole("button", { name: "TR" }).click();
+    await page.getByTestId("profile-menu-trigger").click();
+    await expect(page.getByRole("menu", { name: "Profile menu" }).getByRole("menuitem")).toHaveText(["Profile", "Sign out"]);
+    await page.getByTestId("language-switch").getByRole("menuitemradio", { name: "TR" }).click();
     await expect(page.getByRole("navigation", { name: "Ana gezinme" }).getByRole("link", { name: "Kargo" })).toBeVisible();
 
-    // Logout button is always reachable in the header.
-    await page.getByRole("button", { name: /çıkış/i }).click();
+    // Logout is reachable from the profile menu.
+    await logout(page);
     await expect(page.getByRole("button", { name: /giriş yap/i })).toBeVisible();
 
     // Admin: no presence toggle and no presence dot (legacy: admin is an observer).
@@ -383,9 +421,13 @@ test("header shows brand, role nav, presence, profile, language and logout like 
     await expect(page.getByTestId("profile-presence-dot")).toHaveCount(0);
     await expect(page.getByTestId("app-profile").locator(".profile-role")).toHaveText("Admin");
     await expect(page.getByRole("navigation", { name: "Ana gezinme" }).getByRole("link", { name: "VAPI AI" })).toBeVisible();
+    // Admin menu also carries "Ayarlar" like legacy.
+    await page.getByTestId("profile-menu-trigger").click();
+    await expect(page.getByRole("menu", { name: "Profil menüsü" }).getByRole("menuitem")).toHaveText(["Profil", "Ayarlar", "Çıkış"]);
+    await page.keyboard.press("Escape");
 
     // Bootstrap owner (first admin) gets the admin shell instead of an empty redirect loop.
-    await page.getByRole("button", { name: /çıkış/i }).click();
+    await logout(page);
     backend.user = loginUser({ role: "owner", email: "owner@example.com", first_name: "System", last_name: "Owner" });
     await login(page);
     await expect.poll(() => pathOf(page)).toBe("/mesajlar");
@@ -442,10 +484,100 @@ for (const role of ["calisan", "admin"] as const) {
         const lastLink = nav.getByRole("link").last();
         await lastLink.scrollIntoViewIfNeeded();
         await expect(lastLink).toBeInViewport();
-        await expect(page.getByRole("button", { name: /çıkış/i })).toBeInViewport();
+        await expect(page.getByTestId("profile-menu-trigger")).toBeInViewport();
+        await expect(page.getByTestId("notification-trigger")).toBeInViewport();
+
+        // Open popovers stay fully inside the viewport (mobile anchors them to the actions row).
+        for (const [trigger, panel] of [
+          ["profile-menu-trigger", "profile-menu"],
+          ["notification-trigger", "notification-panel"],
+        ] as const) {
+          await page.getByTestId(trigger).click();
+          await expect(page.getByTestId(panel)).toBeVisible();
+          const box = await page.getByTestId(panel).boundingBox();
+          const width = await page.evaluate(() => document.documentElement.clientWidth);
+          expect(box, `${viewport} ${panel}`).not.toBeNull();
+          expect(box!.x, `${viewport} ${panel} left`).toBeGreaterThanOrEqual(0);
+          expect(box!.x + box!.width, `${viewport} ${panel} right`).toBeLessThanOrEqual(width + 1);
+          await page.keyboard.press("Escape");
+          await expect(page.getByTestId(panel)).toHaveCount(0);
+        }
       }
     } finally {
       await closeWebApp(app.server);
     }
   });
 }
+
+test("notification bell counts unread realtime events like legacy header", async ({ page }) => {
+  const app = await startWebApp();
+  await mockBackend(page, loginUser());
+  const emit = (event: string, payload: Record<string, unknown>, id: string) =>
+    page.evaluate(
+      ([name, body, eventId]) =>
+        window.__GARANTI_REALTIME_TEST__?.emitServer(name, {
+          event: name,
+          id: eventId,
+          occurred_at: new Date().toISOString(),
+          payload: body,
+        }),
+      [event, payload, id] as const,
+    );
+  try {
+    await page.setViewportSize(desktopViewport);
+    await page.goto(`${app.url}/giris`);
+    await login(page);
+    await expect(page.getByTestId("inbox-flow")).toBeVisible();
+    await expect.poll(() => page.evaluate(() => window.__GARANTI_REALTIME_TEST__?.emitted.some((item) => item.event === "connect"))).toBe(true);
+
+    const trigger = page.getByTestId("notification-trigger");
+    const badge = page.getByTestId("notification-badge");
+    await expect(badge).toHaveCount(0);
+    await trigger.click();
+    await expect(page.getByTestId("notification-panel")).toContainText("Bildirim yok");
+    await page.keyboard.press("Escape");
+
+    // Customer message (delivered twice: conversation room + broadcast) counts once; outgoing ones are ignored.
+    const message = { message_public_id: "msg_one", conversation_public_id: "cnv_one", sender_type: "customer" };
+    await emit("message.created", message, "evt_msg_one");
+    await emit("message.created", message, "evt_msg_one");
+    await emit("message.created", { ...message, message_public_id: "msg_ai", sender_type: "ai" }, "evt_msg_ai");
+    await emit("shipment.updated", { shipment_public_id: "shp_one", status: "in_transit", tracking_number: "TRK123" }, "shp_evt_one");
+    await expect(badge).toHaveText("2");
+    await expect(trigger).toHaveAttribute("aria-label", "Bildirimler (2 okunmamış)");
+
+    await trigger.click();
+    const items = page.getByTestId("notification-item");
+    await expect(items).toHaveCount(2);
+    await expect(items.nth(0)).toContainText("Kargo güncellendi");
+    await expect(items.nth(0)).toContainText("TRK123 · in_transit");
+    await expect(items.nth(1)).toContainText("Yeni müşteri mesajı");
+    await expect(items.nth(1)).toContainText("az önce");
+
+    // Opening a notification marks it read and jumps to its page.
+    await items.nth(0).click();
+    await expect.poll(() => pathOf(page)).toBe("/kargo");
+    await expect(badge).toHaveText("1");
+
+    // Legacy badge caps at "9+"; the panel lists the latest 5; "mark all read" clears the badge.
+    for (let index = 0; index < 10; index += 1) {
+      await emit("message.created", { ...message, message_public_id: `msg_${index}` }, `evt_msg_${index}`);
+    }
+    await expect(badge).toHaveText("9+");
+    await trigger.click();
+    await expect(items).toHaveCount(5);
+    await page.getByRole("button", { name: "Tümünü okundu işaretle" }).click();
+    await expect(badge).toHaveCount(0);
+    await expect(page.getByTestId("notification-panel")).toHaveCount(0);
+
+    // Notifications are session-scoped: logging out clears them.
+    await emit("message.created", { ...message, message_public_id: "msg_last" }, "evt_msg_last");
+    await expect(badge).toHaveText("1");
+    await logout(page);
+    await login(page);
+    await expect(page.getByTestId("inbox-flow")).toBeVisible();
+    await expect(page.getByTestId("notification-badge")).toHaveCount(0);
+  } finally {
+    await closeWebApp(app.server);
+  }
+});
