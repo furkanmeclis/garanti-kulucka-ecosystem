@@ -2,6 +2,31 @@
 
 Bu belge, projeye yeni bir sohbetten veya bağlamsız bir çalışma oturumundan devam etmek için tek devam kaynağıdır. Önce bu dosya, ardından `MASTER_ROADMAP.md` ve yalnız çalışılacak fazın ilgili teknik belgeleri okunmalıdır. Buradaki yayımlanmış durum ile çalışma ağacındaki yayımlanmamış durum birbirine karıştırılmamalıdır.
 
+## 0. 2026-10-06 TRT Aktif Devam Notu
+
+Bu bölüm en güncel devam noktasıdır; altındaki 2026-10-04 notu ve eski release listesi tarihsel arka plandır.
+
+### Yayımlanmış Temiz Taban
+
+- Branch: `main`, çalışma ağacı temiz.
+- Son temiz yayımlanmış tag: `v0.1.335` (commit `70ed2b3`, GitHub Actions run `37491273570`).
+- Artifact: `container-images-v0.1.335`, id `11425753389`, size `419707266`, expired değil.
+
+### Bu Oturumda Kapatılan Dilimler
+
+- `977c3cc` → `v0.1.332`: başlıkta legacy profil açılır menüsü (Profil, admin için Ayarlar, TR/EN, Çıkış) ve okunmamış sayılı bildirim zili (`ui/app/notifications.ts`; realtime `message.created` gelen / `shipment.updated`, en fazla 50, "9+" rozet, tümünü okundu yap). Görünür "Çıkış" bekleyen Playwright testleri profil menüsüne taşındı.
+- `a1f20ec` → `v0.1.333`: sözlük tabanlı i18n altyapısı (`ui/i18n/index.tsx`: `defineMessages`, `LanguageProvider`, `useT`, `translate`, `localeFor`; `garanti-lang` korunur). Controller durum satırı ve sipariş formu mesajları anahtarlı `UiMessage`.
+- `b333693` → `v0.1.334`: tüm sayfa içerikleri `ui/i18n/messages/*` altındaki 31 namespace ile TR/EN. Marka adları, enum/backend değerleri, müşteri içeriği, SMS/VAPI şablonları, basılı kargo etiketi ve Excel kolonları bilerek çevrilmedi.
+- `4be3f94` (CI koşusu bir sonraki push tarafından iptal edildi; kod `70ed2b3` / `v0.1.335` içinde yeşil): `useDashboardController` ince birleştiriciye indi, akışlar `ui/app/dashboard/use{Session,InboxFlow,OrdersFlow,ShipmentsFlow,AdminFlow,RealtimeSync}` hook'larında; dönen düz `ctx` aynı (245 anahtar tip denetimiyle doğrulandı).
+- `70ed2b3` → `v0.1.335`: `P5_PARITY_GAPS.md` güncellendi.
+
+Kanıt: her dilimde yerel `npm run typecheck`, `npm run lint`, `npm run test:unit`, tüm Playwright (son durum 43/43) geçti; CI run'ları yeşil.
+
+### Sıradaki Açık İşler
+
+- Softphone widget / gelen arama modalı ve legacy ortak bileşenler (`P5_PARITY_GAPS.md` Layout/components satırı).
+- Yeni ekran eklenirken metinler bir `defineMessages` namespace'ine konmalı; `apps/web/test/i18n-dictionaries.test.ts` TR/EN anahtar eşitliğini otomatik denetler.
+
 ## 0. 2026-10-04 16:24 TRT Aktif Devam Notu
 
 Bu bölüm en güncel devam noktasıdır. Alttaki eski tarihsel release listesi değerli arka plan taşır, fakat yeni sohbet önce bu bölümü esas almalıdır.
