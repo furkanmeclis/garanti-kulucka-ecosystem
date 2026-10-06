@@ -4,6 +4,7 @@ import { createAuthClient } from "./api/auth-client.js";
 import { createCommentsClient } from "./api/comments-client.js";
 import { createDomainClient } from "./api/domain-client.js";
 import { createFileClient } from "./api/file-client.js";
+import { createSmsClient } from "./api/sms-client.js";
 import { createBackendHttpClient, type BackendHttpClientOptions } from "./api/http-client.js";
 import { createWebphoneClient } from "./api/webphone-client.js";
 
@@ -13,6 +14,7 @@ export type BackendApiClient = {
   admin: ReturnType<typeof createAdminClient>;
   domain: ReturnType<typeof createDomainClient>;
   comments: ReturnType<typeof createCommentsClient>;
+  sms: ReturnType<typeof createSmsClient>;
   files: ReturnType<typeof createFileClient>;
   webphone: ReturnType<typeof createWebphoneClient>;
 };
@@ -28,6 +30,7 @@ export function createApiClient(baseUrl: string, options: Omit<BackendHttpClient
     admin: createAdminClient(http),
     domain: createDomainClient(http),
     comments: createCommentsClient(http),
+    sms: createSmsClient(http),
     files: createFileClient(http),
     webphone: createWebphoneClient(http),
   };

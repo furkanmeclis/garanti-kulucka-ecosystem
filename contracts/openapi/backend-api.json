@@ -2617,6 +2617,272 @@
           }
         }
       }
+    },
+    "/api/sms/templates": {
+      "get": {
+        "operationId": "listSmsTemplates",
+        "responses": {
+          "200": {
+            "description": "SMS templates ordered like legacy sms_sablonlar (sort_order, created_at)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SmsTemplateList"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createSmsTemplate",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSmsTemplateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created SMS template",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SmsTemplateResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/sms/templates/{template_public_id}": {
+      "patch": {
+        "operationId": "updateSmsTemplate",
+        "parameters": [
+          {
+            "name": "template_public_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSmsTemplateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated SMS template",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SmsTemplateResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteSmsTemplate",
+        "parameters": [
+          {
+            "name": "template_public_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deleted SMS template",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "deleted"
+                  ],
+                  "properties": {
+                    "deleted": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/sms/history": {
+      "get": {
+        "operationId": "listSmsHistory",
+        "parameters": [
+          {
+            "name": "type",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "all",
+                "manual",
+                "automatic"
+              ]
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated SMS history; delivery status derived from worker provider attempts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SmsHistoryList"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/sms/manual-send": {
+      "post": {
+        "operationId": "sendManualSms",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManualSmsSendRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "One netgsm.sms.send provider-delivery job per recipient (idempotency_key#index)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManualSmsSendResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/sms/automatic/trigger": {
+      "post": {
+        "operationId": "triggerAutomaticSmsTracking",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AutomaticSmsTriggerRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Queued PTT/Sürat shipment.track jobs that drive automatic SMS",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutomaticSmsTriggerResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -6650,6 +6916,373 @@
             "type": "string"
           },
           "suggestion": {
+            "type": "string"
+          }
+        }
+      },
+      "SmsTemplate": {
+        "type": "object",
+        "required": [
+          "public_id",
+          "title",
+          "body",
+          "sort_order",
+          "is_active",
+          "is_system",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "public_id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "sort_order": {
+            "type": "integer"
+          },
+          "is_active": {
+            "type": "boolean"
+          },
+          "is_system": {
+            "type": "boolean"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "SmsTemplateList": {
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SmsTemplate"
+            }
+          }
+        }
+      },
+      "SmsTemplateResponse": {
+        "type": "object",
+        "required": [
+          "template"
+        ],
+        "properties": {
+          "template": {
+            "$ref": "#/components/schemas/SmsTemplate"
+          }
+        }
+      },
+      "CreateSmsTemplateRequest": {
+        "type": "object",
+        "required": [
+          "title",
+          "body"
+        ],
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "body": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000
+          },
+          "sort_order": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "UpdateSmsTemplateRequest": {
+        "type": "object",
+        "minProperties": 1,
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "body": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000
+          },
+          "is_active": {
+            "type": "boolean"
+          },
+          "sort_order": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "SmsMessage": {
+        "type": "object",
+        "required": [
+          "public_id",
+          "recipient_phone",
+          "message",
+          "is_automatic",
+          "status",
+          "request_id",
+          "queued",
+          "created_at"
+        ],
+        "properties": {
+          "public_id": {
+            "type": "string"
+          },
+          "recipient_phone": {
+            "type": "string"
+          },
+          "customer_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tracking_number": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "is_automatic": {
+            "type": "boolean"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "sent",
+              "failed"
+            ]
+          },
+          "error_message": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "provider_bulk_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "request_id": {
+            "type": "string"
+          },
+          "job_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "queued": {
+            "type": "boolean"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "SmsHistoryList": {
+        "type": "object",
+        "required": [
+          "data",
+          "total",
+          "page",
+          "page_size"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SmsMessage"
+            }
+          },
+          "total": {
+            "type": "integer"
+          },
+          "page": {
+            "type": "integer"
+          },
+          "page_size": {
+            "type": "integer"
+          }
+        }
+      },
+      "ManualSmsSendRequest": {
+        "type": "object",
+        "required": [
+          "recipients",
+          "message",
+          "idempotency_key"
+        ],
+        "properties": {
+          "recipients": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 100,
+            "items": {
+              "type": "string"
+            }
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000
+          },
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "template_public_id": {
+            "type": "string"
+          },
+          "customer_name": {
+            "type": "string"
+          },
+          "shipment_public_id": {
+            "type": "string"
+          },
+          "tracking_number": {
+            "type": "string"
+          }
+        }
+      },
+      "ManualSmsSendResponse": {
+        "type": "object",
+        "required": [
+          "provider",
+          "operation",
+          "recipient_count",
+          "queued_count",
+          "replayed",
+          "live_call_permitted",
+          "live_gate",
+          "messages"
+        ],
+        "properties": {
+          "provider": {
+            "type": "string",
+            "enum": [
+              "netgsm"
+            ]
+          },
+          "operation": {
+            "type": "string",
+            "enum": [
+              "sms.send"
+            ]
+          },
+          "recipient_count": {
+            "type": "integer"
+          },
+          "queued_count": {
+            "type": "integer"
+          },
+          "replayed": {
+            "type": "boolean"
+          },
+          "live_call_permitted": {
+            "type": "boolean"
+          },
+          "live_gate": {
+            "type": "string"
+          },
+          "messages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SmsMessage"
+            }
+          }
+        }
+      },
+      "AutomaticSmsTriggerRequest": {
+        "type": "object",
+        "required": [
+          "provider",
+          "idempotency_key"
+        ],
+        "properties": {
+          "provider": {
+            "type": "string",
+            "enum": [
+              "ptt",
+              "surat"
+            ]
+          },
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          }
+        }
+      },
+      "AutomaticSmsTriggerResponse": {
+        "type": "object",
+        "required": [
+          "provider",
+          "operation",
+          "checked_count",
+          "queued_count",
+          "job_ids",
+          "live_call_permitted",
+          "live_gate"
+        ],
+        "properties": {
+          "provider": {
+            "type": "string",
+            "enum": [
+              "ptt",
+              "surat"
+            ]
+          },
+          "operation": {
+            "type": "string",
+            "enum": [
+              "shipment.track"
+            ]
+          },
+          "checked_count": {
+            "type": "integer"
+          },
+          "queued_count": {
+            "type": "integer"
+          },
+          "job_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "live_call_permitted": {
+            "type": "boolean"
+          },
+          "live_gate": {
             "type": "string"
           }
         }

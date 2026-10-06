@@ -80,6 +80,7 @@ import { createFileClient, type DownloadInstruction, type FileMetadata, type Fil
 import { BackendRequestError, createBackendHttpClient } from "../api/http-client.js";
 import { createRealtimeClient, type RealtimeClient } from "../api/realtime-client.js";
 import { createWebphoneClient, type WebphoneConfig } from "../api/webphone-client.js";
+import { SmsPage } from "./pages/SmsPage.js";
 import { YorumlarPage } from "./pages/YorumlarPage.js";
 
 const backendBaseUrl = import.meta.env.VITE_BACKEND_BASE_URL ?? "/backend";
@@ -127,13 +128,6 @@ interface ShortcutDraft {
   code: string;
   message: string;
   attachments: PendingAttachment[];
-}
-
-interface NetgsmConfirmationSettings {
-  aktif: boolean;
-  ilk_arama_dakika: number;
-  max_deneme: number;
-  deneme_arasi_dakika: number;
 }
 
 interface SipServerSettings {
@@ -238,13 +232,6 @@ const navigationItems: NavigationItem[] = [
   { key: "webphone", label: "Santral", icon: Phone, roles: ["admin"], path: "/santral" },
 ];
 
-const defaultNetgsmSettings: NetgsmConfirmationSettings = {
-  aktif: false,
-  ilk_arama_dakika: 5,
-  max_deneme: 3,
-  deneme_arasi_dakika: 10,
-};
-
 const defaultSipServerSettings: SipServerSettings = {
   ws_url: "",
   domain: "",
@@ -263,14 +250,10 @@ const defaultOperationalPolicy: OperationalPolicySettings = {
   orphan_cleanup_enabled: true,
 };
 
-const smsTemplate = "{musteri_adi}, {takip_no} takip numarali kargonuz {kargo_firmasi} ile yoldadir.";
-const smsTemplateVariables = ["{musteri_adi}", "{takip_no}", "{kargo_firmasi}"] as const;
 const instagramDraftImageUrl = "https://example.com/garanti-kulucka.jpg";
 const instagramDraftCaption = "Kuluçka makineleri ve yedek parça operasyonundan güncel ürün duyurusu.";
 const instagramCaptionLimit = 2200;
 const shipmentPageSize = 20;
-
-type SmsTemplateVariable = typeof smsTemplateVariables[number];
 
 function flowFromPath(pathname: string) {
   return [...navigationItems]
@@ -662,31 +645,8 @@ function toBalanceView(summary: BackendBalanceSummary): BalanceSummary {
   };
 }
 
-function smsSegmentInfo(message: string) {
-  const usesUnicode = /[şıİŞĞğ]/.test(message);
-  const singleLimit = usesUnicode ? 70 : 160;
-  const multiLimit = usesUnicode ? 67 : 153;
-  const length = message.length;
-  const segmentCount = length <= singleLimit ? 1 : Math.ceil(length / multiLimit);
-  return { length, segmentCount, usesUnicode };
-}
-
 function readNumberSetting(value: unknown, fallback: number) {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
-}
-
-function netgsmSettingsFrom(settings: AdminSetting[]): NetgsmConfirmationSettings {
-  const value = settings.find((setting) => setting.key === "netgsm_teyit_ayarlar")?.value;
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return defaultNetgsmSettings;
-  }
-  const record = value as Record<string, unknown>;
-  return {
-    aktif: typeof record.aktif === "boolean" ? record.aktif : defaultNetgsmSettings.aktif,
-    ilk_arama_dakika: readNumberSetting(record.ilk_arama_dakika, defaultNetgsmSettings.ilk_arama_dakika),
-    max_deneme: readNumberSetting(record.max_deneme, defaultNetgsmSettings.max_deneme),
-    deneme_arasi_dakika: readNumberSetting(record.deneme_arasi_dakika, defaultNetgsmSettings.deneme_arasi_dakika),
-  };
 }
 
 function sipServerSettingsFrom(settings: AdminSetting[], webphoneConfig: WebphoneConfig | null): SipServerSettings {
@@ -766,7 +726,6 @@ export function App() {
   const [uploadedFile, setUploadedFile] = useState<FileMetadata | null>(null);
   const [downloadInstruction, setDownloadInstruction] = useState<DownloadInstruction | null>(null);
   const [orphanCleanupPreview, setOrphanCleanupPreview] = useState<FileOrphanCleanupDryRun | null>(null);
-  const [lastSmsSend, setLastSmsSend] = useState<string | null>(null);
   const [lastPaymentRequest, setLastPaymentRequest] = useState<string | null>(null);
   const [lastInstagramPublishPreview, setLastInstagramPublishPreview] = useState<string | null>(null);
   const [lastVapiTestCall, setLastVapiTestCall] = useState<string | null>(null);
@@ -777,7 +736,6 @@ export function App() {
   const [vapiTestCustomerName, setVapiTestCustomerName] = useState("Test Müşteri");
   const [vapiTestPhone, setVapiTestPhone] = useState("05051234567");
   const [cronTriggeringProvider, setCronTriggeringProvider] = useState<"ptt" | "surat" | null>(null);
-  const [activeSmsTemplateVariable, setActiveSmsTemplateVariable] = useState<SmsTemplateVariable>("{musteri_adi}");
   const [presenceUpdating, setPresenceUpdating] = useState(false);
   const [integrationSnapshot, setIntegrationSnapshot] = useState<IntegrationAccountSnapshot | null>(null);
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
@@ -1956,21 +1914,6 @@ export function App() {
     }
   }
 
-  async function handleSendSms() {
-    const shipment = selectedShipment;
-    if (!shipment?.recipient_phone) return;
-
-    setStatus("SMS backend provider-delivery kuyruğuna gönderiliyor");
-    const result = await domain.sendSms({
-      recipient_phone: shipment.recipient_phone,
-      message: smsPreview,
-      shipment_public_id: shipment.public_id,
-      idempotency_key: `manual_sms_${shipment.public_id}`,
-    });
-    setLastSmsSend(`${result.provider} ${result.operation} ${result.queued ? "queued" : "dry-run"} ${result.request_id}`);
-    setStatus("SMS backend provider-delivery sınırında hazırlandı");
-  }
-
   async function handleUpdateShipment() {
     const shipment = selectedShipment;
     if (!shipment) return;
@@ -2037,25 +1980,6 @@ export function App() {
       settings: [setting, ...current.settings.filter((item) => item.key !== setting.key)],
     }));
     setStatus("Provider live gate kapalı olarak kaydedildi");
-  }
-
-  async function handleSaveNetgsmSettings() {
-    const setting = await admin.upsertSetting(
-      "netgsm_teyit_ayarlar",
-      {
-        aktif: true,
-        ilk_arama_dakika: 5,
-        max_deneme: 3,
-        deneme_arasi_dakika: 10,
-      },
-      false,
-      "global",
-    );
-    setData((current) => ({
-      ...current,
-      settings: [setting, ...current.settings.filter((item) => item.key !== setting.key)],
-    }));
-    setStatus("NetGSM teyit ayarı backend admin settings üzerinden kaydedildi");
   }
 
   async function handleSaveSipConfig() {
@@ -2240,7 +2164,6 @@ export function App() {
     ? requestedFlow
     : visibleNavigation[0]?.key ?? "inbox";
   const canTogglePresence = Boolean(user && user.role !== "admin");
-  const netgsmSettings = netgsmSettingsFrom(activeSettings);
   const sipServerSettings = sipServerSettingsFrom(activeSettings, data.webphone);
   const operationalPolicy = operationalPolicyFrom(activeSettings);
   const selectedCustomer = data.customers[0] ?? null;
@@ -2256,18 +2179,6 @@ export function App() {
   const orderPersonnel = [...new Map(data.orders
     .filter((order) => order.created_by_user_public_id && order.created_by_user_email)
     .map((order) => [order.created_by_user_public_id as string, order.created_by_user_email as string])).entries()];
-  const smsVariableValues: Record<SmsTemplateVariable, string> = {
-    "{musteri_adi}": selectedShipment?.recipient_name ?? selectedOrder?.customer_full_name ?? "Müşteri",
-    "{takip_no}": selectedShipment?.tracking_number ?? selectedShipment?.barcode_number ?? "takip bekliyor",
-    "{kargo_firmasi}": selectedShipment?.provider ?? "Kargo",
-  };
-  const smsPreview = smsTemplateVariables.reduce(
-    (message, variable) => message.replace(variable, smsVariableValues[variable]),
-    smsTemplate,
-  );
-  const activeSmsTemplateValue = smsVariableValues[activeSmsTemplateVariable];
-  const smsInfo = smsSegmentInfo(smsPreview);
-  const smsRecipientCount = data.shipmentSummary.recipient_phone_count;
   const balanceSummary = toBalanceView(data.balanceSummary);
   const unreadConversationCount = data.conversationSummary.unread_count;
   const poolConversationCount = data.conversationSummary.pool_count;
@@ -4085,71 +3996,7 @@ export function App() {
           </FlowPanel>
         )}
 
-        {activeFlow === "sms" && (
-          <FlowPanel title="SMS" icon={<MessageSquare size={18} />} testId="sms-flow">
-            <DetailPanel title="Manuel SMS Şablonu" testId="sms-template-detail">
-              <DataRows
-                rows={[
-                  ["Şablon", smsTemplate, "değişkenli mesaj"],
-                  ["Önizleme", smsPreview, smsInfo.usesUnicode ? "Türkçe karakter" : "GSM karakter"],
-                  ["Seçili değişken", activeSmsTemplateVariable, activeSmsTemplateValue],
-                  ["Sayaç", `${smsInfo.length} karakter`, `${smsInfo.segmentCount} SMS`],
-                ]}
-              />
-              <p className="detail-note" data-testid="sms-template-selected-variable">
-                {activeSmsTemplateVariable}: {activeSmsTemplateValue}
-              </p>
-              <div className="detail-actions">
-                {smsTemplateVariables.map((variable) => (
-                  <button
-                    aria-pressed={activeSmsTemplateVariable === variable}
-                    className={cx("secondary-action", activeSmsTemplateVariable === variable && "selected")}
-                    data-testid={`sms-template-variable-${variable.slice(1, -1).replaceAll("_", "-")}`}
-                    key={variable}
-                    type="button"
-                    onClick={() => setActiveSmsTemplateVariable(variable)}
-                  >
-                    {variable}
-                  </button>
-                ))}
-                <button className="primary-action" type="button" onClick={() => void handleSendSms()}>
-                  SMS gönder
-                </button>
-              </div>
-            </DetailPanel>
-            <DetailPanel title="SMS Gönderim Kayıtları" testId="sms-history-detail">
-              <DataRows
-                rows={[
-                  ["Alıcı listesi", `${smsRecipientCount} alıcı`, "shipments API"],
-                  ["Seçili alıcı", selectedShipment?.recipient_phone ?? "-", selectedShipment?.recipient_name ?? "-"],
-                  ["Son taslak", smsPreview, `${smsInfo.segmentCount} SMS`],
-                  ["Şablon durumu", "aktif", "manuel gönderim"],
-                  ["Son gönderim", lastSmsSend ?? "-", "provider-delivery API"],
-                ]}
-              />
-            </DetailPanel>
-            <DetailPanel title="Otomatik Teyit Araması" testId="sms-confirmation-detail">
-              <DataRows
-                rows={[
-                  ["Durum", netgsmSettings.aktif ? "aktif" : "kapalı", "admin settings"],
-                  ["İlk arama", `${netgsmSettings.ilk_arama_dakika} dakika`, "sipariş sonrası"],
-                  ["Maksimum deneme", `${netgsmSettings.max_deneme} kez`, `${netgsmSettings.deneme_arasi_dakika} dakika arayla`],
-                  ["Müşteri telefonu", selectedShipment?.recipient_phone ?? "-", "shipments API"],
-                ]}
-              />
-              {netgsmSettings.aktif && (
-                <p className="detail-note">
-                  Sipariş oluşturulduktan {netgsmSettings.ilk_arama_dakika} dakika sonra aranacak.
-                </p>
-              )}
-              {user?.role === "admin" && (
-                <button className="primary-action" type="button" onClick={handleSaveNetgsmSettings}>
-                  NetGSM teyit ayarını kaydet
-                </button>
-              )}
-            </DetailPanel>
-          </FlowPanel>
-        )}
+        {activeFlow === "sms" && <SmsPage http={http} />}
 
         {activeFlow === "calls" && (
           <FlowPanel title="Arama" icon={<Phone size={18} />} testId="calls-flow">

@@ -80,5 +80,12 @@
   "POST /api/comments/{comment_public_id}/hide": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "allow", "admin": "allow" },
   "POST /api/comments/{comment_public_id}/delete": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "allow", "admin": "allow" },
   "POST /api/comments/{comment_public_id}/manual": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "allow", "admin": "allow" },
-  "POST /api/comments/{comment_public_id}/ai-suggestion": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "allow", "admin": "allow" }
+  "POST /api/comments/{comment_public_id}/ai-suggestion": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "allow", "admin": "allow" },
+  "GET /api/sms/templates": { "anonymous": "deny", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" },
+  "POST /api/sms/templates": { "anonymous": "deny", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" },
+  "PATCH /api/sms/templates/{template_public_id}": { "anonymous": "deny", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" },
+  "DELETE /api/sms/templates/{template_public_id}": { "anonymous": "deny", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" },
+  "GET /api/sms/history": { "anonymous": "deny", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" },
+  "POST /api/sms/manual-send": { "anonymous": "deny", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" },
+  "POST /api/sms/automatic/trigger": { "anonymous": "deny", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" }
 }

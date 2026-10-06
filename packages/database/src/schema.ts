@@ -32,6 +32,8 @@ export interface Database {
   message_shortcut_attachments: MessageShortcutAttachmentsTable;
   social_comments: SocialCommentsTable;
   social_comment_actions: SocialCommentActionsTable;
+  sms_templates: SmsTemplatesTable;
+  sms_messages: SmsMessagesTable;
   products: ProductsTable;
   stock_movements: StockMovementsTable;
   orders: OrdersTable;
@@ -220,6 +222,33 @@ export interface SocialCommentActionsTable extends BaseTable {
   action: string;
   idempotency_key: string;
   request_payload: Json;
+  job_id: string | null;
+  queued: boolean;
+  actor_user_id: number | null;
+}
+
+export interface SmsTemplatesTable extends BaseTable {
+  title: string;
+  body: string;
+  sort_order: number;
+  is_active: boolean;
+  is_system: boolean;
+  created_by_user_id: number | null;
+}
+
+export interface SmsMessagesTable extends BaseTable {
+  recipient_phone: string;
+  customer_name: string | null;
+  message: string;
+  is_automatic: boolean;
+  status: string;
+  error_message: string | null;
+  provider_bulk_id: string | null;
+  shipment_id: number | null;
+  tracking_number: string | null;
+  template_id: number | null;
+  idempotency_key: string;
+  request_id: string;
   job_id: string | null;
   queued: boolean;
   actor_user_id: number | null;

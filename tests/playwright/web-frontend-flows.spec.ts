@@ -114,10 +114,9 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
   let orderCreateCount = 0;
   let cancellationApproved = false;
   let cancellationPayload: { status?: string; notes?: string | null } | null = null;
-  let smsSendPayload: {
-    recipient_phone?: string;
+  let smsManualPayload: {
+    recipients?: string[];
     message?: string;
-    shipment_public_id?: string;
     idempotency_key?: string;
   } | null = null;
   let paymentRequestPayload: {
@@ -1807,11 +1806,15 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       return;
     }
 
-    if (url.pathname === "/api/sms/send") {
-      smsSendPayload = JSON.parse(route.request().postData() ?? "{}") as {
-        recipient_phone?: string;
+    if (url.pathname === "/api/sms/templates") {
+      await route.fulfill({ contentType: "application/json", body: JSON.stringify({ data: [] }) });
+      return;
+    }
+
+    if (url.pathname === "/api/sms/manual-send") {
+      smsManualPayload = JSON.parse(route.request().postData() ?? "{}") as {
+        recipients?: string[];
         message?: string;
-        shipment_public_id?: string;
         idempotency_key?: string;
       };
       await route.fulfill({
@@ -1820,12 +1823,26 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
         body: JSON.stringify({
           provider: "netgsm",
           operation: "sms.send",
-          request_id: "req_sms_playwright",
-          job_id: "job_manual_sms_shp_playwright",
-          queued: true,
-          recipient_phone: smsSendPayload.recipient_phone,
-          message_preview: smsSendPayload.message?.slice(0, 80) ?? "",
+          recipient_count: 1,
+          queued_count: 1,
+          replayed: false,
           live_call_permitted: false,
+          live_gate: "providers.netgsm.live_mode",
+          messages: (smsManualPayload.recipients ?? []).map((phone, index) => ({
+            public_id: `sms_playwright_${index}`,
+            recipient_phone: phone,
+            customer_name: null,
+            tracking_number: null,
+            message: smsManualPayload?.message ?? "",
+            is_automatic: false,
+            status: "queued",
+            error_message: null,
+            provider_bulk_id: null,
+            request_id: "req_sms_playwright",
+            job_id: "job_sms_playwright",
+            queued: true,
+            created_at: "2026-01-01T00:00:00.000Z",
+          })),
         }),
       });
       return;
@@ -2210,37 +2227,24 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("balance-payment-detail")).toContainText("balance.payment_request payreq_payment_ord_playwright_12_55_try");
     await expect(page.getByTestId("balance-payment-detail")).toContainText("canlı ödeme provider kapalı");
     await page.getByRole("link", { name: /^sms$/i }).click();
-    await expect(page.getByTestId("sms-template-detail")).toContainText("Manuel SMS Şablonu");
-    await expect(page.getByTestId("sms-template-detail")).toContainText("{musteri_adi}");
-    await expect(page.getByTestId("sms-template-detail")).toContainText("Playwright Customer");
-    await expect(page.getByTestId("sms-template-detail")).toContainText("TRK-PLAYWRIGHT");
-    await expect(page.getByTestId("sms-template-variable-musteri-adi")).toHaveAttribute("aria-pressed", "true");
-    await page.getByTestId("sms-template-variable-takip-no").click();
-    await expect(page.getByTestId("sms-template-variable-takip-no")).toHaveAttribute("aria-pressed", "true");
-    await expect(page.getByTestId("sms-template-detail")).toContainText("Seçili değişken");
-    await expect(page.getByTestId("sms-template-selected-variable")).toContainText("{takip_no}: TRK-PLAYWRIGHT");
-    await page.getByTestId("sms-template-variable-kargo-firmasi").click();
-    await expect(page.getByTestId("sms-template-variable-kargo-firmasi")).toHaveAttribute("aria-pressed", "true");
-    await expect(page.getByTestId("sms-template-selected-variable")).toContainText("{kargo_firmasi}: ptt");
-    await expect(page.getByTestId("sms-template-detail")).toContainText("1 SMS");
-    await expect(page.getByTestId("sms-history-detail")).toContainText("SMS Gönderim Kayıtları");
-    await expect(page.getByTestId("sms-history-detail")).toContainText("13 alıcı");
-    await expect(page.getByTestId("sms-history-detail")).toContainText("5550000000");
-    await page.getByRole("button", { name: "SMS gönder" }).click();
+    await expect(page.getByTestId("sms-flow")).toContainText("Manuel gönderim, geçmiş kayıtlar, şablon yönetimi ve otomatik SMS ayarları");
+    await expect(page.getByTestId("sms-tab-manuel")).toHaveAttribute("aria-selected", "true");
+    await page.getByTestId("sms-variable-musteri-adi").click();
+    await expect(page.getByTestId("sms-message-input")).toHaveValue("{musteri_adi}");
+    await expect(page.getByTestId("sms-preview")).toContainText("[Ahmet Yılmaz]");
+    await page.getByTestId("sms-message-input").fill("Kargonuz TRK-PLAYWRIGHT ile yolda");
+    await expect(page.getByTestId("sms-manual-counter")).toContainText("1 SMS");
+    await page.getByTestId("sms-phone-input").fill("5550000000");
+    await page.getByTestId("sms-send-button").click();
     await expect
-      .poll(() => smsSendPayload)
+      .poll(() => smsManualPayload)
       .toMatchObject({
-        recipient_phone: "5550000000",
-        shipment_public_id: "shp_playwright",
-        idempotency_key: "manual_sms_shp_playwright",
-        message: expect.stringContaining("TRK-PLAYWRIGHT"),
+        recipients: ["5550000000"],
+        message: "Kargonuz TRK-PLAYWRIGHT ile yolda",
+        idempotency_key: expect.stringContaining("sms_manual_"),
       });
-    await expect(page.getByTestId("sms-history-detail")).toContainText("netgsm sms.send queued req_sms_playwright");
-    await expect(page.getByTestId("sms-confirmation-detail")).toContainText("kapalı");
-    await expect(page.getByTestId("sms-confirmation-detail")).toContainText("5550000000");
-    await page.getByRole("button", { name: /netgsm teyit ayarını kaydet/i }).click();
-    await expect(page.getByTestId("sms-confirmation-detail")).toContainText("aktif");
-    await expect(page.getByTestId("sms-confirmation-detail")).toContainText("5 dakika sonra aranacak");
+    await expect(page.getByTestId("sms-toast")).toContainText("1 SMS başarıyla gönderildi");
+    await expect(page.getByTestId("sms-session")).toContainText("5550000000");
     await page.goto(`${app.url}/sesli-asistan`);
     await expect(page.getByTestId("sip-config-detail")).toContainText("wss://sip.example.com/ws");
     await expect(page.getByTestId("sip-config-detail")).toContainText("stun:stun.l.google.com:19302");
@@ -2568,10 +2572,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await expect(page.getByTestId("cron-debug-flow")).toContainText("PTT / req_ptt_cron_debug");
     await expect(page.getByTestId("cron-debug-flow")).toContainText("SURAT / req_surat_debug");
     await page.getByRole("link", { name: /^sms$/i }).click();
-    await expect(page.getByTestId("sms-template-detail")).toContainText("Surat Playwright Customer");
-    await expect(page.getByTestId("sms-template-detail")).toContainText("TRK-SURAT-PLAYWRIGHT");
-    await expect(page.getByTestId("sms-history-detail")).toContainText("5551111111");
-    await expect(page.getByTestId("sms-confirmation-detail")).toContainText("5551111111");
+    await expect(page.getByTestId("sms-flow")).toContainText("Otomatik SMS");
     await page.getByRole("link", { name: /ayarlar/i }).click();
     await expect(page.getByTestId("admin-flow")).toContainText("webphone.enabled");
     await expect(page.getByTestId("operation-policy-detail")).toContainText("Operasyon Politikaları");
@@ -2719,7 +2720,8 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       "/admin/settings/audit",
       "/admin/settings/operations.policy",
       "/admin/settings/sip_config",
-      "/admin/settings/netgsm_teyit_ayarlar",
+      "/api/sms/templates",
+      "/api/sms/manual-send",
       "/admin/settings/providers.ptt.live_mode",
       "/api/files/uploads",
       "/api/files/orphans",
