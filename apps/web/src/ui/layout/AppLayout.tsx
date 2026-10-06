@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { NavLink } from "react-router-dom";
 import { Languages, LogOut, Wifi, WifiOff } from "lucide-react";
 import type { LoginResponse } from "../../api/auth-client.js";
-import { cx, type NavigationItem } from "../app/shared.js";
+import { cx, navigationRole, type NavigationItem } from "../app/shared.js";
 
 export type UiLanguage = "tr" | "en";
 
@@ -39,8 +39,8 @@ const headerText = {
 } satisfies Record<UiLanguage, Record<string, string>>;
 
 const roleLabels: Record<UiLanguage, Record<string, string>> = {
-  tr: { admin: "Admin", calisan: "Personel", kargo_operatoru: "Kargo" },
-  en: { admin: "Admin", calisan: "Personnel", kargo_operatoru: "Cargo" },
+  tr: { owner: "Admin", admin: "Admin", calisan: "Personel", kargo_operatoru: "Kargo" },
+  en: { owner: "Admin", admin: "Admin", calisan: "Personnel", kargo_operatoru: "Cargo" },
 };
 
 function readStoredLanguage(): UiLanguage {
@@ -152,7 +152,7 @@ export function AppLayout(props: AppLayoutProps) {
           <div className="user-chip" data-testid="app-profile">
             <span className="profile-avatar" aria-hidden="true">
               {userInitials(user)}
-              {user && user.role !== "admin" && (
+              {user && navigationRole(user.role) !== "admin" && (
                 <span className={cx("profile-presence-dot", user.is_online && "online")} data-testid="profile-presence-dot" />
               )}
             </span>

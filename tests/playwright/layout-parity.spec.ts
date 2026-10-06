@@ -383,6 +383,17 @@ test("header shows brand, role nav, presence, profile, language and logout like 
     await expect(page.getByTestId("profile-presence-dot")).toHaveCount(0);
     await expect(page.getByTestId("app-profile").locator(".profile-role")).toHaveText("Admin");
     await expect(page.getByRole("navigation", { name: "Ana gezinme" }).getByRole("link", { name: "VAPI AI" })).toBeVisible();
+
+    // Bootstrap owner (first admin) gets the admin shell instead of an empty redirect loop.
+    await page.getByRole("button", { name: /çıkış/i }).click();
+    backend.user = loginUser({ role: "owner", email: "owner@example.com", first_name: "System", last_name: "Owner" });
+    await login(page);
+    await expect.poll(() => pathOf(page)).toBe("/mesajlar");
+    await expect(page.getByTestId("inbox-flow")).toBeVisible();
+    await expect(page.getByTestId("app-profile").locator(".profile-role")).toHaveText("Admin");
+    await expect(page.getByTestId("profile-presence-dot")).toHaveCount(0);
+    await page.goto(`${app.url}/raporlar`);
+    await expect(page.getByTestId("raporlar-page")).toBeVisible();
   } finally {
     await closeWebApp(app.server);
   }

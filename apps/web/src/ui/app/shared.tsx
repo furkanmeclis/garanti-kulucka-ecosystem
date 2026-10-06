@@ -181,6 +181,11 @@ export const instagramCaptionLimit = 2200;
 
 export const shipmentPageSize = 20;
 
+/** The bootstrap `owner` account has admin reach in the UI (navigation, observer presence). */
+export function navigationRole(role: string | null | undefined) {
+  return role === "owner" ? "admin" : role ?? "guest";
+}
+
 export function flowFromPath(pathname: string) {
   return [...navigationItems]
     .sort((first, second) => second.path.length - first.path.length)

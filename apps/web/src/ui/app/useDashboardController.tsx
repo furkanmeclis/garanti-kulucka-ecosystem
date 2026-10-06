@@ -7,7 +7,7 @@ import { createFileClient, type DownloadInstruction, type FileMetadata, type Fil
 import { BackendRequestError, createBackendHttpClient } from "../../api/http-client.js";
 import { createRealtimeClient, type RealtimeClient } from "../../api/realtime-client.js";
 import { createWebphoneClient } from "../../api/webphone-client.js";
-import { backendBaseUrl, tokenStorageKey, type DashboardData, type PendingAttachment, type ShortcutDraft, type ShipmentPipelineFilter, type ShipmentFilter, type OrderSortBy, type SortDirection, type OrderCargoProvider, type OrderFormItem, type OrderFormState, navigationItems, instagramDraftImageUrl, instagramDraftCaption, shipmentPageSize, flowFromPath, shipmentFilterParams, shipmentMatchesFilter, orderStatusLabel, cargoProviderLabel, readStoredToken, attachmentTypeFromFile, isRecord, defaultOrderForm, parseMoneyInput, orderFormTotals, defaultBalanceSummary, defaultConversationSummary, defaultCustomerSummary, defaultOrderSummary, defaultProductSummary, defaultProviderDebugSummary, defaultShipmentPipelineSummary, defaultShipmentSummary, defaultCommentModerationSummary, defaultInstagramAnalyticsSummary, defaultReportSummary, toInstagramAnalyticsView, sipServerSettingsFrom, operationalPolicyFrom } from "./shared.js";
+import { backendBaseUrl, tokenStorageKey, type DashboardData, type PendingAttachment, type ShortcutDraft, type ShipmentPipelineFilter, type ShipmentFilter, type OrderSortBy, type SortDirection, type OrderCargoProvider, type OrderFormItem, type OrderFormState, navigationItems, navigationRole, instagramDraftImageUrl, instagramDraftCaption, shipmentPageSize, flowFromPath, shipmentFilterParams, shipmentMatchesFilter, orderStatusLabel, cargoProviderLabel, readStoredToken, attachmentTypeFromFile, isRecord, defaultOrderForm, parseMoneyInput, orderFormTotals, defaultBalanceSummary, defaultConversationSummary, defaultCustomerSummary, defaultOrderSummary, defaultProductSummary, defaultProviderDebugSummary, defaultShipmentPipelineSummary, defaultShipmentSummary, defaultCommentModerationSummary, defaultInstagramAnalyticsSummary, defaultReportSummary, toInstagramAnalyticsView, sipServerSettingsFrom, operationalPolicyFrom } from "./shared.js";
 import { publicPageFromPath } from "../pages/AuthScreens.js";
 
 export function useDashboardController() {
@@ -1402,12 +1402,12 @@ export function useDashboardController() {
   }
 
   const activeSettings = data.settings.filter((setting) => !setting.is_secret);
-  const visibleNavigation = navigationItems.filter((item) => item.roles.includes(user?.role ?? "guest"));
+  const visibleNavigation = navigationItems.filter((item) => item.roles.includes(navigationRole(user?.role)));
   const requestedFlow = flowFromPath(location.pathname);
   const activeFlow = visibleNavigation.some((item) => item.key === requestedFlow)
     ? requestedFlow
     : visibleNavigation[0]?.key ?? "inbox";
-  const canTogglePresence = Boolean(user && user.role !== "admin");
+  const canTogglePresence = Boolean(user && navigationRole(user.role) !== "admin");
   const sipServerSettings = sipServerSettingsFrom(activeSettings, data.webphone);
   const operationalPolicy = operationalPolicyFrom(activeSettings);
   const selectedCustomer = data.customers[0] ?? null;
