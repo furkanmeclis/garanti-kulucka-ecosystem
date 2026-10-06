@@ -1,6 +1,6 @@
 import { defineMessages, useT, type MessageParams } from "../index.js";
 
-/** Status-row and order-form messages produced by the dashboard controller. */
+/** Status-row, order-form and filter-label messages produced by the dashboard controller. */
 export const statusMessages = defineMessages({
   tr: {
     ready: "Hazır",
@@ -89,6 +89,17 @@ export const statusMessages = defineMessages({
     ordersExportedFiltered: "{count} filtrelenmiş sipariş Excel olarak indirildi",
     ordersExportedVisible: "{count} görünür sipariş Excel olarak indirildi",
     orderCreateFailedWith: "Sipariş oluşturulurken hata oluştu: {message}",
+    filterChannelAll: "Tüm kanallar {count}",
+    filterChannelInstagram: "Instagram {count}",
+    filterChannelFacebook: "Facebook {count}",
+    filterStatusAll: "Tüm durumlar",
+    filterStatusOpen: "Açık {count}",
+    filterStatusClosed: "Kapalı {count}",
+    pipelineTabAll: "Tümü",
+    pipelineTabMessage: "Mesaj",
+    pipelineTabSms: "SMS",
+    pipelineTabVapi: "VAPI",
+    pipelineTabDelivered: "Teslim",
   },
   en: {
     ready: "Ready",
@@ -177,6 +188,17 @@ export const statusMessages = defineMessages({
     ordersExportedFiltered: "{count} filtered orders downloaded as Excel",
     ordersExportedVisible: "{count} visible orders downloaded as Excel",
     orderCreateFailedWith: "An error occurred while creating the order: {message}",
+    filterChannelAll: "All channels {count}",
+    filterChannelInstagram: "Instagram {count}",
+    filterChannelFacebook: "Facebook {count}",
+    filterStatusAll: "All statuses",
+    filterStatusOpen: "Open {count}",
+    filterStatusClosed: "Closed {count}",
+    pipelineTabAll: "All",
+    pipelineTabMessage: "Message",
+    pipelineTabSms: "SMS",
+    pipelineTabVapi: "VAPI",
+    pipelineTabDelivered: "Delivered",
   },
 });
 

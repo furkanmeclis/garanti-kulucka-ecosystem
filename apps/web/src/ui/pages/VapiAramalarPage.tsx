@@ -29,6 +29,10 @@ import {
   type VoiceClient,
 } from "../../api/voice-client.js";
 import { createWebphoneClient } from "../../api/webphone-client.js";
+import { localeFor, useLanguage, useT, type UiLanguage } from "../i18n/index.js";
+import { vapiCallsMessages } from "../i18n/messages/vapiCalls.js";
+
+type VapiMessageKey = keyof (typeof vapiCallsMessages)["tr"];
 
 /**
  * Legacy parity: garanti-kulucka/frontend/src/pages/sesli-asistan/VapiAramalarPage.jsx (+ components/vapi/TestAramaPaneli).
@@ -40,25 +44,26 @@ import { createWebphoneClient } from "../../api/webphone-client.js";
 type Bildirim = { tip: "success" | "error" | "warning"; mesaj: string };
 type Bildir = (tip: Bildirim["tip"], mesaj: string) => void;
 
-const DURUM_STIL: Record<string, { sinif: string; ikon: LucideIcon; etiket: string }> = {
-  basladi: { sinif: "vapi-badge-blue", ikon: Phone, etiket: "Arıyor" },
-  cevaplandi: { sinif: "vapi-badge-green", ikon: CheckCircle, etiket: "Cevaplandı" },
-  cevapsiz: { sinif: "vapi-badge-amber", ikon: PhoneMissed, etiket: "Cevapsız" },
-  tamamlandi: { sinif: "vapi-badge-emerald", ikon: CheckCircle, etiket: "Tamamlandı" },
-  hata: { sinif: "vapi-badge-red", ikon: XCircle, etiket: "Hata" },
-  iptal: { sinif: "vapi-badge-slate", ikon: XCircle, etiket: "İptal" },
-  bekliyor: { sinif: "vapi-badge-cyan", ikon: Clock, etiket: "Bekliyor" },
-  araniyor: { sinif: "vapi-badge-blue", ikon: PhoneOutgoing, etiket: "Aranıyor" },
-  basarisiz: { sinif: "vapi-badge-red", ikon: XCircle, etiket: "Başarısız" },
+const DURUM_STIL: Record<string, { sinif: string; ikon: LucideIcon; etiket: VapiMessageKey }> = {
+  basladi: { sinif: "vapi-badge-blue", ikon: Phone, etiket: "statusCalling" },
+  cevaplandi: { sinif: "vapi-badge-green", ikon: CheckCircle, etiket: "statusAnswered" },
+  cevapsiz: { sinif: "vapi-badge-amber", ikon: PhoneMissed, etiket: "statusMissed" },
+  tamamlandi: { sinif: "vapi-badge-emerald", ikon: CheckCircle, etiket: "statusCompleted" },
+  hata: { sinif: "vapi-badge-red", ikon: XCircle, etiket: "statusError" },
+  iptal: { sinif: "vapi-badge-slate", ikon: XCircle, etiket: "statusCancelled" },
+  bekliyor: { sinif: "vapi-badge-cyan", ikon: Clock, etiket: "statusWaiting" },
+  araniyor: { sinif: "vapi-badge-blue", ikon: PhoneOutgoing, etiket: "statusDialing" },
+  basarisiz: { sinif: "vapi-badge-red", ikon: XCircle, etiket: "statusFailed" },
 };
 
 function DurumBadge(props: { durum: string | null | undefined }) {
+  const t = useT(vapiCallsMessages);
   const stil = DURUM_STIL[props.durum ?? ""] ?? DURUM_STIL.bekliyor!;
   const Ikon = stil.ikon;
   return (
     <span className={`vapi-badge ${stil.sinif}`}>
       <Ikon size={12} />
-      {stil.etiket}
+      {t(stil.etiket)}
     </span>
   );
 }
@@ -70,9 +75,9 @@ function sureFormatla(sn: number | null | undefined) {
   return `${dk}:${String(saniye).padStart(2, "0")}`;
 }
 
-function tarihFormatla(tarih: string | null | undefined) {
+function tarihFormatla(tarih: string | null | undefined, language: UiLanguage) {
   if (!tarih) return "—";
-  return new Date(tarih).toLocaleString("tr-TR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  return new Date(tarih).toLocaleString(localeFor(language), { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
 function hataMesaji(error: unknown, fallback: string) {
@@ -96,26 +101,28 @@ function KargoEtiketi(props: { firma: string | null | undefined }) {
 }
 
 function Pagination(props: { sayfa: number; toplamSayfa: number; sayfaDegistir: (sayfa: number) => void }) {
+  const t = useT(vapiCallsMessages);
   if (props.toplamSayfa <= 1) return null;
   return (
     <div className="vapi-pagination">
-      <span>Sayfa {props.sayfa} / {props.toplamSayfa}</span>
-      <button type="button" disabled={props.sayfa <= 1} onClick={() => props.sayfaDegistir(props.sayfa - 1)}>Önceki</button>
-      <button type="button" disabled={props.sayfa >= props.toplamSayfa} onClick={() => props.sayfaDegistir(props.sayfa + 1)}>Sonraki</button>
+      <span>{t("pageOf", { page: props.sayfa, total: props.toplamSayfa })}</span>
+      <button type="button" disabled={props.sayfa <= 1} onClick={() => props.sayfaDegistir(props.sayfa - 1)}>{t("previous")}</button>
+      <button type="button" disabled={props.sayfa >= props.toplamSayfa} onClick={() => props.sayfaDegistir(props.sayfa + 1)}>{t("next")}</button>
     </div>
   );
 }
 
 type TabId = "kargo-almayan" | "kuyruk" | "gecmis" | "test";
-const TABS: Array<{ id: TabId; etiket: string; ikon: LucideIcon }> = [
-  { id: "kargo-almayan", etiket: "Kargo Almayan", ikon: Package },
-  { id: "kuyruk", etiket: "Arama Kuyruğu", ikon: Clock },
-  { id: "gecmis", etiket: "Arama Geçmişi", ikon: Phone },
-  { id: "test", etiket: "Test Araması", ikon: Stethoscope },
+const TABS: Array<{ id: TabId; etiket: VapiMessageKey; ikon: LucideIcon }> = [
+  { id: "kargo-almayan", etiket: "tabCargoNotReceived", ikon: Package },
+  { id: "kuyruk", etiket: "tabQueue", ikon: Clock },
+  { id: "gecmis", etiket: "tabHistory", ikon: Phone },
+  { id: "test", etiket: "tabTest", ikon: Stethoscope },
 ];
 
 export function VapiAramalarPage(props: { http: BackendHttpClient }) {
   const client = useMemo(() => createVoiceClient(props.http), [props.http]);
+  const t = useT(vapiCallsMessages);
   const [aktifTab, setAktifTab] = useState<TabId>("kargo-almayan");
   const [bildirim, setBildirim] = useState<Bildirim | null>(null);
   const bildir = useCallback<Bildir>((tip, mesaj) => setBildirim({ tip, mesaj }), []);
@@ -126,9 +133,9 @@ export function VapiAramalarPage(props: { http: BackendHttpClient }) {
         <div>
           <h1>
             <span className="vapi-logo"><Bot size={20} /></span>
-            VAPI AI Aramalar
+            {t("pageTitle")}
           </h1>
-          <p className="vapi-muted">Kargo almayan müşterilere otomatik AI sesli arama</p>
+          <p className="vapi-muted">{t("pageSubtitle")}</p>
         </div>
         <IstatistikKartlari client={client} />
       </div>
@@ -136,7 +143,7 @@ export function VapiAramalarPage(props: { http: BackendHttpClient }) {
       {bildirim && (
         <div className={`vapi-toast vapi-toast-${bildirim.tip}`} role="status" data-testid="vapi-toast">
           <span>{bildirim.mesaj}</span>
-          <button type="button" className="vapi-icon-button" onClick={() => setBildirim(null)} aria-label="Kapat">
+          <button type="button" className="vapi-icon-button" onClick={() => setBildirim(null)} aria-label={t("close")}>
             <X size={14} />
           </button>
         </div>
@@ -154,7 +161,7 @@ export function VapiAramalarPage(props: { http: BackendHttpClient }) {
             onClick={() => setAktifTab(id)}
           >
             <Ikon size={16} />
-            {etiket}
+            {t(etiket)}
           </button>
         ))}
       </div>
@@ -172,6 +179,7 @@ export function VapiAramalarPage(props: { http: BackendHttpClient }) {
 }
 
 function IstatistikKartlari(props: { client: VoiceClient }) {
+  const t = useT(vapiCallsMessages);
   const [data, setData] = useState<VapiStatistics | null>(null);
 
   useEffect(() => {
@@ -189,9 +197,9 @@ function IstatistikKartlari(props: { client: VoiceClient }) {
 
   if (!data) return null;
   const kartlar = [
-    { etiket: "Toplam Arama", deger: String(data.toplam_arama) },
-    { etiket: "Başarı Oranı", deger: `%${data.basari_orani}` },
-    { etiket: "Kuyrukta", deger: String(data.kuyruk_bekleyen) },
+    { etiket: t("statTotalCalls"), deger: String(data.toplam_arama) },
+    { etiket: t("statSuccessRate"), deger: t("percentValue", { value: data.basari_orani }) },
+    { etiket: t("statInQueue"), deger: String(data.kuyruk_bekleyen) },
   ];
   return (
     <div className="vapi-stats" data-testid="vapi-stats">
@@ -207,6 +215,8 @@ function IstatistikKartlari(props: { client: VoiceClient }) {
 
 function KargoAlmayanTab(props: { client: VoiceClient; bildir: Bildir }) {
   const { client, bildir } = props;
+  const t = useT(vapiCallsMessages);
+  const { language } = useLanguage();
   const [yukleniyor, setYukleniyor] = useState(false);
   const [data, setData] = useState<VapiCargoNotReceived[]>([]);
   const [toplam, setToplam] = useState(0);
@@ -223,10 +233,10 @@ function KargoAlmayanTab(props: { client: VoiceClient; bildir: Bildir }) {
       setData(r.data ?? []);
       setToplam(r.total ?? 0);
     } catch (error) {
-      bildir("error", hataMesaji(error, "Yükleme hatası"));
+      bildir("error", hataMesaji(error, t("loadError")));
     }
     setYukleniyor(false);
-  }, [client, bildir, kargoFirmasi, sayfa]);
+  }, [client, bildir, kargoFirmasi, sayfa, t]);
 
   useEffect(() => {
     void yukle();
@@ -247,7 +257,7 @@ function KargoAlmayanTab(props: { client: VoiceClient; bildir: Bildir }) {
   const kuyrugaEkle = async () => {
     const secilenKargolar = data.filter((k) => seciliIds.has(k.id));
     if (secilenKargolar.length === 0) {
-      bildir("warning", "Lütfen en az bir kargo seçin");
+      bildir("warning", t("selectAtLeastOneCargo"));
       return;
     }
     setKuyrugaEkleniyor(true);
@@ -263,11 +273,11 @@ function KargoAlmayanTab(props: { client: VoiceClient; bildir: Bildir }) {
         })),
         anahtar("vapi_queue"),
       );
-      bildir("success", `${r.eklenen} kişi arama kuyruğuna eklendi${r.atlanan ? `, ${r.atlanan} atlandı` : ""}`);
+      bildir("success", r.atlanan ? t("addedToQueueSkipped", { added: r.eklenen, skipped: r.atlanan }) : t("addedToQueue", { added: r.eklenen }));
       setSeciliIds(new Set());
       void yukle();
     } catch (error) {
-      bildir("error", hataMesaji(error, "Ekleme hatası"));
+      bildir("error", hataMesaji(error, t("addError")));
     }
     setKuyrugaEkleniyor(false);
   };
@@ -276,29 +286,29 @@ function KargoAlmayanTab(props: { client: VoiceClient; bildir: Bildir }) {
     <div className="vapi-tab">
       <div className="vapi-toolbar">
         <select
-          aria-label="Kargo firması"
+          aria-label={t("cargoProvider")}
           value={kargoFirmasi}
           onChange={(e) => {
             setKargoFirmasi(e.target.value);
             setSayfa(1);
           }}
         >
-          <option value="tumu">Tüm Kargolar</option>
-          <option value="ptt">PTT Kargo</option>
-          <option value="surat">Sürat Kargo</option>
+          <option value="tumu">{t("allCargo")}</option>
+          <option value="ptt">{t("pttCargo")}</option>
+          <option value="surat">{t("suratCargo")}</option>
         </select>
         <button type="button" className="vapi-secondary" onClick={() => void yukle()} disabled={yukleniyor}>
           <RefreshCw size={16} className={yukleniyor ? "vapi-spin" : undefined} />
-          Yenile
+          {t("refresh")}
         </button>
         <div className="vapi-spacer" />
         {seciliIds.size > 0 && (
           <button type="button" className="vapi-primary" onClick={() => void kuyrugaEkle()} disabled={kuyrugaEkleniyor}>
             {kuyrugaEkleniyor ? <Loader2 size={16} className="vapi-spin" /> : <Plus size={16} />}
-            {seciliIds.size} Kişiyi Kuyruğa Ekle
+            {t("addPeopleToQueue", { count: seciliIds.size })}
           </button>
         )}
-        <span className="vapi-muted">{toplam} kargo almayan müşteri</span>
+        <span className="vapi-muted">{t("cargoNotReceivedCount", { count: toplam })}</span>
       </div>
 
       <div className="vapi-table-wrap">
@@ -306,12 +316,12 @@ function KargoAlmayanTab(props: { client: VoiceClient; bildir: Bildir }) {
           <thead>
             <tr>
               <th>
-                <input type="checkbox" aria-label="Tümünü seç" checked={data.length > 0 && seciliIds.size === data.length} onChange={tumunuSec} />
+                <input type="checkbox" aria-label={t("selectAll")} checked={data.length > 0 && seciliIds.size === data.length} onChange={tumunuSec} />
               </th>
-              <th>Müşteri</th>
-              <th>Kargo</th>
-              <th>Son Hareket</th>
-              <th>Durum</th>
+              <th>{t("colCustomer")}</th>
+              <th>{t("colCargo")}</th>
+              <th>{t("colLastEvent")}</th>
+              <th>{t("colStatus")}</th>
             </tr>
           </thead>
           <tbody>
@@ -319,21 +329,21 @@ function KargoAlmayanTab(props: { client: VoiceClient; bildir: Bildir }) {
               <tr>
                 <td colSpan={5} className="vapi-empty">
                   <Loader2 size={24} className="vapi-spin" />
-                  <p>Yükleniyor...</p>
+                  <p>{t("loading")}</p>
                 </td>
               </tr>
             ) : data.length === 0 ? (
               <tr>
                 <td colSpan={5} className="vapi-empty">
                   <Package size={32} />
-                  <p>Kargo almayan müşteri bulunamadı</p>
+                  <p>{t("noCargoNotReceived")}</p>
                 </td>
               </tr>
             ) : (
               data.map((k) => (
                 <tr key={k.id} className={seciliIds.has(k.id) ? "selected" : undefined}>
                   <td>
-                    <input type="checkbox" aria-label={`${k.alici_ad} seç`} checked={seciliIds.has(k.id)} onChange={() => tekSec(k.id)} />
+                    <input type="checkbox" aria-label={t("selectRow", { name: k.alici_ad })} checked={seciliIds.has(k.id)} onChange={() => tekSec(k.id)} />
                   </td>
                   <td>
                     <p className="vapi-strong">{k.alici_ad || "—"}</p>
@@ -345,15 +355,15 @@ function KargoAlmayanTab(props: { client: VoiceClient; bildir: Bildir }) {
                   </td>
                   <td>
                     <p className="vapi-truncate" title={k.son_hareket}>{k.son_hareket || "—"}</p>
-                    <p className="vapi-sub">{tarihFormatla(k.son_hareket_tarihi)}</p>
+                    <p className="vapi-sub">{tarihFormatla(k.son_hareket_tarihi, language)}</p>
                   </td>
                   <td>
                     {k.kuyrukta ? (
                       <DurumBadge durum={k.kuyruk_durumu} />
                     ) : k.son_24s_arandi ? (
-                      <span className="vapi-sub">Son 24s arandı</span>
+                      <span className="vapi-sub">{t("calledLast24h")}</span>
                     ) : (
-                      <span className="vapi-sub">Aranmadı</span>
+                      <span className="vapi-sub">{t("notCalled")}</span>
                     )}
                   </td>
                 </tr>
@@ -369,6 +379,8 @@ function KargoAlmayanTab(props: { client: VoiceClient; bildir: Bildir }) {
 
 function AramaKuyrukTab(props: { client: VoiceClient; bildir: Bildir }) {
   const { client, bildir } = props;
+  const t = useT(vapiCallsMessages);
+  const { language } = useLanguage();
   const [yukleniyor, setYukleniyor] = useState(false);
   const [data, setData] = useState<VapiQueueItem[]>([]);
   const [toplam, setToplam] = useState(0);
@@ -383,10 +395,10 @@ function AramaKuyrukTab(props: { client: VoiceClient; bildir: Bildir }) {
       setData(r.data ?? []);
       setToplam(r.total ?? 0);
     } catch {
-      bildir("error", "Bağlantı hatası");
+      bildir("error", t("connectionError"));
     }
     setYukleniyor(false);
-  }, [client, bildir, durumFiltre, sayfa]);
+  }, [client, bildir, durumFiltre, sayfa, t]);
 
   useEffect(() => {
     void yukle();
@@ -403,20 +415,20 @@ function AramaKuyrukTab(props: { client: VoiceClient; bildir: Bildir }) {
         ...(item.son_hareket ? { last_event_text: item.son_hareket } : {}),
         idempotency_key: `vapi_call_${item.public_id}_${item.deneme_sayisi + 1}`,
       });
-      bildir("success", `${item.musteri_adi || item.musteri_telefon} aranıyor...`);
+      bildir("success", t("callingCustomer", { name: item.musteri_adi || item.musteri_telefon }));
       void yukle();
     } catch (error) {
-      bildir("error", hataMesaji(error, "Arama başlatılamadı"));
+      bildir("error", hataMesaji(error, t("callStartFailed")));
     }
   };
 
   const kuyrukSil = async (id: string) => {
     try {
       await client.deleteQueueItem(id);
-      bildir("success", "Kuyruktan silindi");
+      bildir("success", t("removedFromQueue"));
       void yukle();
     } catch {
-      bildir("error", "Silme hatası");
+      bildir("error", t("deleteError"));
     }
   };
 
@@ -424,10 +436,10 @@ function AramaKuyrukTab(props: { client: VoiceClient; bildir: Bildir }) {
     setTopluAramaYukleniyor(true);
     try {
       const r = await client.startBulkCalls(anahtar("vapi_bulk"));
-      bildir("success", `${r.aranan} kişi arandı${r.hatali ? `, ${r.hatali} hata` : ""}`);
+      bildir("success", r.hatali ? t("bulkCalledWithErrors", { called: r.aranan, failed: r.hatali }) : t("bulkCalled", { called: r.aranan }));
       void yukle();
     } catch (error) {
-      bildir("error", hataMesaji(error, "Toplu arama başlatılamadı"));
+      bildir("error", hataMesaji(error, t("bulkCallStartFailed")));
     }
     setTopluAramaYukleniyor(false);
   };
@@ -438,28 +450,28 @@ function AramaKuyrukTab(props: { client: VoiceClient; bildir: Bildir }) {
     <div className="vapi-tab">
       <div className="vapi-toolbar">
         <select
-          aria-label="Kuyruk durumu"
+          aria-label={t("queueStatus")}
           value={durumFiltre}
           onChange={(e) => {
             setDurumFiltre(e.target.value);
             setSayfa(1);
           }}
         >
-          <option value="tumu">Tüm Durumlar</option>
-          <option value="bekliyor">Bekliyor</option>
-          <option value="araniyor">Aranıyor</option>
-          <option value="tamamlandi">Tamamlandı</option>
-          <option value="basarisiz">Başarısız</option>
+          <option value="tumu">{t("allStatuses")}</option>
+          <option value="bekliyor">{t("statusWaiting")}</option>
+          <option value="araniyor">{t("statusDialing")}</option>
+          <option value="tamamlandi">{t("statusCompleted")}</option>
+          <option value="basarisiz">{t("statusFailed")}</option>
         </select>
         <button type="button" className="vapi-secondary" onClick={() => void yukle()} disabled={yukleniyor}>
           <RefreshCw size={16} className={yukleniyor ? "vapi-spin" : undefined} />
-          Yenile
+          {t("refresh")}
         </button>
         <div className="vapi-spacer" />
         {bekleyenSayisi > 0 && (
           <button type="button" className="vapi-primary vapi-gradient" onClick={() => void topluAramaBaslat()} disabled={topluAramaYukleniyor}>
             {topluAramaYukleniyor ? <Loader2 size={16} className="vapi-spin" /> : <Play size={16} />}
-            Toplu Arama Başlat ({bekleyenSayisi} kişi)
+            {t("startBulkCall", { count: bekleyenSayisi })}
           </button>
         )}
       </div>
@@ -468,12 +480,12 @@ function AramaKuyrukTab(props: { client: VoiceClient; bildir: Bildir }) {
         <table className="vapi-table" data-testid="vapi-queue-table">
           <thead>
             <tr>
-              <th>Müşteri</th>
-              <th>Kargo</th>
-              <th>Son Hareket</th>
-              <th className="vapi-center">Deneme</th>
-              <th>Durum</th>
-              <th className="vapi-right">İşlem</th>
+              <th>{t("colCustomer")}</th>
+              <th>{t("colCargo")}</th>
+              <th>{t("colLastEvent")}</th>
+              <th className="vapi-center">{t("colAttempt")}</th>
+              <th>{t("colStatus")}</th>
+              <th className="vapi-right">{t("colAction")}</th>
             </tr>
           </thead>
           <tbody>
@@ -487,7 +499,7 @@ function AramaKuyrukTab(props: { client: VoiceClient; bildir: Bildir }) {
               <tr>
                 <td colSpan={6} className="vapi-empty">
                   <Clock size={32} />
-                  <p>Kuyrukta arama yok</p>
+                  <p>{t("queueEmpty")}</p>
                 </td>
               </tr>
             ) : (
@@ -509,16 +521,16 @@ function AramaKuyrukTab(props: { client: VoiceClient; bildir: Bildir }) {
                   </td>
                   <td>
                     <DurumBadge durum={item.durum} />
-                    {item.son_arama_zamani && <p className="vapi-sub">Son: {tarihFormatla(item.son_arama_zamani)}</p>}
+                    {item.son_arama_zamani && <p className="vapi-sub">{t("lastCall", { date: tarihFormatla(item.son_arama_zamani, language) })}</p>}
                   </td>
                   <td className="vapi-right">
                     <div className="vapi-actions">
                       {item.durum === "bekliyor" && (
-                        <button type="button" className="vapi-icon-button vapi-call-button" title="Şimdi Ara" aria-label="Şimdi Ara" onClick={() => void tekAra(item)}>
+                        <button type="button" className="vapi-icon-button vapi-call-button" title={t("callNow")} aria-label={t("callNow")} onClick={() => void tekAra(item)}>
                           <PhoneOutgoing size={16} />
                         </button>
                       )}
-                      <button type="button" className="vapi-icon-button vapi-delete-button" title="Kuyruktan Sil" aria-label="Kuyruktan Sil" onClick={() => void kuyrukSil(item.id)}>
+                      <button type="button" className="vapi-icon-button vapi-delete-button" title={t("removeFromQueue")} aria-label={t("removeFromQueue")} onClick={() => void kuyrukSil(item.id)}>
                         <Trash2 size={16} />
                       </button>
                     </div>
@@ -536,6 +548,8 @@ function AramaKuyrukTab(props: { client: VoiceClient; bildir: Bildir }) {
 
 function AramaGecmisiTab(props: { client: VoiceClient; bildir: Bildir }) {
   const { client, bildir } = props;
+  const t = useT(vapiCallsMessages);
+  const { language } = useLanguage();
   const [yukleniyor, setYukleniyor] = useState(false);
   const [data, setData] = useState<VapiCall[]>([]);
   const [toplam, setToplam] = useState(0);
@@ -551,10 +565,10 @@ function AramaGecmisiTab(props: { client: VoiceClient; bildir: Bildir }) {
       setData(r.data ?? []);
       setToplam(r.total ?? 0);
     } catch {
-      bildir("error", "Bağlantı hatası");
+      bildir("error", t("connectionError"));
     }
     setYukleniyor(false);
-  }, [client, bildir, durumFiltre, sayfa, arama]);
+  }, [client, bildir, durumFiltre, sayfa, arama, t]);
 
   useEffect(() => {
     void yukle();
@@ -575,39 +589,39 @@ function AramaGecmisiTab(props: { client: VoiceClient; bildir: Bildir }) {
       <div className="vapi-toolbar">
         <div className="vapi-search">
           <Search size={16} />
-          <input value={arama} onChange={(e) => setArama(e.target.value)} placeholder="İsim, telefon, takip no..." aria-label="Arama geçmişinde ara" />
+          <input value={arama} onChange={(e) => setArama(e.target.value)} placeholder={t("historySearchPlaceholder")} aria-label={t("historySearchLabel")} />
         </div>
         <select
-          aria-label="Arama durumu"
+          aria-label={t("callStatus")}
           value={durumFiltre}
           onChange={(e) => {
             setDurumFiltre(e.target.value);
             setSayfa(1);
           }}
         >
-          <option value="tumu">Tüm Durumlar</option>
-          <option value="tamamlandi">Tamamlandı</option>
-          <option value="cevaplandi">Cevaplandı</option>
-          <option value="cevapsiz">Cevapsız</option>
-          <option value="hata">Hata</option>
+          <option value="tumu">{t("allStatuses")}</option>
+          <option value="tamamlandi">{t("statusCompleted")}</option>
+          <option value="cevaplandi">{t("statusAnswered")}</option>
+          <option value="cevapsiz">{t("statusMissed")}</option>
+          <option value="hata">{t("statusError")}</option>
         </select>
-        <button type="button" className="vapi-secondary" onClick={() => void yukle()} disabled={yukleniyor} aria-label="Yenile">
+        <button type="button" className="vapi-secondary" onClick={() => void yukle()} disabled={yukleniyor} aria-label={t("refresh")}>
           <RefreshCw size={16} className={yukleniyor ? "vapi-spin" : undefined} />
         </button>
         <div className="vapi-spacer" />
-        <span className="vapi-muted">{toplam} arama kaydı</span>
+        <span className="vapi-muted">{t("callRecordCount", { count: toplam })}</span>
       </div>
 
       <div className="vapi-table-wrap">
         <table className="vapi-table" data-testid="vapi-calls-table">
           <thead>
             <tr>
-              <th>Tarih</th>
-              <th>Müşteri</th>
-              <th>Kargo</th>
-              <th className="vapi-center">Süre</th>
-              <th>Durum</th>
-              <th className="vapi-right">Detay</th>
+              <th>{t("colDate")}</th>
+              <th>{t("colCustomer")}</th>
+              <th>{t("colCargo")}</th>
+              <th className="vapi-center">{t("colDuration")}</th>
+              <th>{t("colStatus")}</th>
+              <th className="vapi-right">{t("colDetail")}</th>
             </tr>
           </thead>
           <tbody>
@@ -621,13 +635,13 @@ function AramaGecmisiTab(props: { client: VoiceClient; bildir: Bildir }) {
               <tr>
                 <td colSpan={6} className="vapi-empty">
                   <Phone size={32} />
-                  <p>Henüz arama kaydı yok</p>
+                  <p>{t("noCallRecords")}</p>
                 </td>
               </tr>
             ) : (
               data.map((item) => (
                 <tr key={item.id} className="vapi-clickable" onClick={() => void detayAc(item)}>
-                  <td>{tarihFormatla(item.baslangic)}</td>
+                  <td>{tarihFormatla(item.baslangic, language)}</td>
                   <td>
                     <p className="vapi-strong">{item.musteri_adi || "—"}</p>
                     <p className="vapi-sub">{item.musteri_telefon}</p>
@@ -641,7 +655,7 @@ function AramaGecmisiTab(props: { client: VoiceClient; bildir: Bildir }) {
                     <DurumBadge durum={item.durum} />
                   </td>
                   <td className="vapi-right">
-                    <button type="button" className="vapi-icon-button" aria-label="Detay">
+                    <button type="button" className="vapi-icon-button" aria-label={t("colDetail")}>
                       <Eye size={16} />
                     </button>
                   </td>
@@ -664,59 +678,61 @@ function transkriptMesajlari(transkript: unknown): Array<Record<string, unknown>
 function AramaDetayModal(props: { arama: VapiCall; onKapat: () => void }) {
   const { arama, onKapat } = props;
   const mesajlar = transkriptMesajlari(arama.transkript);
+  const t = useT(vapiCallsMessages);
+  const { language } = useLanguage();
   return (
     <div className="vapi-modal-backdrop" onClick={onKapat}>
-      <div className="vapi-modal" role="dialog" aria-label="Arama Detayı" data-testid="vapi-call-detail-modal" onClick={(e) => e.stopPropagation()}>
+      <div className="vapi-modal" role="dialog" aria-label={t("callDetail")} data-testid="vapi-call-detail-modal" onClick={(e) => e.stopPropagation()}>
         <div className="vapi-modal-header">
           <div className="vapi-modal-title">
             <span className="vapi-logo vapi-logo-sm"><Phone size={16} /></span>
             <div>
-              <h2>Arama Detayı</h2>
+              <h2>{t("callDetail")}</h2>
               <p className="vapi-sub">{arama.vapi_call_id || arama.id}</p>
             </div>
           </div>
-          <button type="button" className="vapi-icon-button" onClick={onKapat} aria-label="Kapat">
+          <button type="button" className="vapi-icon-button" onClick={onKapat} aria-label={t("close")}>
             <X size={20} />
           </button>
         </div>
         <div className="vapi-modal-body">
           <div className="vapi-info-grid">
             <div className="vapi-info">
-              <p className="vapi-sub">Müşteri</p>
+              <p className="vapi-sub">{t("colCustomer")}</p>
               <p className="vapi-strong">{arama.musteri_adi || "—"}</p>
               <p className="vapi-sub">{arama.musteri_telefon}</p>
             </div>
             <div className="vapi-info">
-              <p className="vapi-sub">Kargo</p>
-              <p className="vapi-strong">{isPtt(arama.kargo_firmasi) ? "PTT Kargo" : "Sürat Kargo"}</p>
+              <p className="vapi-sub">{t("colCargo")}</p>
+              <p className="vapi-strong">{isPtt(arama.kargo_firmasi) ? t("pttCargo") : t("suratCargo")}</p>
               <p className="vapi-sub vapi-mono">{arama.takip_no || "—"}</p>
             </div>
             <div className="vapi-info">
-              <p className="vapi-sub">Durum</p>
+              <p className="vapi-sub">{t("colStatus")}</p>
               <DurumBadge durum={arama.durum} />
             </div>
             <div className="vapi-info">
-              <p className="vapi-sub">Süre</p>
+              <p className="vapi-sub">{t("colDuration")}</p>
               <p className="vapi-strong vapi-mono">{sureFormatla(arama.sure_sn)}</p>
               {arama.maliyet && <p className="vapi-sub">${Number.parseFloat(arama.maliyet).toFixed(4)}</p>}
             </div>
           </div>
 
           <div className="vapi-info">
-            <p className="vapi-sub">Zaman Bilgisi</p>
+            <p className="vapi-sub">{t("timeInfo")}</p>
             <div className="vapi-time-grid">
               <div>
-                <span className="vapi-sub">Başlangıç:</span> <span>{tarihFormatla(arama.baslangic)}</span>
+                <span className="vapi-sub">{t("start")}</span> <span>{tarihFormatla(arama.baslangic, language)}</span>
               </div>
               <div>
-                <span className="vapi-sub">Bitiş:</span> <span>{tarihFormatla(arama.bitis)}</span>
+                <span className="vapi-sub">{t("end")}</span> <span>{tarihFormatla(arama.bitis, language)}</span>
               </div>
             </div>
           </div>
 
           {arama.son_hareket && (
             <div className="vapi-info">
-              <p className="vapi-sub">Arama Anındaki Kargo Durumu</p>
+              <p className="vapi-sub">{t("cargoStatusAtCall")}</p>
               <p className="vapi-amber">{arama.son_hareket}</p>
             </div>
           )}
@@ -724,7 +740,7 @@ function AramaDetayModal(props: { arama: VapiCall; onKapat: () => void }) {
           {arama.arama_ozeti && (
             <div className="vapi-info vapi-info-violet">
               <p className="vapi-violet-label">
-                <Bot size={14} /> AI Arama Özeti
+                <Bot size={14} /> {t("aiCallSummary")}
               </p>
               <p>{arama.arama_ozeti}</p>
             </div>
@@ -732,7 +748,7 @@ function AramaDetayModal(props: { arama: VapiCall; onKapat: () => void }) {
 
           {arama.transkript != null && arama.transkript !== "" && (
             <div className="vapi-info">
-              <p className="vapi-sub">Konuşma Transkripti</p>
+              <p className="vapi-sub">{t("transcript")}</p>
               <div className="vapi-transcript">
                 {mesajlar ? (
                   mesajlar.map((msg, i) => {
@@ -740,7 +756,7 @@ function AramaDetayModal(props: { arama: VapiCall; onKapat: () => void }) {
                     const metin = msg.text ?? msg.content ?? msg.message ?? JSON.stringify(msg);
                     return (
                       <div key={i} className={`vapi-bubble ${ai ? "vapi-bubble-ai" : "vapi-bubble-customer"}`}>
-                        <span>{ai ? "AI" : "Müşteri"}</span>
+                        <span>{ai ? "AI" : t("speakerCustomer")}</span>
                         {String(metin)}
                       </div>
                     );
@@ -761,6 +777,7 @@ function AramaDetayModal(props: { arama: VapiCall; onKapat: () => void }) {
 
 function TestAramaPaneli(props: { http: BackendHttpClient; bildir: Bildir }) {
   const webphone = useMemo(() => createWebphoneClient(props.http), [props.http]);
+  const t = useT(vapiCallsMessages);
   const [testTelefon, setTestTelefon] = useState("");
   const [testAd, setTestAd] = useState("");
   const [testAramaYukleniyor, setTestAramaYukleniyor] = useState(false);
@@ -768,7 +785,7 @@ function TestAramaPaneli(props: { http: BackendHttpClient; bildir: Bildir }) {
 
   const testAramasiYap = async () => {
     if (!testTelefon) {
-      props.bildir("warning", "Lütfen test telefon numarasını girin");
+      props.bildir("warning", t("enterTestPhone"));
       return;
     }
     setTestAramaYukleniyor(true);
@@ -782,9 +799,9 @@ function TestAramaPaneli(props: { http: BackendHttpClient; bildir: Bildir }) {
         idempotency_key: `vapi_test_${testTelefon.trim().replace(/[^0-9a-zA-Z_-]+/g, "_")}`,
       });
       setSonIstek(`${attempt.operation} ${attempt.request_id}`);
-      props.bildir("success", "Test araması başlatıldı!");
+      props.bildir("success", t("testCallStarted"));
     } catch (error) {
-      props.bildir("error", hataMesaji(error, "Arama başlatılamadı. Ayarları ve VAPI bakiyenizi kontrol edin."));
+      props.bildir("error", hataMesaji(error, t("testCallFailed")));
     }
     setTestAramaYukleniyor(false);
   };
@@ -793,30 +810,30 @@ function TestAramaPaneli(props: { http: BackendHttpClient; bildir: Bildir }) {
     <div className="vapi-test-panel" data-testid="vapi-test-call-detail">
       <h3>
         <Phone size={16} />
-        Hızlı Test Araması
+        {t("quickTestCall")}
       </h3>
       <p className="vapi-sub">
-        Asistan sesini ve konuşma senaryosunu kendi numaranızda test edin. Arama anında PTT kargosu şubede bekleyen bir müşteri senaryosu taklit edilir.
+        {t("quickTestCallDescription")}
       </p>
       <div className="vapi-test-grid">
         <label>
-          <span>Müşteri Adı (Test İçin)</span>
-          <input value={testAd} onChange={(e) => setTestAd(e.target.value)} placeholder="Örn: Ahmet Yılmaz" />
+          <span>{t("testCustomerName")}</span>
+          <input value={testAd} onChange={(e) => setTestAd(e.target.value)} placeholder={t("testCustomerNamePlaceholder")} />
         </label>
         <label>
-          <span>Telefon Numarası (Test İçin)</span>
+          <span>{t("testPhone")}</span>
           <div className="vapi-test-row">
-            <input type="tel" value={testTelefon} onChange={(e) => setTestTelefon(e.target.value)} placeholder="Örn: 05051234567" />
+            <input type="tel" value={testTelefon} onChange={(e) => setTestTelefon(e.target.value)} placeholder={t("testPhonePlaceholder")} />
             <button type="button" className="vapi-call-now" onClick={() => void testAramasiYap()} disabled={testAramaYukleniyor}>
               {testAramaYukleniyor ? <Loader2 size={16} className="vapi-spin" /> : <Phone size={16} />}
-              Ara
+              {t("call")}
             </button>
           </div>
         </label>
       </div>
       {sonIstek && (
         <p className="vapi-sub" data-testid="vapi-test-call-last">
-          {sonIstek} · canlı çağrı kapalı (providers.vapi.live_mode)
+          {sonIstek} · {t("liveCallDisabled")} (providers.vapi.live_mode)
         </p>
       )}
     </div>

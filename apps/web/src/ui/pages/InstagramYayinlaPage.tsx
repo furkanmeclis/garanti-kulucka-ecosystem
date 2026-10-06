@@ -3,6 +3,8 @@ import { AlertCircle, CheckCircle, ExternalLink, Image as ImageIcon, Instagram, 
 import { BackendRequestError, type BackendHttpClient } from "../../api/http-client.js";
 import { createFileClient } from "../../api/file-client.js";
 import { createInstagramClient, type InstagramPublication } from "../../api/instagram-client.js";
+import { useT } from "../i18n/index.js";
+import { instagramPublishMessages } from "../i18n/messages/instagramPublish.js";
 
 /**
  * Legacy frontend/src/pages/instagram/YayinlaPage.jsx parity (admin, calisan). Publishing goes
@@ -32,6 +34,7 @@ function newIdempotencyKey() {
 }
 
 export function InstagramYayinlaPage(props: { http: BackendHttpClient }) {
+  const t = useT(instagramPublishMessages);
   const client = useMemo(() => createInstagramClient(props.http), [props.http]);
   const files = useMemo(() => createFileClient(props.http), [props.http]);
   const [imageUrl, setImageUrl] = useState("");
@@ -76,7 +79,7 @@ export function InstagramYayinlaPage(props: { http: BackendHttpClient }) {
       setImageUrl("");
       idempotencyKey.current = null;
     } catch (error) {
-      setMesaj({ tip: "hata", metin: errorMessage(error, "Dosya yüklenemedi") });
+      setMesaj({ tip: "hata", metin: errorMessage(error, t("uploadFailed")) });
     } finally {
       setDosyaYukleniyor(false);
     }
@@ -91,15 +94,15 @@ export function InstagramYayinlaPage(props: { http: BackendHttpClient }) {
         if (!aktif.current) return;
         if (yayin.status === "published") {
           setSonuc(yayin);
-          setMesaj({ tip: "basari", metin: "Instagram gönderisi yayınlandı!" });
+          setMesaj({ tip: "basari", metin: t("published") });
           return;
         }
         if (yayin.status === "failed") {
-          setMesaj({ tip: "hata", metin: yayin.error_message || "Yayınlama başarısız" });
+          setMesaj({ tip: "hata", metin: yayin.error_message || t("publishFailed") });
           return;
         }
         if (yayin.status === "dry_run") {
-          setMesaj({ tip: "bilgi", metin: "Yayın isteği işlendi (canlı mod kapalı: providers.instagram.live_mode)" });
+          setMesaj({ tip: "bilgi", metin: t("dryRunProcessed") });
           return;
         }
       } catch {
@@ -110,11 +113,11 @@ export function InstagramYayinlaPage(props: { http: BackendHttpClient }) {
 
   const yayinla = async () => {
     if (!medyaVar) {
-      setMesaj({ tip: "hata", metin: "Fotoğraf URL'si girin" });
+      setMesaj({ tip: "hata", metin: t("enterImageUrl") });
       return;
     }
     if (caption.length > CAPTION_LIMIT) {
-      setMesaj({ tip: "hata", metin: "Başlık 2200 karakterden uzun olamaz" });
+      setMesaj({ tip: "hata", metin: t("captionTooLong") });
       return;
     }
     setYukleniyor(true);
@@ -133,13 +136,13 @@ export function InstagramYayinlaPage(props: { http: BackendHttpClient }) {
       setDosya(null);
       if (yanit.publication.status === "published") {
         setSonuc(yanit.publication);
-        setMesaj({ tip: "basari", metin: "Instagram gönderisi yayınlandı!" });
+        setMesaj({ tip: "basari", metin: t("published") });
       } else {
-        setMesaj({ tip: "bilgi", metin: "Yayın isteği kuyruğa alındı" });
+        setMesaj({ tip: "bilgi", metin: t("queued") });
         void sonucuBekle(yanit.publication.public_id);
       }
     } catch (error) {
-      setMesaj({ tip: "hata", metin: errorMessage(error, "Yayınlama başarısız") });
+      setMesaj({ tip: "hata", metin: errorMessage(error, t("publishFailed")) });
     } finally {
       setYukleniyor(false);
     }
@@ -152,8 +155,8 @@ export function InstagramYayinlaPage(props: { http: BackendHttpClient }) {
           <Send size={28} />
         </div>
         <div>
-          <h1>Instagram Gönderi Yayınla</h1>
-          <p>Foto ve açıklama ile Instagram hesabınıza doğrudan gönderi yayınlayın</p>
+          <h1>{t("title")}</h1>
+          <p>{t("subtitle")}</p>
         </div>
       </div>
 
@@ -168,7 +171,7 @@ export function InstagramYayinlaPage(props: { http: BackendHttpClient }) {
         <div className="ig-kart ig-form">
           <div>
             <label className="ig-etiket" htmlFor="ig-image-url">
-              Fotoğraf URL'si <span className="ig-zorunlu">*</span>
+              {t("imageUrlLabel")} <span className="ig-zorunlu">*</span>
             </label>
             <input
               id="ig-image-url"
@@ -182,10 +185,10 @@ export function InstagramYayinlaPage(props: { http: BackendHttpClient }) {
               placeholder="https://example.com/photo.jpg"
               className="ig-input ig-mono"
             />
-            <p className="ig-yardim">JPEG, public erişilebilir URL. Oran: 4:5 ile 1.91:1 arası.</p>
+            <p className="ig-yardim">{t("imageUrlHelp")}</p>
             <label className="ig-dosya">
               {dosyaYukleniyor ? <Loader2 size={14} className="ig-spin" /> : <Upload size={14} />}
-              <span>{dosya ? dosya.ad : "veya dosya yükle (JPEG / MP4)"}</span>
+              <span>{dosya ? dosya.ad : t("uploadFilePrompt")}</span>
               <input
                 type="file"
                 accept="image/jpeg,video/mp4"
@@ -201,7 +204,7 @@ export function InstagramYayinlaPage(props: { http: BackendHttpClient }) {
 
           <div>
             <label className="ig-etiket" htmlFor="ig-caption">
-              Başlık (Caption)
+              {t("captionLabel")}
             </label>
             <textarea
               id="ig-caption"
@@ -210,24 +213,24 @@ export function InstagramYayinlaPage(props: { http: BackendHttpClient }) {
                 setCaption(event.target.value);
                 idempotencyKey.current = null;
               }}
-              placeholder="Gönderinizin açıklamasını yazın..."
+              placeholder={t("captionPlaceholder")}
               rows={8}
               maxLength={CAPTION_LIMIT}
               className="ig-input ig-textarea"
             />
             <p className={`ig-sayac ${caption.length > 2000 ? "ig-sayac-uyari" : ""}`}>
-              {caption.length} / 2200 karakter
+              {t("charCount", { count: caption.length })}
             </p>
           </div>
 
           <button type="button" className="ig-yayinla-buton" onClick={() => void yayinla()} disabled={yukleniyor || dosyaYukleniyor || !medyaVar}>
             {yukleniyor ? <Loader2 size={16} className="ig-spin" /> : <Send size={16} />}
-            {yukleniyor ? "Yayınlanıyor..." : "Instagram'a Yayınla"}
+            {yukleniyor ? t("publishing") : t("publishToInstagram")}
           </button>
         </div>
 
         <div className="ig-kart">
-          <h2 className="ig-onizleme-baslik">Önizleme</h2>
+          <h2 className="ig-onizleme-baslik">{t("preview")}</h2>
           <div className="ig-onizleme" data-testid="instagram-preview">
             <div className="ig-onizleme-hesap">
               <div className="ig-onizleme-avatar" />
@@ -239,7 +242,7 @@ export function InstagramYayinlaPage(props: { http: BackendHttpClient }) {
               ) : (
                 <img
                   src={onizlemeUrl}
-                  alt="preview"
+                  alt={t("previewAlt")}
                   className="ig-onizleme-medya"
                   onError={(event) => {
                     event.currentTarget.style.display = "none";
@@ -263,11 +266,11 @@ export function InstagramYayinlaPage(props: { http: BackendHttpClient }) {
       {sonuc?.media_id && (
         <div className="ig-sonuc" data-testid="instagram-publish-result">
           <div>
-            <p className="ig-sonuc-baslik">Yayınlandı</p>
-            <p className="ig-sonuc-alt">Media ID: {sonuc.media_id}</p>
+            <p className="ig-sonuc-baslik">{t("resultPublished")}</p>
+            <p className="ig-sonuc-alt">{t("mediaId", { id: sonuc.media_id })}</p>
           </div>
           <a href={`https://www.instagram.com/p/${sonuc.media_id}`} target="_blank" rel="noopener noreferrer">
-            Instagram'da Gör <ExternalLink size={12} />
+            {t("viewOnInstagram")} <ExternalLink size={12} />
           </a>
         </div>
       )}
@@ -275,14 +278,14 @@ export function InstagramYayinlaPage(props: { http: BackendHttpClient }) {
       <div className="ig-gereksinimler">
         <Instagram size={16} />
         <div>
-          <p>Teknik Gereksinimler (Instagram Graph API)</p>
+          <p>{t("requirementsTitle")}</p>
           <ul>
-            <li>Fotoğraf formatı: JPEG</li>
-            <li>Boyut oranı: 4:5 - 1.91:1 (kare veya dikey)</li>
-            <li>Başlık: Maksimum 2200 karakter</li>
-            <li>URL herkese açık olmalı (Instagram sunucuları indirecek)</li>
-            <li>Günlük limit: 100 post / 24 saat</li>
-            <li>Gerekli izin: instagram_business_content_publish</li>
+            <li>{t("requirementFormat")}</li>
+            <li>{t("requirementAspect")}</li>
+            <li>{t("requirementCaption")}</li>
+            <li>{t("requirementPublicUrl")}</li>
+            <li>{t("requirementDailyLimit")}</li>
+            <li>{t("requirementPermission")}</li>
           </ul>
         </div>
       </div>

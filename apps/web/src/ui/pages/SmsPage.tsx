@@ -33,6 +33,10 @@ import {
   type SmsMessage,
   type SmsTemplate,
 } from "../../api/sms-client.js";
+import { localeFor, useLanguage, useT } from "../i18n/index.js";
+import { smsMessages } from "../i18n/messages/sms.js";
+
+type SmsKey = keyof (typeof smsMessages)["tr"];
 
 /**
  * Legacy parity: garanti-kulucka/frontend/src/pages/sms/SmsGonderPage.jsx.
@@ -42,10 +46,10 @@ import {
 
 // ─── Değişkenler ──────────────────────────────────────────────────────────────
 const DEGISKENLER = [
-  { etiket: "Müşteri Adı", deger: "{musteri_adi}", ornek: "Ahmet Yılmaz" },
-  { etiket: "Takip No", deger: "{takip_no}", ornek: "123456789" },
-  { etiket: "Kargo Firması", deger: "{kargo_firmasi}", ornek: "PTT" },
-] as const;
+  { etiket: "variableCustomerName", deger: "{musteri_adi}", ornek: "Ahmet Yılmaz" },
+  { etiket: "variableTrackingNumber", deger: "{takip_no}", ornek: "123456789" },
+  { etiket: "variableCargoProvider", deger: "{kargo_firmasi}", ornek: "PTT" },
+] as const satisfies readonly { etiket: SmsKey; deger: string; ornek: string }[];
 
 const SAYFA_BOYUTU = 25;
 
@@ -101,9 +105,10 @@ function DegiskenButonlari(props: {
   metin: string;
   onChange: (value: string) => void;
 }) {
+  const t = useT(smsMessages);
   return (
     <div className="sms-variables" data-testid="sms-variable-buttons">
-      <span className="sms-variables-label">Değişken ekle:</span>
+      <span className="sms-variables-label">{t("addVariable")}</span>
       {DEGISKENLER.map((d) => (
         <button
           key={d.deger}
@@ -120,15 +125,16 @@ function DegiskenButonlari(props: {
 }
 
 function SmsKarakterSayaci(props: { metin: string; testId?: string }) {
+  const t = useT(smsMessages);
   const { len, sayisi, unicode, tekLimit } = smsBilgisi(props.metin);
   return (
     <div className="sms-counter" data-testid={props.testId}>
-      <span>{len} karakter</span>
-      <span className={sayisi > 1 ? "sms-counter-multi" : "sms-counter-single"}>{sayisi} SMS</span>
+      <span>{t("characterCount", { count: len })}</span>
+      <span className={sayisi > 1 ? "sms-counter-multi" : "sms-counter-single"}>{t("smsCount", { count: sayisi })}</span>
       {unicode && (
         <span className="sms-counter-unicode">
           <AlertCircle size={12} />
-          Türkçe karakter → {tekLimit} karakter/SMS
+          {t("unicodeLimit", { limit: tekLimit })}
         </span>
       )}
     </div>
@@ -136,11 +142,12 @@ function SmsKarakterSayaci(props: { metin: string; testId?: string }) {
 }
 
 function OnizlemeKutusu(props: { metin: string }) {
+  const t = useT(smsMessages);
   if (!props.metin || !degiskenVarMi(props.metin)) return null;
   return (
     <div className="sms-preview" data-testid="sms-preview">
       <p className="sms-preview-title">
-        <Eye size={12} /> Önizleme (örnek değerlerle)
+        <Eye size={12} /> {t("previewTitle")}
       </p>
       <p className="sms-preview-text">{onizlemeUret(props.metin)}</p>
     </div>
@@ -160,6 +167,8 @@ interface OturumKaydi {
 }
 
 function ManuelTab(props: { client: SmsClient; sablonlar: SmsTemplate[]; bildir: Bildir }) {
+  const t = useT(smsMessages);
+  const { language } = useLanguage();
   const [telefonlar, setTelefonlar] = useState<Array<{ id: number; numara: string }>>([{ id: 1, numara: "" }]);
   const [metin, setMetin] = useState("");
   const [sablon, setSablon] = useState<SmsTemplate | null>(null);
@@ -169,9 +178,9 @@ function ManuelTab(props: { client: SmsClient; sablonlar: SmsTemplate[]; bildir:
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const telefonEkle = () => setTelefonlar((prev) => [...prev, { id: Date.now(), numara: "" }]);
-  const telefonKaldir = (id: number) => setTelefonlar((prev) => prev.filter((t) => t.id !== id));
+  const telefonKaldir = (id: number) => setTelefonlar((prev) => prev.filter((tel) => tel.id !== id));
   const telefonGuncelle = (id: number, numara: string) =>
-    setTelefonlar((prev) => prev.map((t) => (t.id === id ? { ...t, numara } : t)));
+    setTelefonlar((prev) => prev.map((tel) => (tel.id === id ? { ...tel, numara } : tel)));
 
   const sablonSec = (s: SmsTemplate) => {
     setMetin(s.body);
@@ -180,21 +189,21 @@ function ManuelTab(props: { client: SmsClient; sablonlar: SmsTemplate[]; bildir:
   };
 
   const handleGonder = async () => {
-    const gecerliNumaralar = telefonlar.map((t) => t.numara.trim()).filter(Boolean);
+    const gecerliNumaralar = telefonlar.map((tel) => tel.numara.trim()).filter(Boolean);
     if (gecerliNumaralar.length === 0) {
-      props.bildir("error", "En az bir telefon numarası girin");
+      props.bildir("error", t("errorPhoneRequired"));
       return;
     }
     if (!metin.trim()) {
-      props.bildir("error", "Mesaj boş olamaz");
+      props.bildir("error", t("errorMessageEmpty"));
       return;
     }
     if (degiskenVarMi(metin)) {
-      props.bildir("error", "Mesajda doldurulmamış değişken var ({musteri_adi} vb.)");
+      props.bildir("error", t("errorUnfilledVariables"));
       return;
     }
     setGonderiliyor(true);
-    const zaman = new Date().toLocaleTimeString("tr-TR");
+    const zaman = new Date().toLocaleTimeString(localeFor(language));
     let sonuclar: OturumKaydi[];
     try {
       const response = await props.client.sendManual({
@@ -214,7 +223,7 @@ function ManuelTab(props: { client: SmsClient; sablonlar: SmsTemplate[]; bildir:
         zaman,
       }));
     } catch (error) {
-      const hata = hataMesaji(error, "SMS gönderilemedi");
+      const hata = hataMesaji(error, t("sendFailed"));
       sonuclar = gecerliNumaralar.map((numara, index) => ({
         id: `${Date.now()}_${index}`,
         telefon: numara,
@@ -230,14 +239,14 @@ function ManuelTab(props: { client: SmsClient; sablonlar: SmsTemplate[]; bildir:
     const basarili = sonuclar.filter((s) => s.durum === "basarili").length;
     const hatali = sonuclar.filter((s) => s.durum === "hata").length;
     if (basarili > 0 && hatali === 0) {
-      props.bildir("success", `${basarili} SMS başarıyla gönderildi`);
+      props.bildir("success", t("sendSuccess", { count: basarili }));
       setTelefonlar([{ id: 1, numara: "" }]);
       setMetin("");
       setSablon(null);
     } else if (basarili > 0 && hatali > 0) {
-      props.bildir("warning", `${basarili} gönderildi, ${hatali} başarısız`);
+      props.bildir("warning", t("sendPartial", { sent: basarili, failed: hatali }));
     } else {
-      props.bildir("error", "SMS gönderilemedi");
+      props.bildir("error", t("sendFailed"));
     }
     setGonderiliyor(false);
   };
@@ -248,26 +257,26 @@ function ManuelTab(props: { client: SmsClient; sablonlar: SmsTemplate[]; bildir:
     <div className="sms-manual-grid" data-testid="sms-manual-tab">
       <div className="sms-card sms-form">
         <div>
-          <label className="sms-label">Alıcı Telefon Numaraları</label>
+          <label className="sms-label">{t("recipientPhones")}</label>
           <div className="sms-phone-list">
-            {telefonlar.map((t) => (
-              <div key={t.id} className="sms-phone-row">
+            {telefonlar.map((tel) => (
+              <div key={tel.id} className="sms-phone-row">
                 <div className="sms-input-icon">
                   <Phone size={16} />
                   <input
                     type="tel"
                     placeholder="05XX XXX XX XX"
-                    value={t.numara}
+                    value={tel.numara}
                     data-testid="sms-phone-input"
-                    onChange={(event) => telefonGuncelle(t.id, event.target.value)}
+                    onChange={(event) => telefonGuncelle(tel.id, event.target.value)}
                   />
                 </div>
                 {telefonlar.length > 1 && (
                   <button
                     type="button"
                     className="sms-icon-button sms-icon-danger"
-                    aria-label="Numarayı kaldır"
-                    onClick={() => telefonKaldir(t.id)}
+                    aria-label={t("removePhone")}
+                    onClick={() => telefonKaldir(tel.id)}
                   >
                     <Trash2 size={16} />
                   </button>
@@ -277,12 +286,12 @@ function ManuelTab(props: { client: SmsClient; sablonlar: SmsTemplate[]; bildir:
           </div>
           <button type="button" className="sms-link-button" data-testid="sms-add-phone" onClick={telefonEkle}>
             <Plus size={16} />
-            Numara Ekle
+            {t("addPhone")}
           </button>
         </div>
 
         <div>
-          <label className="sms-label">Hazır Şablon (opsiyonel)</label>
+          <label className="sms-label">{t("templateOptional")}</label>
           <div className="sms-dropdown">
             <button
               type="button"
@@ -290,7 +299,7 @@ function ManuelTab(props: { client: SmsClient; sablonlar: SmsTemplate[]; bildir:
               data-testid="sms-template-select"
               onClick={() => setSablonAcik(!sablonAcik)}
             >
-              <span className={sablon ? undefined : "sms-placeholder"}>{sablon?.title || "Şablon seç..."}</span>
+              <span className={sablon ? undefined : "sms-placeholder"}>{sablon?.title || t("selectTemplate")}</span>
               <ChevronDown size={16} className={sablonAcik ? "sms-rotate" : undefined} />
             </button>
             {sablonAcik && (
@@ -313,7 +322,7 @@ function ManuelTab(props: { client: SmsClient; sablonlar: SmsTemplate[]; bildir:
 
         <div className="sms-stack">
           <div className="sms-row-between">
-            <label className="sms-label sms-label-inline">Mesaj</label>
+            <label className="sms-label sms-label-inline">{t("message")}</label>
             <SmsKarakterSayaci metin={metin} testId="sms-manual-counter" />
           </div>
           <DegiskenButonlari textareaRef={textareaRef} metin={metin} onChange={setMetin} />
@@ -324,13 +333,13 @@ function ManuelTab(props: { client: SmsClient; sablonlar: SmsTemplate[]; bildir:
             onChange={(event) => setMetin(event.target.value)}
             rows={5}
             maxLength={480}
-            placeholder="Mesajınızı buraya yazın veya şablon seçin..."
+            placeholder={t("messagePlaceholder")}
           />
           <OnizlemeKutusu metin={metin} />
           {degiskenVar && (
             <p className="sms-warning-text">
               <AlertCircle size={12} />
-              Değişkenleri göndermeden önce doldurun veya silin
+              {t("fillVariablesWarning")}
             </p>
           )}
         </div>
@@ -344,11 +353,11 @@ function ManuelTab(props: { client: SmsClient; sablonlar: SmsTemplate[]; bildir:
         >
           {gonderiliyor ? (
             <>
-              <RefreshCw size={16} className="sms-spin" /> Gönderiliyor...
+              <RefreshCw size={16} className="sms-spin" /> {t("sending")}
             </>
           ) : (
             <>
-              <Send size={16} /> Gönder
+              <Send size={16} /> {t("send")}
             </>
           )}
         </button>
@@ -358,18 +367,18 @@ function ManuelTab(props: { client: SmsClient; sablonlar: SmsTemplate[]; bildir:
         <div className="sms-row-between sms-session-head">
           <h2>
             <MessageSquare size={16} />
-            Bu Oturum
+            {t("thisSession")}
           </h2>
           {gonderilenler.length > 0 && (
             <button type="button" className="sms-text-button" onClick={() => setGonderilenler([])}>
-              Temizle
+              {t("clear")}
             </button>
           )}
         </div>
         {gonderilenler.length === 0 ? (
           <div className="sms-empty">
             <Clock size={32} />
-            <p>Henüz SMS gönderilmedi</p>
+            <p>{t("noSmsSent")}</p>
           </div>
         ) : (
           <div className="sms-session-list">
@@ -388,7 +397,7 @@ function ManuelTab(props: { client: SmsClient; sablonlar: SmsTemplate[]; bildir:
                 </div>
                 <p className="sms-session-text">{g.metin}</p>
                 {g.durum === "basarili" && g.bulkId && <p className="sms-session-meta">BulkID: {g.bulkId}</p>}
-                {g.durum === "basarili" && !g.bulkId && g.kuyrukta && <p className="sms-session-meta">Kuyruğa alındı</p>}
+                {g.durum === "basarili" && !g.bulkId && g.kuyrukta && <p className="sms-session-meta">{t("queuedForSend")}</p>}
                 {g.durum === "hata" && <p className="sms-session-error-text">{g.hata}</p>}
               </div>
             ))}
@@ -400,14 +409,16 @@ function ManuelTab(props: { client: SmsClient; sablonlar: SmsTemplate[]; bildir:
 }
 
 // ─── Geçmiş Tab ──────────────────────────────────────────────────────────────
-const TUR_SECENEKLERI: Array<{ id: SmsHistoryType; label: string }> = [
-  { id: "all", label: "Hepsi" },
-  { id: "manual", label: "Manuel" },
-  { id: "automatic", label: "Otomatik" },
+const TUR_SECENEKLERI: Array<{ id: SmsHistoryType; label: SmsKey }> = [
+  { id: "all", label: "historyTypeAll" },
+  { id: "manual", label: "historyTypeManual" },
+  { id: "automatic", label: "historyTypeAutomatic" },
 ];
 
 function GecmisTab(props: { client: SmsClient; bildir: Bildir }) {
   const { client, bildir } = props;
+  const t = useT(smsMessages);
+  const { language } = useLanguage();
   const [kayitlar, setKayitlar] = useState<SmsMessage[]>([]);
   const [toplam, setToplam] = useState(0);
   const [yukleniyor, setYukleniyor] = useState(false);
@@ -427,11 +438,11 @@ function GecmisTab(props: { client: SmsClient; bildir: Bildir }) {
       setKayitlar(response.data ?? []);
       setToplam(response.total ?? 0);
     } catch (error) {
-      bildir("error", `Geçmiş yüklenemedi: ${hataMesaji(error, "bilinmeyen hata")}`);
+      bildir("error", t("historyLoadFailed", { error: hataMesaji(error, t("unknownError")) }));
     } finally {
       setYukleniyor(false);
     }
-  }, [client, bildir, tur, sayfa, aramaMetni]);
+  }, [client, bildir, tur, sayfa, aramaMetni, t]);
 
   useEffect(() => {
     void getir();
@@ -446,7 +457,7 @@ function GecmisTab(props: { client: SmsClient; bildir: Bildir }) {
           <Search size={16} />
           <input
             type="text"
-            placeholder="Telefon, müşteri adı veya takip no..."
+            placeholder={t("historySearchPlaceholder")}
             value={aramaMetni}
             data-testid="sms-history-search"
             onChange={(event) => {
@@ -456,25 +467,25 @@ function GecmisTab(props: { client: SmsClient; bildir: Bildir }) {
           />
         </div>
         <div className="sms-segment">
-          {TUR_SECENEKLERI.map((t) => (
+          {TUR_SECENEKLERI.map((secenek) => (
             <button
-              key={t.id}
+              key={secenek.id}
               type="button"
-              className={tur === t.id ? "selected" : undefined}
-              data-testid={`sms-history-type-${t.id}`}
-              aria-pressed={tur === t.id}
+              className={tur === secenek.id ? "selected" : undefined}
+              data-testid={`sms-history-type-${secenek.id}`}
+              aria-pressed={tur === secenek.id}
               onClick={() => {
-                setTur(t.id);
+                setTur(secenek.id);
                 setSayfa(1);
               }}
             >
-              {t.label}
+              {t(secenek.label)}
             </button>
           ))}
         </div>
         <button type="button" className="sms-secondary" disabled={yukleniyor} onClick={() => void getir()}>
           <RefreshCw size={16} className={yukleniyor ? "sms-spin" : undefined} />
-          Yenile
+          {t("refresh")}
         </button>
       </div>
 
@@ -486,26 +497,26 @@ function GecmisTab(props: { client: SmsClient; bildir: Bildir }) {
         ) : kayitlar.length === 0 ? (
           <div className="sms-empty">
             <History size={32} />
-            <p>Kayıt bulunamadı</p>
+            <p>{t("noRecords")}</p>
           </div>
         ) : (
           <div className="sms-table-scroll">
             <table className="sms-table" data-testid="sms-history-table">
               <thead>
                 <tr>
-                  <th>Zaman</th>
-                  <th>Telefon</th>
-                  <th>Müşteri</th>
-                  <th>Mesaj</th>
-                  <th>Tür</th>
-                  <th>Durum</th>
+                  <th>{t("columnTime")}</th>
+                  <th>{t("columnPhone")}</th>
+                  <th>{t("columnCustomer")}</th>
+                  <th>{t("columnMessage")}</th>
+                  <th>{t("columnType")}</th>
+                  <th>{t("columnStatus")}</th>
                 </tr>
               </thead>
               <tbody>
                 {kayitlar.map((k) => (
                   <tr key={k.public_id} data-testid="sms-history-row">
                     <td className="sms-nowrap sms-muted-cell">
-                      {new Date(k.created_at).toLocaleString("tr-TR", {
+                      {new Date(k.created_at).toLocaleString(localeFor(language), {
                         day: "2-digit",
                         month: "2-digit",
                         hour: "2-digit",
@@ -523,21 +534,21 @@ function GecmisTab(props: { client: SmsClient; bildir: Bildir }) {
                     <td>
                       <span className={`sms-badge ${k.is_automatic ? "sms-badge-auto" : "sms-badge-manual"}`}>
                         {k.is_automatic ? <Bot size={12} /> : <Send size={12} />}
-                        {k.is_automatic ? "Otomatik" : "Manuel"}
+                        {k.is_automatic ? t("historyTypeAutomatic") : t("historyTypeManual")}
                       </span>
                     </td>
                     <td data-testid="sms-history-status">
                       {k.status === "sent" ? (
                         <span className="sms-badge sms-badge-ok">
-                          <CheckCircle size={12} /> Gönderildi
+                          <CheckCircle size={12} /> {t("statusSent")}
                         </span>
                       ) : k.status === "failed" ? (
                         <span className="sms-badge sms-badge-error" title={k.error_message ?? ""}>
-                          <XCircle size={12} /> Hata
+                          <XCircle size={12} /> {t("statusFailed")}
                         </span>
                       ) : (
                         <span className="sms-badge sms-badge-queued">
-                          <Clock size={12} /> Kuyrukta
+                          <Clock size={12} /> {t("statusQueued")}
                         </span>
                       )}
                     </td>
@@ -552,10 +563,14 @@ function GecmisTab(props: { client: SmsClient; bildir: Bildir }) {
       {toplamSayfa > 1 && (
         <div className="sms-pagination" data-testid="sms-history-pagination">
           <span>
-            {toplam} kayıttan {(sayfa - 1) * SAYFA_BOYUTU + 1}–{Math.min(sayfa * SAYFA_BOYUTU, toplam)} gösteriliyor
+            {t("paginationSummary", {
+              total: toplam,
+              from: (sayfa - 1) * SAYFA_BOYUTU + 1,
+              to: Math.min(sayfa * SAYFA_BOYUTU, toplam),
+            })}
           </span>
           <div className="sms-pagination-buttons">
-            <button type="button" disabled={sayfa === 1} aria-label="Önceki sayfa" onClick={() => setSayfa((p) => p - 1)}>
+            <button type="button" disabled={sayfa === 1} aria-label={t("previousPage")} onClick={() => setSayfa((p) => p - 1)}>
               ‹
             </button>
             <span>
@@ -564,7 +579,7 @@ function GecmisTab(props: { client: SmsClient; bildir: Bildir }) {
             <button
               type="button"
               disabled={sayfa === toplamSayfa}
-              aria-label="Sonraki sayfa"
+              aria-label={t("nextPage")}
               data-testid="sms-history-next"
               onClick={() => setSayfa((p) => p + 1)}
             >
@@ -587,13 +602,14 @@ function SablonForm(props: {
   onIptal: () => void;
   kaydediliyor: boolean;
 }) {
+  const t = useT(smsMessages);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   return (
     <div className="sms-stack" data-testid="sms-template-form">
       <input
         type="text"
         className="sms-text-input"
-        placeholder="Şablon başlığı"
+        placeholder={t("templateTitlePlaceholder")}
         value={props.baslik}
         data-testid="sms-template-title-input"
         onChange={(event) => props.onBaslikChange(event.target.value)}
@@ -603,7 +619,7 @@ function SablonForm(props: {
         <textarea
           ref={textareaRef}
           rows={4}
-          placeholder="Şablon metni"
+          placeholder={t("templateBodyPlaceholder")}
           value={props.metin}
           data-testid="sms-template-body-input"
           onChange={(event) => props.onMetinChange(event.target.value)}
@@ -613,10 +629,10 @@ function SablonForm(props: {
       </div>
       <div className="sms-actions">
         <button type="button" className="sms-primary sms-small" disabled={props.kaydediliyor} onClick={props.onKaydet}>
-          <Save size={14} /> Kaydet
+          <Save size={14} /> {t("save")}
         </button>
         <button type="button" className="sms-secondary sms-small" onClick={props.onIptal}>
-          <X size={14} /> İptal
+          <X size={14} /> {t("cancel")}
         </button>
       </div>
     </div>
@@ -626,6 +642,7 @@ function SablonForm(props: {
 // ─── Şablonlar Tab ────────────────────────────────────────────────────────────
 function SablonlarTab(props: { client: SmsClient; sablonlar: SmsTemplate[]; getirSablonlar: () => void; bildir: Bildir }) {
   const { client, bildir, getirSablonlar } = props;
+  const t = useT(smsMessages);
   const [duzenleniyor, setDuzenleniyor] = useState<{ id: string; baslik: string; metin: string } | null>(null);
   const [yeniSablon, setYeniSablon] = useState({ baslik: "", metin: "" });
   const [yeniAcik, setYeniAcik] = useState(false);
@@ -634,17 +651,17 @@ function SablonlarTab(props: { client: SmsClient; sablonlar: SmsTemplate[]; geti
   const handleKaydet = async () => {
     if (!duzenleniyor) return;
     if (!duzenleniyor.baslik.trim() || !duzenleniyor.metin.trim()) {
-      bildir("error", "Başlık ve metin boş olamaz");
+      bildir("error", t("errorTitleBodyRequired"));
       return;
     }
     setKaydediliyor(true);
     try {
       await client.updateTemplate(duzenleniyor.id, { title: duzenleniyor.baslik, body: duzenleniyor.metin });
-      bildir("success", "Şablon güncellendi");
+      bildir("success", t("templateUpdated"));
       setDuzenleniyor(null);
       getirSablonlar();
     } catch (error) {
-      bildir("error", hataMesaji(error, "Güncellenemedi"));
+      bildir("error", hataMesaji(error, t("updateFailed")));
     } finally {
       setKaydediliyor(false);
     }
@@ -652,33 +669,33 @@ function SablonlarTab(props: { client: SmsClient; sablonlar: SmsTemplate[]; geti
 
   const handleSil = async (id: string, sistem: boolean) => {
     if (sistem) {
-      bildir("error", "Sistem şablonları silinemez");
+      bildir("error", t("systemTemplateNotDeletable"));
       return;
     }
-    if (!window.confirm("Bu şablonu silmek istediğinizden emin misiniz?")) return;
+    if (!window.confirm(t("confirmDeleteTemplate"))) return;
     try {
       await client.deleteTemplate(id);
-      bildir("success", "Şablon silindi");
+      bildir("success", t("templateDeleted"));
       getirSablonlar();
     } catch (error) {
-      bildir("error", hataMesaji(error, "Silinemedi"));
+      bildir("error", hataMesaji(error, t("deleteFailed")));
     }
   };
 
   const handleYeniEkle = async () => {
     if (!yeniSablon.baslik.trim() || !yeniSablon.metin.trim()) {
-      bildir("error", "Başlık ve metin boş olamaz");
+      bildir("error", t("errorTitleBodyRequired"));
       return;
     }
     setKaydediliyor(true);
     try {
       await client.createTemplate({ title: yeniSablon.baslik, body: yeniSablon.metin });
-      bildir("success", "Şablon eklendi");
+      bildir("success", t("templateAdded"));
       setYeniSablon({ baslik: "", metin: "" });
       setYeniAcik(false);
       getirSablonlar();
     } catch (error) {
-      bildir("error", hataMesaji(error, "Eklenemedi"));
+      bildir("error", hataMesaji(error, t("addFailed")));
     } finally {
       setKaydediliyor(false);
     }
@@ -687,14 +704,12 @@ function SablonlarTab(props: { client: SmsClient; sablonlar: SmsTemplate[]; geti
   return (
     <div className="sms-stack-lg" data-testid="sms-templates-tab">
       <div className="sms-variables-help">
-        <p className="sms-variables-help-title">Kullanılabilir Değişkenler</p>
+        <p className="sms-variables-help-title">{t("availableVariables")}</p>
         <div className="sms-variables-help-list">
           {DEGISKENLER.map((d) => (
             <div key={d.deger} className="sms-variables-help-item">
               <span className="sms-variable sms-variable-static">{d.deger}</span>
-              <span>
-                → {d.etiket} (örn: {d.ornek})
-              </span>
+              <span>{t("variableExample", { label: t(d.etiket), example: d.ornek })}</span>
             </div>
           ))}
         </div>
@@ -702,17 +717,17 @@ function SablonlarTab(props: { client: SmsClient; sablonlar: SmsTemplate[]; geti
 
       <div className="sms-row-between">
         <p className="sms-muted" data-testid="sms-template-count">
-          {props.sablonlar.length} şablon • Sistem şablonları düzenlenebilir ama silinemez
+          {t("templateCount", { count: props.sablonlar.length })}
         </p>
         <button type="button" className="sms-primary" data-testid="sms-template-new" onClick={() => setYeniAcik(!yeniAcik)}>
           <Plus size={16} />
-          Yeni Şablon
+          {t("newTemplate")}
         </button>
       </div>
 
       {yeniAcik && (
         <div className="sms-card sms-card-accent">
-          <h3 className="sms-card-title">Yeni Şablon Ekle</h3>
+          <h3 className="sms-card-title">{t("addNewTemplate")}</h3>
           <SablonForm
             baslik={yeniSablon.baslik}
             metin={yeniSablon.metin}
@@ -746,8 +761,8 @@ function SablonlarTab(props: { client: SmsClient; sablonlar: SmsTemplate[]; geti
                 <div className="sms-template-main">
                   <div className="sms-template-head">
                     <h3>{s.title}</h3>
-                    {s.is_system && <span className="sms-pill">Sistem</span>}
-                    {s.is_active === false && <span className="sms-pill sms-pill-passive">Pasif</span>}
+                    {s.is_system && <span className="sms-pill">{t("badgeSystem")}</span>}
+                    {s.is_active === false && <span className="sms-pill sms-pill-passive">{t("badgeInactive")}</span>}
                   </div>
                   <p className="sms-template-body">{s.body}</p>
                   {degiskenVarMi(s.body) && <p className="sms-template-preview">{onizlemeUret(s.body)}</p>}
@@ -759,8 +774,8 @@ function SablonlarTab(props: { client: SmsClient; sablonlar: SmsTemplate[]; geti
                   <button
                     type="button"
                     className="sms-icon-button"
-                    title="Düzenle"
-                    aria-label="Düzenle"
+                    title={t("edit")}
+                    aria-label={t("edit")}
                     data-testid="sms-template-edit"
                     onClick={() => setDuzenleniyor({ id: s.public_id, baslik: s.title, metin: s.body })}
                   >
@@ -770,8 +785,8 @@ function SablonlarTab(props: { client: SmsClient; sablonlar: SmsTemplate[]; geti
                     <button
                       type="button"
                       className="sms-icon-button sms-icon-danger"
-                      title="Sil"
-                      aria-label="Sil"
+                      title={t("delete")}
+                      aria-label={t("delete")}
                       data-testid="sms-template-delete"
                       onClick={() => void handleSil(s.public_id, s.is_system)}
                     >
@@ -807,6 +822,7 @@ const KEYWORDS = [
 ];
 
 function OtomatikTab(props: { client: SmsClient; bildir: Bildir }) {
+  const t = useT(smsMessages);
   const [tetikleniyorPtt, setTetikleniyorPtt] = useState(false);
   const [tetikleniyorSurat, setTetikleniyorSurat] = useState(false);
 
@@ -815,9 +831,9 @@ function OtomatikTab(props: { client: SmsClient; bildir: Bildir }) {
     setFn(true);
     try {
       await props.client.triggerAutomatic(firma, yeniAnahtar(`sms_auto_${firma}`));
-      props.bildir("success", `${firma === "ptt" ? "PTT" : "Sürat"} takip güncelleme başlatıldı`);
+      props.bildir("success", t("triggerStarted", { provider: firma === "ptt" ? "PTT" : "Sürat" }));
     } catch (error) {
-      props.bildir("error", hataMesaji(error, "Başlatılamadı"));
+      props.bildir("error", hataMesaji(error, t("triggerFailed")));
     } finally {
       setFn(false);
     }
@@ -828,18 +844,15 @@ function OtomatikTab(props: { client: SmsClient; bildir: Bildir }) {
       <div className="sms-info">
         <Info size={20} />
         <div>
-          <h3>Otomatik SMS Nasıl Çalışır?</h3>
-          <p>
-            PTT ve Sürat kargo takip cron job'ları çalıştığında, son harekette aşağıdaki anahtar kelimelerden biri varsa
-            müşteriye otomatik SMS gönderilir. Aynı kargo için 24 saat içinde tekrar gönderilmez.
-          </p>
+          <h3>{t("howAutomaticWorks")}</h3>
+          <p>{t("howAutomaticWorksBody")}</p>
         </div>
       </div>
 
       <div className="sms-card">
         <h3 className="sms-card-title">
           <Filter size={16} />
-          Tetikleyen Anahtar Kelimeler
+          {t("triggerKeywords")}
         </h3>
         <div className="sms-keywords" data-testid="sms-keywords">
           {KEYWORDS.map((k) => (
@@ -853,10 +866,10 @@ function OtomatikTab(props: { client: SmsClient; bildir: Bildir }) {
       <div className="sms-card">
         <h3 className="sms-card-title">
           <Play size={16} />
-          Manuel Tetikleme
+          {t("manualTrigger")}
         </h3>
         <p className="sms-subtle sms-auto-note">
-          Cron job'u hemen çalıştırır — otomatik SMS dahil tüm takip güncellemeleri yapılır.
+          {t("manualTriggerNote")}
         </p>
         <div className="sms-actions">
           <button
@@ -867,7 +880,7 @@ function OtomatikTab(props: { client: SmsClient; bildir: Bildir }) {
             onClick={() => void tetikle("ptt")}
           >
             {tetikleniyorPtt ? <RefreshCw size={16} className="sms-spin" /> : <Play size={16} className="sms-ptt" />}
-            PTT Takip Güncelle
+            {t("updatePttTracking")}
           </button>
           <button
             type="button"
@@ -877,12 +890,12 @@ function OtomatikTab(props: { client: SmsClient; bildir: Bildir }) {
             onClick={() => void tetikle("surat")}
           >
             {tetikleniyorSurat ? <RefreshCw size={16} className="sms-spin" /> : <Play size={16} className="sms-surat" />}
-            Sürat Takip Güncelle
+            {t("updateSuratTracking")}
           </button>
         </div>
         <p className="sms-subtle sms-auto-footnote">
           <AlertCircle size={14} />
-          Güncellemeler arka planda çalışır; tamamlanması birkaç dakika sürebilir.
+          {t("backgroundNote")}
         </p>
       </div>
     </div>
@@ -891,16 +904,17 @@ function OtomatikTab(props: { client: SmsClient; bildir: Bildir }) {
 
 // ─── Tabs ─────────────────────────────────────────────────────────────────────
 type TabId = "manuel" | "gecmis" | "sablonlar" | "otomatik";
-const TABS: Array<{ id: TabId; label: string; icon: LucideIcon }> = [
-  { id: "manuel", label: "Manuel Gönder", icon: Send },
-  { id: "gecmis", label: "Geçmiş", icon: History },
-  { id: "sablonlar", label: "Şablonlar", icon: FileText },
-  { id: "otomatik", label: "Otomatik SMS", icon: Zap },
+const TABS: Array<{ id: TabId; label: SmsKey; icon: LucideIcon }> = [
+  { id: "manuel", label: "tabManual", icon: Send },
+  { id: "gecmis", label: "tabHistory", icon: History },
+  { id: "sablonlar", label: "tabTemplates", icon: FileText },
+  { id: "otomatik", label: "tabAutomatic", icon: Zap },
 ];
 
 // ─── Ana Sayfa ────────────────────────────────────────────────────────────────
 export function SmsPage(props: { http: BackendHttpClient }) {
   const client = useMemo(() => createSmsClient(props.http), [props.http]);
+  const t = useT(smsMessages);
   const [aktifTab, setAktifTab] = useState<TabId>("manuel");
   const [sablonlar, setSablonlar] = useState<SmsTemplate[]>([]);
   const [bildirim, setBildirim] = useState<Bildirim | null>(null);
@@ -923,14 +937,14 @@ export function SmsPage(props: { http: BackendHttpClient }) {
   return (
     <section className="sms-page" data-testid="sms-flow">
       <div>
-        <h1>SMS</h1>
-        <p className="sms-muted">Manuel gönderim, geçmiş kayıtlar, şablon yönetimi ve otomatik SMS ayarları</p>
+        <h1>{t("title")}</h1>
+        <p className="sms-muted">{t("subtitle")}</p>
       </div>
 
       {bildirim && (
         <div className={`sms-toast sms-toast-${bildirim.tip}`} role="status" data-testid="sms-toast">
           <span>{bildirim.mesaj}</span>
-          <button type="button" className="sms-icon-button" onClick={() => setBildirim(null)} aria-label="Kapat">
+          <button type="button" className="sms-icon-button" onClick={() => setBildirim(null)} aria-label={t("close")}>
             <X size={14} />
           </button>
         </div>
@@ -948,7 +962,7 @@ export function SmsPage(props: { http: BackendHttpClient }) {
             onClick={() => setAktifTab(id)}
           >
             <Icon size={16} />
-            {label}
+            {t(label)}
           </button>
         ))}
       </div>

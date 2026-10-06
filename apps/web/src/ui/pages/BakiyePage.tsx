@@ -28,42 +28,46 @@ import {
   type StaffBalance,
   type StaffOrder,
 } from "../../api/balances-client.js";
+import { localeFor, useLanguage, useT, type UiLanguage } from "../i18n/index.js";
+import { balancesMessages } from "../i18n/messages/balances.js";
+
+type BalancesKey = keyof (typeof balancesMessages)["tr"];
 
 /** Legacy frontend/src/pages/bakiye/BakiyePage.jsx parity on backend-owned balance routes. */
 
 const PAGE_SIZE = 50;
 
-const HAREKET_CONFIG: Record<string, { label: string; tone: string; icon: LucideIcon }> = {
-  commission: { label: "Komisyon", tone: "emerald", icon: TrendingUp },
-  cancellation: { label: "İptal Kesintisi", tone: "red", icon: TrendingDown },
-  return: { label: "İade Kesintisi", tone: "orange", icon: TrendingDown },
-  payment: { label: "Ödeme", tone: "blue", icon: DollarSign },
-  adjustment: { label: "Düzeltme", tone: "purple", icon: AlertCircle },
-  rollback: { label: "Geri Alma", tone: "cyan", icon: TrendingUp },
+const HAREKET_CONFIG: Record<string, { label: BalancesKey; tone: string; icon: LucideIcon }> = {
+  commission: { label: "movementCommission", tone: "emerald", icon: TrendingUp },
+  cancellation: { label: "movementCancellation", tone: "red", icon: TrendingDown },
+  return: { label: "movementReturn", tone: "orange", icon: TrendingDown },
+  payment: { label: "movementPayment", tone: "blue", icon: DollarSign },
+  adjustment: { label: "movementAdjustment", tone: "purple", icon: AlertCircle },
+  rollback: { label: "movementRollback", tone: "cyan", icon: TrendingUp },
 };
 
-const ODEME_DURUM_CONFIG: Record<string, { label: string; tone: string; icon: LucideIcon }> = {
-  pending: { label: "Bekliyor", tone: "yellow", icon: Clock },
-  seen: { label: "Görüldü", tone: "blue", icon: Eye },
-  approved: { label: "Ödeme Yapıldı", tone: "emerald", icon: CheckCircle },
-  rejected: { label: "Reddedildi", tone: "red", icon: XCircle },
+const ODEME_DURUM_CONFIG: Record<string, { label: BalancesKey; tone: string; icon: LucideIcon }> = {
+  pending: { label: "paymentPending", tone: "yellow", icon: Clock },
+  seen: { label: "paymentSeen", tone: "blue", icon: Eye },
+  approved: { label: "paymentApproved", tone: "emerald", icon: CheckCircle },
+  rejected: { label: "paymentRejected", tone: "red", icon: XCircle },
 };
 
-const SIPARIS_DURUM: Record<string, { label: string; tone: string }> = {
-  draft: { label: "Oluşturuldu", tone: "blue" },
-  pending: { label: "Oluşturuldu", tone: "blue" },
-  pending_confirmation: { label: "Teyit Bekliyor", tone: "yellow" },
-  confirmed: { label: "Teyit Edildi", tone: "green" },
-  preparing: { label: "Hazırlanıyor", tone: "purple" },
-  shipped: { label: "Kargoda", tone: "indigo" },
-  delivered: { label: "Teslim Edildi", tone: "emerald" },
-  cancelled: { label: "İptal", tone: "red" },
-  returned: { label: "İade", tone: "orange" },
+const SIPARIS_DURUM: Record<string, { label: BalancesKey; tone: string }> = {
+  draft: { label: "orderCreated", tone: "blue" },
+  pending: { label: "orderCreated", tone: "blue" },
+  pending_confirmation: { label: "orderPendingConfirmation", tone: "yellow" },
+  confirmed: { label: "orderConfirmed", tone: "green" },
+  preparing: { label: "orderPreparing", tone: "purple" },
+  shipped: { label: "orderShipped", tone: "indigo" },
+  delivered: { label: "orderDelivered", tone: "emerald" },
+  cancelled: { label: "orderCancelled", tone: "red" },
+  returned: { label: "orderReturned", tone: "orange" },
 };
 
-function tarihFormatla(tarih: string | null | undefined) {
+function tarihFormatla(tarih: string | null | undefined, language: UiLanguage) {
   if (!tarih) return "-";
-  return new Date(tarih).toLocaleDateString("tr-TR", {
+  return new Date(tarih).toLocaleDateString(localeFor(language), {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
@@ -72,8 +76,8 @@ function tarihFormatla(tarih: string | null | undefined) {
   });
 }
 
-function tl(value: number) {
-  return value.toLocaleString("tr-TR");
+function tl(value: number, language: UiLanguage) {
+  return value.toLocaleString(localeFor(language));
 }
 
 function errorMessage(error: unknown, fallback: string) {
@@ -85,12 +89,13 @@ function errorMessage(error: unknown, fallback: string) {
 }
 
 function Pagination(props: { sayfa: number; toplamSayfa: number; sayfaDegistir: (sayfa: number) => void }) {
+  const t = useT(balancesMessages);
   if (props.toplamSayfa <= 1) return null;
   return (
     <div className="bakiye-pagination">
-      <button type="button" disabled={props.sayfa <= 1} onClick={() => props.sayfaDegistir(props.sayfa - 1)}>Önceki</button>
+      <button type="button" disabled={props.sayfa <= 1} onClick={() => props.sayfaDegistir(props.sayfa - 1)}>{t("previous")}</button>
       <span>{props.sayfa} / {props.toplamSayfa}</span>
-      <button type="button" disabled={props.sayfa >= props.toplamSayfa} onClick={() => props.sayfaDegistir(props.sayfa + 1)}>Sonraki</button>
+      <button type="button" disabled={props.sayfa >= props.toplamSayfa} onClick={() => props.sayfaDegistir(props.sayfa + 1)}>{t("next")}</button>
     </div>
   );
 }
@@ -98,6 +103,11 @@ function Pagination(props: { sayfa: number; toplamSayfa: number; sayfaDegistir: 
 export function BakiyePage(props: { http: BackendHttpClient; role: string | undefined }) {
   const isAdmin = props.role === "admin" || props.role === "owner";
   const client = useMemo(() => createBalancesClient(props.http), [props.http]);
+  const t = useT(balancesMessages);
+  const { language } = useLanguage();
+  /** Latest translator for async callbacks, so a language switch does not re-create them (and refetch). */
+  const tRef = useRef(t);
+  tRef.current = t;
 
   const [hareketler, setHareketler] = useState<BalanceMovement[]>([]);
   const [odemeIstekleri, setOdemeIstekleri] = useState<BalancePaymentRequest[]>([]);
@@ -144,7 +154,7 @@ export function BakiyePage(props: { http: BackendHttpClient; role: string | unde
       setBakiyeOzeti(ozet);
       setPersonelBakiyeleri(personel.data);
     } catch {
-      bildir("error", "Veriler yüklenirken hata oluştu");
+      bildir("error", tRef.current("loadError"));
     } finally {
       setYukleniyor(false);
     }
@@ -199,15 +209,15 @@ export function BakiyePage(props: { http: BackendHttpClient; role: string | unde
   const bakiyeSifirla = useCallback(async (personel: StaffBalance) => {
     if (!isAdmin || sifirlamaLock.current) return;
     const personelAd = `${personel.first_name} ${personel.last_name}`;
-    if (!window.confirm(`${personelAd} adlı personelin bakiyesi sıfırlanacak.\n\nDevam etmek istiyor musunuz?`)) return;
+    if (!window.confirm(tRef.current("confirmReset", { name: personelAd }))) return;
     sifirlamaLock.current = true;
     setSifirlamaYapiliyor(personel.user_public_id);
     try {
       const result = await client.resetStaffBalance(personel.user_public_id);
-      bildir("success", `${personelAd} bakiyesi sıfırlandı (₺${result.previous_balance})`);
+      bildir("success", tRef.current("resetDone", { name: personelAd, amount: result.previous_balance }));
       await verileriGetir();
     } catch (error) {
-      bildir("info", errorMessage(error, "İşlem yapılamadı"));
+      bildir("info", errorMessage(error, tRef.current("operationFailed")));
     } finally {
       sifirlamaLock.current = false;
       setSifirlamaYapiliyor(null);
@@ -222,7 +232,7 @@ export function BakiyePage(props: { http: BackendHttpClient; role: string | unde
       const result = await client.listStaffOrders(personel.user_public_id);
       setDetaySiparisler(result.data);
     } catch {
-      bildir("error", "Siparişler yüklenirken hata oluştu");
+      bildir("error", tRef.current("ordersLoadError"));
     } finally {
       setDetayYukleniyor(false);
     }
@@ -233,7 +243,7 @@ export function BakiyePage(props: { http: BackendHttpClient; role: string | unde
     if (odemeGondermeLock.current) return;
     const tutar = Number.parseFloat(odemeTutar);
     if (!tutar || tutar <= 0) {
-      bildir("error", "Geçerli bir tutar girin");
+      bildir("error", tRef.current("invalidAmount"));
       return;
     }
     odemeGondermeLock.current = true;
@@ -243,12 +253,12 @@ export function BakiyePage(props: { http: BackendHttpClient; role: string | unde
         amount: tutar.toFixed(2),
         idempotency_key: `odeme_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`,
       });
-      bildir("success", "Ödeme isteğiniz admin'e iletildi!");
+      bildir("success", tRef.current("paymentRequestSent"));
       setOdemeModalAcik(false);
       setOdemeTutar("");
       await verileriGetir();
     } catch (error) {
-      bildir("error", errorMessage(error, "Ödeme isteği oluşturulurken hata oluştu"));
+      bildir("error", errorMessage(error, tRef.current("paymentRequestError")));
     } finally {
       odemeGondermeLock.current = false;
       setOdemeGonderiliyor(false);
@@ -263,7 +273,7 @@ export function BakiyePage(props: { http: BackendHttpClient; role: string | unde
       const result = await client.processPaymentRequest(istekId, karar);
       bildir("success", result.message);
     } catch (error) {
-      bildir("info", errorMessage(error, "İşlem yapılamadı"));
+      bildir("info", errorMessage(error, tRef.current("operationFailed")));
     } finally {
       odemeIslemLock.current = false;
       setOdemeIslemYapiliyor(null);
@@ -289,11 +299,11 @@ export function BakiyePage(props: { http: BackendHttpClient; role: string | unde
 
       <div className="bakiye-header">
         <div>
-          <h1><Wallet size={28} />{isAdmin ? "Bakiye Yönetimi" : "Bakiyem"}</h1>
+          <h1><Wallet size={28} />{isAdmin ? t("adminTitle") : t("staffTitle")}</h1>
           <p className="bakiye-muted">
             {isAdmin
-              ? "Tüm personellerin bakiyelerini ve ödeme isteklerini yönetin"
-              : "Komisyon bakiyenizi ve ödeme geçmişinizi görüntüleyin"}
+              ? t("adminSubtitle")
+              : t("staffSubtitle")}
           </p>
         </div>
         {!isAdmin && (
@@ -305,7 +315,7 @@ export function BakiyePage(props: { http: BackendHttpClient; role: string | unde
             onClick={() => setOdemeModalAcik(true)}
           >
             <Send size={16} />
-            Ödeme İste
+            {t("requestPayment")}
           </button>
         )}
       </div>
@@ -313,42 +323,42 @@ export function BakiyePage(props: { http: BackendHttpClient; role: string | unde
       {!isAdmin ? (
         <div className="bakiye-stats" data-testid="bakiye-stats">
           <div className="bakiye-stat bakiye-stat-main">
-            <p className="bakiye-stat-label">Güncel Bakiye</p>
+            <p className="bakiye-stat-label">{t("currentBalance")}</p>
             <p className={`bakiye-stat-value-lg ${guncelBakiye >= 0 ? "bakiye-pos" : "bakiye-neg"}`}>
-              {guncelBakiye >= 0 ? "+" : ""}₺{tl(guncelBakiye)}
+              {guncelBakiye >= 0 ? "+" : ""}₺{tl(guncelBakiye, language)}
             </p>
           </div>
           <div className="bakiye-stat">
-            <p className="bakiye-stat-label"><ArrowUpRight size={16} className="bakiye-pos" />Toplam Komisyon</p>
-            <p className="bakiye-stat-value bakiye-pos">+₺{tl(istatistikler.toplamKomisyon)}</p>
+            <p className="bakiye-stat-label"><ArrowUpRight size={16} className="bakiye-pos" />{t("totalCommission")}</p>
+            <p className="bakiye-stat-value bakiye-pos">+₺{tl(istatistikler.toplamKomisyon, language)}</p>
           </div>
           <div className="bakiye-stat">
-            <p className="bakiye-stat-label"><ArrowDownRight size={16} className="bakiye-neg" />Toplam Kesinti</p>
-            <p className="bakiye-stat-value bakiye-neg">-₺{tl(istatistikler.toplamKesinti)}</p>
+            <p className="bakiye-stat-label"><ArrowDownRight size={16} className="bakiye-neg" />{t("totalDeduction")}</p>
+            <p className="bakiye-stat-value bakiye-neg">-₺{tl(istatistikler.toplamKesinti, language)}</p>
           </div>
           <div className="bakiye-stat">
-            <p className="bakiye-stat-label"><DollarSign size={16} className="bakiye-blue" />Ödenen</p>
-            <p className="bakiye-stat-value bakiye-blue">₺{tl(istatistikler.toplamOdeme)}</p>
+            <p className="bakiye-stat-label"><DollarSign size={16} className="bakiye-blue" />{t("paid")}</p>
+            <p className="bakiye-stat-value bakiye-blue">₺{tl(istatistikler.toplamOdeme, language)}</p>
           </div>
         </div>
       ) : (
         <div data-testid="bakiye-personel-bakiyeleri">
-          <h2 className="bakiye-section-title"><Users size={20} />Personel Bakiyeleri</h2>
+          <h2 className="bakiye-section-title"><Users size={20} />{t("staffBalances")}</h2>
           <div className="bakiye-staff-grid">
             {personelBakiyeleri.map((personel) => (
               <div key={personel.user_public_id} className="bakiye-staff-card" data-testid={`bakiye-personel-${personel.user_public_id}`}>
                 <div className="bakiye-staff-head">
                   <span className={`bakiye-dot ${personel.is_online ? "online" : ""}`} />
                   <p className="bakiye-staff-name">{personel.first_name} {personel.last_name}</p>
-                  {personel.pending_payment > 0 && <span className="bakiye-badge-pending">bekliyor</span>}
+                  {personel.pending_payment > 0 && <span className="bakiye-badge-pending">{t("pendingBadge")}</span>}
                 </div>
                 <p className={`bakiye-staff-balance ${personel.balance >= 0 ? "bakiye-pos" : "bakiye-neg"}`}>
-                  {personel.balance >= 0 ? "+" : ""}₺{tl(personel.balance)}
+                  {personel.balance >= 0 ? "+" : ""}₺{tl(personel.balance, language)}
                 </p>
                 <div className="bakiye-staff-actions">
                   <button type="button" className="bakiye-detail-button" onClick={() => void personelDetayAc(personel)}>
                     <FileText size={12} />
-                    Detay
+                    {t("detail")}
                   </button>
                   {personel.balance !== 0 && (
                     <button
@@ -357,13 +367,13 @@ export function BakiyePage(props: { http: BackendHttpClient; role: string | unde
                       disabled={sifirlamaYapiliyor !== null}
                       onClick={() => void bakiyeSifirla(personel)}
                     >
-                      {sifirlamaYapiliyor === personel.user_public_id ? "Sıfırlanıyor..." : "Bakiye Sıfırla"}
+                      {sifirlamaYapiliyor === personel.user_public_id ? t("resetting") : t("resetBalance")}
                     </button>
                   )}
                 </div>
               </div>
             ))}
-            {personelBakiyeleri.length === 0 && <p className="bakiye-muted">Personel bulunmuyor</p>}
+            {personelBakiyeleri.length === 0 && <p className="bakiye-muted">{t("noStaff")}</p>}
           </div>
         </div>
       )}
@@ -376,7 +386,7 @@ export function BakiyePage(props: { http: BackendHttpClient; role: string | unde
           className={aktifTab === "hareketler" ? "active" : ""}
           onClick={() => setAktifTab("hareketler")}
         >
-          Bakiye Hareketleri
+          {t("tabMovements")}
         </button>
         <button
           type="button"
@@ -385,7 +395,7 @@ export function BakiyePage(props: { http: BackendHttpClient; role: string | unde
           className={aktifTab === "odeme_istekleri" ? "active" : ""}
           onClick={() => setAktifTab("odeme_istekleri")}
         >
-          Ödeme İstekleri
+          {t("tabPaymentRequests")}
           {isAdmin && bekleyenOdemeSayisi > 0 && <span className="bakiye-tab-badge">{bekleyenOdemeSayisi}</span>}
         </button>
       </div>
@@ -393,20 +403,20 @@ export function BakiyePage(props: { http: BackendHttpClient; role: string | unde
       {aktifTab === "hareketler" && (
         <div className="bakiye-table-card" data-testid="bakiye-hareketler">
           {hareketler.length === 0 ? (
-            <div className="bakiye-empty"><Wallet size={48} /><p>Henüz bakiye hareketi bulunmuyor</p></div>
+            <div className="bakiye-empty"><Wallet size={48} /><p>{t("noMovements")}</p></div>
           ) : (
             <>
               <div className="bakiye-table-scroll">
                 <table className="bakiye-table">
                   <thead>
                     <tr>
-                      <th>Tür</th>
-                      <th>Tutar</th>
-                      <th>Sipariş</th>
-                      <th>Bakiye Sonrası</th>
-                      <th>Açıklama</th>
-                      {isAdmin && <th>Personel</th>}
-                      <th>Tarih</th>
+                      <th>{t("columnType")}</th>
+                      <th>{t("columnAmount")}</th>
+                      <th>{t("columnOrder")}</th>
+                      <th>{t("columnBalanceAfter")}</th>
+                      <th>{t("columnDescription")}</th>
+                      {isAdmin && <th>{t("columnStaff")}</th>}
+                      <th>{t("columnDate")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -418,11 +428,11 @@ export function BakiyePage(props: { http: BackendHttpClient; role: string | unde
                           <td>
                             <span className="bakiye-kind">
                               <span className={`bakiye-kind-icon tone-${conf?.tone ?? "slate"}`}><Ikon size={14} /></span>
-                              {conf?.label ?? hareket.kind}
+                              {conf ? t(conf.label) : hareket.kind}
                             </span>
                           </td>
                           <td className={hareket.amount >= 0 ? "bakiye-pos bakiye-strong" : "bakiye-neg bakiye-strong"}>
-                            {hareket.amount >= 0 ? "+" : ""}₺{tl(Math.abs(hareket.amount))}
+                            {hareket.amount >= 0 ? "+" : ""}₺{tl(Math.abs(hareket.amount), language)}
                           </td>
                           <td>
                             {hareket.order_number ? (
@@ -434,10 +444,10 @@ export function BakiyePage(props: { http: BackendHttpClient; role: string | unde
                               <span className="bakiye-muted">-</span>
                             )}
                           </td>
-                          <td>₺{tl(hareket.balance_after)}</td>
+                          <td>₺{tl(hareket.balance_after, language)}</td>
                           <td className="bakiye-desc">{hareket.description || "-"}</td>
                           {isAdmin && <td>{hareket.user_full_name || "-"}</td>}
-                          <td className="bakiye-date">{tarihFormatla(hareket.created_at)}</td>
+                          <td className="bakiye-date">{tarihFormatla(hareket.created_at, language)}</td>
                         </tr>
                       );
                     })}
@@ -453,18 +463,18 @@ export function BakiyePage(props: { http: BackendHttpClient; role: string | unde
       {aktifTab === "odeme_istekleri" && (
         <div className="bakiye-table-card" data-testid="bakiye-odeme-istekleri">
           {odemeIstekleri.length === 0 ? (
-            <div className="bakiye-empty"><Send size={48} /><p>Henüz ödeme isteği bulunmuyor</p></div>
+            <div className="bakiye-empty"><Send size={48} /><p>{t("noPaymentRequests")}</p></div>
           ) : (
             <>
               <div className="bakiye-table-scroll">
                 <table className="bakiye-table">
                   <thead>
                     <tr>
-                      {isAdmin && <th>Personel</th>}
-                      <th>Tutar</th>
-                      <th>Durum</th>
-                      <th>Tarih</th>
-                      {isAdmin && <th>İşlem</th>}
+                      {isAdmin && <th>{t("columnStaff")}</th>}
+                      <th>{t("columnAmount")}</th>
+                      <th>{t("columnStatus")}</th>
+                      <th>{t("columnDate")}</th>
+                      {isAdmin && <th>{t("columnAction")}</th>}
                     </tr>
                   </thead>
                   <tbody>
@@ -475,14 +485,14 @@ export function BakiyePage(props: { http: BackendHttpClient; role: string | unde
                       return (
                         <tr key={istek.public_id} data-testid={`bakiye-istek-${istek.public_id}`}>
                           {isAdmin && <td>{istek.user_full_name ?? "-"}</td>}
-                          <td className="bakiye-primary-text bakiye-strong">₺{tl(istek.amount)}</td>
+                          <td className="bakiye-primary-text bakiye-strong">₺{tl(istek.amount, language)}</td>
                           <td>
                             <span className={`bakiye-status tone-${durum?.tone ?? "slate"}`}>
                               <DurumIkon size={12} />
-                              {durum?.label ?? istek.status}
+                              {durum ? t(durum.label) : istek.status}
                             </span>
                           </td>
-                          <td className="bakiye-date">{tarihFormatla(istek.created_at)}</td>
+                          <td className="bakiye-date">{tarihFormatla(istek.created_at, language)}</td>
                           {isAdmin && (
                             <td>
                               {istek.status === "pending" && (
@@ -493,7 +503,7 @@ export function BakiyePage(props: { http: BackendHttpClient; role: string | unde
                                     disabled={odemeIslemYapiliyor !== null}
                                     onClick={() => void odemeIstegiIsle(istek.public_id, "approve")}
                                   >
-                                    {buIslemde ? <Loader2 size={12} className="bakiye-spin" /> : "Onayla"}
+                                    {buIslemde ? <Loader2 size={12} className="bakiye-spin" /> : t("approve")}
                                   </button>
                                   <button
                                     type="button"
@@ -501,7 +511,7 @@ export function BakiyePage(props: { http: BackendHttpClient; role: string | unde
                                     disabled={odemeIslemYapiliyor !== null}
                                     onClick={() => void odemeIstegiIsle(istek.public_id, "reject")}
                                   >
-                                    Reddet
+                                    {t("reject")}
                                   </button>
                                 </div>
                               )}
@@ -524,12 +534,12 @@ export function BakiyePage(props: { http: BackendHttpClient; role: string | unde
           <div className="bakiye-modal bakiye-modal-wide">
             <div className="bakiye-modal-head">
               <div>
-                <h2><Package size={20} />{detayPersonel.first_name} {detayPersonel.last_name} - Siparişler</h2>
+                <h2><Package size={20} />{t("staffOrdersTitle", { name: `${detayPersonel.first_name} ${detayPersonel.last_name}` })}</h2>
                 <p className="bakiye-muted">
-                  Bakiye: <span className={detayPersonel.balance >= 0 ? "bakiye-pos bakiye-strong" : "bakiye-neg bakiye-strong"}>₺{tl(detayPersonel.balance)}</span>
+                  {t("balanceLabel")}<span className={detayPersonel.balance >= 0 ? "bakiye-pos bakiye-strong" : "bakiye-neg bakiye-strong"}>₺{tl(detayPersonel.balance, language)}</span>
                 </p>
               </div>
-              <button type="button" className="bakiye-icon-button" aria-label="Kapat" onClick={() => setDetayPersonel(null)}>
+              <button type="button" className="bakiye-icon-button" aria-label={t("close")} onClick={() => setDetayPersonel(null)}>
                 <X size={20} />
               </button>
             </div>
@@ -537,17 +547,17 @@ export function BakiyePage(props: { http: BackendHttpClient; role: string | unde
               {detayYukleniyor ? (
                 <div className="bakiye-loading"><Loader2 size={24} className="bakiye-spin" /></div>
               ) : detaySiparisler.length === 0 ? (
-                <div className="bakiye-empty"><Package size={40} /><p>Bu personele ait sipariş bulunamadı</p></div>
+                <div className="bakiye-empty"><Package size={40} /><p>{t("noStaffOrders")}</p></div>
               ) : (
                 <div className="bakiye-table-scroll">
                   <table className="bakiye-table">
                     <thead>
                       <tr>
-                        <th>Sipariş No</th>
-                        <th>Müşteri</th>
-                        <th>Durum</th>
-                        <th>Tutar</th>
-                        <th>Tarih</th>
+                        <th>{t("columnOrderNumber")}</th>
+                        <th>{t("columnCustomer")}</th>
+                        <th>{t("columnStatus")}</th>
+                        <th>{t("columnAmount")}</th>
+                        <th>{t("columnDate")}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -562,9 +572,9 @@ export function BakiyePage(props: { http: BackendHttpClient; role: string | unde
                                 {siparis.customer_phone && <small>{siparis.customer_phone}</small>}
                               </span>
                             </td>
-                            <td><span className={`bakiye-status tone-${durum?.tone ?? "slate"}`}>{durum?.label ?? siparis.status}</span></td>
-                            <td className="bakiye-strong">₺{tl(siparis.total_amount)}</td>
-                            <td className="bakiye-date">{tarihFormatla(siparis.created_at)}</td>
+                            <td><span className={`bakiye-status tone-${durum?.tone ?? "slate"}`}>{durum ? t(durum.label) : siparis.status}</span></td>
+                            <td className="bakiye-strong">₺{tl(siparis.total_amount, language)}</td>
+                            <td className="bakiye-date">{tarihFormatla(siparis.created_at, language)}</td>
                           </tr>
                         );
                       })}
@@ -580,20 +590,20 @@ export function BakiyePage(props: { http: BackendHttpClient; role: string | unde
       {odemeModalAcik && (
         <div className="bakiye-overlay" role="dialog" aria-modal="true" data-testid="bakiye-odeme-modal">
           <div className="bakiye-modal">
-            <button type="button" className="bakiye-icon-button bakiye-modal-close" aria-label="Kapat" onClick={() => setOdemeModalAcik(false)}>
+            <button type="button" className="bakiye-icon-button bakiye-modal-close" aria-label={t("close")} onClick={() => setOdemeModalAcik(false)}>
               <X size={20} />
             </button>
-            <h2><Send size={20} />Ödeme İste</h2>
+            <h2><Send size={20} />{t("requestPayment")}</h2>
             <div className="bakiye-available">
-              <p className="bakiye-stat-label">Kullanılabilir Bakiye</p>
-              <p className="bakiye-available-value">₺{tl(kullanilabilirBakiye)}</p>
+              <p className="bakiye-stat-label">{t("availableBalance")}</p>
+              <p className="bakiye-available-value">₺{tl(kullanilabilirBakiye, language)}</p>
               {istatistikler.bekleyenOdeme > 0 && (
-                <p className="bakiye-pending-note">(₺{tl(istatistikler.bekleyenOdeme)} bekleyen ödeme isteği)</p>
+                <p className="bakiye-pending-note">{t("pendingPaymentNote", { amount: tl(istatistikler.bekleyenOdeme, language) })}</p>
               )}
             </div>
             <form onSubmit={(event) => void odemeIstegiOlustur(event)} className="bakiye-form">
               <label>
-                <span>İstenen Tutar (₺)</span>
+                <span>{t("requestedAmount")}</span>
                 <input
                   type="number"
                   min="1"
@@ -623,11 +633,11 @@ export function BakiyePage(props: { http: BackendHttpClient; role: string | unde
                   disabled={odemeGonderiliyor}
                   onClick={() => setOdemeTutar(kullanilabilirBakiye.toString())}
                 >
-                  Tümü
+                  {t("all")}
                 </button>
               </div>
               <button type="submit" className="bakiye-primary bakiye-full" disabled={odemeGonderiliyor}>
-                {odemeGonderiliyor ? (<><Loader2 size={16} className="bakiye-spin" />Gönderiliyor...</>) : "Ödeme İsteği Gönder"}
+                {odemeGonderiliyor ? (<><Loader2 size={16} className="bakiye-spin" />{t("sending")}</>) : t("sendPaymentRequest")}
               </button>
             </form>
           </div>

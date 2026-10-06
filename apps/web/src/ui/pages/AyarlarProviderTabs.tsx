@@ -20,6 +20,8 @@ import type { BackendHttpClient } from "../../api/http-client.js";
 import { createAdminClient, type AdminSetting } from "../../api/admin-client.js";
 import { createSettingsClient, type ManagedUser, type NetgsmBalance } from "../../api/settings-client.js";
 import { MesajBanner, hataMetni, tarihSaatFormatla, useMesaj } from "./AyarlarShared.js";
+import { localeFor, useLanguage, useT } from "../i18n/index.js";
+import { settingsProvidersMessages, type SettingsProvidersKey } from "../i18n/messages/settingsProviders.js";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -82,6 +84,8 @@ const NETGSM_VARSAYILAN = { aktif: false, ilk_arama_dakika: 5, max_deneme: 3, de
 export function SantralAyarlar({ http }: { http: BackendHttpClient }) {
   const settingsClient = useMemo(() => createSettingsClient(http), [http]);
   const { settings, yukleniyor, yukle, kaydet } = useGlobalSettings(http);
+  const t = useT(settingsProvidersMessages);
+  const { language } = useLanguage();
   const { mesaj, mesajGoster } = useMesaj();
   const [config, setConfig] = useState({ ws_url: "", domain: "", stun: "stun:stun.l.google.com:19302" });
   const [configKaydediliyor, setConfigKaydediliyor] = useState(false);
@@ -100,11 +104,11 @@ export function SantralAyarlar({ http }: { http: BackendHttpClient }) {
     try {
       setBakiye(await settingsClient.getNetgsmBalance());
     } catch (error) {
-      mesajGoster("hata", `Bakiye alınamadı: ${hataMetni(error)}`);
+      mesajGoster("hata", t("balanceFetchFailed", { error: hataMetni(error) }));
     } finally {
       setBakiyeYukleniyor(false);
     }
-  }, [settingsClient, mesajGoster]);
+  }, [settingsClient, mesajGoster, t]);
 
   const kullanicilariYukle = useCallback(async () => {
     try {
@@ -138,9 +142,9 @@ export function SantralAyarlar({ http }: { http: BackendHttpClient }) {
     setConfigKaydediliyor(true);
     try {
       await kaydet("sip_config", config);
-      mesajGoster("basari", "Santral ayarları kaydedildi.");
+      mesajGoster("basari", t("pbxSettingsSaved"));
     } catch (error) {
-      mesajGoster("hata", `Kaydedilemedi: ${hataMetni(error)}`);
+      mesajGoster("hata", t("saveFailed", { error: hataMetni(error) }));
     } finally {
       setConfigKaydediliyor(false);
     }
@@ -154,9 +158,9 @@ export function SantralAyarlar({ http }: { http: BackendHttpClient }) {
         await kaydet("netgsm.teyit_voice_password", teyitVoice.teyit_voice_password.trim());
       }
       setTeyitVoice((current) => ({ ...current, teyit_voice_password: "" }));
-      mesajGoster("basari", "Teyit araması arayan numarası kaydedildi.");
+      mesajGoster("basari", t("callerIdSaved"));
     } catch (error) {
-      mesajGoster("hata", `Kaydedilemedi: ${hataMetni(error)}`);
+      mesajGoster("hata", t("saveFailed", { error: hataMetni(error) }));
     } finally {
       setTeyitKaydediliyor(false);
     }
@@ -166,9 +170,9 @@ export function SantralAyarlar({ http }: { http: BackendHttpClient }) {
     setNetgsmKaydediliyor(true);
     try {
       await kaydet("netgsm_teyit_ayarlar", netgsm);
-      mesajGoster("basari", "Ayarlar kaydedildi.");
+      mesajGoster("basari", t("settingsSaved"));
     } catch (error) {
-      mesajGoster("hata", `Kaydedilemedi: ${hataMetni(error)}`);
+      mesajGoster("hata", t("saveFailed", { error: hataMetni(error) }));
     } finally {
       setNetgsmKaydediliyor(false);
     }
@@ -189,9 +193,9 @@ export function SantralAyarlar({ http }: { http: BackendHttpClient }) {
         delete next[user.public_id];
         return next;
       });
-      mesajGoster("basari", `${user.first_name} SIP bilgisi kaydedildi.`);
+      mesajGoster("basari", t("sipSaved", { name: user.first_name }));
     } catch (error) {
-      mesajGoster("hata", `Kaydedilemedi: ${hataMetni(error)}`);
+      mesajGoster("hata", t("saveFailed", { error: hataMetni(error) }));
     } finally {
       setSipKaydediliyor(null);
     }
@@ -207,8 +211,8 @@ export function SantralAyarlar({ http }: { http: BackendHttpClient }) {
           <Phone size={20} />
         </div>
         <div>
-          <h3 className="ayarlar-h2">Santral / Softphone</h3>
-          <p className="ayarlar-small">NetSantral WebRTC bağlantı ayarları</p>
+          <h3 className="ayarlar-h2">{t("pbxTitle")}</h3>
+          <p className="ayarlar-small">{t("pbxSubtitle")}</p>
         </div>
       </div>
       <MesajBanner mesaj={mesaj} />
@@ -216,9 +220,9 @@ export function SantralAyarlar({ http }: { http: BackendHttpClient }) {
       <section className="ayarlar-card ayarlar-form">
         <div className="ayarlar-row-between">
           <h4 className="ayarlar-h4">
-            <Server size={16} /> Sunucu Bilgileri
+            <Server size={16} /> {t("serverInfo")}
           </h4>
-          <button type="button" className="ayarlar-icon-btn" title="Yenile" onClick={() => void yukle()} disabled={yukleniyor}>
+          <button type="button" className="ayarlar-icon-btn" title={t("refresh")} onClick={() => void yukle()} disabled={yukleniyor}>
             <RefreshCw size={16} className={yukleniyor ? "ayarlar-spin" : ""} />
           </button>
         </div>
@@ -227,56 +231,57 @@ export function SantralAyarlar({ http }: { http: BackendHttpClient }) {
             <Globe size={12} /> WebSocket URL (wss://)
           </span>
           <input value={config.ws_url} placeholder="wss://sip.netgsm.com.tr:8089/ws" onChange={(e) => setConfig({ ...config, ws_url: e.target.value })} />
-          <small>Santral firmasından alınır. UDP/TCP değil, WebSocket (wss://) gerekli.</small>
+          <small>{t("wsUrlHint")}</small>
         </label>
         <label className="ayarlar-field">
           <span>
             <Server size={12} /> Domain
           </span>
           <input value={config.domain} placeholder="sip.netgsm.com.tr" onChange={(e) => setConfig({ ...config, domain: e.target.value })} />
-          <small>SIP URI domain&apos;i (sip:user@DOMAIN formatında kullanılır).</small>
+          <small>{t("domainHint")}</small>
         </label>
         <label className="ayarlar-field">
-          <span>STUN Sunucusu (NAT geçişi)</span>
+          <span>{t("stunServer")}</span>
           <input value={config.stun} placeholder="stun:stun.l.google.com:19302" onChange={(e) => setConfig({ ...config, stun: e.target.value })} />
         </label>
         <div>
           <button type="button" className="ayarlar-primary-btn" onClick={() => void configKaydet()} disabled={configKaydediliyor}>
             {configKaydediliyor ? <Loader2 size={16} className="ayarlar-spin" /> : <Save size={16} />}
-            Kaydet
+            {t("save")}
           </button>
         </div>
       </section>
 
       <section className="ayarlar-card ayarlar-form" data-testid="ayarlar-teyit-voice">
         <h4 className="ayarlar-h4">
-          <Phone size={16} /> Teyit Araması Arayan Numarası
+          <Phone size={16} /> {t("callerIdTitle")}
         </h4>
         <p className="ayarlar-small">
-          Sadece otomatik/manuel IVR teyit aramalarını etkiler. Softphone (Ara butonu) kullanıcı SIP hesabıyla devam eder. Boş bırakılırsa
-          sunucu env değerleri (<code>NETGSM_VOICE_*</code>) kullanılır.
+          {t("callerIdDescriptionBefore")}
+          <code>NETGSM_VOICE_*</code>
+          {t("callerIdDescriptionAfter")}
         </p>
         <div className="ayarlar-grid-2">
           <label className="ayarlar-field">
             <span>
-              <Key size={12} /> Arayan numara (NetGSM usercode)
+              <Key size={12} /> {t("callerIdLabel")}
             </span>
             <input
               value={teyitVoice.teyit_voice_usercode}
-              placeholder="örn: 3229110370"
+              placeholder={t("examplePrefix", { value: "3229110370" })}
               onChange={(e) => setTeyitVoice({ ...teyitVoice, teyit_voice_usercode: e.target.value })}
             />
-            <small>NetGSM alt kullanıcı kodu — müşteride görünen arayan numara bu hesaba bağlıdır.</small>
+            <small>{t("callerIdHint")}</small>
           </label>
           <label className="ayarlar-field">
             <span>
-              <Key size={12} /> Şifre
+              <Key size={12} /> {t("password")}
             </span>
             <input
               type="password"
               autoComplete="off"
               value={teyitVoice.teyit_voice_password}
-              placeholder={secretConfigured(settings, "netgsm.teyit_voice_password") ? "•••••• (tanımlı)" : "••••••"}
+              placeholder={secretConfigured(settings, "netgsm.teyit_voice_password") ? t("secretConfiguredPlaceholder") : "••••••"}
               onChange={(e) => setTeyitVoice({ ...teyitVoice, teyit_voice_password: e.target.value })}
             />
           </label>
@@ -284,7 +289,7 @@ export function SantralAyarlar({ http }: { http: BackendHttpClient }) {
         <div>
           <button type="button" className="ayarlar-primary-btn" onClick={() => void teyitKaydet()} disabled={teyitKaydediliyor}>
             {teyitKaydediliyor ? <Loader2 size={16} className="ayarlar-spin" /> : <Save size={16} />}
-            Kaydet
+            {t("save")}
           </button>
         </div>
       </section>
@@ -295,30 +300,30 @@ export function SantralAyarlar({ http }: { http: BackendHttpClient }) {
             <Phone size={20} />
           </div>
           <div>
-            <h3 className="ayarlar-h3">Otomatik Teyit Araması</h3>
-            <p className="ayarlar-muted">Yeni siparişler için otomatik IVR araması</p>
+            <h3 className="ayarlar-h3">{t("autoConfirmTitle")}</h3>
+            <p className="ayarlar-muted">{t("autoConfirmSubtitle")}</p>
           </div>
         </div>
         <div className="ayarlar-toggle-row">
           <div>
-            <p className="ayarlar-strong">Otomatik arama aktif</p>
-            <p className="ayarlar-muted">Yeni sipariş geldiğinde belirtilen süre sonra otomatik arar</p>
+            <p className="ayarlar-strong">{t("autoCallActive")}</p>
+            <p className="ayarlar-muted">{t("autoCallActiveHint")}</p>
           </div>
-          <Toggle aktif={netgsm.aktif} label="Otomatik arama aktif" onClick={() => setN("aktif", !netgsm.aktif)} />
+          <Toggle aktif={netgsm.aktif} label={t("autoCallActive")} onClick={() => setN("aktif", !netgsm.aktif)} />
         </div>
         <div className="ayarlar-grid-3">
           <label className="ayarlar-field">
-            <span>İlk arama (dakika sonra)</span>
+            <span>{t("firstCallDelay")}</span>
             <input type="number" min={1} max={60} value={netgsm.ilk_arama_dakika} onChange={(e) => setN("ilk_arama_dakika", sayi(e.target.value, 60))} />
-            <small>Sipariş oluşturulduktan kaç dakika sonra aransın</small>
+            <small>{t("firstCallDelayHint")}</small>
           </label>
           <label className="ayarlar-field">
-            <span>Maksimum deneme sayısı</span>
+            <span>{t("maxAttempts")}</span>
             <input type="number" min={1} max={10} value={netgsm.max_deneme} onChange={(e) => setN("max_deneme", sayi(e.target.value, 10))} />
-            <small>Ulaşılamazsa kaç kez tekrar denesin</small>
+            <small>{t("maxAttemptsHint")}</small>
           </label>
           <label className="ayarlar-field">
-            <span>Denemeler arası (dakika)</span>
+            <span>{t("retryInterval")}</span>
             <input
               type="number"
               min={1}
@@ -326,19 +331,24 @@ export function SantralAyarlar({ http }: { http: BackendHttpClient }) {
               value={netgsm.deneme_arasi_dakika}
               onChange={(e) => setN("deneme_arasi_dakika", sayi(e.target.value, 120))}
             />
-            <small>Ulaşılamazsa kaç dakika sonra tekrar denesin</small>
+            <small>{t("retryIntervalHint")}</small>
           </label>
         </div>
         {netgsm.aktif && (
           <div className="ayarlar-info green">
-            Sipariş oluşturulduktan <strong>{netgsm.ilk_arama_dakika} dakika</strong> sonra aranacak. Ulaşılamazsa{" "}
-            <strong>{netgsm.deneme_arasi_dakika} dakika</strong> arayla en fazla <strong>{netgsm.max_deneme} kez</strong> tekrar denenecek.
+            {t("summaryPart1")}
+            <strong>{t("summaryMinutes", { count: netgsm.ilk_arama_dakika })}</strong>
+            {t("summaryPart2")}{" "}
+            <strong>{t("summaryMinutes", { count: netgsm.deneme_arasi_dakika })}</strong>
+            {t("summaryPart3")}
+            <strong>{t("summaryTimes", { count: netgsm.max_deneme })}</strong>
+            {t("summaryPart4")}
           </div>
         )}
         <div>
           <button type="button" className="ayarlar-primary-btn" onClick={() => void netgsmKaydet()} disabled={netgsmKaydediliyor}>
             {netgsmKaydediliyor ? <Loader2 size={16} className="ayarlar-spin" /> : <Save size={16} />}
-            Kaydet
+            {t("save")}
           </button>
         </div>
       </section>
@@ -346,34 +356,34 @@ export function SantralAyarlar({ http }: { http: BackendHttpClient }) {
       <section className="ayarlar-card" data-testid="ayarlar-netgsm-bakiye">
         <div className="ayarlar-row-between">
           <h4 className="ayarlar-h4">
-            <Wallet size={16} /> NetGSM Bakiye
+            <Wallet size={16} /> {t("netgsmBalance")}
           </h4>
-          <button type="button" className="ayarlar-icon-btn" title="Yenile" onClick={() => void bakiyeSorgula()} disabled={bakiyeYukleniyor}>
+          <button type="button" className="ayarlar-icon-btn" title={t("refresh")} onClick={() => void bakiyeSorgula()} disabled={bakiyeYukleniyor}>
             <RefreshCw size={16} className={bakiyeYukleniyor ? "ayarlar-spin" : ""} />
           </button>
         </div>
         {bakiye ? (
           <div className="ayarlar-balance">
             <p className="ayarlar-balance-value">
-              {bakiye.balance === null ? "-" : `${bakiye.balance.toLocaleString("tr-TR", { minimumFractionDigits: 2 })} ${bakiye.currency}`}
+              {bakiye.balance === null ? "-" : `${bakiye.balance.toLocaleString(localeFor(language), { minimumFractionDigits: 2 })} ${bakiye.currency}`}
             </p>
             <p className="ayarlar-small">
               {bakiye.live_call_permitted
-                ? `Son sorgu: ${tarihSaatFormatla(bakiye.checked_at)}`
-                : `Canlı NetGSM sorgusu kapalı (${bakiye.live_gate}) — backend dry-run`}
+                ? t("lastChecked", { date: tarihSaatFormatla(bakiye.checked_at, language) })
+                : t("liveQueryDisabled", { gate: bakiye.live_gate })}
             </p>
           </div>
         ) : (
-          <p className="ayarlar-small">{bakiyeYukleniyor ? "Yükleniyor..." : "-"}</p>
+          <p className="ayarlar-small">{bakiyeYukleniyor ? t("loading") : "-"}</p>
         )}
       </section>
 
       <section className="ayarlar-card ayarlar-form" data-testid="ayarlar-sip-kullanicilar">
         <h4 className="ayarlar-h4">
-          <Users size={16} /> Kullanıcı SIP Hesapları
+          <Users size={16} /> {t("userSipAccounts")}
         </h4>
         {kullanicilar.length === 0 ? (
-          <div className="ayarlar-small">Aktif kullanıcı bulunamadı</div>
+          <div className="ayarlar-small">{t("noActiveUsers")}</div>
         ) : (
           kullanicilar.map((user) => {
             const form = sipDuzenle[user.public_id];
@@ -388,15 +398,15 @@ export function SantralAyarlar({ http }: { http: BackendHttpClient }) {
                 {form ? (
                   <div className="ayarlar-row ayarlar-wrap">
                     <label className="ayarlar-field compact">
-                      <span>SIP Kullanıcı Adı</span>
+                      <span>{t("sipUsername")}</span>
                       <input
                         value={form.sip_username}
-                        placeholder="örn: 3229110532"
+                        placeholder={t("examplePrefix", { value: "3229110532" })}
                         onChange={(e) => setSipDuzenle((c) => ({ ...c, [user.public_id]: { ...form, sip_username: e.target.value } }))}
                       />
                     </label>
                     <label className="ayarlar-field compact">
-                      <span>SIP Şifre</span>
+                      <span>{t("sipPassword")}</span>
                       <input
                         type="password"
                         autoComplete="off"
@@ -406,17 +416,17 @@ export function SantralAyarlar({ http }: { http: BackendHttpClient }) {
                       />
                     </label>
                     <button type="button" className="ayarlar-primary-btn small" onClick={() => void sipKaydet(user)} disabled={sipKaydediliyor === user.public_id}>
-                      {sipKaydediliyor === user.public_id ? "..." : "Kaydet"}
+                      {sipKaydediliyor === user.public_id ? "..." : t("save")}
                     </button>
                   </div>
                 ) : (
                   <div className="ayarlar-row ayarlar-wrap">
                     <span className="ayarlar-small">
-                      <span className="ayarlar-muted">Kullanıcı: </span>
+                      <span className="ayarlar-muted">{t("userPrefix")}</span>
                       {user.sip_username ?? "-"}
                     </span>
                     <span className="ayarlar-small">
-                      <span className="ayarlar-muted">Şifre: </span>
+                      <span className="ayarlar-muted">{t("passwordPrefix")}</span>
                       {user.sip_password_configured ? "••••••" : "-"}
                     </span>
                     <button
@@ -424,7 +434,7 @@ export function SantralAyarlar({ http }: { http: BackendHttpClient }) {
                       className="ayarlar-outline-btn small"
                       onClick={() => setSipDuzenle((c) => ({ ...c, [user.public_id]: { sip_username: user.sip_username ?? "", sip_password: "" } }))}
                     >
-                      Düzenle
+                      {t("edit")}
                     </button>
                   </div>
                 )}
@@ -459,21 +469,22 @@ const VAPI_VARSAYILAN = {
   system_prompt: VAPI_VARSAYILAN_PROMPT,
 };
 
-const TTS_SESLER: Record<string, Array<{ id: string; ad: string }>> = {
+const TTS_SESLER: Record<string, Array<{ id: string; ad: SettingsProvidersKey }>> = {
   azure: [
-    { id: "tr-TR-AhmetNeural", ad: "Ahmet (Erkek)" },
-    { id: "tr-TR-EmelNeural", ad: "Emel (Kadın)" },
+    { id: "tr-TR-AhmetNeural", ad: "voiceAhmet" },
+    { id: "tr-TR-EmelNeural", ad: "voiceEmel" },
   ],
-  elevenlabs: [{ id: "default", ad: "Varsayılan" }],
+  elevenlabs: [{ id: "default", ad: "voiceDefault" }],
   google: [
-    { id: "tr-TR-Standard-A", ad: "Standard A (Kadın)" },
-    { id: "tr-TR-Standard-B", ad: "Standard B (Erkek)" },
+    { id: "tr-TR-Standard-A", ad: "voiceStandardA" },
+    { id: "tr-TR-Standard-B", ad: "voiceStandardB" },
   ],
 };
 
 /** Legacy parity: pages/ayarlar/VapiAyarlar.jsx — `vapi_ayarlar` + secret `vapi.api_key`. */
 export function VapiAyarlar({ http }: { http: BackendHttpClient }) {
   const { settings, yukle, kaydet } = useGlobalSettings(http);
+  const t = useT(settingsProvidersMessages);
   const { mesaj, mesajGoster } = useMesaj();
   const [config, setConfig] = useState(VAPI_VARSAYILAN);
   const [apiKey, setApiKey] = useState("");
@@ -495,9 +506,9 @@ export function VapiAyarlar({ http }: { http: BackendHttpClient }) {
       await kaydet("vapi_ayarlar", config);
       if (apiKey.trim()) await kaydet("vapi.api_key", apiKey.trim());
       setApiKey("");
-      mesajGoster("basari", "VAPI ayarları kaydedildi.");
+      mesajGoster("basari", t("vapiSaved"));
     } catch (error) {
-      mesajGoster("hata", `Kaydedilemedi: ${hataMetni(error)}`);
+      mesajGoster("hata", t("saveFailed", { error: hataMetni(error) }));
     } finally {
       setKaydediyor(false);
     }
@@ -514,13 +525,13 @@ export function VapiAyarlar({ http }: { http: BackendHttpClient }) {
             <Bot size={20} />
           </div>
           <div>
-            <h2 className="ayarlar-h2">VAPI Yapılandırması</h2>
-            <p className="ayarlar-small">AI sesli arama ayarları</p>
+            <h2 className="ayarlar-h2">{t("vapiTitle")}</h2>
+            <p className="ayarlar-small">{t("vapiSubtitle")}</p>
           </div>
         </div>
         <button type="button" className="ayarlar-purple-btn" onClick={() => void kaydetTumu()} disabled={kaydediyor}>
           {kaydediyor ? <Loader2 size={16} className="ayarlar-spin" /> : <Save size={16} />}
-          Kaydet
+          {t("save")}
         </button>
       </div>
       <MesajBanner mesaj={mesaj} />
@@ -528,19 +539,19 @@ export function VapiAyarlar({ http }: { http: BackendHttpClient }) {
       <section className="ayarlar-card">
         <div className="ayarlar-row-between">
           <div>
-            <h3 className="ayarlar-h3">VAPI Durumu</h3>
-            <p className="ayarlar-small">VAPI AI sesli arama sistemini etkinleştir/devre dışı bırak</p>
+            <h3 className="ayarlar-h3">{t("vapiStatus")}</h3>
+            <p className="ayarlar-small">{t("vapiStatusHint")}</p>
           </div>
           <div className="ayarlar-row">
-            <Toggle aktif={config.enabled} label="VAPI Durumu" onClick={() => guncelle("enabled", !config.enabled)} />
-            <span className={config.enabled ? "ayarlar-purple-text" : "ayarlar-muted"}>{config.enabled ? "Aktif" : "Kapalı"}</span>
+            <Toggle aktif={config.enabled} label={t("vapiStatus")} onClick={() => guncelle("enabled", !config.enabled)} />
+            <span className={config.enabled ? "ayarlar-purple-text" : "ayarlar-muted"}>{config.enabled ? t("active") : t("off")}</span>
           </div>
         </div>
       </section>
 
       <section className="ayarlar-card ayarlar-form">
         <h3 className="ayarlar-h3">
-          <Key size={16} /> API Yapılandırması
+          <Key size={16} /> {t("apiConfig")}
         </h3>
         <div className="ayarlar-grid-2">
           <label className="ayarlar-field">
@@ -549,33 +560,33 @@ export function VapiAyarlar({ http }: { http: BackendHttpClient }) {
               type="password"
               autoComplete="off"
               value={apiKey}
-              placeholder={apiKeyTanimli ? "•••••••• (tanımlı)" : "sk-xxxxxxxxxxxxxxxx"}
+              placeholder={apiKeyTanimli ? t("configuredPlaceholder") : "sk-xxxxxxxxxxxxxxxx"}
               onChange={(e) => setApiKey(e.target.value)}
             />
           </label>
           <label className="ayarlar-field">
-            <span>Assistant ID (opsiyonel)</span>
+            <span>{t("assistantIdOptional")}</span>
             <input
               value={config.assistant_id}
-              placeholder="Boş bırakılırsa inline assistant kullanılır"
+              placeholder={t("assistantIdPlaceholder")}
               onChange={(e) => guncelle("assistant_id", e.target.value)}
             />
           </label>
           <label className="ayarlar-field">
-            <span>Telefon Numarası ID</span>
+            <span>{t("phoneNumberId")}</span>
             <input value={config.phone_number_id} placeholder="VAPI Phone Number ID" onChange={(e) => guncelle("phone_number_id", e.target.value)} />
-            <small>VAPI Dashboard → Phone Numbers&apos;dan alınır</small>
+            <small>{t("phoneNumberIdHint")}</small>
           </label>
         </div>
       </section>
 
       <section className="ayarlar-card ayarlar-form">
         <h3 className="ayarlar-h3">
-          <Volume2 size={16} /> Ses Ayarları
+          <Volume2 size={16} /> {t("voiceSettings")}
         </h3>
         <div className="ayarlar-grid-2">
           <label className="ayarlar-field">
-            <span>TTS Sağlayıcı</span>
+            <span>{t("ttsProvider")}</span>
             <select
               value={config.tts_provider}
               onChange={(e) => {
@@ -589,11 +600,11 @@ export function VapiAyarlar({ http }: { http: BackendHttpClient }) {
             </select>
           </label>
           <label className="ayarlar-field">
-            <span>Ses</span>
+            <span>{t("voice")}</span>
             <select value={config.tts_voice} onChange={(e) => guncelle("tts_voice", e.target.value)}>
               {mevcutSesler.map((ses) => (
                 <option key={ses.id} value={ses.id}>
-                  {ses.ad}
+                  {t(ses.ad)}
                 </option>
               ))}
             </select>
@@ -603,23 +614,23 @@ export function VapiAyarlar({ http }: { http: BackendHttpClient }) {
 
       <section className="ayarlar-card ayarlar-form">
         <h3 className="ayarlar-h3">
-          <Clock size={16} /> Arama Zamanlaması
+          <Clock size={16} /> {t("callSchedule")}
         </h3>
         <div className="ayarlar-grid-4">
           <label className="ayarlar-field">
-            <span>Başlangıç Saati</span>
+            <span>{t("startTime")}</span>
             <input type="time" value={config.arama_baslangic_saati} onChange={(e) => guncelle("arama_baslangic_saati", e.target.value)} />
           </label>
           <label className="ayarlar-field">
-            <span>Bitiş Saati</span>
+            <span>{t("endTime")}</span>
             <input type="time" value={config.arama_bitis_saati} onChange={(e) => guncelle("arama_bitis_saati", e.target.value)} />
           </label>
           <label className="ayarlar-field">
-            <span>Max Deneme</span>
+            <span>{t("maxAttemptsShort")}</span>
             <input type="number" min={1} max={10} value={config.max_deneme} onChange={(e) => guncelle("max_deneme", Math.max(1, Number(e.target.value) || 1))} />
           </label>
           <label className="ayarlar-field">
-            <span>Tekrar Arama (saat)</span>
+            <span>{t("retryHours")}</span>
             <input
               type="number"
               min={1}
@@ -631,15 +642,15 @@ export function VapiAyarlar({ http }: { http: BackendHttpClient }) {
         </div>
         <div className="ayarlar-toggle-row">
           <div>
-            <p className="ayarlar-strong">Otomatik Arama</p>
+            <p className="ayarlar-strong">{t("autoCall")}</p>
           </div>
-          <Toggle aktif={config.otomatik_arama} label="Otomatik Arama" onClick={() => guncelle("otomatik_arama", !config.otomatik_arama)} />
+          <Toggle aktif={config.otomatik_arama} label={t("autoCall")} onClick={() => guncelle("otomatik_arama", !config.otomatik_arama)} />
         </div>
       </section>
 
       <section className="ayarlar-card ayarlar-form">
         <h3 className="ayarlar-h3">
-          <Bot size={16} /> Sistem Prompt
+          <Bot size={16} /> {t("systemPrompt")}
         </h3>
         <textarea className="ayarlar-textarea mono" rows={12} value={config.system_prompt} onChange={(e) => guncelle("system_prompt", e.target.value)} />
       </section>
@@ -665,6 +676,7 @@ const PLACEHOLDERS = ["{musteri_adi}", "{takip_no}", "{son_hareket}", "{takip_li
 /** Legacy parity: pages/ayarlar/KargoPipelineAyarlar.jsx — `kargo_pipeline_ayarlar`. */
 export function KargoPipelineAyarlar({ http }: { http: BackendHttpClient }) {
   const { yukleniyor, yukle, kaydet } = useGlobalSettings(http);
+  const t = useT(settingsProvidersMessages);
   const { mesaj, mesajGoster } = useMesaj();
   const [ayarlar, setAyarlar] = useState(PIPELINE_VARSAYILAN);
   const [kaydediliyor, setKaydediliyor] = useState(false);
@@ -683,9 +695,9 @@ export function KargoPipelineAyarlar({ http }: { http: BackendHttpClient }) {
     setKaydediliyor(true);
     try {
       await kaydet("kargo_pipeline_ayarlar", ayarlar);
-      mesajGoster("basari", "Kargo pipeline ayarları kaydedildi");
+      mesajGoster("basari", t("pipelineSaved"));
     } catch (error) {
-      mesajGoster("hata", `Ayarlar kaydedilemedi: ${hataMetni(error)}`);
+      mesajGoster("hata", t("pipelineSaveFailed", { error: hataMetni(error) }));
     } finally {
       setKaydediliyor(false);
     }
@@ -694,7 +706,7 @@ export function KargoPipelineAyarlar({ http }: { http: BackendHttpClient }) {
   if (yukleniyor) {
     return (
       <div className="ayarlar-loading" data-testid="ayarlar-kargo-pipeline">
-        <Loader2 size={16} className="ayarlar-spin" /> Yükleniyor...
+        <Loader2 size={16} className="ayarlar-spin" /> {t("loading")}
       </div>
     );
   }
@@ -709,62 +721,64 @@ export function KargoPipelineAyarlar({ http }: { http: BackendHttpClient }) {
             <Package size={20} />
           </div>
           <div>
-            <h3 className="ayarlar-h3">Kargo Pipeline Ayarları</h3>
-            <p className="ayarlar-muted">Teslim alınmayan kargolar için otomatik mesaj → SMS → VAPI akışı</p>
+            <h3 className="ayarlar-h3">{t("pipelineTitle")}</h3>
+            <p className="ayarlar-muted">{t("pipelineSubtitle")}</p>
           </div>
         </div>
         <MesajBanner mesaj={mesaj} />
         <div className="ayarlar-toggle-row">
           <div>
-            <p className="ayarlar-strong">Pipeline aktif</p>
-            <p className="ayarlar-muted">PTT/Sürat takip güncellemelerinde uygun kargolar otomatik kuyruğa alınır</p>
+            <p className="ayarlar-strong">{t("pipelineActive")}</p>
+            <p className="ayarlar-muted">{t("pipelineActiveHint")}</p>
           </div>
-          <Toggle aktif={ayarlar.aktif} label="Pipeline aktif" onClick={() => set("aktif", !ayarlar.aktif)} />
+          <Toggle aktif={ayarlar.aktif} label={t("pipelineActive")} onClick={() => set("aktif", !ayarlar.aktif)} />
         </div>
-        <h4 className="ayarlar-h4">Çalışma Saatleri (Türkiye)</h4>
+        <h4 className="ayarlar-h4">{t("workingHours")}</h4>
         <div className="ayarlar-grid-2">
           <label className="ayarlar-field">
-            <span>Başlangıç saati</span>
+            <span>{t("pipelineStartTime")}</span>
             <input type="time" value={ayarlar.baslangic_saati} onChange={(e) => set("baslangic_saati", e.target.value)} />
           </label>
           <label className="ayarlar-field">
-            <span>Bitiş saati</span>
+            <span>{t("pipelineEndTime")}</span>
             <input type="time" value={ayarlar.bitis_saati} onChange={(e) => set("bitis_saati", e.target.value)} />
           </label>
         </div>
         <div className="ayarlar-grid-4">
           <label className="ayarlar-field">
-            <span>Mesaj gecikmesi (dk)</span>
+            <span>{t("messageDelay")}</span>
             <input type="number" min={0} value={ayarlar.mesaj_gecikme_dk} onChange={(e) => set("mesaj_gecikme_dk", sayi(e.target.value))} />
           </label>
           <label className="ayarlar-field">
-            <span>SMS gecikmesi (dk)</span>
+            <span>{t("smsDelay")}</span>
             <input type="number" min={0} value={ayarlar.sms_gecikme_dk} onChange={(e) => set("sms_gecikme_dk", sayi(e.target.value))} />
           </label>
           <label className="ayarlar-field">
-            <span>VAPI gecikmesi (dk)</span>
+            <span>{t("vapiDelay")}</span>
             <input type="number" min={0} value={ayarlar.vapi_gecikme_dk} onChange={(e) => set("vapi_gecikme_dk", sayi(e.target.value))} />
           </label>
           <label className="ayarlar-field">
-            <span>Maks. deneme</span>
+            <span>{t("maxAttemptsAbbr")}</span>
             <input type="number" min={1} value={ayarlar.max_deneme} onChange={(e) => set("max_deneme", Math.max(1, sayi(e.target.value)))} />
           </label>
         </div>
         <label className="ayarlar-field">
-          <span>Mesaj şablonu</span>
+          <span>{t("messageTemplate")}</span>
           <textarea className="ayarlar-textarea" rows={4} value={ayarlar.mesaj_sablonu} onChange={(e) => set("mesaj_sablonu", e.target.value)} />
-          <small>
-            Kullanılabilir değişkenler: {PLACEHOLDERS.join(" ")}
-          </small>
+          <small>{t("availableVariables", { variables: PLACEHOLDERS.join(" ") })}</small>
         </label>
         <div className="ayarlar-info">
-          {ayarlar.baslangic_saati}–{ayarlar.bitis_saati} arası çalışır. Mesaj sonrası {ayarlar.sms_gecikme_dk} dk, SMS sonrası{" "}
-          {ayarlar.vapi_gecikme_dk} dk beklenir.
+          {t("pipelineSummary", {
+            start: ayarlar.baslangic_saati,
+            end: ayarlar.bitis_saati,
+            smsDelay: ayarlar.sms_gecikme_dk,
+            vapiDelay: ayarlar.vapi_gecikme_dk,
+          })}
         </div>
         <div>
           <button type="button" className="ayarlar-primary-btn" onClick={() => void handleKaydet()} disabled={kaydediliyor}>
             {kaydediliyor ? <Loader2 size={16} className="ayarlar-spin" /> : <Save size={16} />}
-            Kaydet
+            {t("save")}
           </button>
         </div>
       </section>

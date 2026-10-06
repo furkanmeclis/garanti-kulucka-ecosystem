@@ -16,6 +16,8 @@ import {
 } from "lucide-react";
 import type { BackendHttpClient } from "../../api/http-client.js";
 import { createAdminClient, toProviderAttemptViewModel, type ProviderAttemptViewModel } from "../../api/admin-client.js";
+import { localeFor, useLanguage, useT, type UiLanguage } from "../i18n/index.js";
+import { cronDebugMessages } from "../i18n/messages/cronDebug.js";
 import { hataMetni } from "./AyarlarShared.js";
 import { compactJson, useAutoRefresh } from "./SuratDebugPage.js";
 
@@ -31,10 +33,10 @@ function cronKey(provider: Firma) {
   return `cron_debug_${provider}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function zamanFormatla(value: string | null | undefined) {
+function zamanFormatla(value: string | null | undefined, language: UiLanguage) {
   if (!value) return "-";
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "-" : date.toLocaleString("tr-TR");
+  return Number.isNaN(date.getTime()) ? "-" : date.toLocaleString(localeFor(language));
 }
 
 function basarili(attempt: ProviderAttemptViewModel) {
@@ -42,6 +44,8 @@ function basarili(attempt: ProviderAttemptViewModel) {
 }
 
 export function CronDebugPage({ http }: { http: BackendHttpClient }) {
+  const t = useT(cronDebugMessages);
+  const { language } = useLanguage();
   const adminClient = useMemo(() => createAdminClient(http), [http]);
   const [loglar, setLoglar] = useState<ProviderAttemptViewModel[]>([]);
   const [hata, setHata] = useState<string | null>(null);
@@ -130,35 +134,37 @@ export function CronDebugPage({ http }: { http: BackendHttpClient }) {
         <div className="debug-title">
           <Bug size={24} className="debug-purple" />
           <div>
-            <h1>Kargo Takip Cron Debug</h1>
-            <p className="debug-mono">PTT + Sürat | Son yenileme: {sonYenileme ? new Date(sonYenileme).toLocaleString("tr-TR") : "-"}</p>
+            <h1>{t("title")}</h1>
+            <p className="debug-mono">
+              {t("lastRefresh", { time: sonYenileme ? new Date(sonYenileme).toLocaleString(localeFor(language)) : "-" })}
+            </p>
           </div>
         </div>
         <div className="debug-actions" data-testid="cron-debug-actions">
           <button type="button" className="debug-btn purple" onClick={() => void cronTetikle("hepsi")} disabled={tetikleniyor !== null}>
             {tetikleniyor === "hepsi" ? <Loader2 size={14} className="ayarlar-spin" /> : <Play size={14} />}
-            Hepsini Çalıştır
+            {t("runAll")}
           </button>
           <button type="button" className="debug-btn blue" onClick={() => void cronTetikle("ptt")} disabled={tetikleniyor !== null}>
             {tetikleniyor === "ptt" ? <Loader2 size={14} className="ayarlar-spin" /> : <Truck size={14} />}
-            PTT Cron
+            {t("pttCron")}
           </button>
           <button type="button" className="debug-btn orange" onClick={() => void cronTetikle("surat")} disabled={tetikleniyor !== null}>
             {tetikleniyor === "surat" ? <Loader2 size={14} className="ayarlar-spin" /> : <Truck size={14} />}
-            Sürat Cron
+            {t("suratCron")}
           </button>
           <span className="debug-divider" />
           <button type="button" className={`debug-btn ${otomatikYenile ? "live" : ""}`} onClick={() => setOtomatikYenile((v) => !v)}>
             {otomatikYenile ? <Wifi size={14} /> : <WifiOff size={14} />}
-            {otomatikYenile ? "Canlı (2sn)" : "Canlı Kapalı"}
+            {otomatikYenile ? t("liveOn") : t("liveOff")}
           </button>
           <button type="button" className="debug-btn blue" onClick={() => void loglariGetir()}>
             <RefreshCw size={14} />
-            Yenile
+            {t("refresh")}
           </button>
           <button type="button" className="debug-btn red" onClick={() => setTemizlemeZamani(new Date().toISOString())}>
             <Trash2 size={14} />
-            Temizle
+            {t("clear")}
           </button>
         </div>
       </div>
@@ -166,14 +172,14 @@ export function CronDebugPage({ http }: { http: BackendHttpClient }) {
       {hata && (
         <div className="debug-error">
           <XCircle size={16} />
-          API Hatası: {hata}
+          {t("apiError", { message: hata })}
         </div>
       )}
 
       <div className="debug-cron-cards" data-testid="cron-debug-detail">
         {([
-          ["PTT Kargo Cron", ptt, "ptt"],
-          ["Sürat Kargo Cron", surat, "surat"],
+          [t("pttCardTitle"), ptt, "ptt"],
+          [t("suratCardTitle"), surat, "surat"],
         ] as const).map(([baslik, veri, firma]) => (
           <div key={firma} className={`debug-cron-card ${firma}`}>
             <div className="debug-row">
@@ -182,16 +188,16 @@ export function CronDebugPage({ http }: { http: BackendHttpClient }) {
             </div>
             <div className="debug-cron-stats">
               <span>
-                <span className="debug-muted">Son çalışma:</span> {zamanFormatla(veri.son)}
+                <span className="debug-muted">{t("lastRun")}</span> {zamanFormatla(veri.son, language)}
               </span>
               <span>
-                <span className="debug-muted">Güncellenen:</span> <strong className="debug-green">{veri.guncellenen}</strong>
+                <span className="debug-muted">{t("updated")}</span> <strong className="debug-green">{veri.guncellenen}</strong>
               </span>
               <span>
-                <span className="debug-muted">Hata:</span> <strong className="debug-red">{veri.hata}</strong>
+                <span className="debug-muted">{t("error")}</span> <strong className="debug-red">{veri.hata}</strong>
               </span>
             </div>
-            <p className="debug-small">providers.{firma}.live_mode kapalı — cron-takip-guncelle canlı çağrı yok (dry-run)</p>
+            <p className="debug-small">{t("dryRunNote", { provider: firma })}</p>
           </div>
         ))}
       </div>
@@ -201,27 +207,27 @@ export function CronDebugPage({ http }: { http: BackendHttpClient }) {
           <Search size={16} />
           <input
             type="text"
-            placeholder="Tüm loglarda ara (takip no, hata mesajı, son hareket...)"
+            placeholder={t("searchPlaceholder")}
             value={arama}
             onChange={(e) => setArama(e.target.value)}
           />
         </label>
-        <select aria-label="Firma" value={firmaFiltre} onChange={(e) => setFirmaFiltre(e.target.value as "hepsi" | Firma)}>
-          <option value="hepsi">Tüm Firmalar</option>
+        <select aria-label={t("providerLabel")} value={firmaFiltre} onChange={(e) => setFirmaFiltre(e.target.value as "hepsi" | Firma)}>
+          <option value="hepsi">{t("allProviders")}</option>
           <option value="ptt">PTT</option>
           <option value="surat">Sürat</option>
         </select>
       </div>
 
       <div className="debug-small">
-        {filtrelenmisLoglar.length} / {tumLoglar.length} cron çalışması gösteriliyor
+        {t("showingCount", { filtered: filtrelenmisLoglar.length, total: tumLoglar.length })}
       </div>
 
       {filtrelenmisLoglar.length === 0 ? (
         <div className="debug-empty">
           <Bug size={40} />
-          <p>Henüz cron logu yok</p>
-          <p className="debug-small">Cron job çalıştığında veya manuel tetiklendiğinde loglar burada görünecek</p>
+          <p>{t("emptyTitle")}</p>
+          <p className="debug-small">{t("emptyHint")}</p>
         </div>
       ) : (
         <div className="debug-log-list">
@@ -238,8 +244,8 @@ export function CronDebugPage({ http }: { http: BackendHttpClient }) {
                     {log.status} / {log.retry_decision}
                   </span>
                   <span className="debug-mono">{log.request_id}</span>
-                  <span className="debug-mono">{zamanFormatla(log.started_at)}</span>
-                  <span className="debug-mono">{(log.duration_ms / 1000).toFixed(1)}s toplam</span>
+                  <span className="debug-mono">{zamanFormatla(log.started_at, language)}</span>
+                  <span className="debug-mono">{t("totalDuration", { seconds: (log.duration_ms / 1000).toFixed(1) })}</span>
                   {log.error_message && <span className="debug-red debug-truncate">{log.error_message}</span>}
                 </button>
                 {acik && (
@@ -252,7 +258,7 @@ export function CronDebugPage({ http }: { http: BackendHttpClient }) {
                       <strong>Body:</strong> <code>{compactJson(log.provider_request_preview?.body)}</code>
                     </p>
                     <p>
-                      <strong>Yanıt:</strong> <code>{compactJson(log.response_metadata)}</code>
+                      <strong>{t("response")}</strong> <code>{compactJson(log.response_metadata)}</code>
                     </p>
                   </div>
                 )}

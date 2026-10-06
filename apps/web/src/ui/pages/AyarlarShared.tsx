@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
 import { AlertCircle, CheckCircle } from "lucide-react";
+import { localeFor, type UiLanguage } from "../i18n/index.js";
 
 /** Ayarlar sekmeleri için ortak yardımcılar (legacy mesaj bandı, tarih biçimi). */
 
@@ -23,11 +24,11 @@ export function hataMetni(error: unknown) {
   return error instanceof Error ? error.message : String(error);
 }
 
-export function tarihSaatFormatla(value: string | null | undefined) {
+export function tarihSaatFormatla(value: string | null | undefined, language: UiLanguage = "tr") {
   if (!value) return "-";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "-";
-  return date.toLocaleString("tr-TR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  return date.toLocaleString(localeFor(language), { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
 export function useMesaj() {

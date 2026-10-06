@@ -79,8 +79,8 @@ describe("security abuse guards", () => {
 
     expect(webSources.length).toBeGreaterThan(10);
     for (const source of webSources) expect(source).not.toContain("dangerouslySetInnerHTML");
-    expect(inboxSource).toContain("{message.body ?? (attachments.length > 0 ? \"Medya\" : \"Boş mesaj\")}");
-    expect(commentsSource).toContain("{yorum.text || \"(boş)\"}");
+    expect(inboxSource).toContain("{message.body ?? (attachments.length > 0 ? t(\"media\") : t(\"emptyMessage\"))}");
+    expect(commentsSource).toContain("{yorum.text || t(\"emptyText\")}");
     expect(xssPayload).toContain("onerror");
   });
 });

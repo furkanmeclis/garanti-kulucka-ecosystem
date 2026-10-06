@@ -22,19 +22,22 @@ import type { BackendHttpClient } from "../../api/http-client.js";
 import { createAdminClient, type IntegrationAccount, type IntegrationAccountSnapshot } from "../../api/admin-client.js";
 import { createSettingsClient, type ManagedRole, type ManagedUser } from "../../api/settings-client.js";
 import { MesajBanner, hataMetni, tarihSaatFormatla, useMesaj } from "./AyarlarShared.js";
+import { useLanguage, useT, type Translator } from "../i18n/index.js";
+import { settingsAdminMessages, type SettingsAdminKey } from "../i18n/messages/settingsAdmin.js";
 
 /** Legacy parity: pages/ayarlar/KullanicilarPage.jsx — `/admin/users` (admin-only RBAC). */
 
-const ROL_ADLARI: Record<string, string> = {
-  admin: "Admin",
-  owner: "Admin",
-  calisan: "Çalışan",
-  kargo_operatoru: "Kargo Operatörü",
+const ROL_ADLARI: Record<string, SettingsAdminKey> = {
+  admin: "roleAdmin",
+  owner: "roleAdmin",
+  calisan: "roleEmployee",
+  kargo_operatoru: "roleCargoOperator",
 };
 
-function rolAdiGetir(rol: string | undefined) {
+function rolAdiGetir(rol: string | undefined, t: Translator<SettingsAdminKey>) {
   if (!rol) return "-";
-  return ROL_ADLARI[rol] ?? rol;
+  const key = ROL_ADLARI[rol];
+  return key ? t(key) : rol;
 }
 
 const BOSH_YENI = { email: "", ad: "", soyad: "", telefon: "", sifre: "", rol: "" as ManagedRole | "" };
@@ -42,6 +45,8 @@ const BOSH_DUZENLE = { ad: "", soyad: "", telefon: "", rol: "" as ManagedRole | 
 
 export function KullanicilarSekmesi({ http, currentUserPublicId }: { http: BackendHttpClient; currentUserPublicId: string }) {
   const client = useMemo(() => createSettingsClient(http), [http]);
+  const t = useT(settingsAdminMessages);
+  const { language } = useLanguage();
   const [kullanicilar, setKullanicilar] = useState<ManagedUser[]>([]);
   const [roller, setRoller] = useState<ManagedRole[]>(["admin", "calisan", "kargo_operatoru"]);
   const [yukleniyor, setYukleniyor] = useState(true);
@@ -63,11 +68,11 @@ export function KullanicilarSekmesi({ http, currentUserPublicId }: { http: Backe
       setKullanicilar(response.data);
       if (response.roles.length > 0) setRoller(response.roles);
     } catch (error) {
-      mesajGoster("hata", `Kullanıcılar yüklenemedi: ${hataMetni(error)}`);
+      mesajGoster("hata", t("usersLoadFailed", { error: hataMetni(error) }));
     } finally {
       setYukleniyor(false);
     }
-  }, [client, mesajGoster]);
+  }, [client, mesajGoster, t]);
 
   useEffect(() => {
     void kullanicilariGetir();
@@ -76,11 +81,11 @@ export function KullanicilarSekmesi({ http, currentUserPublicId }: { http: Backe
   async function yeniKullaniciOlustur(event: FormEvent) {
     event.preventDefault();
     if (!yeniForm.email || !yeniForm.ad || !yeniForm.sifre) {
-      mesajGoster("hata", "E-posta, ad ve şifre zorunlu.");
+      mesajGoster("hata", t("newUserRequiredFields"));
       return;
     }
     if (yeniForm.sifre.length < 6) {
-      mesajGoster("hata", "Şifre en az 6 karakter olmalı.");
+      mesajGoster("hata", t("passwordMinLength"));
       return;
     }
     setYeniKaydediliyor(true);
@@ -95,10 +100,10 @@ export function KullanicilarSekmesi({ http, currentUserPublicId }: { http: Backe
       });
       setYeniModal(false);
       setYeniForm(BOSH_YENI);
-      mesajGoster("basari", `${yeniForm.ad} oluşturuldu.`);
+      mesajGoster("basari", t("userCreated", { name: yeniForm.ad }));
       void kullanicilariGetir();
     } catch (error) {
-      mesajGoster("hata", `Oluşturulamadı: ${hataMetni(error)}`);
+      mesajGoster("hata", t("createFailed", { error: hataMetni(error) }));
     } finally {
       setYeniKaydediliyor(false);
     }
@@ -115,9 +120,9 @@ export function KullanicilarSekmesi({ http, currentUserPublicId }: { http: Backe
       });
       setKullanicilar((prev) => prev.map((item) => (item.public_id === publicId ? user : item)));
       setDuzenleId(null);
-      mesajGoster("basari", "Kullanıcı güncellendi.");
+      mesajGoster("basari", t("userUpdated"));
     } catch (error) {
-      mesajGoster("hata", `Güncellenemedi: ${hataMetni(error)}`);
+      mesajGoster("hata", t("updateFailed", { error: hataMetni(error) }));
     } finally {
       setDuzenleKaydediliyor(false);
     }
@@ -132,7 +137,7 @@ export function KullanicilarSekmesi({ http, currentUserPublicId }: { http: Backe
       setKullanicilar((prev) =>
         prev.map((item) => (item.public_id === kullanici.public_id ? { ...item, is_active: kullanici.is_active } : item)),
       );
-      mesajGoster("hata", `Durum güncellenemedi. ${hataMetni(error)}`);
+      mesajGoster("hata", t("statusUpdateFailed", { error: hataMetni(error) }));
     }
   }
 
@@ -142,9 +147,9 @@ export function KullanicilarSekmesi({ http, currentUserPublicId }: { http: Backe
       await client.deactivateUser(publicId);
       setKullanicilar((prev) => prev.filter((item) => item.public_id !== publicId));
       setSilOnayId(null);
-      mesajGoster("basari", "Kullanıcı silindi.");
+      mesajGoster("basari", t("userDeleted"));
     } catch (error) {
-      mesajGoster("hata", `Silinemedi: ${hataMetni(error)}`);
+      mesajGoster("hata", t("deleteFailed", { error: hataMetni(error) }));
     } finally {
       setSiliniyor(false);
     }
@@ -166,8 +171,8 @@ export function KullanicilarSekmesi({ http, currentUserPublicId }: { http: Backe
         <div className="ayarlar-row">
           <Users size={20} className="ayarlar-primary-text" />
           <div>
-            <h2 className="ayarlar-h2">Kullanıcı Yönetimi</h2>
-            <p className="ayarlar-muted">Panel kullanıcılarını yönetin</p>
+            <h2 className="ayarlar-h2">{t("userManagement")}</h2>
+            <p className="ayarlar-muted">{t("userManagementSubtitle")}</p>
           </div>
         </div>
         <button
@@ -179,7 +184,7 @@ export function KullanicilarSekmesi({ http, currentUserPublicId }: { http: Backe
           }}
         >
           <Plus size={16} />
-          Yeni Kullanıcı
+          {t("newUser")}
         </button>
       </div>
 
@@ -187,22 +192,22 @@ export function KullanicilarSekmesi({ http, currentUserPublicId }: { http: Backe
 
       <div className="ayarlar-table-card">
         {yukleniyor ? (
-          <div className="ayarlar-empty">Yükleniyor...</div>
+          <div className="ayarlar-empty">{t("loading")}</div>
         ) : kullanicilar.length === 0 ? (
           <div className="ayarlar-empty">
             <Users size={40} />
-            <p>Kullanıcı bulunamadı</p>
+            <p>{t("noUsers")}</p>
           </div>
         ) : (
           <div className="ayarlar-table-scroll">
             <table className="ayarlar-table">
               <thead>
                 <tr>
-                  <th>Kullanıcı</th>
-                  <th>Rol</th>
-                  <th>Durum</th>
-                  <th>Son Giriş</th>
-                  <th className="right">İşlem</th>
+                  <th>{t("colUser")}</th>
+                  <th>{t("colRole")}</th>
+                  <th>{t("colStatus")}</th>
+                  <th>{t("colLastLogin")}</th>
+                  <th className="right">{t("colAction")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -211,26 +216,26 @@ export function KullanicilarSekmesi({ http, currentUserPublicId }: { http: Backe
                     <td>
                       {duzenleId === kullanici.public_id ? (
                         <div className="ayarlar-inline-edit">
-                          <input placeholder="Ad" value={duzenleForm.ad} onChange={(e) => setDuzenleForm((f) => ({ ...f, ad: e.target.value }))} />
+                          <input placeholder={t("firstName")} value={duzenleForm.ad} onChange={(e) => setDuzenleForm((f) => ({ ...f, ad: e.target.value }))} />
                           <input
-                            placeholder="Soyad"
+                            placeholder={t("lastName")}
                             value={duzenleForm.soyad}
                             onChange={(e) => setDuzenleForm((f) => ({ ...f, soyad: e.target.value }))}
                           />
                           <input
-                            placeholder="Telefon"
+                            placeholder={t("phone")}
                             value={duzenleForm.telefon}
                             onChange={(e) => setDuzenleForm((f) => ({ ...f, telefon: e.target.value }))}
                           />
                           <select
-                            aria-label="Rol"
+                            aria-label={t("role")}
                             value={duzenleForm.rol}
                             onChange={(e) => setDuzenleForm((f) => ({ ...f, rol: e.target.value as ManagedRole | "" }))}
                           >
-                            <option value="">Rol seç</option>
+                            <option value="">{t("selectRoleShort")}</option>
                             {roller.map((rol) => (
                               <option key={rol} value={rol}>
-                                {rolAdiGetir(rol)}
+                                {rolAdiGetir(rol, t)}
                               </option>
                             ))}
                           </select>
@@ -241,9 +246,9 @@ export function KullanicilarSekmesi({ http, currentUserPublicId }: { http: Backe
                               onClick={() => void kullaniciGuncelle(kullanici.public_id)}
                               disabled={duzenleKaydediliyor}
                             >
-                              {duzenleKaydediliyor ? "..." : "Kaydet"}
+                              {duzenleKaydediliyor ? "..." : t("save")}
                             </button>
-                            <button type="button" className="ayarlar-outline-btn small" aria-label="Vazgeç" onClick={() => setDuzenleId(null)}>
+                            <button type="button" className="ayarlar-outline-btn small" aria-label={t("cancel")} onClick={() => setDuzenleId(null)}>
                               <X size={14} />
                             </button>
                           </div>
@@ -267,7 +272,7 @@ export function KullanicilarSekmesi({ http, currentUserPublicId }: { http: Backe
                     <td>
                       <span className={`ayarlar-pill ${kullanici.role === "admin" || kullanici.role === "owner" ? "purple" : "blue"}`}>
                         <Shield size={12} />
-                        {rolAdiGetir(kullanici.role)}
+                        {rolAdiGetir(kullanici.role, t)}
                       </span>
                     </td>
                     <td>
@@ -275,34 +280,34 @@ export function KullanicilarSekmesi({ http, currentUserPublicId }: { http: Backe
                         type="button"
                         className="ayarlar-link-btn"
                         onClick={() => void aktifToggle(kullanici)}
-                        title={kullanici.is_active ? "Pasife al" : "Aktife al"}
+                        title={kullanici.is_active ? t("deactivate") : t("activate")}
                         disabled={kullanici.public_id === currentUserPublicId}
                       >
                         {kullanici.is_active ? <ToggleRight size={20} className="ayarlar-green" /> : <ToggleLeft size={20} />}
-                        <span className={kullanici.is_active ? "ayarlar-green" : "ayarlar-muted"}>{kullanici.is_active ? "Aktif" : "Pasif"}</span>
+                        <span className={kullanici.is_active ? "ayarlar-green" : "ayarlar-muted"}>{kullanici.is_active ? t("active") : t("inactive")}</span>
                       </button>
                     </td>
-                    <td className="ayarlar-nowrap">{kullanici.last_seen_at ? tarihSaatFormatla(kullanici.last_seen_at) : "-"}</td>
+                    <td className="ayarlar-nowrap">{kullanici.last_seen_at ? tarihSaatFormatla(kullanici.last_seen_at, language) : "-"}</td>
                     <td className="right">
                       {duzenleId !== kullanici.public_id && (
                         <div className="ayarlar-row ayarlar-justify-end">
                           <button type="button" className="ayarlar-outline-btn small" onClick={() => duzenleBaslat(kullanici)}>
                             <Pencil size={14} />
-                            Düzenle
+                            {t("edit")}
                           </button>
                           {silOnayId === kullanici.public_id ? (
                             <div className="ayarlar-row">
-                              <span className="ayarlar-red small">Emin misin?</span>
+                              <span className="ayarlar-red small">{t("confirmDelete")}</span>
                               <button
                                 type="button"
                                 className="ayarlar-danger-btn small"
                                 onClick={() => void kullaniciSil(kullanici.public_id)}
                                 disabled={siliniyor}
                               >
-                                {siliniyor ? "..." : "Evet"}
+                                {siliniyor ? "..." : t("yes")}
                               </button>
                               <button type="button" className="ayarlar-outline-btn small" onClick={() => setSilOnayId(null)}>
-                                Hayır
+                                {t("no")}
                               </button>
                             </div>
                           ) : (
@@ -313,7 +318,7 @@ export function KullanicilarSekmesi({ http, currentUserPublicId }: { http: Backe
                               disabled={kullanici.public_id === currentUserPublicId}
                             >
                               <Trash2 size={14} />
-                              Sil
+                              {t("delete")}
                             </button>
                           )}
                         </div>
@@ -328,30 +333,30 @@ export function KullanicilarSekmesi({ http, currentUserPublicId }: { http: Backe
       </div>
 
       {yeniModal && (
-        <div className="ayarlar-overlay" role="dialog" aria-modal="true" aria-label="Yeni Kullanıcı">
+        <div className="ayarlar-overlay" role="dialog" aria-modal="true" aria-label={t("newUser")}>
           <form className="ayarlar-modal" onSubmit={(event) => void yeniKullaniciOlustur(event)}>
             <div className="ayarlar-row-between">
-              <h3 className="ayarlar-h2">Yeni Kullanıcı</h3>
-              <button type="button" className="ayarlar-icon-btn" aria-label="Kapat" onClick={() => setYeniModal(false)}>
+              <h3 className="ayarlar-h2">{t("newUser")}</h3>
+              <button type="button" className="ayarlar-icon-btn" aria-label={t("close")} onClick={() => setYeniModal(false)}>
                 <X size={18} />
               </button>
             </div>
             <div className="ayarlar-grid-2">
               <label className="ayarlar-field">
-                <span>Ad *</span>
+                <span>{t("firstNameRequired")}</span>
                 <input value={yeniForm.ad} onChange={(e) => setYeniForm((f) => ({ ...f, ad: e.target.value }))} />
               </label>
               <label className="ayarlar-field">
-                <span>Soyad</span>
+                <span>{t("lastName")}</span>
                 <input value={yeniForm.soyad} onChange={(e) => setYeniForm((f) => ({ ...f, soyad: e.target.value }))} />
               </label>
             </div>
             <label className="ayarlar-field">
-              <span>E-posta *</span>
+              <span>{t("emailRequired")}</span>
               <input type="email" value={yeniForm.email} onChange={(e) => setYeniForm((f) => ({ ...f, email: e.target.value }))} />
             </label>
             <label className="ayarlar-field">
-              <span>Telefon</span>
+              <span>{t("phone")}</span>
               <input
                 value={yeniForm.telefon}
                 placeholder="05xx xxx xx xx"
@@ -359,37 +364,37 @@ export function KullanicilarSekmesi({ http, currentUserPublicId }: { http: Backe
               />
             </label>
             <label className="ayarlar-field">
-              <span>Şifre *</span>
+              <span>{t("passwordRequired")}</span>
               <div className="ayarlar-password">
                 <input
                   type={sifreGoster ? "text" : "password"}
                   value={yeniForm.sifre}
-                  placeholder="En az 6 karakter"
+                  placeholder={t("passwordPlaceholder")}
                   onChange={(e) => setYeniForm((f) => ({ ...f, sifre: e.target.value }))}
                 />
-                <button type="button" className="ayarlar-icon-btn" aria-label="Şifreyi göster" onClick={() => setSifreGoster((v) => !v)}>
+                <button type="button" className="ayarlar-icon-btn" aria-label={t("showPassword")} onClick={() => setSifreGoster((v) => !v)}>
                   {sifreGoster ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
               </div>
             </label>
             <label className="ayarlar-field">
-              <span>Rol</span>
+              <span>{t("role")}</span>
               <select value={yeniForm.rol} onChange={(e) => setYeniForm((f) => ({ ...f, rol: e.target.value as ManagedRole | "" }))}>
-                <option value="">Rol seçin</option>
+                <option value="">{t("selectRole")}</option>
                 {roller.map((rol) => (
                   <option key={rol} value={rol}>
-                    {rolAdiGetir(rol)}
+                    {rolAdiGetir(rol, t)}
                   </option>
                 ))}
               </select>
             </label>
             <div className="ayarlar-row ayarlar-justify-end">
               <button type="button" className="ayarlar-outline-btn" onClick={() => setYeniModal(false)}>
-                İptal
+                {t("cancelButton")}
               </button>
               <button type="submit" className="ayarlar-primary-btn" disabled={yeniKaydediliyor}>
                 {yeniKaydediliyor ? <Loader2 size={16} className="ayarlar-spin" /> : <Plus size={16} />}
-                Oluştur
+                {t("create")}
               </button>
             </div>
           </form>
@@ -404,13 +409,14 @@ export function KullanicilarSekmesi({ http, currentUserPublicId }: { http: Backe
  * Token/config backend integration accounts üzerinden kaydedilir; tokenlar her zaman maskeli döner.
  */
 const ENTEGRASYON_METIN = {
-  instagram: { baslik: "Instagram Entegrasyonu", alt: "Instagram DM mesajlaşma ve webhook ayarları", aktif: "Instagram Aktif", pasif: "Instagram Pasif" },
-  messenger: { baslik: "Messenger Entegrasyonu", alt: "Facebook Messenger mesajlaşma ve webhook ayarları", aktif: "Messenger Aktif", pasif: "Messenger Pasif" },
-} as const;
+  instagram: { baslik: "instagramTitle", alt: "instagramSubtitle", aktif: "instagramActive", pasif: "instagramInactive" },
+  messenger: { baslik: "messengerTitle", alt: "messengerSubtitle", aktif: "messengerActive", pasif: "messengerInactive" },
+} as const satisfies Record<string, Record<string, SettingsAdminKey>>;
 
 export function EntegrasyonAyarlar({ http, provider }: { http: BackendHttpClient; provider: "instagram" | "messenger" }) {
   const adminClient = useMemo(() => createAdminClient(http), [http]);
   const metin = ENTEGRASYON_METIN[provider];
+  const t = useT(settingsAdminMessages);
   const [hesap, setHesap] = useState<IntegrationAccount | null>(null);
   const [snapshot, setSnapshot] = useState<IntegrationAccountSnapshot | null>(null);
   const [yukleniyor, setYukleniyor] = useState(true);
@@ -449,7 +455,7 @@ export function EntegrasyonAyarlar({ http, provider }: { http: BackendHttpClient
   async function kaydet(event: FormEvent) {
     event.preventDefault();
     if (!form.pageId.trim()) {
-      mesajGoster("hata", "Page ID gerekli");
+      mesajGoster("hata", t("pageIdRequired"));
       return;
     }
     setKaydediliyor(true);
@@ -466,10 +472,10 @@ export function EntegrasyonAyarlar({ http, provider }: { http: BackendHttpClient
         await adminClient.upsertIntegrationSetting(account.public_id, "webhook.verify_token", form.verifyToken.trim(), true);
       }
       setForm((current) => ({ ...current, pageAccessToken: "", verifyToken: "" }));
-      mesajGoster("basari", "Token bilgileri kaydedildi.");
+      mesajGoster("basari", t("tokensSaved"));
       await yukle();
     } catch (error) {
-      mesajGoster("hata", `Kayıt başarısız: ${hataMetni(error)}`);
+      mesajGoster("hata", t("saveFailed", { error: hataMetni(error) }));
     } finally {
       setKaydediliyor(false);
     }
@@ -480,7 +486,7 @@ export function EntegrasyonAyarlar({ http, provider }: { http: BackendHttpClient
       await navigator.clipboard.writeText(deger);
       mesajGoster("basari", basari);
     } catch {
-      mesajGoster("hata", "Kopyalanamadı");
+      mesajGoster("hata", t("copyFailed"));
     }
   }
 
@@ -489,38 +495,38 @@ export function EntegrasyonAyarlar({ http, provider }: { http: BackendHttpClient
       <section className="ayarlar-card">
         <div className="ayarlar-row-between">
           <div>
-            <h3 className="ayarlar-h2">{metin.baslik}</h3>
-            <p className="ayarlar-muted">{metin.alt}</p>
+            <h3 className="ayarlar-h2">{t(metin.baslik)}</h3>
+            <p className="ayarlar-muted">{t(metin.alt)}</p>
           </div>
           <button type="button" className="ayarlar-outline-btn" onClick={() => void yukle()} disabled={yukleniyor}>
             <RefreshCw size={16} className={yukleniyor ? "ayarlar-spin" : ""} />
-            Yenile
+            {t("refresh")}
           </button>
         </div>
         <MesajBanner mesaj={mesaj} />
-        <h4 className="ayarlar-h4">Bağlantı Durumu</h4>
+        <h4 className="ayarlar-h4">{t("connectionStatus")}</h4>
         <div className="ayarlar-status-grid">
           <span className={`ayarlar-pill ${tokenTanimli ? "green" : "red"}`}>
             {tokenTanimli ? <CheckCircle size={12} /> : <XCircle size={12} />}
-            {tokenTanimli ? "Page Access Token Tanımlı" : "Page Access Token Eksik"}
+            {tokenTanimli ? t("tokenConfigured") : t("tokenMissing")}
           </span>
           <span className={`ayarlar-pill ${hesap?.external_account_id ? "green" : "red"}`}>
-            {hesap?.external_account_id ? `Page ID: ${hesap.external_account_id}` : "Page ID Eksik"}
+            {hesap?.external_account_id ? t("pageIdValue", { id: hesap.external_account_id }) : t("pageIdMissing")}
           </span>
           <span className={`ayarlar-pill ${hesap?.status === "active" ? "green" : "slate"}`}>
-            {hesap?.status === "active" ? metin.aktif : metin.pasif}
+            {hesap?.status === "active" ? t(metin.aktif) : t(metin.pasif)}
           </span>
         </div>
         {snapshot && (
           <p className="ayarlar-small" data-testid={`ayarlar-${provider}-token-mask`}>
-            Token: {tokenTanimli ? "••••••••" : "-"} (maskeli)
+            {t("tokenMasked", { mask: tokenTanimli ? "••••••••" : "-" })}
           </p>
         )}
       </section>
 
       <form className="ayarlar-card ayarlar-form" onSubmit={(event) => void kaydet(event)}>
         <h4 className="ayarlar-h4">
-          <Key size={16} /> Manuel Yapılandırma
+          <Key size={16} /> {t("manualConfig")}
         </h4>
         <label className="ayarlar-field">
           <span>Page Access Token</span>
@@ -528,7 +534,7 @@ export function EntegrasyonAyarlar({ http, provider }: { http: BackendHttpClient
             type="password"
             autoComplete="off"
             value={form.pageAccessToken}
-            placeholder={tokenTanimli ? "•••••••• (değiştirmek için yeni token girin)" : ""}
+            placeholder={tokenTanimli ? t("tokenReplacePlaceholder") : ""}
             onChange={(e) => setForm((f) => ({ ...f, pageAccessToken: e.target.value }))}
           />
         </label>
@@ -538,19 +544,19 @@ export function EntegrasyonAyarlar({ http, provider }: { http: BackendHttpClient
         </label>
         <button type="submit" className="ayarlar-primary-btn" disabled={kaydediliyor}>
           {kaydediliyor ? <Loader2 size={16} className="ayarlar-spin" /> : <Save size={16} />}
-          {kaydediliyor ? "Kaydediliyor..." : "Token Bilgilerini Kaydet"}
+          {kaydediliyor ? t("saving") : t("saveTokens")}
         </button>
       </form>
 
       <form className="ayarlar-card ayarlar-form" onSubmit={(event) => void kaydet(event)}>
-        <h4 className="ayarlar-h4">Webhook Ayarları</h4>
+        <h4 className="ayarlar-h4">{t("webhookSettings")}</h4>
         <div className="ayarlar-field">
           <span>Callback URL</span>
           <div className="ayarlar-copy-row">
             <code data-testid={`ayarlar-${provider}-callback`}>{callbackUrl}</code>
-            <button type="button" className="ayarlar-outline-btn small" onClick={() => void kopyala(callbackUrl, "URL kopyalandı!")}>
+            <button type="button" className="ayarlar-outline-btn small" onClick={() => void kopyala(callbackUrl, t("urlCopied"))}>
               <Copy size={14} />
-              Kopyala
+              {t("copy")}
             </button>
           </div>
         </div>
@@ -560,13 +566,13 @@ export function EntegrasyonAyarlar({ http, provider }: { http: BackendHttpClient
             type="password"
             autoComplete="off"
             value={form.verifyToken}
-            placeholder={verifyTokenTanimli ? "•••••••• (tanımlı)" : ""}
+            placeholder={verifyTokenTanimli ? t("configuredPlaceholder") : ""}
             onChange={(e) => setForm((f) => ({ ...f, verifyToken: e.target.value }))}
           />
         </label>
         <button type="submit" className="ayarlar-primary-btn" disabled={kaydediliyor}>
           <Save size={16} />
-          Kaydet
+          {t("save")}
         </button>
       </form>
     </div>

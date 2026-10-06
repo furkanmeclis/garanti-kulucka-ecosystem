@@ -7,6 +7,8 @@ import {
   type ProviderAttemptViewModel,
   type ProviderCatalogItem,
 } from "../../api/admin-client.js";
+import { localeFor, useLanguage, useT, type UiLanguage } from "../i18n/index.js";
+import { suratDebugMessages } from "../i18n/messages/suratDebug.js";
 import { hataMetni } from "./AyarlarShared.js";
 
 /**
@@ -46,10 +48,10 @@ export function compactJson(value: unknown) {
   }
 }
 
-export function saatFormatla(value: string | null | undefined) {
+export function saatFormatla(value: string | null | undefined, language: UiLanguage = "tr") {
   if (!value) return "-";
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "-" : date.toLocaleTimeString("tr-TR");
+  return Number.isNaN(date.getTime()) ? "-" : date.toLocaleTimeString(localeFor(language));
 }
 
 export function useAutoRefresh(enabled: boolean, callback: () => void, intervalMs = 2000) {
@@ -61,6 +63,8 @@ export function useAutoRefresh(enabled: boolean, callback: () => void, intervalM
 }
 
 export function SuratDebugPage({ http }: { http: BackendHttpClient }) {
+  const t = useT(suratDebugMessages);
+  const { language } = useLanguage();
   const adminClient = useMemo(() => createAdminClient(http), [http]);
   const [loglar, setLoglar] = useState<ProviderAttemptViewModel[]>([]);
   const [catalogItem, setCatalogItem] = useState<ProviderCatalogItem | null>(null);
@@ -82,7 +86,7 @@ export function SuratDebugPage({ http }: { http: BackendHttpClient }) {
       setLoglar(data.filter((attempt) => attempt.provider_key === "surat").map(toProviderAttemptViewModel));
       setCatalogItem(catalog.data.find((item) => item.provider === "surat") ?? null);
       setHata(null);
-      setSonYenileme(new Date().toLocaleTimeString("tr-TR"));
+      setSonYenileme(new Date().toISOString());
     } catch (error) {
       setHata(hataMetni(error));
     }
@@ -127,13 +131,13 @@ export function SuratDebugPage({ http }: { http: BackendHttpClient }) {
   }, [gorunurLoglar, arama, endpointFiltre, durumFiltre]);
 
   const kartlar = [
-    { baslik: "Toplam", deger: String(istatistikler.toplam), renk: "gray" },
-    { baslik: "Başarılı", deger: String(istatistikler.basarili), renk: "green" },
-    { baslik: "Hata", deger: String(istatistikler.hata), renk: "red" },
-    { baslik: "Kurtarıldı", deger: String(istatistikler.kurtarildi), renk: "yellow" },
-    { baslik: "Ort. Süre", deger: `${istatistikler.ortSure}ms`, renk: "blue" },
-    { baslik: "Min Süre", deger: `${istatistikler.minSure}ms`, renk: "indigo" },
-    { baslik: "Max Süre", deger: `${istatistikler.maxSure}ms`, renk: "purple" },
+    { baslik: t("statTotal"), deger: String(istatistikler.toplam), renk: "gray" },
+    { baslik: t("statSuccess"), deger: String(istatistikler.basarili), renk: "green" },
+    { baslik: t("statError"), deger: String(istatistikler.hata), renk: "red" },
+    { baslik: t("statRecovered"), deger: String(istatistikler.kurtarildi), renk: "yellow" },
+    { baslik: t("statAvgDuration"), deger: `${istatistikler.ortSure}ms`, renk: "blue" },
+    { baslik: t("statMinDuration"), deger: `${istatistikler.minSure}ms`, renk: "indigo" },
+    { baslik: t("statMaxDuration"), deger: `${istatistikler.maxSure}ms`, renk: "purple" },
   ];
 
   return (
@@ -142,24 +146,28 @@ export function SuratDebugPage({ http }: { http: BackendHttpClient }) {
         <div className="debug-title">
           <Bug size={24} className="debug-red" />
           <div>
-            <h1>Sürat Kargo Debug</h1>
+            <h1>{t("title")}</h1>
             <p className="debug-mono">
-              Son yenileme: {sonYenileme ?? "-"} | {gorunurLoglar.length}/{LOG_LIMIT} log
+              {t("lastRefresh", {
+                time: sonYenileme ? new Date(sonYenileme).toLocaleTimeString(localeFor(language)) : "-",
+                visible: gorunurLoglar.length,
+                limit: LOG_LIMIT,
+              })}
             </p>
           </div>
         </div>
         <div className="debug-actions">
           <button type="button" className={`debug-btn ${otomatikYenile ? "live" : ""}`} onClick={() => setOtomatikYenile((v) => !v)}>
             {otomatikYenile ? <Wifi size={14} /> : <WifiOff size={14} />}
-            {otomatikYenile ? "Canlı (2sn)" : "Canlı Kapalı"}
+            {otomatikYenile ? t("liveOn") : t("liveOff")}
           </button>
           <button type="button" className="debug-btn blue" onClick={() => void loglariGetir()}>
             <RefreshCw size={14} />
-            Yenile
+            {t("refresh")}
           </button>
           <button type="button" className="debug-btn red" onClick={() => setTemizlemeZamani(new Date().toISOString())}>
             <Trash2 size={14} />
-            Temizle
+            {t("clear")}
           </button>
         </div>
       </div>
@@ -167,7 +175,7 @@ export function SuratDebugPage({ http }: { http: BackendHttpClient }) {
       {hata && (
         <div className="debug-error">
           <XCircle size={16} />
-          API Hatası: {hata}
+          {t("apiError", { message: hata })}
         </div>
       )}
 
@@ -181,7 +189,7 @@ export function SuratDebugPage({ http }: { http: BackendHttpClient }) {
       </div>
 
       <div className="debug-gate" data-testid="surat-debug-detail">
-        <span>Canlı gate: {catalogItem?.live_call_permitted ? "açık" : "kapalı"}</span>
+        <span>{t("liveGate", { state: catalogItem?.live_call_permitted ? t("gateOpen") : t("gateClosed") })}</span>
         <span>{catalogItem?.live_feature_flag_key ?? "providers.surat.live_mode"}</span>
         <span>{catalogItem?.live_block_reason ?? "-"}</span>
       </div>
@@ -191,31 +199,31 @@ export function SuratDebugPage({ http }: { http: BackendHttpClient }) {
           <Search size={16} />
           <input
             type="text"
-            placeholder="Tüm loglarda ara (takip no, alıcı adı, hata mesajı...)"
+            placeholder={t("searchPlaceholder")}
             value={arama}
             onChange={(e) => setArama(e.target.value)}
           />
         </label>
-        <select aria-label="Endpoint" value={endpointFiltre} onChange={(e) => setEndpointFiltre(e.target.value)}>
-          <option value="hepsi">Tüm Endpointler</option>
-          <option value="/kargoya-gonder">Kargoya Gönder</option>
-          <option value="/kargo-takip">Kargo Takip</option>
-          <option value="/gonderi-sil">Gönderi Sil</option>
-          <option value="/gonderi-geri-cek">Gönderi Geri Çek</option>
+        <select aria-label={t("endpointLabel")} value={endpointFiltre} onChange={(e) => setEndpointFiltre(e.target.value)}>
+          <option value="hepsi">{t("allEndpoints")}</option>
+          <option value="/kargoya-gonder">{t("endpointSend")}</option>
+          <option value="/kargo-takip">{t("endpointTrack")}</option>
+          <option value="/gonderi-sil">{t("endpointDelete")}</option>
+          <option value="/gonderi-geri-cek">{t("endpointWithdraw")}</option>
         </select>
-        <select aria-label="Durum" value={durumFiltre} onChange={(e) => setDurumFiltre(e.target.value as DurumFiltre)}>
-          <option value="hepsi">Tüm Durumlar</option>
-          <option value="basarili">Başarılı</option>
-          <option value="hata">Hata</option>
-          <option value="kurtarildi">Kurtarıldı</option>
+        <select aria-label={t("statusLabel")} value={durumFiltre} onChange={(e) => setDurumFiltre(e.target.value as DurumFiltre)}>
+          <option value="hepsi">{t("allStatuses")}</option>
+          <option value="basarili">{t("statSuccess")}</option>
+          <option value="hata">{t("statError")}</option>
+          <option value="kurtarildi">{t("statRecovered")}</option>
         </select>
       </div>
 
       {filtreliLoglar.length === 0 ? (
         <div className="debug-empty">
           <Bug size={40} />
-          <p>Henüz debug logu yok</p>
-          <p className="debug-small">Sürat Kargo API&apos;sine istek atıldığında loglar burada görünecek</p>
+          <p>{t("emptyTitle")}</p>
+          <p className="debug-small">{t("emptyHint")}</p>
         </div>
       ) : (
         <div className="debug-log-list">
@@ -226,7 +234,7 @@ export function SuratDebugPage({ http }: { http: BackendHttpClient }) {
               <div key={log.public_id} className={`debug-log ${durum}`}>
                 <button type="button" className="debug-log-head" onClick={() => setAcikLog(acik ? null : log.public_id)}>
                   {acik ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                  <span className="debug-mono">{saatFormatla(log.started_at)}</span>
+                  <span className="debug-mono">{saatFormatla(log.started_at, language)}</span>
                   <span className="debug-strong">
                     {log.operation} / {log.direction}
                   </span>
@@ -241,11 +249,11 @@ export function SuratDebugPage({ http }: { http: BackendHttpClient }) {
                 {acik && (
                   <div className="debug-log-body">
                     <p>
-                      <strong>İstek:</strong> {log.request_id}
+                      <strong>{t("request")}</strong> {log.request_id}
                     </p>
                     {log.error_message && (
                       <p className="debug-red">
-                        <strong>Hata:</strong> {log.error_code ?? ""} {log.error_message}
+                        <strong>{t("error")}</strong> {log.error_code ?? ""} {log.error_message}
                       </p>
                     )}
                     <p>
@@ -255,9 +263,9 @@ export function SuratDebugPage({ http }: { http: BackendHttpClient }) {
                       <strong>Body:</strong> <code>{compactJson(log.provider_request_preview?.body)}</code>
                     </p>
                     <p>
-                      <strong>Yanıt:</strong> <code>{compactJson(log.response_metadata)}</code>
+                      <strong>{t("response")}</strong> <code>{compactJson(log.response_metadata)}</code>
                     </p>
-                    {log.provider_request_preview?.live_call_performed === false && <p className="debug-small">canlı çağrı yok</p>}
+                    {log.provider_request_preview?.live_call_performed === false && <p className="debug-small">{t("noLiveCall")}</p>}
                   </div>
                 )}
               </div>

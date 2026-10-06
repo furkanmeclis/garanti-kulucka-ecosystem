@@ -1487,14 +1487,14 @@ export function useDashboardController() {
   }, [pendingAttachments, shortcutDraft.attachments]);
 
   const conversationChannelFilters = [
-    { value: "all", label: `Tüm kanallar ${data.conversationSummary.total_count}` },
-    { value: "instagram", label: `Instagram ${instagramConversationCount}` },
-    { value: "facebook", label: `Facebook ${facebookConversationCount}` },
+    { value: "all", label: uiMessage("filterChannelAll", { count: data.conversationSummary.total_count }) },
+    { value: "instagram", label: uiMessage("filterChannelInstagram", { count: instagramConversationCount }) },
+    { value: "facebook", label: uiMessage("filterChannelFacebook", { count: facebookConversationCount }) },
   ];
   const conversationStatusFilters = [
-    { value: "all", label: "Tüm durumlar" },
-    { value: "open", label: `Açık ${openConversationCount}` },
-    { value: "closed", label: `Kapalı ${closedConversationCount}` },
+    { value: "all", label: uiMessage("filterStatusAll") },
+    { value: "open", label: uiMessage("filterStatusOpen", { count: openConversationCount }) },
+    { value: "closed", label: uiMessage("filterStatusClosed", { count: closedConversationCount }) },
   ];
   const instagramAnalytics = toInstagramAnalyticsView(data.instagramAnalytics);
   const selectedProviderAttempt = data.providerAttempts[0] ?? null;
@@ -1526,12 +1526,12 @@ export function useDashboardController() {
   const pipelineProcessingCount = data.shipmentPipeline.counts.isleniyor;
   const pipelineErrorCount = data.shipmentPipeline.counts.hata;
   const pipelineDeliveredCount = data.shipmentPipeline.counts.teslim;
-  const shipmentPipelineFilters: Array<{ value: ShipmentPipelineFilter; label: string; count: number }> = [
-    { value: "all", label: "Tümü", count: data.shipmentPipeline.counts.all },
-    { value: "mesaj", label: "Mesaj", count: pipelineMessageCount },
-    { value: "sms", label: "SMS", count: pipelineSmsCount },
-    { value: "vapi", label: "VAPI", count: pipelineVapiCount },
-    { value: "teslim", label: "Teslim", count: pipelineDeliveredCount },
+  const shipmentPipelineFilters: Array<{ value: ShipmentPipelineFilter; label: UiMessage; count: number }> = [
+    { value: "all", label: uiMessage("pipelineTabAll"), count: data.shipmentPipeline.counts.all },
+    { value: "mesaj", label: uiMessage("pipelineTabMessage"), count: pipelineMessageCount },
+    { value: "sms", label: uiMessage("pipelineTabSms"), count: pipelineSmsCount },
+    { value: "vapi", label: uiMessage("pipelineTabVapi"), count: pipelineVapiCount },
+    { value: "teslim", label: uiMessage("pipelineTabDelivered"), count: pipelineDeliveredCount },
   ];
   const customerWithPhoneCount = data.customerSummary.with_phone_count;
   const customerWithEmailCount = data.customerSummary.with_email_count;

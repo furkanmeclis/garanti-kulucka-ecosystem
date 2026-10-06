@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   ArrowDown,
@@ -24,11 +24,14 @@ import type {
   StockMovementSummary,
   createDomainClient,
 } from "../../api/domain-client.js";
+import { localeFor, useLanguage, useT, type UiLanguage } from "../i18n/index.js";
+import { inventoryMessages } from "../i18n/messages/inventory.js";
 
 type DomainClient = ReturnType<typeof createDomainClient>;
 type ModalMode = "create" | "edit" | "giris" | "cikis";
 type StockStatusKey = "tukendi" | "kritik" | "normal";
 type StockStatusFilter = "all" | StockStatusKey;
+type InventoryKey = keyof (typeof inventoryMessages)["tr"];
 
 /** Legacy StokPage thresholds: <=0 Tükendi, <10 Kritik, otherwise Normal. */
 const LEGACY_CRITICAL_STOCK_LIMIT = 10;
@@ -36,20 +39,20 @@ const UNITS: ProductUnit[] = ["Adet", "Kg", "Lt", "Mt", "Koli"];
 
 const CATEGORY_CARDS: Array<{
   key: ProductCategory;
-  title: string;
-  subtitle: string;
+  title: InventoryKey;
+  subtitle: InventoryKey;
   icon: typeof Package;
   tone: string;
 }> = [
-  { key: "incubator", title: "Kuluçka Makineleri", subtitle: "Ana ürün grubu", icon: Package, tone: "blue" },
-  { key: "spare_part", title: "Yedek Parçalar", subtitle: "Tamir ve bakım parçaları", icon: Settings, tone: "orange" },
-  { key: "other", title: "Diğer Malzemeler", subtitle: "Sarf malzemeleri ve diğerleri", icon: Box, tone: "slate" },
+  { key: "incubator", title: "categoryIncubatorTitle", subtitle: "categoryIncubatorSubtitle", icon: Package, tone: "blue" },
+  { key: "spare_part", title: "categorySparePartTitle", subtitle: "categorySparePartSubtitle", icon: Settings, tone: "orange" },
+  { key: "other", title: "categoryOtherTitle", subtitle: "categoryOtherSubtitle", icon: Box, tone: "slate" },
 ];
 
-const MOVEMENT_LABELS: Record<StockMovementSummary["movement_type"], string> = {
-  in: "Giriş",
-  out: "Çıkış",
-  adjustment: "Düzeltme",
+const MOVEMENT_LABELS: Record<StockMovementSummary["movement_type"], InventoryKey> = {
+  in: "movementIn",
+  out: "movementOut",
+  adjustment: "movementAdjustment",
 };
 
 interface StockForm {
@@ -91,20 +94,22 @@ function productCategory(product: ProductSummary): ProductCategory {
   return "other";
 }
 
-function stockStatus(quantity: number): { key: StockStatusKey; label: string } {
-  if (quantity <= 0) return { key: "tukendi", label: "Tükendi" };
-  if (quantity < LEGACY_CRITICAL_STOCK_LIMIT) return { key: "kritik", label: "Kritik" };
-  return { key: "normal", label: "Normal" };
+function stockStatus(quantity: number): { key: StockStatusKey; label: InventoryKey } {
+  if (quantity <= 0) return { key: "tukendi", label: "statusOutOfStock" };
+  if (quantity < LEGACY_CRITICAL_STOCK_LIMIT) return { key: "kritik", label: "statusCritical" };
+  return { key: "normal", label: "statusNormal" };
 }
 
-function formatPrice(value: string) {
+function formatPrice(value: string, language: UiLanguage) {
   const parsed = Number.parseFloat(value);
-  return Number.isFinite(parsed) ? parsed.toLocaleString("tr-TR", { minimumFractionDigits: 2 }) : "0,00";
+  return Number.isFinite(parsed)
+    ? parsed.toLocaleString(localeFor(language), { minimumFractionDigits: 2 })
+    : (0).toLocaleString(localeFor(language), { minimumFractionDigits: 2 });
 }
 
-function formatDate(value: string) {
+function formatDate(value: string, language: UiLanguage) {
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString("tr-TR");
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString(localeFor(language));
 }
 
 function normalizeMoney(value: string) {
@@ -123,6 +128,11 @@ function useDebouncedValue<T>(value: T, delay: number) {
 
 export function StokPage(props: { domain: DomainClient }) {
   const { domain } = props;
+  const t = useT(inventoryMessages);
+  const { language } = useLanguage();
+  /** Latest translator for the loader, so a language switch does not re-create it (and refetch). */
+  const tRef = useRef(t);
+  tRef.current = t;
   const [products, setProducts] = useState<ProductSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -145,7 +155,7 @@ export function StokPage(props: { domain: DomainClient }) {
       const response = await domain.listInventoryProducts({ active: "true", limit: 200 });
       setProducts(response.data);
     } catch {
-      setNotice({ tone: "error", text: "Stok verileri alınamadı" });
+      setNotice({ tone: "error", text: tRef.current("loadProductsError") });
     } finally {
       setLoading(false);
     }
@@ -233,27 +243,27 @@ export function StokPage(props: { domain: DomainClient }) {
         const response = await domain.listProductStockMovements(product.public_id, 50);
         setMovements(response.data);
       } catch {
-        setNotice({ tone: "error", text: "Stok hareketleri alınamadı" });
+        setNotice({ tone: "error", text: t("loadMovementsError") });
       } finally {
         setMovementsLoading(false);
       }
     },
-    [domain],
+    [domain, t],
   );
 
   const handleDelete = useCallback(
     async (product: ProductSummary) => {
       setActiveDropdown(null);
-      if (!window.confirm(`"${product.name}" stok kartını silmek istediğinize emin misiniz?`)) return;
+      if (!window.confirm(t("confirmDelete", { name: product.name }))) return;
       try {
         await domain.deactivateProduct(product.public_id);
         setProducts((current) => current.filter((item) => item.public_id !== product.public_id));
-        setNotice({ tone: "success", text: `"${product.name}" silindi` });
+        setNotice({ tone: "success", text: t("deleted", { name: product.name }) });
       } catch (error) {
-        setNotice({ tone: "error", text: `Silinemedi: ${error instanceof Error ? error.message : "bilinmeyen hata"}` });
+        setNotice({ tone: "error", text: t("deleteFailed", { error: error instanceof Error ? error.message : t("unknownError") }) });
       }
     },
-    [domain],
+    [domain, t],
   );
 
   const handleSave = async () => {
@@ -263,10 +273,10 @@ export function StokPage(props: { domain: DomainClient }) {
     if (modalMode === "giris" || modalMode === "cikis") {
       if (!selectedProduct) return;
       const quantity = Number.parseInt(form.quantity, 10) || 0;
-      if (quantity <= 0) return fail("Miktar 0'dan büyük olmalı");
+      if (quantity <= 0) return fail(t("quantityMustBePositive"));
       const current = selectedProduct.stock_quantity;
       if (modalMode === "cikis" && current - quantity < 0) {
-        return fail(`Yetersiz stok! Mevcut: ${current}, Çıkış: ${quantity}`);
+        return fail(t("insufficientStock", { current, quantity }));
       }
       setSaving(true);
       try {
@@ -277,12 +287,17 @@ export function StokPage(props: { domain: DomainClient }) {
         });
         setNotice({
           tone: "success",
-          text: `${modalMode === "giris" ? "Giriş" : "Çıkış"}: ${quantity} ${form.unit} → Yeni stok: ${result.product.stock_quantity}`,
+          text: t("movementSaved", {
+            movement: t(modalMode === "giris" ? "movementIn" : "movementOut"),
+            quantity,
+            unit: form.unit,
+            stock: result.product.stock_quantity,
+          }),
         });
         setModalMode(null);
         await fetchProducts();
       } catch (error) {
-        fail(`İşlem sırasında hata oluştu: ${error instanceof Error ? error.message : "bilinmeyen hata"}`);
+        fail(t("operationFailed", { error: error instanceof Error ? error.message : t("unknownError") }));
       } finally {
         setSaving(false);
       }
@@ -290,12 +305,12 @@ export function StokPage(props: { domain: DomainClient }) {
     }
 
     const name = form.name.trim();
-    if (!name) return fail(modalMode === "create" ? "Ürün adı gerekli" : "Ürün adı boş olamaz");
+    if (!name) return fail(t(modalMode === "create" ? "nameRequired" : "nameEmpty"));
     const unitPrice = normalizeMoney(form.unit_price || "0");
-    if (unitPrice === null) return fail("Geçerli bir birim tutar giriniz");
+    if (unitPrice === null) return fail(t("invalidUnitPrice"));
     const quantityText = form.quantity.trim();
     const quantity = quantityText === "" ? null : Number.parseInt(quantityText, 10);
-    if (quantity !== null && (!Number.isFinite(quantity) || quantity < 0)) return fail("Miktar 0 veya daha büyük olmalı");
+    if (quantity !== null && (!Number.isFinite(quantity) || quantity < 0)) return fail(t("quantityMustBeNonNegative"));
 
     setSaving(true);
     try {
@@ -309,7 +324,7 @@ export function StokPage(props: { domain: DomainClient }) {
           description: form.description.trim() || null,
           external_product_id: form.kolaybi_product_id.trim() || null,
         });
-        setNotice({ tone: "success", text: "Yeni stok kartı oluşturuldu" });
+        setNotice({ tone: "success", text: t("cardCreated") });
       } else if (selectedProduct) {
         await domain.updateProduct(selectedProduct.public_id, {
           name,
@@ -320,12 +335,12 @@ export function StokPage(props: { domain: DomainClient }) {
           description: form.description.trim() || null,
           external_product_id: form.kolaybi_product_id.trim() || null,
         });
-        setNotice({ tone: "success", text: "Stok kartı güncellendi" });
+        setNotice({ tone: "success", text: t("cardUpdated") });
       }
       setModalMode(null);
       await fetchProducts();
     } catch (error) {
-      fail(`İşlem sırasında hata oluştu: ${error instanceof Error ? error.message : "bilinmeyen hata"}`);
+      fail(t("operationFailed", { error: error instanceof Error ? error.message : t("unknownError") }));
     } finally {
       setSaving(false);
     }
@@ -341,7 +356,7 @@ export function StokPage(props: { domain: DomainClient }) {
         <div className="stok-heading">
           {selectedCategory && (
             <button
-              aria-label="Kategorilere dön"
+              aria-label={t("backToCategories")}
               className="stok-icon-button"
               onClick={() => {
                 setSelectedCategory(null);
@@ -354,20 +369,20 @@ export function StokPage(props: { domain: DomainClient }) {
             </button>
           )}
           <div>
-            <h1>{selectedCategoryCard ? selectedCategoryCard.title : "Stok Kategorileri"}</h1>
+            <h1>{selectedCategoryCard ? t(selectedCategoryCard.title) : t("pageTitle")}</h1>
             <p>
               {selectedCategory
-                ? `Toplam ${filteredProducts.length} ürün listeleniyor`
-                : "Stoklarınızı yönetmek için kategori seçiniz."}
+                ? t("listingCount", { count: filteredProducts.length })
+                : t("selectCategoryHint")}
             </p>
           </div>
         </div>
         <div className="stok-actions">
           <button className="secondary-action" disabled={loading} onClick={() => void fetchProducts()} type="button">
-            <RefreshCw className={loading ? "stok-spin" : undefined} size={16} /> Yenile
+            <RefreshCw className={loading ? "stok-spin" : undefined} size={16} /> {t("refresh")}
           </button>
           <button className="primary-action" onClick={() => openModal("create")} type="button">
-            <Plus size={16} /> Yeni Stok
+            <Plus size={16} /> {t("newStock")}
           </button>
         </div>
       </div>
@@ -375,7 +390,7 @@ export function StokPage(props: { domain: DomainClient }) {
       {notice && (
         <div className={`stok-notice ${notice.tone}`} data-testid="stok-notice" role="status">
           <span>{notice.text}</span>
-          <button aria-label="Bildirimi kapat" onClick={() => setNotice(null)} type="button">
+          <button aria-label={t("closeNotice")} onClick={() => setNotice(null)} type="button">
             <X size={14} />
           </button>
         </div>
@@ -386,8 +401,8 @@ export function StokPage(props: { domain: DomainClient }) {
           <AlertTriangle size={18} />
           <div>
             <strong>
-              Kritik stok uyarısı: {criticalProducts.length} ürün kritik seviyede
-              {outOfStockCount > 0 ? `, ${outOfStockCount} ürün tükendi` : ""}
+              {t("criticalWarning", { count: criticalProducts.length })}
+              {outOfStockCount > 0 ? t("criticalOutOfStock", { count: outOfStockCount }) : ""}
             </strong>
             <span>{criticalProducts.map((product) => `${product.name} (${product.stock_quantity})`).join(", ")}</span>
           </div>
@@ -412,14 +427,14 @@ export function StokPage(props: { domain: DomainClient }) {
                 <span className="stok-category-icon">
                   <Icon size={22} />
                 </span>
-                <span className="stok-category-title">{card.title}</span>
-                <span className="stok-category-subtitle">{card.subtitle}</span>
+                <span className="stok-category-title">{t(card.title)}</span>
+                <span className="stok-category-subtitle">{t(card.subtitle)}</span>
                 <span className="stok-category-footer">
                   <span>
-                    {loading ? "…" : `${items.length} Ürün`}
-                    {!loading && <small> ({total} adet)</small>}
+                    {loading ? "…" : t("productCount", { count: items.length })}
+                    {!loading && <small>{t("unitCount", { count: total })}</small>}
                   </span>
-                  <span>İncele →</span>
+                  <span>{t("inspect")}</span>
                 </span>
               </button>
             );
@@ -433,38 +448,38 @@ export function StokPage(props: { domain: DomainClient }) {
             <label className="stok-search">
               <Search size={16} />
               <input
-                aria-label="Bu kategoride ara"
+                aria-label={t("searchInCategory")}
                 onChange={(event) => setSearch(event.target.value)}
-                placeholder="Bu kategoride ara..."
+                placeholder={t("searchInCategoryPlaceholder")}
                 type="text"
                 value={search}
               />
               {search && (
-                <button aria-label="Aramayı temizle" onClick={() => setSearch("")} type="button">
+                <button aria-label={t("clearSearch")} onClick={() => setSearch("")} type="button">
                   <X size={14} />
                 </button>
               )}
             </label>
             <select
-              aria-label="Stok durumu"
+              aria-label={t("stockStatus")}
               className="inline-input"
               onChange={(event) => setStatusFilter(event.target.value as StockStatusFilter)}
               value={statusFilter}
             >
-              <option value="all">Tüm Durumlar</option>
-              <option value="normal">Normal</option>
-              <option value="kritik">Kritik</option>
-              <option value="tukendi">Tükendi</option>
+              <option value="all">{t("allStatuses")}</option>
+              <option value="normal">{t("statusNormal")}</option>
+              <option value="kritik">{t("statusCritical")}</option>
+              <option value="tukendi">{t("statusOutOfStock")}</option>
             </select>
           </div>
 
           {loading ? (
-            <p className="stok-empty">Yükleniyor...</p>
+            <p className="stok-empty">{t("loading")}</p>
           ) : filteredProducts.length === 0 ? (
             <div className="stok-empty" data-testid="stok-empty">
               <Package size={36} />
-              <strong>Bu kategoride ürün yok</strong>
-              <span>Henüz bu kategoriye ait bir stok kartı eklenmemiş.</span>
+              <strong>{t("emptyTitle")}</strong>
+              <span>{t("emptyDescription")}</span>
             </div>
           ) : (
             <div className="stok-product-grid" data-testid="stok-products">
@@ -478,10 +493,10 @@ export function StokPage(props: { domain: DomainClient }) {
                     onClick={() => openModal("edit", product)}
                   >
                     <div className="stok-product-top">
-                      <span className={`stok-badge ${status.key}`}>{status.label}</span>
+                      <span className={`stok-badge ${status.key}`}>{t(status.label)}</span>
                       <div className="stok-menu">
                         <button
-                          aria-label={`${product.name} işlemleri`}
+                          aria-label={t("productActions", { name: product.name })}
                           onClick={(event) => {
                             event.stopPropagation();
                             setActiveDropdown((current) => (current === product.public_id ? null : product.public_id));
@@ -493,20 +508,20 @@ export function StokPage(props: { domain: DomainClient }) {
                         {activeDropdown === product.public_id && (
                           <div className="stok-menu-list" onClick={(event) => event.stopPropagation()} role="menu">
                             <button className="in" onClick={() => openModal("giris", product)} role="menuitem" type="button">
-                              <ArrowUp size={15} /> Stok Giriş
+                              <ArrowUp size={15} /> {t("stockIn")}
                             </button>
                             <button className="out" onClick={() => openModal("cikis", product)} role="menuitem" type="button">
-                              <ArrowDown size={15} /> Stok Çıkış
+                              <ArrowDown size={15} /> {t("stockOut")}
                             </button>
                             <hr />
                             <button onClick={() => openModal("edit", product)} role="menuitem" type="button">
-                              <ArrowRightLeft size={15} /> Düzenle
+                              <ArrowRightLeft size={15} /> {t("edit")}
                             </button>
                             <button onClick={() => void openHistory(product)} role="menuitem" type="button">
-                              <History size={15} /> Stok Hareketleri
+                              <History size={15} /> {t("stockMovements")}
                             </button>
                             <button className="out" onClick={() => void handleDelete(product)} role="menuitem" type="button">
-                              <Trash2 size={15} /> Sil
+                              <Trash2 size={15} /> {t("delete")}
                             </button>
                           </div>
                         )}
@@ -514,16 +529,16 @@ export function StokPage(props: { domain: DomainClient }) {
                     </div>
                     <h3 title={product.name}>{product.name}</h3>
                     <p className="stok-product-meta">
-                      Kod: {product.sku || "-"} | Birim: {product.unit ?? "Adet"}
+                      {t("productMeta", { code: product.sku || "-", unit: product.unit ?? "Adet" })}
                     </p>
                     <div className="stok-product-bottom">
                       <div>
-                        <span>Mevcut Stok</span>
+                        <span>{t("currentStock")}</span>
                         <strong>{product.stock_quantity}</strong>
                       </div>
                       <div className="right">
-                        <span>Satış Fiyatı</span>
-                        <strong className="price">{formatPrice(product.unit_price)} ₺</strong>
+                        <span>{t("salePrice")}</span>
+                        <strong className="price">{formatPrice(product.unit_price, language)} ₺</strong>
                       </div>
                     </div>
                   </article>
@@ -547,14 +562,14 @@ export function StokPage(props: { domain: DomainClient }) {
             <header>
               <h2 id="stok-modal-title">
                 {modalMode === "create"
-                  ? "Yeni Stok Kartı"
+                  ? t("modalCreateTitle")
                   : modalMode === "giris"
-                    ? "Stok Giriş İşlemi"
+                    ? t("modalStockInTitle")
                     : modalMode === "cikis"
-                      ? "Stok Çıkış İşlemi"
-                      : "Stok Düzenle"}
+                      ? t("modalStockOutTitle")
+                      : t("modalEditTitle")}
               </h2>
-              <button aria-label="Kapat" onClick={() => setModalMode(null)} type="button">
+              <button aria-label={t("close")} onClick={() => setModalMode(null)} type="button">
                 <X size={18} />
               </button>
             </header>
@@ -563,14 +578,14 @@ export function StokPage(props: { domain: DomainClient }) {
                 <div className="stok-modal-product">
                   <strong>{selectedProduct.name}</strong>
                   <span>
-                    Mevcut Stok: {selectedProduct.stock_quantity} {selectedProduct.unit ?? "Adet"}
+                    {t("currentStockWithUnit", { quantity: selectedProduct.stock_quantity, unit: selectedProduct.unit ?? "Adet" })}
                   </span>
                 </div>
               )}
               {isCardEdit && (
                 <>
                   <label>
-                    Stok Fiş Kodu / Kod
+                    {t("fieldCode")}
                     <input
                       onChange={(event) => setForm((current) => ({ ...current, code: event.target.value }))}
                       type="text"
@@ -578,7 +593,7 @@ export function StokPage(props: { domain: DomainClient }) {
                     />
                   </label>
                   <label>
-                    Ürün Adı *
+                    {t("fieldName")}
                     <input
                       onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
                       type="text"
@@ -586,20 +601,20 @@ export function StokPage(props: { domain: DomainClient }) {
                     />
                   </label>
                   <label>
-                    KolayBi Ürün Eşleştirme
+                    {t("fieldKolaybiMatch")}
                     <input
                       onChange={(event) => setForm((current) => ({ ...current, kolaybi_product_id: event.target.value }))}
-                      placeholder="KolayBi ürün ID — boş: Eşleşme Yok"
+                      placeholder={t("fieldKolaybiPlaceholder")}
                       type="text"
                       value={form.kolaybi_product_id}
                     />
-                    <small>Fatura oluşturulurken bu KolayBi ürün ID'si kullanılır</small>
+                    <small>{t("fieldKolaybiHint")}</small>
                   </label>
                 </>
               )}
               <div className="stok-modal-row">
                 <label>
-                  Miktar *
+                  {t("fieldQuantity")}
                   <input
                     min={0}
                     onChange={(event) => setForm((current) => ({ ...current, quantity: event.target.value }))}
@@ -608,9 +623,9 @@ export function StokPage(props: { domain: DomainClient }) {
                   />
                 </label>
                 <label>
-                  Birim
+                  {t("fieldUnit")}
                   <select
-                    aria-label="Birim"
+                    aria-label={t("fieldUnit")}
                     disabled={isStockMovement}
                     onChange={(event) => setForm((current) => ({ ...current, unit: event.target.value as ProductUnit }))}
                     value={form.unit}
@@ -625,15 +640,15 @@ export function StokPage(props: { domain: DomainClient }) {
               </div>
               <div className="stok-modal-hint">
                 {modalMode === "giris"
-                  ? "Gireceğiniz miktar mevcut stoğun üzerine eklenecektir."
+                  ? t("hintStockIn")
                   : modalMode === "cikis"
-                    ? "Gireceğiniz miktar mevcut stoktan düşülecektir."
-                    : "Mevcut stok miktarını güncelliyorsunuz."}
+                    ? t("hintStockOut")
+                    : t("hintEdit")}
               </div>
               {isCardEdit && (
                 <div className="stok-modal-row">
                   <label>
-                    Birim Tutar
+                    {t("fieldUnitPrice")}
                     <input
                       min={0}
                       onChange={(event) => setForm((current) => ({ ...current, unit_price: event.target.value }))}
@@ -643,13 +658,13 @@ export function StokPage(props: { domain: DomainClient }) {
                     />
                   </label>
                   <label>
-                    Toplam Tutar
+                    {t("fieldTotalPrice")}
                     <input readOnly type="number" value={totalPrice} />
                   </label>
                 </div>
               )}
               <label>
-                Açıklama
+                {t("fieldDescription")}
                 <textarea
                   onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
                   rows={3}
@@ -659,7 +674,7 @@ export function StokPage(props: { domain: DomainClient }) {
             </div>
             <footer>
               <button className="secondary-action" onClick={() => setModalMode(null)} type="button">
-                İptal
+                {t("cancel")}
               </button>
               <button
                 className={modalMode === "cikis" ? "primary-action danger" : "primary-action"}
@@ -668,7 +683,7 @@ export function StokPage(props: { domain: DomainClient }) {
                 type="button"
               >
                 {saving ? <RefreshCw className="stok-spin" size={16} /> : <Save size={16} />}
-                {saving ? "Kaydediliyor..." : modalMode === "create" ? "Kaydet" : "Onayla"}
+                {saving ? t("saving") : modalMode === "create" ? t("save") : t("confirm")}
               </button>
             </footer>
           </div>
@@ -686,35 +701,35 @@ export function StokPage(props: { domain: DomainClient }) {
             role="dialog"
           >
             <header>
-              <h2 id="stok-history-title">Stok Hareketleri — {historyProduct.name}</h2>
-              <button aria-label="Kapat" onClick={() => setHistoryProduct(null)} type="button">
+              <h2 id="stok-history-title">{t("historyTitle", { name: historyProduct.name })}</h2>
+              <button aria-label={t("close")} onClick={() => setHistoryProduct(null)} type="button">
                 <X size={18} />
               </button>
             </header>
             <div className="stok-modal-body">
               {movementsLoading ? (
-                <p className="stok-empty">Yükleniyor...</p>
+                <p className="stok-empty">{t("loading")}</p>
               ) : movements.length === 0 ? (
-                <p className="stok-empty">Bu ürün için stok hareketi bulunmuyor.</p>
+                <p className="stok-empty">{t("historyEmpty")}</p>
               ) : (
                 <table className="stok-history-table">
                   <thead>
                     <tr>
-                      <th>Tarih</th>
-                      <th>İşlem</th>
-                      <th>Miktar</th>
-                      <th>Önceki → Yeni</th>
-                      <th>Açıklama</th>
-                      <th>Kullanıcı</th>
+                      <th>{t("columnDate")}</th>
+                      <th>{t("columnOperation")}</th>
+                      <th>{t("columnQuantity")}</th>
+                      <th>{t("columnPreviousNew")}</th>
+                      <th>{t("columnDescription")}</th>
+                      <th>{t("columnUser")}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {movements.map((movement) => (
                       <tr key={movement.public_id}>
-                        <td>{formatDate(movement.created_at)}</td>
+                        <td>{formatDate(movement.created_at, language)}</td>
                         <td>
                           <span className={`stok-badge movement-${movement.movement_type}`}>
-                            {MOVEMENT_LABELS[movement.movement_type]}
+                            {t(MOVEMENT_LABELS[movement.movement_type])}
                           </span>
                         </td>
                         <td>{movement.quantity}</td>

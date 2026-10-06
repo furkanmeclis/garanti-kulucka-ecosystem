@@ -3,6 +3,8 @@ import { createPortal } from "react-dom";
 import { Printer, X } from "lucide-react";
 import { BackendRequestError, type BackendHttpClient } from "../../api/http-client.js";
 import { createShipmentsClient, type ShipmentPrintData } from "../../api/shipments-client.js";
+import { translate, useLanguage, useT, type UiLanguage } from "../i18n/index.js";
+import { cargoPrintMessages } from "../i18n/messages/cargoPrint.js";
 
 /**
  * Legacy barkodlu fatura print (SiparislerPage `handleBarkodluPdfYazdir` + KargolarPage popup):
@@ -24,12 +26,12 @@ const legacyBarcodeOptions = {
   lineColor: "#000000",
 } as const;
 
-function errorMessage(error: unknown) {
+function errorMessage(error: unknown, language: UiLanguage) {
   if (error instanceof BackendRequestError) {
     const body = error.body as { error?: { message?: string } } | null;
     return body?.error?.message ?? error.message;
   }
-  return error instanceof Error ? error.message : "Bilinmeyen hata";
+  return error instanceof Error ? error.message : translate(cargoPrintMessages, language, "unknownError");
 }
 
 export function KargoPrintView(props: {
@@ -38,6 +40,13 @@ export function KargoPrintView(props: {
   onClose: () => void;
   onPrinted?: (labelPrintedAt: string) => void;
 }) {
+  const t = useT(cargoPrintMessages);
+  const { language } = useLanguage();
+  // Refs keep async error messages in the current language without re-running the fetch effects.
+  const tRef = useRef(t);
+  tRef.current = t;
+  const languageRef = useRef(language);
+  languageRef.current = language;
   const client = useMemo(() => createShipmentsClient(props.http), [props.http]);
   const [data, setData] = useState<ShipmentPrintData | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -61,7 +70,7 @@ export function KargoPrintView(props: {
         setPrintedAt(next.label_printed_at);
       })
       .catch((reason: unknown) => {
-        if (active) setError(`Yazdırma hatası: ${errorMessage(reason)}`);
+        if (active) setError(tRef.current("printError", { message: errorMessage(reason, languageRef.current) }));
       });
     return () => {
       active = false;
@@ -81,7 +90,7 @@ export function KargoPrintView(props: {
         setBarcodeError(null);
       })
       .catch((reason: unknown) => {
-        if (active) setBarcodeError(`Barkod render hatası: ${errorMessage(reason)}`);
+        if (active) setBarcodeError(tRef.current("barcodeRenderError", { message: errorMessage(reason, languageRef.current) }));
       });
     return () => {
       active = false;
@@ -115,16 +124,16 @@ export function KargoPrintView(props: {
   const content = (
     <div className="kargo-print-root" data-testid="kargo-print-view">
       <div className="kargo-print-bar">
-        <span>Kargo Etiketi + e-Fatura</span>
+        <span>{t("barTitle")}</span>
         {printedAt && (
           <em className="kargo-print-done" data-testid="kargo-print-done">
-            Yazdırıldı
+            {t("printed")}
           </em>
         )}
         <button className="kargo-print-button" data-testid="kargo-print-button" disabled={!data} type="button" onClick={() => window.print()}>
-          <Printer size={14} aria-hidden="true" /> Yazdir
+          <Printer size={14} aria-hidden="true" /> {t("print")}
         </button>
-        <button className="kargo-print-close" data-testid="kargo-print-close" type="button" aria-label="Kapat" onClick={props.onClose}>
+        <button className="kargo-print-close" data-testid="kargo-print-close" type="button" aria-label={t("close")} onClick={props.onClose}>
           <X size={16} aria-hidden="true" />
         </button>
       </div>
@@ -172,7 +181,7 @@ export function KargoPrintView(props: {
                 {barcodeError && <p className="kargo-print-error">{barcodeError}</p>}
               </>
             ) : (
-              <p className="kargo-print-error">Önce kargoya aktarın</p>
+              <p className="kargo-print-error">{t("transferFirst")}</p>
             )}
           </div>
         )}

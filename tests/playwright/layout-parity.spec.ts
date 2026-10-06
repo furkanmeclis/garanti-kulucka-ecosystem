@@ -581,3 +581,66 @@ test("notification bell counts unread realtime events like legacy header", async
     await closeWebApp(app.server);
   }
 });
+
+test("TR/EN language switch translates page content and the status row, persisted across reloads", async ({ page }) => {
+  const app = await startWebApp();
+  await mockBackend(page, loginUser({ role: "admin", email: "admin@example.com", first_name: "Admin", last_name: "User" }));
+  const pages = [
+    { path: "/mesajlar", testId: "inbox-flow", tr: "Mesajlar", en: "Messages" },
+    { path: "/siparisler", testId: "orders-flow", tr: "Siparişler", en: "Orders" },
+    { path: "/kargo", testId: "shipments-flow", tr: "Kargo Gönderileri", en: "Shipments" },
+    { path: "/kargo/pipeline", testId: "shipment-pipeline-flow", tr: "Teslim Alınmayan Kargo Pipeline", en: "Undelivered Shipment Pipeline" },
+    { path: "/iptaller", testId: "cancellations-flow", tr: "İptaller", en: "Cancellations" },
+    { path: "/musteriler", testId: "customers-flow", tr: "Müşteriler", en: "Customers" },
+    { path: "/raporlar", testId: "raporlar-page", tr: "İş Analizi", en: "Business Analytics" },
+  ];
+  const expectHeadings = async (language: "tr" | "en") => {
+    for (const item of pages) {
+      await page.goto(`${app.url}${item.path}`);
+      const panel = page.getByTestId(item.testId);
+      await expect(panel, item.path).toBeVisible();
+      await expect(panel.getByRole("heading", { name: item[language], exact: true }).first(), `${item.path} ${language}`).toBeVisible();
+    }
+  };
+  try {
+    await page.setViewportSize(desktopViewport);
+    await page.goto(`${app.url}/giris`);
+    await login(page);
+    await expect(page.getByTestId("inbox-flow")).toBeVisible();
+    await expect(page.locator("html .app-shell")).toHaveAttribute("lang", "tr");
+    await expect(page.locator(".status-row")).toContainText("Backend API, presigned dosya ve Socket.IO sınırları aktif");
+    await expectHeadings("tr");
+
+    // Switch to English from the profile menu: content, filter labels and the status row follow.
+    await page.goto(`${app.url}/mesajlar`);
+    await page.getByTestId("profile-menu-trigger").click();
+    await page.getByTestId("language-switch").getByRole("menuitemradio", { name: "EN" }).click();
+    await expect(page.locator(".app-shell")).toHaveAttribute("lang", "en");
+    await expect(page.locator(".status-row")).toContainText("Supabase not used");
+    await expect(page.getByTestId("conversation-status-filter-all")).toHaveText("All statuses");
+    await expect(page.getByTestId("inbox-flow").getByRole("heading", { name: "Messages", exact: true }).first()).toBeVisible();
+    expect(await page.evaluate(() => window.localStorage.getItem("garanti-lang"))).toBe("en");
+    await expectHeadings("en");
+    await page.goto(`${app.url}/kargo/pipeline`);
+    await expect(page.getByTestId("shipment-pipeline-filter-all")).toContainText("All");
+    await expect(page.getByTestId("shipment-pipeline-filter-teslim")).toContainText("Delivered");
+
+    // The choice survives a reload and also applies to the login screen.
+    await page.reload();
+    await expect(page.getByTestId("shipment-pipeline-flow").getByRole("heading", { name: "Undelivered Shipment Pipeline" })).toBeVisible();
+    await page.getByTestId("profile-menu-trigger").click();
+    await page.getByRole("menu", { name: "Profile menu" }).getByRole("menuitem", { name: "Sign out" }).click();
+    await expect(page.getByRole("button", { name: "Sign in", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: /giriş yap/i })).toHaveCount(0);
+
+    // Back to Turkish restores the original texts everywhere.
+    await page.evaluate(() => window.localStorage.setItem("garanti-lang", "tr"));
+    await page.reload();
+    await login(page);
+    await expect(page.getByTestId("inbox-flow")).toBeVisible();
+    await expect(page.getByTestId("conversation-status-filter-all")).toHaveText("Tüm durumlar");
+    await expectHeadings("tr");
+  } finally {
+    await closeWebApp(app.server);
+  }
+});

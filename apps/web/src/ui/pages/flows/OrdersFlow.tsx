@@ -4,9 +4,13 @@ import { KargoSiparisAksiyonlari, KargoTopluAktar } from "../KargoOlusturModal.j
 import { cx, orderStatusLabel, cargoProviderLabel, formatMoney, parseMoneyInput, FlowPanel, DetailPanel, Metric, DataRows } from "../../app/shared.js";
 import type { DashboardController } from "../../app/useDashboardController.js";
 import { useUiMessageText } from "../../i18n/messages/status.js";
+import { localeFor, useLanguage, useT } from "../../i18n/index.js";
+import { ordersMessages } from "../../i18n/messages/orders.js";
 
 export function OrdersFlow({ ctx }: { ctx: DashboardController }) {
   const orderFormText = useUiMessageText();
+  const t = useT(ordersMessages);
+  const { language } = useLanguage();
   const {
     addOrderFormItem,
     allVisibleOrdersSelected,
@@ -59,12 +63,12 @@ export function OrdersFlow({ ctx }: { ctx: DashboardController }) {
   } = ctx;
 
   return (
-    <FlowPanel title="Siparişler" icon={<ShoppingCart size={18} />} testId="orders-flow">
+    <FlowPanel title={t("title")} icon={<ShoppingCart size={18} />} testId="orders-flow">
             <div className="report-grid">
-              <Metric title="Toplam Sipariş" value={String(data.orderSummary.total_count)} />
-              <Metric title="Aktif Sipariş" value={String(data.orderSummary.active_count)} />
-              <Metric title="Teyit Bekleyen" value={String(data.orderSummary.pending_confirmation_count)} />
-              <Metric title="Ciro" value={formatMoney(data.orderSummary.total_revenue, data.orderSummary.currency)} />
+              <Metric title={t("metricTotalOrders")} value={String(data.orderSummary.total_count)} />
+              <Metric title={t("metricActiveOrders")} value={String(data.orderSummary.active_count)} />
+              <Metric title={t("metricPendingConfirmation")} value={String(data.orderSummary.pending_confirmation_count)} />
+              <Metric title={t("metricRevenue")} value={formatMoney(data.orderSummary.total_revenue, data.orderSummary.currency)} />
             </div>
             <div className="orders-toolbar" data-testid="order-section-filters">
               <button
@@ -73,7 +77,7 @@ export function OrdersFlow({ ctx }: { ctx: DashboardController }) {
                 type="button"
                 onClick={() => void handleApplyOrderFilter("all")}
               >
-                Hepsi {orderFilter === "all" ? data.orderSummary.total_count : "sonuç"}
+                {t("filterAll", { count: orderFilter === "all" ? data.orderSummary.total_count : t("filterResultWord") })}
               </button>
               <button
                 className={cx("secondary-action", orderFilter === "active" && "selected")}
@@ -81,7 +85,7 @@ export function OrdersFlow({ ctx }: { ctx: DashboardController }) {
                 type="button"
                 onClick={() => void handleApplyOrderFilter("active")}
               >
-                Aktif {orderFilter === "all" || orderFilter === "active" ? data.orderSummary.active_count : "sonuç"}
+                {t("filterActive", { count: orderFilter === "all" || orderFilter === "active" ? data.orderSummary.active_count : t("filterResultWord") })}
               </button>
               <button
                 className={cx("secondary-action", orderFilter === "pending_confirmation" && "selected")}
@@ -89,7 +93,7 @@ export function OrdersFlow({ ctx }: { ctx: DashboardController }) {
                 type="button"
                 onClick={() => void handleApplyOrderFilter("pending_confirmation")}
               >
-                Teyit {orderFilter === "all" || orderFilter === "pending_confirmation" ? data.orderSummary.pending_confirmation_count : "sonuç"}
+                {t("filterPendingConfirmation", { count: orderFilter === "all" || orderFilter === "pending_confirmation" ? data.orderSummary.pending_confirmation_count : t("filterResultWord") })}
               </button>
               <button
                 className={cx("secondary-action", orderFilter === "delivered" && "selected")}
@@ -97,35 +101,35 @@ export function OrdersFlow({ ctx }: { ctx: DashboardController }) {
                 type="button"
                 onClick={() => void handleApplyOrderFilter("delivered")}
               >
-                Teslim {orderFilter === "all" || orderFilter === "delivered" ? data.orderSummary.delivered_count : "sonuç"}
+                {t("filterDelivered", { count: orderFilter === "all" || orderFilter === "delivered" ? data.orderSummary.delivered_count : t("filterResultWord") })}
               </button>
             </div>
             <div className="orders-filter-grid" data-testid="orders-advanced-filters">
               <label>
-                <span>Arama</span>
+                <span>{t("search")}</span>
                 <input
                   className="inline-input"
                   data-testid="orders-search-input"
-                  placeholder="Sipariş, müşteri, not"
+                  placeholder={t("searchPlaceholder")}
                   value={orderSearch}
                   onChange={(event) => setOrderSearch(event.target.value)}
                 />
               </label>
               <label>
-                <span>Durum</span>
+                <span>{t("status")}</span>
                 <select className="inline-input" data-testid="orders-status-filter" value={orderStatusFilter} onChange={(event) => setOrderStatusFilter(event.target.value)}>
-                  <option value="all">Tüm durumlar</option>
-                  <option value="active">Aktif</option>
-                  <option value="draft">Oluşturuldu</option>
-                  <option value="delivered">Teslim Edildi</option>
-                  <option value="cancelled">İptal</option>
-                  <option value="returned">İade</option>
+                  <option value="all">{t("allStatuses")}</option>
+                  <option value="active">{t("statusActive")}</option>
+                  <option value="draft">{t("statusDraft")}</option>
+                  <option value="delivered">{t("statusDelivered")}</option>
+                  <option value="cancelled">{t("statusCancelled")}</option>
+                  <option value="returned">{t("statusReturned")}</option>
                 </select>
               </label>
               <label>
-                <span>Kaynak</span>
+                <span>{t("source")}</span>
                 <select className="inline-input" data-testid="orders-source-filter" value={orderSourceFilter} onChange={(event) => setOrderSourceFilter(event.target.value)}>
-                  <option value="all">Tüm kaynaklar</option>
+                  <option value="all">{t("allSources")}</option>
                   <option value="manual">manual</option>
                   {orderSources.filter((source) => source !== "manual").map((source) => (
                     <option key={source} value={source}>{source}</option>
@@ -133,50 +137,50 @@ export function OrdersFlow({ ctx }: { ctx: DashboardController }) {
                 </select>
               </label>
               <label>
-                <span>Kargo</span>
+                <span>{t("cargo")}</span>
                 <select className="inline-input" data-testid="orders-cargo-filter" value={orderCargoFilter} onChange={(event) => setOrderCargoFilter(event.target.value)}>
-                  <option value="all">Tüm kargolar</option>
+                  <option value="all">{t("allCargos")}</option>
                   <option value="ptt">PTT</option>
                   <option value="surat">Sürat</option>
-                  <option value="other">Diğer</option>
+                  <option value="other">{t("cargoOther")}</option>
                 </select>
               </label>
               <label>
-                <span>Personel</span>
+                <span>{t("personnel")}</span>
                 <select className="inline-input" data-testid="orders-person-filter" value={orderPersonnelFilter} onChange={(event) => setOrderPersonnelFilter(event.target.value)}>
-                  <option value="all">Tüm personel</option>
+                  <option value="all">{t("allPersonnel")}</option>
                   {orderPersonnel.map(([publicId, email]) => (
                     <option key={publicId} value={publicId}>{email}</option>
                   ))}
                 </select>
               </label>
               <label>
-                <span>Başlangıç</span>
+                <span>{t("dateFrom")}</span>
                 <input className="inline-input" data-testid="orders-date-from" type="date" value={orderCreatedFrom} onChange={(event) => setOrderCreatedFrom(event.target.value)} />
               </label>
               <label>
-                <span>Bitiş</span>
+                <span>{t("dateTo")}</span>
                 <input className="inline-input" data-testid="orders-date-to" type="date" value={orderCreatedTo} onChange={(event) => setOrderCreatedTo(event.target.value)} />
               </label>
               <button className="primary-action icon-action" data-testid="orders-apply-filters" type="button" onClick={() => void handleApplyOrderAdvancedFilters()}>
                 <Search size={16} aria-hidden="true" />
-                <span>Filtrele</span>
+                <span>{t("applyFilters")}</span>
               </button>
             </div>
             <div className="orders-toolbar">
               <button className="primary-action" type="button" onClick={() => openOrderForm("orders")}>
-                Sipariş oluştur
+                {t("createOrder")}
               </button>
               <button className="secondary-action icon-action" data-testid="orders-export-current" type="button" onClick={() => void handleExportOrders("current")}>
                 <Download size={16} aria-hidden="true" />
-                <span>Excel indir</span>
+                <span>{t("exportCurrent")}</span>
               </button>
               <button className="secondary-action icon-action" data-testid="orders-export-all" type="button" onClick={() => void handleExportOrders("all")}>
                 <Download size={16} aria-hidden="true" />
-                <span>Filtreli Excel</span>
+                <span>{t("exportFiltered")}</span>
               </button>
               <button className="secondary-action" data-testid="orders-export-selected" disabled={selectedOrderIds.size === 0} type="button" onClick={() => void handleExportOrders("selected")}>
-                Seçilenleri indir ({selectedOrderIds.size})
+                {t("exportSelected", { count: selectedOrderIds.size })}
               </button>
               <SiparisTopluAksiyonlar http={http} selectedIds={[...selectedOrderIds]} onDone={() => refreshOrders({ page: orderPage })} />
             </div>
@@ -191,8 +195,8 @@ export function OrdersFlow({ ctx }: { ctx: DashboardController }) {
                   }}
                 >
                   <div className="order-form-header">
-                    <h2>Sipariş Oluştur</h2>
-                    <button className="secondary-action icon-only" type="button" onClick={() => setOrderFormOpen(false)} aria-label="Kapat">
+                    <h2>{t("formTitle")}</h2>
+                    <button className="secondary-action icon-only" type="button" onClick={() => setOrderFormOpen(false)} aria-label={t("close")}>
                       <XCircle size={16} aria-hidden="true" />
                     </button>
                   </div>
@@ -203,17 +207,17 @@ export function OrdersFlow({ ctx }: { ctx: DashboardController }) {
                   )}
                   <div className="order-form-grid">
                     <label>
-                      <span>İsim</span>
+                      <span>{t("name")}</span>
                       <input
                         className="inline-input"
                         data-testid="order-form-name"
-                        placeholder="İsim Soyisim"
+                        placeholder={t("namePlaceholder")}
                         value={orderForm.customer_name}
                         onChange={(event) => setOrderForm((current) => ({ ...current, customer_name: event.target.value, customer_public_id: null, force_duplicate: false }))}
                       />
                     </label>
                     <label>
-                      <span>Telefon</span>
+                      <span>{t("phone")}</span>
                       <input
                         className="inline-input"
                         data-testid="order-form-phone"
@@ -226,9 +230,9 @@ export function OrdersFlow({ ctx }: { ctx: DashboardController }) {
                   </div>
                   <div className="order-form-items">
                     <div className="order-form-section-title">
-                      <span>Ürünler</span>
+                      <span>{t("products")}</span>
                       <button className="secondary-action" data-testid="order-form-add-item" type="button" onClick={addOrderFormItem}>
-                        Ürün Ekle
+                        {t("addProduct")}
                       </button>
                     </div>
                     {orderForm.items.map((item, index) => (
@@ -239,7 +243,7 @@ export function OrdersFlow({ ctx }: { ctx: DashboardController }) {
                           value={item.product_public_id}
                           onChange={(event) => selectOrderFormProduct(index, event.target.value)}
                         >
-                          <option value="">Ürün seç...</option>
+                          <option value="">{t("selectProduct")}</option>
                           {data.products.map((product) => (
                             <option key={product.public_id} value={product.public_id}>{product.name}</option>
                           ))}
@@ -247,7 +251,7 @@ export function OrdersFlow({ ctx }: { ctx: DashboardController }) {
                         <input
                           className="inline-input"
                           data-testid={`order-form-item-name-${index}`}
-                          placeholder="Ürün adı"
+                          placeholder={t("productNamePlaceholder")}
                           value={item.name}
                           onChange={(event) => updateOrderFormItem(index, { name: event.target.value, product_public_id: "" })}
                         />
@@ -272,7 +276,7 @@ export function OrdersFlow({ ctx }: { ctx: DashboardController }) {
                           {(Math.max(Number(item.quantity) || 0, 0) * parseMoneyInput(item.unit_price)).toFixed(2)} TRY
                         </span>
                         {orderForm.items.length > 1 && (
-                          <button className="secondary-action icon-only" type="button" onClick={() => removeOrderFormItem(index)} aria-label="Ürünü çıkar">
+                          <button className="secondary-action icon-only" type="button" onClick={() => removeOrderFormItem(index)} aria-label={t("removeProduct")}>
                             <Trash2 size={16} aria-hidden="true" />
                           </button>
                         )}
@@ -281,49 +285,49 @@ export function OrdersFlow({ ctx }: { ctx: DashboardController }) {
                   </div>
                   <div className="order-form-grid">
                     <label>
-                      <span>Şehir</span>
+                      <span>{t("city")}</span>
                       <input
                         className="inline-input"
                         data-testid="order-form-city"
-                        placeholder="Şehir"
+                        placeholder={t("city")}
                         value={orderForm.city}
                         onChange={(event) => setOrderForm((current) => ({ ...current, city: event.target.value, force_surat_at: false }))}
                       />
                     </label>
                     <label>
-                      <span>İlçe</span>
+                      <span>{t("district")}</span>
                       <input
                         className="inline-input"
                         data-testid="order-form-district"
-                        placeholder="İlçe"
+                        placeholder={t("district")}
                         value={orderForm.district}
                         onChange={(event) => setOrderForm((current) => ({ ...current, district: event.target.value, force_surat_at: false }))}
                       />
                     </label>
                   </div>
                   <label className="order-form-full">
-                    <span>Adres</span>
+                    <span>{t("address")}</span>
                     <textarea
                       className="inline-input"
                       data-testid="order-form-address"
-                      placeholder="Adres"
+                      placeholder={t("address")}
                       rows={2}
                       value={orderForm.address_line}
                       onChange={(event) => setOrderForm((current) => ({ ...current, address_line: event.target.value, force_surat_at: false }))}
                     />
                   </label>
                   <label className="order-form-full">
-                    <span>Not</span>
+                    <span>{t("note")}</span>
                     <input
                       className="inline-input"
                       data-testid="order-form-notes"
-                      placeholder="Sipariş notu..."
+                      placeholder={t("notePlaceholder")}
                       value={orderForm.notes}
                       onChange={(event) => setOrderForm((current) => ({ ...current, notes: event.target.value }))}
                     />
                   </label>
                   <div className="order-form-cargo" data-testid="order-form-cargo">
-                    <span>Kargo</span>
+                    <span>{t("cargo")}</span>
                     <button
                       className={cx("secondary-action", orderForm.cargo_provider === "ptt" && "selected")}
                       type="button"
@@ -341,36 +345,36 @@ export function OrdersFlow({ ctx }: { ctx: DashboardController }) {
                   </div>
                   <DataRows
                     rows={[
-                      ["Ara Toplam", `${currentOrderFormTotals.araToplam.toFixed(2)} TRY`, "KDV hariç"],
-                      ["KDV", `${currentOrderFormTotals.kdvToplam.toFixed(2)} TRY`, "%20"],
-                      ["Genel Toplam", `${currentOrderFormTotals.genelToplam.toFixed(2)} TRY`, "KDV dahil"],
+                      [t("subtotal"), `${currentOrderFormTotals.araToplam.toFixed(2)} TRY`, t("excludingVat")],
+                      [t("vat"), `${currentOrderFormTotals.kdvToplam.toFixed(2)} TRY`, "%20"],
+                      [t("grandTotal"), `${currentOrderFormTotals.genelToplam.toFixed(2)} TRY`, t("includingVat")],
                     ]}
                   />
                   <button className="primary-action order-form-submit" data-testid="order-form-submit" disabled={orderFormSubmitting} type="submit">
                     {orderFormSubmitting
-                      ? "Oluşturuluyor..."
+                      ? t("submitting")
                       : orderForm.force_surat_at
-                        ? "Oluştur"
+                        ? t("submitCreate")
                         : orderForm.force_duplicate
-                          ? "Yine de Oluştur"
-                          : "Sipariş Oluştur"}
+                          ? t("submitCreateAnyway")
+                          : t("submitCreateOrder")}
                   </button>
                 </form>
               </div>
             )}
             <div className="orders-list" data-testid="orders-list">
               <div className="orders-list-header">
-                <button className="secondary-action icon-only" data-testid="orders-select-all" type="button" onClick={toggleAllVisibleOrders} aria-label="Tümünü seç">
+                <button className="secondary-action icon-only" data-testid="orders-select-all" type="button" onClick={toggleAllVisibleOrders} aria-label={t("selectAll")}>
                   {allVisibleOrdersSelected ? <CheckSquare size={16} aria-hidden="true" /> : <Square size={16} aria-hidden="true" />}
                 </button>
-                <button className="orders-sort-button" type="button" onClick={() => void handleOrderSort("order_number")}>Sipariş No</button>
-                <span>Müşteri</span>
-                <button className="orders-sort-button" type="button" onClick={() => void handleOrderSort("status")}>Durum</button>
-                <span>Kaynak</span>
-                <span>Kargo</span>
-                <span>Personel</span>
-                <button className="orders-sort-button" type="button" onClick={() => void handleOrderSort("total_amount")}>Tutar</button>
-                <button className="orders-sort-button" type="button" onClick={() => void handleOrderSort("created_at")}>Tarih</button>
+                <button className="orders-sort-button" type="button" onClick={() => void handleOrderSort("order_number")}>{t("columnOrderNumber")}</button>
+                <span>{t("columnCustomer")}</span>
+                <button className="orders-sort-button" type="button" onClick={() => void handleOrderSort("status")}>{t("columnStatus")}</button>
+                <span>{t("columnSource")}</span>
+                <span>{t("columnCargo")}</span>
+                <span>{t("columnPersonnel")}</span>
+                <button className="orders-sort-button" type="button" onClick={() => void handleOrderSort("total_amount")}>{t("columnAmount")}</button>
+                <button className="orders-sort-button" type="button" onClick={() => void handleOrderSort("created_at")}>{t("columnDate")}</button>
               </div>
               {data.orders.map((order) => (
                 <button
@@ -400,34 +404,34 @@ export function OrdersFlow({ ctx }: { ctx: DashboardController }) {
                     {selectedOrderIds.has(order.public_id) ? <CheckSquare size={16} aria-hidden="true" /> : <Square size={16} aria-hidden="true" />}
                   </span>
                   <strong>{order.order_number}</strong>
-                  <span>{order.customer_full_name ?? "Müşteri eşleşmedi"}</span>
-                  <span>{orderStatusLabel(order.status)}</span>
+                  <span>{order.customer_full_name ?? t("customerUnmatched")}</span>
+                  <span>{orderStatusLabel(order.status, language)}</span>
                   <span>{order.source}</span>
                   <span>{cargoProviderLabel(order.cargo_provider)}</span>
                   <span>{order.created_by_user_email ?? "-"}</span>
                   <span>{order.total_amount} {order.currency}</span>
-                  <span><Calendar size={14} aria-hidden="true" /> {new Date(order.created_at).toLocaleDateString("tr-TR")}</span>
+                  <span><Calendar size={14} aria-hidden="true" /> {new Date(order.created_at).toLocaleDateString(localeFor(language))}</span>
                 </button>
               ))}
             </div>
             <div className="orders-pagination" data-testid="orders-pagination">
-              <span>{orderTotalCount.toLocaleString("tr-TR")} kayıt, sayfa {orderPage + 1}/{orderPageCount}</span>
-              <button className="secondary-action" disabled={orderPage === 0} type="button" onClick={() => void handleOrderPage(orderPage - 1)}>Önceki</button>
-              <button className="secondary-action" disabled={orderPage + 1 >= orderPageCount} type="button" onClick={() => void handleOrderPage(orderPage + 1)}>Sonraki</button>
+              <span>{t("pagination", { count: orderTotalCount.toLocaleString(localeFor(language)), page: orderPage + 1, pageCount: orderPageCount })}</span>
+              <button className="secondary-action" disabled={orderPage === 0} type="button" onClick={() => void handleOrderPage(orderPage - 1)}>{t("previous")}</button>
+              <button className="secondary-action" disabled={orderPage + 1 >= orderPageCount} type="button" onClick={() => void handleOrderPage(orderPage + 1)}>{t("next")}</button>
             </div>
             {selectedOrder && (
-              <DetailPanel title="Sipariş Detayı" testId="order-detail">
+              <DetailPanel title={t("detailTitle")} testId="order-detail">
                 <DataRows
                   rows={[
-                    ["Sipariş No", selectedOrder.order_number, orderStatusLabel(selectedOrder.status)],
-                    ["Müşteri", selectedOrder.customer_full_name ?? "Müşteri eşleşmedi", selectedOrder.source],
+                    [t("detailOrderNumber"), selectedOrder.order_number, orderStatusLabel(selectedOrder.status, language)],
+                    [t("detailCustomer"), selectedOrder.customer_full_name ?? t("customerUnmatched"), selectedOrder.source],
                     [
-                      "Tutar",
+                      t("detailAmount"),
                       `${selectedOrder.total_amount} ${selectedOrder.currency}`,
-                      selectedOrder.confirmation_status ?? "teyit bekliyor",
+                      selectedOrder.confirmation_status ?? t("detailAwaitingConfirmation"),
                     ],
-                    ["Kargo", cargoProviderLabel(selectedOrder.cargo_provider), selectedOrder.created_by_user_email ?? "personel yok"],
-                    ["Not", selectedOrder.notes ?? "-", selectedOrder.updated_at],
+                    [t("detailCargo"), cargoProviderLabel(selectedOrder.cargo_provider), selectedOrder.created_by_user_email ?? t("detailNoPersonnel")],
+                    [t("detailNote"), selectedOrder.notes ?? "-", selectedOrder.updated_at],
                   ]}
                 />
                 <KargoSiparisAksiyonlari

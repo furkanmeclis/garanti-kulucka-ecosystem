@@ -1,6 +1,8 @@
 import { CheckCircle, Eye, Printer, RefreshCw, Search, Truck } from "lucide-react";
 import { cx, shipmentStatusLabel, cargoProviderLabel, FlowPanel, DetailPanel, Metric, DataRows } from "../../app/shared.js";
 import type { DashboardController } from "../../app/useDashboardController.js";
+import { localeFor, useLanguage, useT } from "../../i18n/index.js";
+import { shipmentsMessages } from "../../i18n/messages/shipments.js";
 
 export function ShipmentsFlow({ ctx }: { ctx: DashboardController }) {
   const {
@@ -32,31 +34,33 @@ export function ShipmentsFlow({ ctx }: { ctx: DashboardController }) {
     trackingMissingCount,
     trackingShipmentId,
   } = ctx;
+  const t = useT(shipmentsMessages);
+  const { language } = useLanguage();
 
   return (
-    <FlowPanel title="Kargo Gönderileri" icon={<Truck size={18} />} testId="shipments-flow">
+    <FlowPanel title={t("title")} icon={<Truck size={18} />} testId="shipments-flow">
             <div className="report-grid">
               <Metric title="PTT Kargo" value={String(pttShipmentCount)} />
               <Metric title="Sürat Kargo" value={String(suratShipmentCount)} />
-              <Metric title="Yoldaki Kargolar" value={String(activeShipmentCount)} />
-              <Metric title="Teslim Edilen" value={String(deliveredShipmentCount)} />
+              <Metric title={t("metricInTransit")} value={String(activeShipmentCount)} />
+              <Metric title={t("metricDelivered")} value={String(deliveredShipmentCount)} />
             </div>
             <form className="filter-grid" onSubmit={(event) => void handleSearchShipments(event)}>
               <label className="field-label" htmlFor="shipment-search">
-                Arama
+                {t("searchLabel")}
               </label>
               <div className="search-row">
                 <Search size={16} />
                 <input
                   data-testid="shipment-search"
                   id="shipment-search"
-                  placeholder="Takip no, müşteri veya sipariş ara..."
+                  placeholder={t("searchPlaceholder")}
                   type="search"
                   value={shipmentSearch}
                   onChange={(event) => setShipmentSearch(event.target.value)}
                 />
                 <button className="secondary-action" type="submit">
-                  Ara
+                  {t("searchButton")}
                 </button>
               </div>
             </form>
@@ -67,7 +71,7 @@ export function ShipmentsFlow({ ctx }: { ctx: DashboardController }) {
                 type="button"
                 onClick={() => void handleApplyShipmentFilter("all")}
               >
-                Tüm kargolar {shipmentFilter === "all" ? data.shipmentSummary.total_count : "sonuç"}
+                {t("filterAll")} {shipmentFilter === "all" ? data.shipmentSummary.total_count : t("resultsWord")}
               </button>
               <button
                 className={cx("secondary-action", shipmentFilter === "ptt" && "selected")}
@@ -75,7 +79,7 @@ export function ShipmentsFlow({ ctx }: { ctx: DashboardController }) {
                 type="button"
                 onClick={() => void handleApplyShipmentFilter("ptt")}
               >
-                PTT {shipmentFilter === "all" || shipmentFilter === "ptt" ? pttShipmentCount : "sonuç"}
+                PTT {shipmentFilter === "all" || shipmentFilter === "ptt" ? pttShipmentCount : t("resultsWord")}
               </button>
               <button
                 className={cx("secondary-action", shipmentFilter === "surat" && "selected")}
@@ -83,7 +87,7 @@ export function ShipmentsFlow({ ctx }: { ctx: DashboardController }) {
                 type="button"
                 onClick={() => void handleApplyShipmentFilter("surat")}
               >
-                Sürat {shipmentFilter === "all" || shipmentFilter === "surat" ? suratShipmentCount : "sonuç"}
+                Sürat {shipmentFilter === "all" || shipmentFilter === "surat" ? suratShipmentCount : t("resultsWord")}
               </button>
               <button
                 className={cx("secondary-action", shipmentFilter === "other" && "selected")}
@@ -91,7 +95,7 @@ export function ShipmentsFlow({ ctx }: { ctx: DashboardController }) {
                 type="button"
                 onClick={() => void handleApplyShipmentFilter("other")}
               >
-                Diğer {shipmentFilter === "all" || shipmentFilter === "other" ? otherShipmentCount : "sonuç"}
+                {t("filterOther")} {shipmentFilter === "all" || shipmentFilter === "other" ? otherShipmentCount : t("resultsWord")}
               </button>
               <button
                 className={cx("secondary-action", shipmentFilter === "in_transit" && "selected")}
@@ -99,7 +103,7 @@ export function ShipmentsFlow({ ctx }: { ctx: DashboardController }) {
                 type="button"
                 onClick={() => void handleApplyShipmentFilter("in_transit")}
               >
-                Yoldaki {shipmentFilter === "all" || shipmentFilter === "in_transit" ? activeShipmentCount : "sonuç"}
+                {t("filterInTransit")} {shipmentFilter === "all" || shipmentFilter === "in_transit" ? activeShipmentCount : t("resultsWord")}
               </button>
               <button
                 className={cx("secondary-action", shipmentFilter === "delivered" && "selected")}
@@ -107,7 +111,7 @@ export function ShipmentsFlow({ ctx }: { ctx: DashboardController }) {
                 type="button"
                 onClick={() => void handleApplyShipmentFilter("delivered")}
               >
-                Teslim {shipmentFilter === "all" || shipmentFilter === "delivered" ? deliveredShipmentCount : "sonuç"}
+                {t("filterDelivered")} {shipmentFilter === "all" || shipmentFilter === "delivered" ? deliveredShipmentCount : t("resultsWord")}
               </button>
               <button
                 className={cx("secondary-action", shipmentFilter === "tracking_missing" && "selected")}
@@ -115,16 +119,16 @@ export function ShipmentsFlow({ ctx }: { ctx: DashboardController }) {
                 type="button"
                 onClick={() => void handleApplyShipmentFilter("tracking_missing")}
               >
-                Takipsiz {shipmentFilter === "all" || shipmentFilter === "tracking_missing" ? trackingMissingCount : "sonuç"}
+                {t("filterTrackingMissing")} {shipmentFilter === "all" || shipmentFilter === "tracking_missing" ? trackingMissingCount : t("resultsWord")}
               </button>
             </div>
-            <DetailPanel title="Kargo Filtre Özeti" testId="shipment-filter-summary">
+            <DetailPanel title={t("filterSummaryTitle")} testId="shipment-filter-summary">
               <DataRows
                 rows={[
-                  ["Yeni", String(activeShipmentCount), "sevk/teslim bekliyor"],
-                  ["PTT Almayan", String(pttNotDeliveredCount), "legacy filtre"],
-                  ["Sürat Almayan", String(suratNotDeliveredCount), "legacy filtre"],
-                  ["Takip No Yok", String(trackingMissingCount), "barkod kontrol"],
+                  [t("summaryNew"), String(activeShipmentCount), t("summaryNewHint")],
+                  [t("summaryPttNotDelivered"), String(pttNotDeliveredCount), t("summaryLegacyFilter")],
+                  [t("summarySuratNotDelivered"), String(suratNotDeliveredCount), t("summaryLegacyFilter")],
+                  [t("summaryTrackingMissing"), String(trackingMissingCount), t("summaryBarcodeCheck")],
                 ]}
               />
             </DetailPanel>
@@ -132,19 +136,19 @@ export function ShipmentsFlow({ ctx }: { ctx: DashboardController }) {
               <table className="data-table" data-testid="shipment-table">
                 <thead>
                   <tr>
-                    <th>Kargo Firma</th>
-                    <th>Takip No / Aktar</th>
-                    <th>Müşteri</th>
-                    <th>Sipariş</th>
-                    <th>Kargo Durumu</th>
-                    <th>Aktarılma Tarihi</th>
-                    <th>İşlem</th>
+                    <th>{t("colProvider")}</th>
+                    <th>{t("colTracking")}</th>
+                    <th>{t("colCustomer")}</th>
+                    <th>{t("colOrder")}</th>
+                    <th>{t("colStatus")}</th>
+                    <th>{t("colTransferredAt")}</th>
+                    <th>{t("colAction")}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {data.shipments.length === 0 ? (
                     <tr>
-                      <td colSpan={7}>Henüz kargoya aktarılmış sipariş bulunmuyor</td>
+                      <td colSpan={7}>{t("emptyTable")}</td>
                     </tr>
                   ) : data.shipments.map((shipment) => (
                     <tr data-testid="shipment-row" key={shipment.public_id}>
@@ -158,9 +162,9 @@ export function ShipmentsFlow({ ctx }: { ctx: DashboardController }) {
                           type="button"
                           onClick={() => void handleOpenShipmentDetail(shipment.public_id)}
                         >
-                          {shipment.tracking_number ?? shipment.barcode_number ?? "Takip No Yok"} detay
+                          {shipment.tracking_number ?? shipment.barcode_number ?? t("trackingMissing")} {t("detailSuffix")}
                         </button>
-                        <span className="muted-line">{shipment.last_event_text ?? "Kargoya aktarıldı - hareket bekleniyor"}</span>
+                        <span className="muted-line">{shipment.last_event_text ?? t("awaitingMovement")}</span>
                       </td>
                       <td>
                         <strong>{shipment.recipient_name}</strong>
@@ -169,37 +173,37 @@ export function ShipmentsFlow({ ctx }: { ctx: DashboardController }) {
                         </span>
                       </td>
                       <td>{shipment.order_number ?? shipment.customer_full_name ?? "-"}</td>
-                      <td>{shipmentStatusLabel(shipment.status)}</td>
-                      <td>{new Date(shipment.updated_at).toLocaleString("tr-TR")}</td>
+                      <td>{shipmentStatusLabel(shipment.status, language)}</td>
+                      <td>{new Date(shipment.updated_at).toLocaleString(localeFor(language))}</td>
                       <td>
                         <div className="icon-actions">
                           <button
-                            aria-label="Detay"
+                            aria-label={t("actionDetail")}
                             className={cx("icon-button", selectedShipment?.public_id === shipment.public_id && "selected")}
                             data-testid="shipment-detail-action"
-                            title="Detay"
+                            title={t("actionDetail")}
                             type="button"
                             onClick={() => void handleOpenShipmentDetail(shipment.public_id)}
                           >
                             <Eye size={16} />
                           </button>
                           <button
-                            aria-label="Takip Güncelle"
+                            aria-label={t("actionTrack")}
                             className="icon-button"
                             data-testid="shipment-track-action"
                             disabled={trackingShipmentId === shipment.public_id || !shipment.tracking_number}
-                            title="Takip Güncelle"
+                            title={t("actionTrack")}
                             type="button"
                             onClick={() => void handleTrackShipment(shipment)}
                           >
                             <RefreshCw className={trackingShipmentId === shipment.public_id ? "spin" : undefined} size={16} />
                           </button>
                           <button
-                            aria-label={selectedShipment?.public_id === shipment.public_id ? "Teslim edildi yap" : "Önce detay seç"}
+                            aria-label={selectedShipment?.public_id === shipment.public_id ? t("actionMarkDelivered") : t("actionSelectDetailFirst")}
                             className="icon-button"
                             data-testid="shipment-status-action"
                             disabled={selectedShipment?.public_id !== shipment.public_id}
-                            title={selectedShipment?.public_id === shipment.public_id ? "Teslim edildi yap" : "Önce detay seç"}
+                            title={selectedShipment?.public_id === shipment.public_id ? t("actionMarkDelivered") : t("actionSelectDetailFirst")}
                             type="button"
                             onClick={() => void handleUpdateShipment()}
                           >
@@ -224,9 +228,9 @@ export function ShipmentsFlow({ ctx }: { ctx: DashboardController }) {
                   type="button"
                   onClick={() => void handleShipmentPage(shipmentPage - 1)}
                 >
-                  Önceki
+                  {t("previous")}
                 </button>
-                <span>Sayfa {shipmentPage + 1} / {shipmentPageCount}</span>
+                <span>{t("pageOf", { page: shipmentPage + 1, count: shipmentPageCount })}</span>
                 <button
                   className="secondary-action"
                   data-testid="shipment-next-page"
@@ -234,25 +238,25 @@ export function ShipmentsFlow({ ctx }: { ctx: DashboardController }) {
                   type="button"
                   onClick={() => void handleShipmentPage(shipmentPage + 1)}
                 >
-                  Sonraki
+                  {t("next")}
                 </button>
               </div>
             </div>
             {lastShipmentTrack && <p className="status-copy" data-testid="shipment-track-result">{lastShipmentTrack}</p>}
             {selectedShipment && (
-              <DetailPanel title="Kargo Detayı" testId="shipment-detail">
+              <DetailPanel title={t("detailTitle")} testId="shipment-detail">
                 <DataRows
                   rows={[
-                    ["Takip No", selectedShipment.tracking_number ?? "-", selectedShipment.provider],
-                    ["Alıcı", selectedShipment.recipient_name, selectedShipment.recipient_phone ?? "-"],
+                    [t("rowTrackingNo"), selectedShipment.tracking_number ?? "-", selectedShipment.provider],
+                    [t("rowRecipient"), selectedShipment.recipient_name, selectedShipment.recipient_phone ?? "-"],
                     [
-                      "Adres",
+                      t("rowAddress"),
                       [selectedShipment.recipient_district, selectedShipment.recipient_city].filter(Boolean).join(" / ") || "-",
                       selectedShipment.barcode_number ?? "-",
                     ],
-                    ["Son Hareket", selectedShipment.last_event_text ?? "-", selectedShipment.status],
-                    ["Sipariş", selectedShipment.order_number ?? "-", selectedShipment.customer_full_name ?? "-"],
-                    ["Barkod", selectedShipment.barcode_number ?? "barkod bekliyor", "shipments API"],
+                    [t("rowLastEvent"), selectedShipment.last_event_text ?? "-", selectedShipment.status],
+                    [t("rowOrder"), selectedShipment.order_number ?? "-", selectedShipment.customer_full_name ?? "-"],
+                    [t("rowBarcode"), selectedShipment.barcode_number ?? t("barcodePending"), "shipments API"],
                   ]}
                 />
                 <div className="detail-actions">
@@ -260,26 +264,26 @@ export function ShipmentsFlow({ ctx }: { ctx: DashboardController }) {
                     <button
                       className="kargo-yazdir-button"
                       data-testid="kargo-yazdir"
-                      title="Barkodlu Fatura Yazdır"
+                      title={t("printTitle")}
                       type="button"
                       onClick={() => setPrintShipmentId(selectedShipment.public_id)}
                     >
-                      <Printer size={14} aria-hidden="true" /> Yazdır
+                      <Printer size={14} aria-hidden="true" /> {t("print")}
                     </button>
                   ) : (
-                    <span className="kargo-muted">Önce kargoya aktarın</span>
+                    <span className="kargo-muted">{t("transferFirst")}</span>
                   )}
                 </div>
                 <div className="timeline" data-testid="shipment-tracking-history">
-                  <h3>Hareket Geçmişi</h3>
+                  <h3>{t("historyTitle")}</h3>
                   {(selectedShipment.tracking_events ?? []).length === 0 ? (
-                    <p>Henüz hareket yok</p>
+                    <p>{t("noEvents")}</p>
                   ) : (
                     selectedShipment.tracking_events.map((event) => (
                       <div className="timeline-item" key={event.public_id}>
-                        <strong>{event.description ?? shipmentStatusLabel(event.status)}</strong>
+                        <strong>{event.description ?? shipmentStatusLabel(event.status, language)}</strong>
                         <span>{event.location ?? "-"}</span>
-                        <span>{new Date(event.occurred_at).toLocaleString("tr-TR")}</span>
+                        <span>{new Date(event.occurred_at).toLocaleString(localeFor(language))}</span>
                       </div>
                     ))
                   )}

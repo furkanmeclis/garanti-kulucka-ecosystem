@@ -37,23 +37,28 @@ import {
   type ReportCargoProvider,
   type ReportMetrics,
 } from "../../api/reports-client.js";
+import { localeFor, useLanguage, useT, type Translator, type UiLanguage } from "../i18n/index.js";
+import { reportsMessages } from "../i18n/messages/reports.js";
+
+type ReportsKey = keyof (typeof reportsMessages)["tr"];
+type ReportsT = Translator<ReportsKey>;
 
 /**
  * Legacy frontend/src/pages/raporlar/RaporlarPage.jsx ("İş Analizi") parity. Every KPI, rate and
  * chart series comes from the backend SQL aggregate `GET /api/reports/analysis`.
  */
 
-const DURUM_ETIKETLERI: Record<LegacyOrderStatusKey, string> = {
-  olusturuldu: "Oluşturuldu",
-  teyit_bekliyor: "Teyit Bekliyor",
-  teyit_edildi: "Teyit Edildi",
-  hazirlaniyor: "Hazırlanıyor",
-  kargoya_verildi: "Kargoya Verildi",
-  sevk_edildi: "Yoldaki Kargolar",
-  teslim_edildi: "Teslim Edildi",
-  iptal: "İptal",
-  iade: "İade",
-};
+const DURUM_ETIKETLERI = {
+  olusturuldu: "statusCreated",
+  teyit_bekliyor: "statusAwaitingConfirmation",
+  teyit_edildi: "statusConfirmed",
+  hazirlaniyor: "statusPreparing",
+  kargoya_verildi: "statusHandedToCargo",
+  sevk_edildi: "statusInTransit",
+  teslim_edildi: "statusDelivered",
+  iptal: "statusCancelled",
+  iade: "statusReturned",
+} as const satisfies Record<LegacyOrderStatusKey, ReportsKey>;
 
 const DURUM_RENKLERI: Record<LegacyOrderStatusKey, string> = {
   olusturuldu: "#3b82f6",
@@ -68,10 +73,10 @@ const DURUM_RENKLERI: Record<LegacyOrderStatusKey, string> = {
 };
 
 const TARIH_PRESETLERI = [
-  { id: "7", gun: 7, label: "Son 7 gün" },
-  { id: "30", gun: 30, label: "Son 30 gün" },
-  { id: "90", gun: 90, label: "Son 90 gün" },
-];
+  { id: "7", gun: 7, label: "presetLast7" },
+  { id: "30", gun: 30, label: "presetLast30" },
+  { id: "90", gun: 90, label: "presetLast90" },
+] as const satisfies readonly { id: string; gun: number; label: ReportsKey }[];
 
 const tooltipStil = {
   backgroundColor: "#1e293b",
@@ -118,23 +123,23 @@ function gunOnce(gun: number) {
   return yerelTarih(date);
 }
 
-function tarihKisa(tarihStr: string) {
+function tarihKisa(tarihStr: string, language: UiLanguage) {
   const [yil, ay, gun] = tarihStr.split("-").map(Number);
   if (!yil || !ay || !gun) return tarihStr;
-  return new Date(yil, ay - 1, gun).toLocaleDateString("tr-TR", { day: "numeric", month: "short" });
+  return new Date(yil, ay - 1, gun).toLocaleDateString(localeFor(language), { day: "numeric", month: "short" });
 }
 
-function paraFormatla(miktar: number) {
-  const formatli = new Intl.NumberFormat("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(miktar);
+function paraFormatla(miktar: number, language: UiLanguage) {
+  const formatli = new Intl.NumberFormat(localeFor(language), { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(miktar);
   return `${formatli} ₺`;
 }
 
-function errorMessage(error: unknown) {
+function errorMessage(error: unknown, t: ReportsT) {
   if (error instanceof BackendRequestError) {
     const body = error.body as { error?: { message?: unknown } } | null | undefined;
     if (typeof body?.error?.message === "string" && body.error.message.length > 0) return body.error.message;
   }
-  return error instanceof Error && error.message ? error.message : "Bilinmeyen hata";
+  return error instanceof Error && error.message ? error.message : t("unknownError");
 }
 
 function KpiKart(props: {
@@ -173,11 +178,14 @@ function GrafikKart(props: { baslik: string; alt?: string; children: ReactNode; 
 }
 
 function VeriYok() {
-  return <div className="rapor-veri-yok">Veri yok</div>;
+  const t = useT(reportsMessages);
+  return <div className="rapor-veri-yok">{t("noData")}</div>;
 }
 
 export function RaporlarPage(props: { http: BackendHttpClient }) {
   const client = useMemo(() => createReportsClient(props.http), [props.http]);
+  const t = useT(reportsMessages);
+  const { language } = useLanguage();
   const bugun = yerelTarih(new Date());
   const [tarihBaslangic, setTarihBaslangic] = useState(gunOnce(29));
   const [tarihBitis, setTarihBitis] = useState(bugun);
@@ -200,11 +208,11 @@ export function RaporlarPage(props: { http: BackendHttpClient }) {
       });
       setAnaliz(sonuc);
     } catch (error) {
-      setHata(`Raporlar yüklenemedi: ${errorMessage(error)}`);
+      setHata(t("loadFailed", { error: errorMessage(error, t) }));
     } finally {
       setYukleniyor(false);
     }
-  }, [client, tarihBaslangic, tarihBitis, kargoFirmasi, personelId]);
+  }, [client, tarihBaslangic, tarihBitis, kargoFirmasi, personelId, t]);
 
   useEffect(() => {
     void verileriGetir();
@@ -218,23 +226,23 @@ export function RaporlarPage(props: { http: BackendHttpClient }) {
     () =>
       (analiz?.daily ?? []).map((gun) => ({
         tarih: gun.date,
-        label: tarihKisa(gun.date),
+        label: tarihKisa(gun.date, language),
         siparis: gun.orders,
         ciro: gun.revenue,
         iptal: gun.cancelled,
         iade: gun.returned,
       })),
-    [analiz],
+    [analiz, language],
   );
 
   const durumDagilimi = useMemo(
     () =>
       (analiz?.status_distribution ?? []).map((satir) => ({
-        name: DURUM_ETIKETLERI[satir.status] ?? satir.status,
+        name: satir.status in DURUM_ETIKETLERI ? t(DURUM_ETIKETLERI[satir.status]) : satir.status,
         value: satir.count,
         fill: DURUM_RENKLERI[satir.status] ?? "#64748b",
       })),
-    [analiz],
+    [analiz, t],
   );
 
   const kargoFirmaVeri = useMemo(
@@ -263,11 +271,11 @@ export function RaporlarPage(props: { http: BackendHttpClient }) {
   };
 
   const oranOzeti = [
-    { baslik: "Teslim Oranı", deger: oranlar.teslim, renk: "green", aciklama: "Teslim / (Sevk + Teslim)" },
-    { baslik: "Kargo İade Oranı", deger: oranlar.kargo_iade, renk: "orange", aciklama: "Kargo iadesi / Kargoya verilenler" },
-    { baslik: "İptal Oranı", deger: oranlar.iptal, renk: "red", aciklama: "İptal / Toplam" },
-    { baslik: "İade Oranı", deger: oranlar.iade, renk: "orange", aciklama: "İade / Toplam" },
-    { baslik: "Şubede Bekleme", deger: oranlar.sube, renk: "amber", aciklama: "Şubede / Kargolanan" },
+    { baslik: t("deliveryRate"), deger: oranlar.teslim, renk: "green", aciklama: t("deliveryRateFormula") },
+    { baslik: t("cargoReturnRate"), deger: oranlar.kargo_iade, renk: "orange", aciklama: t("cargoReturnRateFormula") },
+    { baslik: t("cancelRate"), deger: oranlar.iptal, renk: "red", aciklama: t("cancelRateFormula") },
+    { baslik: t("returnRate"), deger: oranlar.iade, renk: "orange", aciklama: t("returnRateFormula") },
+    { baslik: t("branchWaiting"), deger: oranlar.sube, renk: "amber", aciklama: t("branchWaitingFormula") },
   ];
 
   return (
@@ -276,13 +284,13 @@ export function RaporlarPage(props: { http: BackendHttpClient }) {
         <div>
           <div className="rapor-baslik">
             <BarChart3 size={28} />
-            <h1>İş Analizi</h1>
+            <h1>{t("title")}</h1>
           </div>
-          <p className="rapor-alt-baslik">Sipariş, kargo, fatura ve sonuçlanma metrikleri — filtreli görünüm</p>
+          <p className="rapor-alt-baslik">{t("subtitle")}</p>
         </div>
         <button type="button" className="rapor-yenile" onClick={() => void verileriGetir()} disabled={yukleniyor}>
           {yukleniyor ? <Loader2 size={16} className="rapor-spin" /> : <RefreshCw size={16} />}
-          Yenile
+          {t("refresh")}
         </button>
       </div>
 
@@ -295,7 +303,7 @@ export function RaporlarPage(props: { http: BackendHttpClient }) {
       <div className="rapor-filtreler" data-testid="rapor-filtreler">
         <div className="rapor-filtre-baslik">
           <Filter size={16} />
-          Filtreler
+          {t("filters")}
         </div>
         <div className="rapor-presetler">
           {TARIH_PRESETLERI.map((preset) => (
@@ -305,13 +313,13 @@ export function RaporlarPage(props: { http: BackendHttpClient }) {
               className={aktifPreset === preset.id ? "aktif" : ""}
               onClick={() => presetSec(preset.gun, preset.id)}
             >
-              {preset.label}
+              {t(preset.label)}
             </button>
           ))}
         </div>
         <div className="rapor-filtre-grid">
           <label>
-            <span>Başlangıç</span>
+            <span>{t("startDate")}</span>
             <input
               type="date"
               value={tarihBaslangic}
@@ -322,7 +330,7 @@ export function RaporlarPage(props: { http: BackendHttpClient }) {
             />
           </label>
           <label>
-            <span>Bitiş</span>
+            <span>{t("endDate")}</span>
             <input
               type="date"
               value={tarihBitis}
@@ -333,9 +341,9 @@ export function RaporlarPage(props: { http: BackendHttpClient }) {
             />
           </label>
           <label>
-            <span>Personel</span>
+            <span>{t("personnel")}</span>
             <select value={personelId} onChange={(event) => setPersonelId(event.target.value)}>
-              <option value="">Tüm personel</option>
+              <option value="">{t("allPersonnel")}</option>
               {personeller.map((personel) => (
                 <option key={personel.public_id} value={personel.public_id}>
                   {personel.first_name} {personel.last_name}
@@ -344,9 +352,9 @@ export function RaporlarPage(props: { http: BackendHttpClient }) {
             </select>
           </label>
           <label>
-            <span>Kargo firması</span>
+            <span>{t("cargoProvider")}</span>
             <select value={kargoFirmasi} onChange={(event) => setKargoFirmasi(event.target.value as ReportCargoProvider)}>
-              <option value="tumu">Tümü</option>
+              <option value="tumu">{t("allProviders")}</option>
               <option value="ptt">PTT</option>
               <option value="surat">Sürat</option>
             </select>
@@ -355,57 +363,57 @@ export function RaporlarPage(props: { http: BackendHttpClient }) {
       </div>
 
       <section>
-        <h2 className="rapor-bolum-baslik">Sipariş Özeti</h2>
+        <h2 className="rapor-bolum-baslik">{t("orderSummary")}</h2>
         <div className="rapor-kpi-grid rapor-kpi-grid-5" data-testid="rapor-siparis-ozeti">
-          <KpiKart baslik="Toplam Sipariş" deger={metrikler.toplam} ikon={Package} renk="blue" yukleniyor={yukleniyor} />
-          <KpiKart baslik="Aktif Sipariş" deger={metrikler.aktif} ikon={TrendingUp} renk="emerald" yukleniyor={yukleniyor} />
-          <KpiKart baslik="Toplam Ciro" deger={paraFormatla(metrikler.ciro)} ikon={TrendingUp} renk="green" yukleniyor={yukleniyor} />
-          <KpiKart baslik="İptal" deger={metrikler.iptal} alt={`%${oranlar.iptal} iptal oranı`} ikon={XCircle} renk="red" yukleniyor={yukleniyor} />
-          <KpiKart baslik="İade" deger={metrikler.iade} alt={`%${oranlar.iade} iade oranı`} ikon={RotateCcw} renk="orange" yukleniyor={yukleniyor} />
+          <KpiKart baslik={t("totalOrders")} deger={metrikler.toplam} ikon={Package} renk="blue" yukleniyor={yukleniyor} />
+          <KpiKart baslik={t("activeOrders")} deger={metrikler.aktif} ikon={TrendingUp} renk="emerald" yukleniyor={yukleniyor} />
+          <KpiKart baslik={t("totalRevenue")} deger={paraFormatla(metrikler.ciro, language)} ikon={TrendingUp} renk="green" yukleniyor={yukleniyor} />
+          <KpiKart baslik={t("statusCancelled")} deger={metrikler.iptal} alt={t("cancelRateSuffix", { rate: oranlar.iptal })} ikon={XCircle} renk="red" yukleniyor={yukleniyor} />
+          <KpiKart baslik={t("statusReturned")} deger={metrikler.iade} alt={t("returnRateSuffix", { rate: oranlar.iade })} ikon={RotateCcw} renk="orange" yukleniyor={yukleniyor} />
         </div>
       </section>
 
       <section>
-        <h2 className="rapor-bolum-baslik">Kargo Durumu</h2>
+        <h2 className="rapor-bolum-baslik">{t("cargoStatus")}</h2>
         <div className="rapor-kpi-grid rapor-kpi-grid-6" data-testid="rapor-kargo-durumu">
-          <KpiKart baslik="Kargoya Verilenler" deger={metrikler.kargoya_giden} ikon={Truck} renk="indigo" yukleniyor={yukleniyor} />
-          <KpiKart baslik="Yoldaki Kargolar" deger={metrikler.sevk_edildi} ikon={Truck} renk="emerald" yukleniyor={yukleniyor} />
+          <KpiKart baslik={t("handedToCargo")} deger={metrikler.kargoya_giden} ikon={Truck} renk="indigo" yukleniyor={yukleniyor} />
+          <KpiKart baslik={t("statusInTransit")} deger={metrikler.sevk_edildi} ikon={Truck} renk="emerald" yukleniyor={yukleniyor} />
           <KpiKart
-            baslik="Teslim Edildi"
+            baslik={t("statusDelivered")}
             deger={metrikler.teslim_edildi}
-            alt={`%${oranlar.teslim} teslim oranı`}
+            alt={t("deliveryRateSuffix", { rate: oranlar.teslim })}
             ikon={CheckCircle}
             renk="green"
             yukleniyor={yukleniyor}
           />
           <KpiKart
-            baslik="Kargo İadesi"
+            baslik={t("cargoReturns")}
             deger={metrikler.kargo_iade}
-            alt={`PTT: ${metrikler.ptt_kargo_iade} · Sürat: ${metrikler.surat_kargo_iade} · %${oranlar.kargo_iade} iade oranı`}
+            alt={t("cargoReturnsDetail", { ptt: metrikler.ptt_kargo_iade, surat: metrikler.surat_kargo_iade, rate: oranlar.kargo_iade })}
             ikon={RotateCcw}
             renk="orange"
             yukleniyor={yukleniyor}
           />
           <KpiKart
-            baslik="Şubede Bekleyen"
+            baslik={t("waitingAtBranch")}
             deger={metrikler.subede_toplam}
-            alt={`PTT: ${metrikler.ptt_subede} · Sürat: ${metrikler.surat_subede}`}
+            alt={t("branchDetail", { ptt: metrikler.ptt_subede, surat: metrikler.surat_subede })}
             ikon={Building2}
             renk="amber"
             yukleniyor={yukleniyor}
           />
           <KpiKart
-            baslik="Takipte İade"
+            baslik={t("trackingReturns")}
             deger={metrikler.kargo_takip_iade}
-            alt="Kargo hareketinde iade görünen"
+            alt={t("trackingReturnsDetail")}
             ikon={RotateCcw}
             renk="red"
             yukleniyor={yukleniyor}
           />
           <KpiKart
-            baslik="Teyit Oranı"
+            baslik={t("confirmationRate")}
             deger={`%${oranlar.teyit}`}
-            alt={`${metrikler.teyit_bekliyor} teyit bekliyor`}
+            alt={t("awaitingConfirmationCount", { count: metrikler.teyit_bekliyor })}
             ikon={Percent}
             renk="purple"
             yukleniyor={yukleniyor}
@@ -415,8 +423,8 @@ export function RaporlarPage(props: { http: BackendHttpClient }) {
 
       <div className="rapor-grafik-satir rapor-grafik-satir-3">
         <GrafikKart
-          baslik="Günlük Sipariş Trendi"
-          alt="Seçilen tarih aralığında günlük sipariş sayısı"
+          baslik={t("dailyOrderTrend")}
+          alt={t("dailyOrderTrendDetail")}
           className="rapor-grafik-genis"
           testId="rapor-gunluk-trend"
         >
@@ -435,7 +443,7 @@ export function RaporlarPage(props: { http: BackendHttpClient }) {
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#334155" />
                   <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fill: "#94a3b8", fontSize: 11 }} interval="preserveStartEnd" />
                   <YAxis axisLine={false} tickLine={false} tick={{ fill: "#94a3b8", fontSize: 11 }} width={36} />
-                  <Tooltip contentStyle={tooltipStil} formatter={(value) => [value, "Sipariş"]} />
+                  <Tooltip contentStyle={tooltipStil} formatter={(value) => [value, t("seriesOrders")]} />
                   <Area type="monotone" dataKey="siparis" stroke="#3b82f6" strokeWidth={2} fill="url(#siparisGrad)" />
                 </AreaChart>
               </ResponsiveContainer>
@@ -443,7 +451,7 @@ export function RaporlarPage(props: { http: BackendHttpClient }) {
           </div>
         </GrafikKart>
 
-        <GrafikKart baslik="Sipariş Durumu" alt="Durum dağılımı" testId="rapor-durum-dagilimi">
+        <GrafikKart baslik={t("orderStatus")} alt={t("orderStatusDetail")} testId="rapor-durum-dagilimi">
           <div className="rapor-grafik-alan">
             {durumDagilimi.length === 0 && !yukleniyor ? (
               <VeriYok />
@@ -465,7 +473,7 @@ export function RaporlarPage(props: { http: BackendHttpClient }) {
       </div>
 
       <div className="rapor-grafik-satir rapor-grafik-satir-2">
-        <GrafikKart baslik="Günlük Ciro" alt="Aktif siparişlerin günlük toplam tutarı" testId="rapor-gunluk-ciro">
+        <GrafikKart baslik={t("dailyRevenue")} alt={t("dailyRevenueDetail")} testId="rapor-gunluk-ciro">
           <div className="rapor-grafik-alan rapor-grafik-alan-kisa">
             {gunlukVeri.length === 0 && !yukleniyor ? (
               <VeriYok />
@@ -481,7 +489,7 @@ export function RaporlarPage(props: { http: BackendHttpClient }) {
                     width={48}
                     tickFormatter={(value: number) => (value >= 1000 ? `${(value / 1000).toFixed(0)}k` : String(value))}
                   />
-                  <Tooltip contentStyle={tooltipStil} formatter={(value) => [paraFormatla(Number(value)), "Ciro"]} />
+                  <Tooltip contentStyle={tooltipStil} formatter={(value) => [paraFormatla(Number(value), language), t("seriesRevenue")]} />
                   <Bar dataKey="ciro" fill="#22c55e" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
@@ -489,7 +497,7 @@ export function RaporlarPage(props: { http: BackendHttpClient }) {
           </div>
         </GrafikKart>
 
-        <GrafikKart baslik="Kargo Firması" alt="Aktif kargolar ve kargo iadeleri (iptal/iade hariç aktif sayım)" testId="rapor-kargo-firmasi">
+        <GrafikKart baslik={t("cargoProviderChart")} alt={t("cargoProviderChartDetail")} testId="rapor-kargo-firmasi">
           <div className="rapor-grafik-alan rapor-grafik-alan-kisa">
             {kargoFirmaVeri.every((kargo) => kargo.aktif === 0 && kargo.iade === 0) && !yukleniyor ? (
               <VeriYok />
@@ -501,8 +509,8 @@ export function RaporlarPage(props: { http: BackendHttpClient }) {
                   <YAxis axisLine={false} tickLine={false} tick={{ fill: "#94a3b8", fontSize: 11 }} width={36} />
                   <Tooltip contentStyle={tooltipStil} />
                   <Legend wrapperStyle={{ fontSize: "12px", color: "#94a3b8" }} />
-                  <Bar dataKey="aktif" name="Aktif Kargo" fill="#6366f1" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="iade" name="Kargo İadesi" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="aktif" name={t("seriesActiveCargo")} fill="#6366f1" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="iade" name={t("cargoReturns")} fill="#f59e0b" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             )}
@@ -512,8 +520,8 @@ export function RaporlarPage(props: { http: BackendHttpClient }) {
 
       {personelDagilimi.length > 0 && (
         <GrafikKart
-          baslik="Personel Performansı"
-          alt="Seçilen tarih aralığında personel bazlı sipariş dağılımı"
+          baslik={t("personnelPerformance")}
+          alt={t("personnelPerformanceDetail")}
           testId="rapor-personel-performansi"
         >
           <div className="rapor-personel-kaydir">
@@ -534,8 +542,8 @@ export function RaporlarPage(props: { http: BackendHttpClient }) {
                   <YAxis axisLine={false} tickLine={false} tick={{ fill: "#94a3b8", fontSize: 11 }} width={36} />
                   <Tooltip contentStyle={tooltipStil} />
                   <Legend wrapperStyle={{ fontSize: "12px", color: "#94a3b8" }} />
-                  <Bar dataKey="siparis" name="Sipariş" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="iptal" name="İptal" fill="#ef4444" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="siparis" name={t("seriesOrders")} fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="iptal" name={t("statusCancelled")} fill="#ef4444" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>

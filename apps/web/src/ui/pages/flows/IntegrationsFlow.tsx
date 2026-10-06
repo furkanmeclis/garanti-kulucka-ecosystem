@@ -1,6 +1,8 @@
 import { Settings } from "lucide-react";
 import { instagramDraftImageUrl, instagramDraftCaption, instagramCaptionLimit, compactJson, FlowPanel, DetailPanel, DataRows } from "../../app/shared.js";
 import type { DashboardController } from "../../app/useDashboardController.js";
+import { useT } from "../../i18n/index.js";
+import { integrationsMessages } from "../../i18n/messages/integrations.js";
 
 export function IntegrationsFlow({ ctx }: { ctx: DashboardController }) {
   const {
@@ -25,21 +27,22 @@ export function IntegrationsFlow({ ctx }: { ctx: DashboardController }) {
     selectedProviderCatalogItem,
     selectedProviderPreview,
   } = ctx;
+  const t = useT(integrationsMessages);
 
   return (
-    <FlowPanel title="Entegrasyon Hesapları" icon={<Settings size={18} />} testId="integrations-flow">
+    <FlowPanel title={t("title")} icon={<Settings size={18} />} testId="integrations-flow">
             <div className="system-settings" data-testid="system-settings">
               <button className="primary-action" type="button" onClick={handleSaveProviderLiveGate}>
-                PTT live gate kapalı kaydet
+                {t("savePttLiveGateClosed")}
               </button>
               <button className="secondary-action" type="button" onClick={handleSaveOperationalPolicy}>
-                Operasyon politikasını kaydet
+                {t("saveOperationalPolicy")}
               </button>
               <DataRows rows={activeSettings.map((setting) => [setting.key, setting.scope, JSON.stringify(setting.value)])} />
-              <DetailPanel title="Operasyon Politikaları" testId="operation-policy-detail">
+              <DetailPanel title={t("policiesTitle")} testId="operation-policy-detail">
                 <DataRows
                   rows={[
-                    ["Retry", `${operationalPolicy.max_attempts} deneme`, `${operationalPolicy.retry_delay_ms} ms bekleme`],
+                    ["Retry", t("attempts", { count: operationalPolicy.max_attempts }), t("waitMs", { ms: operationalPolicy.retry_delay_ms })],
                     [
                       "Timeout",
                       `${operationalPolicy.request_timeout_ms} ms provider`,
@@ -47,77 +50,78 @@ export function IntegrationsFlow({ ctx }: { ctx: DashboardController }) {
                     ],
                     [
                       "Rate Limit",
-                      `${operationalPolicy.provider_rate_limit_per_minute}/dk`,
+                      t("perMinute", { count: operationalPolicy.provider_rate_limit_per_minute }),
                       `queue concurrency ${operationalPolicy.queue_concurrency}`,
                     ],
                     [
                       "Storage",
                       operationalPolicy.storage_bucket,
-                      `${operationalPolicy.lifecycle_days} gün / orphan cleanup ${
-                        operationalPolicy.orphan_cleanup_enabled ? "açık" : "kapalı"
-                      }`,
+                      t("lifecycleDays", {
+                        days: operationalPolicy.lifecycle_days,
+                        state: operationalPolicy.orphan_cleanup_enabled ? t("enabled") : t("disabled"),
+                      }),
                     ],
                   ]}
                 />
               </DetailPanel>
-              <DetailPanel title="Ayar Denetim Kayıtları" testId="settings-audit-detail">
+              <DetailPanel title={t("settingsAuditTitle")} testId="settings-audit-detail">
                 <DataRows
                   rows={[
-                    ["Kayıt", String(data.settingsAuditSummary.total_count), "settings audit summary"],
+                    [t("record"), String(data.settingsAuditSummary.total_count), "settings audit summary"],
                     [
-                      "Son işlem",
-                      latestSettingsAudit ? `${latestSettingsAudit.action} / ${latestSettingsAudit.entity_type}` : "denetim yok",
+                      t("lastAction"),
+                      latestSettingsAudit ? `${latestSettingsAudit.action} / ${latestSettingsAudit.entity_type}` : t("noAudit"),
                       latestSettingsAudit?.entity_id ?? "-",
                     ],
                     [
-                      "Aktör",
+                      t("actor"),
                       latestSettingsAudit?.actor_user_id === null || latestSettingsAudit?.actor_user_id === undefined
-                        ? "sistem"
+                        ? t("system")
                         : String(latestSettingsAudit.actor_user_id),
                       latestSettingsAudit?.created_at ?? "-",
                     ],
-                    ["Eski", compactJson(latestSettingsAudit?.old_value), "redacted"],
-                    ["Yeni", compactJson(latestSettingsAudit?.new_value), "redacted"],
+                    [t("oldValue"), compactJson(latestSettingsAudit?.old_value), "redacted"],
+                    [t("newValue"), compactJson(latestSettingsAudit?.new_value), "redacted"],
                   ]}
                 />
               </DetailPanel>
             </div>
             <button className="primary-action" type="button" onClick={handleUpsertIntegrationAccount}>
-              Instagram hesabı kaydet
+              {t("saveInstagramAccount")}
             </button>
             <DataRows rows={data.integrationAccounts.map((account) => [account.provider_name, account.display_name, account.status])} />
-            <DetailPanel title="Provider Canlı Mod Sınırları" testId="provider-catalog-detail">
+            <DetailPanel title={t("providerLiveLimitsTitle")} testId="provider-catalog-detail">
               <DataRows
                 rows={[
-                  ["Katalog", String(data.providerCatalog.length), "backend provider catalog"],
+                  [t("catalog"), String(data.providerCatalog.length), "backend provider catalog"],
                   [
-                    "İlk provider",
+                    t("firstProvider"),
                     selectedProviderCatalogItem?.provider ?? "-",
                     selectedProviderCatalogItem?.contract_mode ?? "-",
                   ],
                   [
-                    "Canlı çağrı",
-                    selectedProviderCatalogItem?.live_call_permitted === false ? "kapalı" : "-",
+                    t("liveCall"),
+                    selectedProviderCatalogItem?.live_call_permitted === false ? t("disabled") : "-",
                     selectedProviderCatalogItem?.live_feature_flag_key ?? "-",
                   ],
                   [
-                    "Blok nedeni",
+                    t("blockReason"),
                     selectedProviderCatalogItem?.live_block_reason ?? "-",
                     selectedProviderCatalogItem?.supported_operations.join(", ") ?? "-",
                   ],
-                  ["Kanallar", data.providerCatalog.map((item) => item.channels.join("+")).join(" / "), "adapter sınırları"],
-                  ["Providerlar", data.providerCatalog.map((item) => item.provider).join(", "), "canlı HTTP kapalı"],
+                  [t("channels"), data.providerCatalog.map((item) => item.channels.join("+")).join(" / "), t("adapterLimits")],
+                  [t("providers"), data.providerCatalog.map((item) => item.provider).join(", "), t("liveHttpDisabled")],
                 ]}
               />
             </DetailPanel>
-            <DetailPanel title="Instagram Yayın Önizleme" testId="instagram-publish-preview">
+            <DetailPanel title={t("instagramPreviewTitle")} testId="instagram-publish-preview">
               <DataRows
                 rows={[
-                  ["Fotoğraf URL", instagramDraftImageUrl, "Graph publish"],
-                  ["Caption", instagramDraftCaption, `${instagramDraftCaption.length} / ${instagramCaptionLimit} karakter`],
-                  ["Önizleme hesabı", integrationSnapshot?.account.display_name ?? "garantikulucka", "Instagram"],
-                  ["Yayın modu", "taslak", "canlı provider kapalı"],
-                  ["Son backend isteği", lastInstagramPublishPreview ?? "-", "provider attempt dry-run"],
+                  [t("photoUrl"), instagramDraftImageUrl, "Graph publish"],
+                  ["Caption", instagramDraftCaption, t("characterCount", { length: instagramDraftCaption.length, limit: instagramCaptionLimit })],
+                  [t("previewAccount"), integrationSnapshot?.account.display_name ?? "garantikulucka", "Instagram"],
+                  [t("publishMode"), t("draft"), t("liveProviderDisabled")],
+                  [t("lastBackendRequest"), lastInstagramPublishPreview ?? "-", "provider attempt dry-run"],
                 ]}
               />
               <button
@@ -126,28 +130,28 @@ export function IntegrationsFlow({ ctx }: { ctx: DashboardController }) {
                 disabled={instagramPublishPreviewing}
                 onClick={() => void handleCreateInstagramPublishPreview()}
               >
-                {instagramPublishPreviewing ? "Yayın dry-run hazırlanıyor" : "Instagram yayın dry-run hazırla"}
+                {instagramPublishPreviewing ? t("publishDryRunPreparing") : t("publishDryRunPrepare")}
               </button>
             </DetailPanel>
-            <DetailPanel title="Instagram Analitik Özeti" testId="instagram-analytics-summary">
+            <DetailPanel title={t("instagramAnalyticsTitle")} testId="instagram-analytics-summary">
               <DataRows
                 rows={[
-                  ["Takipçi", String(instagramAnalytics.followers), "backend snapshot"],
-                  ["Erişim", String(instagramAnalytics.reach), "legacy analitik"],
-                  ["Gösterim", String(instagramAnalytics.impressions), "legacy analitik"],
-                  ["Profil Görüntüleme", String(instagramAnalytics.profileViews), `${instagramAnalytics.engagementRate}% etkileşim`],
+                  [t("followers"), String(instagramAnalytics.followers), "backend snapshot"],
+                  [t("reach"), String(instagramAnalytics.reach), t("legacyAnalytics")],
+                  [t("impressions"), String(instagramAnalytics.impressions), t("legacyAnalytics")],
+                  [t("profileViews"), String(instagramAnalytics.profileViews), t("engagement", { rate: instagramAnalytics.engagementRate })],
                 ]}
               />
             </DetailPanel>
-            <DetailPanel title="Provider Deneme Kayıtları" testId="provider-attempts-detail">
+            <DetailPanel title={t("providerAttemptsTitle")} testId="provider-attempts-detail">
               <DataRows
                 rows={[
-                  ["Kayıt", String(providerAttemptTotal), "provider debug summary API"],
+                  [t("record"), String(providerAttemptTotal), "provider debug summary API"],
                   [
-                    "Son deneme",
+                    t("lastAttempt"),
                     selectedProviderAttempt
                       ? `${selectedProviderAttempt.provider_key} / ${selectedProviderAttempt.operation}`
-                      : "deneme yok",
+                      : t("noAttempt"),
                     selectedProviderAttempt?.status ?? "-",
                   ],
                   [
@@ -160,19 +164,19 @@ export function IntegrationsFlow({ ctx }: { ctx: DashboardController }) {
                   [
                     "Retry",
                     selectedProviderAttempt?.retry_decision ?? "-",
-                    selectedProviderAttempt?.next_retry_at ?? "yeniden deneme yok",
+                    selectedProviderAttempt?.next_retry_at ?? t("noRetry"),
                   ],
                   [
-                    "İstek",
+                    t("request"),
                     selectedProviderAttempt?.request_id ?? "-",
-                    selectedProviderAttempt?.idempotency_key ?? "idempotency yok",
+                    selectedProviderAttempt?.idempotency_key ?? t("noIdempotency"),
                   ],
                   [
-                    "Önizleme",
+                    t("preview"),
                     selectedProviderPreview
                       ? `${selectedProviderPreview.method} ${selectedProviderPreview.path}`
-                      : "dry-run preview yok",
-                    selectedProviderPreview?.live_call_performed === false ? "canlı çağrı yok" : "-",
+                      : t("noDryRunPreview"),
+                    selectedProviderPreview?.live_call_performed === false ? t("noLiveCall") : "-",
                   ],
                   [
                     "Header",
@@ -187,26 +191,26 @@ export function IntegrationsFlow({ ctx }: { ctx: DashboardController }) {
                 ]}
               />
             </DetailPanel>
-            <DetailPanel title="Entegrasyon Denetim Kayıtları" testId="integration-audit-detail">
+            <DetailPanel title={t("integrationAuditTitle")} testId="integration-audit-detail">
               <DataRows
                 rows={[
-                  ["Kayıt", String(data.integrationAuditSummary.total_count), "integration audit summary"],
+                  [t("record"), String(data.integrationAuditSummary.total_count), "integration audit summary"],
                   [
-                    "Son işlem",
+                    t("lastAction"),
                     latestIntegrationAudit
                       ? `${latestIntegrationAudit.action} / ${latestIntegrationAudit.entity_type}`
-                      : "denetim yok",
+                      : t("noAudit"),
                     latestIntegrationAudit?.entity_id ?? "-",
                   ],
                   [
-                    "Aktör",
+                    t("actor"),
                     latestIntegrationAudit?.actor_user_id === null || latestIntegrationAudit?.actor_user_id === undefined
-                      ? "sistem"
+                      ? t("system")
                       : String(latestIntegrationAudit.actor_user_id),
                     latestIntegrationAudit?.created_at ?? "-",
                   ],
-                  ["Eski", compactJson(latestIntegrationAudit?.old_value), "redacted"],
-                  ["Yeni", compactJson(latestIntegrationAudit?.new_value), "redacted"],
+                  [t("oldValue"), compactJson(latestIntegrationAudit?.old_value), "redacted"],
+                  [t("newValue"), compactJson(latestIntegrationAudit?.new_value), "redacted"],
                 ]}
               />
             </DetailPanel>
@@ -218,26 +222,26 @@ export function IntegrationsFlow({ ctx }: { ctx: DashboardController }) {
                   type="button"
                   onClick={() => handleOpenIntegrationAccount(account.public_id)}
                 >
-                  {account.display_name} detay
+                  {t("accountDetail", { name: account.display_name })}
                 </button>
               ))}
               <button className="secondary-action" type="button" onClick={handleSaveIntegrationToken}>
-                Access token kaydet
+                {t("saveAccessToken")}
               </button>
               <button className="secondary-action" type="button" onClick={handleSaveIntegrationSetting}>
-                Webhook ayarını kaydet
+                {t("saveWebhookSetting")}
               </button>
             </div>
             {integrationSnapshot && (
               <div className="integration-detail" data-testid="integration-detail">
                 <div>
                   <h2>{integrationSnapshot.account.display_name}</h2>
-                  <p>{integrationSnapshot.account.external_account_id ?? "Harici hesap yok"}</p>
+                  <p>{integrationSnapshot.account.external_account_id ?? t("noExternalAccount")}</p>
                 </div>
                 <DataRows
                   rows={[
                     ["Provider", integrationSnapshot.account.provider_name, integrationSnapshot.account.status],
-                    ["Ayar", String(integrationSnapshot.settings.length), "backend snapshot"],
+                    [t("setting"), String(integrationSnapshot.settings.length), "backend snapshot"],
                     ["Token", String(integrationSnapshot.tokens.length), "value masked"],
                   ]}
                 />
@@ -251,8 +255,8 @@ export function IntegrationsFlow({ ctx }: { ctx: DashboardController }) {
                 <DataRows
                   rows={integrationSnapshot.tokens.map((token) => [
                     token.token_type,
-                    token.expires_at ?? "süresiz",
-                    token.value === null ? "maskeli" : "gizli veri gösterilmedi",
+                    token.expires_at ?? t("noExpiry"),
+                    token.value === null ? t("masked") : t("secretNotShown"),
                   ])}
                 />
               </div>

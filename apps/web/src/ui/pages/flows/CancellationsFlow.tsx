@@ -1,6 +1,8 @@
 import { XCircle } from "lucide-react";
 import { cx, FlowPanel, DetailPanel, DataRows } from "../../app/shared.js";
 import type { DashboardController } from "../../app/useDashboardController.js";
+import { useT } from "../../i18n/index.js";
+import { cancellationsMessages } from "../../i18n/messages/cancellations.js";
 
 export function CancellationsFlow({ ctx }: { ctx: DashboardController }) {
   const {
@@ -9,9 +11,10 @@ export function CancellationsFlow({ ctx }: { ctx: DashboardController }) {
     selectedOrder,
     setSelectedOrderId,
   } = ctx;
+  const t = useT(cancellationsMessages);
 
   return (
-    <FlowPanel title="İptaller" icon={<XCircle size={18} />} testId="cancellations-flow">
+    <FlowPanel title={t("title")} icon={<XCircle size={18} />} testId="cancellations-flow">
             <DataRows rows={data.orders.map((order) => [order.order_number, order.status, order.customer_full_name ?? "-"])} />
             <div className="detail-actions">
               {data.orders.map((order) => (
@@ -21,23 +24,23 @@ export function CancellationsFlow({ ctx }: { ctx: DashboardController }) {
                   type="button"
                   onClick={() => setSelectedOrderId(order.public_id)}
                 >
-                  {order.order_number} incele
+                  {t("reviewOrder", { orderNumber: order.order_number })}
                 </button>
               ))}
             </div>
-            <DetailPanel title="İptal İncelemesi" testId="cancellation-detail">
+            <DetailPanel title={t("reviewTitle")} testId="cancellation-detail">
               <DataRows
                 rows={[
-                  ["Sipariş kaydı", String(data.orderSummary.total_count), "orders summary API"],
-                  ["Seçili sipariş", selectedOrder?.order_number ?? "-", selectedOrder?.customer_full_name ?? "-"],
-                  ["Durum", selectedOrder?.status ?? "-", selectedOrder?.confirmation_status ?? "teyit bekliyor"],
-                  ["Tutar", selectedOrder ? `${selectedOrder.total_amount} ${selectedOrder.currency}` : "-", selectedOrder?.source ?? "-"],
-                  ["Not", selectedOrder?.notes ?? "-", "orders API"],
+                  [t("orderRecords"), String(data.orderSummary.total_count), "orders summary API"],
+                  [t("selectedOrder"), selectedOrder?.order_number ?? "-", selectedOrder?.customer_full_name ?? "-"],
+                  [t("status"), selectedOrder?.status ?? "-", selectedOrder?.confirmation_status ?? t("awaitingConfirmation")],
+                  [t("amount"), selectedOrder ? `${selectedOrder.total_amount} ${selectedOrder.currency}` : "-", selectedOrder?.source ?? "-"],
+                  [t("note"), selectedOrder?.notes ?? "-", "orders API"],
                 ]}
               />
             </DetailPanel>
             <button className="primary-action" type="button" onClick={() => void handleCancelSelectedOrder()}>
-              İptali onayla
+              {t("confirmCancellation")}
             </button>
           </FlowPanel>
   );

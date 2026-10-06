@@ -3,6 +3,8 @@ import { NavLink } from "react-router-dom";
 import { ArrowLeft, CheckCircle, FileText, LogIn, Shield, Trash2 } from "lucide-react";
 import { DataRows } from "../app/shared.js";
 import { useUiMessageText, type UiMessage } from "../i18n/messages/status.js";
+import { useT } from "../i18n/index.js";
+import { authMessages } from "../i18n/messages/auth.js";
 
 export function publicPageFromPath(pathname: string): "privacy" | "terms" | "deletion" | null {
   if (pathname === "/gizlilik-politikasi") return "privacy";
@@ -12,35 +14,36 @@ export function publicPageFromPath(pathname: string): "privacy" | "terms" | "del
 }
 
 export function PublicPage(props: { page: "privacy" | "terms" | "deletion" }) {
+  const t = useT(authMessages);
   const content = {
     privacy: {
-      title: "Gizlilik Politikası",
-      subtitle: "Privacy Policy",
+      title: t("privacyTitle"),
+      subtitle: t("privacySubtitle"),
       icon: <Shield size={20} aria-hidden="true" />,
       rows: [
-        ["Veri kapsamı", "Müşteri iletişimi, sipariş, kargo ve destek kayıtları"],
-        ["Altyapı", "Backend API, production object storage ve provider adapter sınırları"],
-        ["Erişim", "Rol bazlı panel oturumu ve denetlenebilir admin ayarları"],
+        [t("privacyDataScope"), t("privacyDataScopeValue")],
+        [t("privacyInfrastructure"), t("privacyInfrastructureValue")],
+        [t("privacyAccess"), t("privacyAccessValue")],
       ],
     },
     terms: {
-      title: "Kullanım Koşulları",
-      subtitle: "Terms of Service",
+      title: t("termsTitle"),
+      subtitle: t("termsSubtitle"),
       icon: <FileText size={20} aria-hidden="true" />,
       rows: [
-        ["Hizmet", "Mesaj, sipariş, kargo, dosya ve santral operasyon paneli"],
-        ["Kullanım", "Yetkili kullanıcılar yalnızca iş süreçleri için erişebilir"],
-        ["Sağlayıcılar", "PTT, Sürat, KolayBi, Meta, NetGSM ve SIP/Vapi sınırları"],
+        [t("termsService"), t("termsServiceValue")],
+        [t("termsUsage"), t("termsUsageValue")],
+        [t("termsProviders"), t("termsProvidersValue")],
       ],
     },
     deletion: {
-      title: "Veri Silme Talebi",
-      subtitle: "Data Deletion",
+      title: t("deletionTitle"),
+      subtitle: t("deletionSubtitle"),
       icon: <Trash2 size={20} aria-hidden="true" />,
       rows: [
-        ["Talep", "Müşteri kimliği ve iletişim kanalıyla operasyon ekibine iletilir"],
-        ["Süreç", "Kayıtlar yasal saklama ve provider zorunluluklarına göre incelenir"],
-        ["Durum", "Talep sonucu kayıtlı iletişim kanalı üzerinden bildirilir"],
+        [t("deletionRequest"), t("deletionRequestValue")],
+        [t("deletionProcess"), t("deletionProcessValue")],
+        [t("deletionStatus"), t("deletionStatusValue")],
       ],
     },
   }[props.page];
@@ -50,7 +53,7 @@ export function PublicPage(props: { page: "privacy" | "terms" | "deletion" }) {
       <section className="public-card">
         <NavLink className="back-link" to="/giris">
           <ArrowLeft size={16} aria-hidden="true" />
-          Giriş sayfasına dön
+          {t("backToLogin")}
         </NavLink>
         <div className="public-title">
           <span className="public-icon">{content.icon}</span>
@@ -66,6 +69,7 @@ export function PublicPage(props: { page: "privacy" | "terms" | "deletion" }) {
 }
 
 export function ResetPasswordScreen() {
+  const t = useT(authMessages);
   const [submitted, setSubmitted] = useState(false);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -78,25 +82,25 @@ export function ResetPasswordScreen() {
       <form className="login-card" onSubmit={handleSubmit} data-testid="reset-password-flow">
         <NavLink className="back-link" to="/giris">
           <ArrowLeft size={16} aria-hidden="true" />
-          Giriş sayfasına dön
+          {t("backToLogin")}
         </NavLink>
         <div className="brand large">
           <span className="brand-mark">G</span>
-          <span>Şifre sıfırlama</span>
+          <span>{t("resetTitle")}</span>
         </div>
         {submitted ? (
           <p className="success-line">
             <CheckCircle size={16} aria-hidden="true" />
-            Sıfırlama talebi backend auth akışına kaydedildi.
+            {t("resetSubmitted")}
           </p>
         ) : (
           <>
             <label>
-              E-posta
+              {t("email")}
               <input name="email" type="email" defaultValue="admin@example.com" />
             </label>
             <button className="primary-action" type="submit">
-              Sıfırlama bağlantısı gönder
+              {t("sendResetLink")}
             </button>
           </>
         )}
@@ -107,6 +111,7 @@ export function ResetPasswordScreen() {
 
 export function LoginScreen(props: { onLogin: (event: FormEvent<HTMLFormElement>) => void; status: UiMessage }) {
   const messageText = useUiMessageText();
+  const t = useT(authMessages);
   return (
     <main className="login-screen">
       <form className="login-card" onSubmit={props.onLogin}>
@@ -115,22 +120,22 @@ export function LoginScreen(props: { onLogin: (event: FormEvent<HTMLFormElement>
           <span>Garanti Kuluçka</span>
         </div>
         <label>
-          E-posta
+          {t("email")}
           <input name="email" defaultValue="admin@example.com" type="email" />
         </label>
         <label>
-          Şifre
+          {t("password")}
           <input name="password" defaultValue="password" type="password" />
         </label>
         <button className="primary-action" type="submit">
           <LogIn size={16} aria-hidden="true" />
-          Giriş yap
+          {t("login")}
         </button>
         <div className="auth-links">
-          <NavLink to="/sifre-sifirla">Şifremi unuttum</NavLink>
-          <NavLink to="/gizlilik-politikasi">Gizlilik Politikası</NavLink>
-          <NavLink to="/kullanim-kosullari">Kullanım Koşulları</NavLink>
-          <NavLink to="/veri-silme">Veri Silme Talebi</NavLink>
+          <NavLink to="/sifre-sifirla">{t("forgotPassword")}</NavLink>
+          <NavLink to="/gizlilik-politikasi">{t("privacyTitle")}</NavLink>
+          <NavLink to="/kullanim-kosullari">{t("termsTitle")}</NavLink>
+          <NavLink to="/veri-silme">{t("deletionTitle")}</NavLink>
         </div>
         <p aria-live="polite">{messageText(props.status)}</p>
       </form>

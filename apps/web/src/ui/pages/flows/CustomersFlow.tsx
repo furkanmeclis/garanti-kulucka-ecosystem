@@ -1,6 +1,8 @@
 import { Users } from "lucide-react";
 import { FlowPanel, DetailPanel, Metric, DataRows } from "../../app/shared.js";
 import type { DashboardController } from "../../app/useDashboardController.js";
+import { useT } from "../../i18n/index.js";
+import { customersMessages } from "../../i18n/messages/customers.js";
 
 export function CustomersFlow({ ctx }: { ctx: DashboardController }) {
   const {
@@ -10,15 +12,16 @@ export function CustomersFlow({ ctx }: { ctx: DashboardController }) {
     data,
     selectedCustomer,
   } = ctx;
+  const t = useT(customersMessages);
 
   return (
-    <FlowPanel title="Müşteriler" icon={<Users size={18} />} testId="customers-flow">
+    <FlowPanel title={t("title")} icon={<Users size={18} />} testId="customers-flow">
             <div className="report-grid">
-              <Metric title="Müşteri" value={String(data.customerSummary.total_count)} />
-              <Metric title="Telefon" value={String(customerWithPhoneCount)} />
-              <Metric title="E-posta" value={String(customerWithEmailCount)} />
+              <Metric title={t("metricCustomer")} value={String(data.customerSummary.total_count)} />
+              <Metric title={t("metricPhone")} value={String(customerWithPhoneCount)} />
+              <Metric title={t("metricEmail")} value={String(customerWithEmailCount)} />
             </div>
-            <DetailPanel title="Müşteri Listesi" testId="customers-list-detail">
+            <DetailPanel title={t("listTitle")} testId="customers-list-detail">
               <DataRows
                 rows={data.customers.map((customer) => [
                   customer.full_name,
@@ -27,13 +30,13 @@ export function CustomersFlow({ ctx }: { ctx: DashboardController }) {
                 ])}
               />
             </DetailPanel>
-            <DetailPanel title="Müşteri Kartı" testId="customer-card-detail">
+            <DetailPanel title={t("cardTitle")} testId="customer-card-detail">
               <DataRows
                 rows={[
-                  ["Seçili müşteri", selectedCustomer?.full_name ?? "-", selectedCustomer?.username ?? "-"],
-                  ["Telefon", selectedCustomer?.phone ?? "-", "customers API"],
-                  ["E-posta", selectedCustomer?.email ?? "-", selectedCustomer?.updated_at ?? "-"],
-                  ["Notlu müşteri", String(customerWithNotesCount), "legacy müşteri notu"],
+                  [t("selectedCustomer"), selectedCustomer?.full_name ?? "-", selectedCustomer?.username ?? "-"],
+                  [t("phone"), selectedCustomer?.phone ?? "-", "customers API"],
+                  [t("email"), selectedCustomer?.email ?? "-", selectedCustomer?.updated_at ?? "-"],
+                  [t("customersWithNotes"), String(customerWithNotesCount), t("legacyCustomerNote")],
                 ]}
               />
             </DetailPanel>

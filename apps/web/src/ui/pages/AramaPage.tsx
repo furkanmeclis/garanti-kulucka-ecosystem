@@ -24,6 +24,8 @@ import {
   type NetgsmTeyitSettings,
   type VoiceClient,
 } from "../../api/voice-client.js";
+import { useT } from "../i18n/index.js";
+import { callsMessages } from "../i18n/messages/calls.js";
 
 /**
  * Legacy parity: garanti-kulucka/frontend/src/pages/sesli-asistan/AramaPage.jsx
@@ -43,11 +45,12 @@ function hataMesaji(error: unknown, fallback: string) {
 
 export function AramaPage(props: { http: BackendHttpClient }) {
   const client = useMemo(() => createVoiceClient(props.http), [props.http]);
+  const t = useT(callsMessages);
   return (
     <section className="arama-page" data-testid="calls-flow">
       <div>
-        <h1>Arama</h1>
-        <p className="arama-muted">NetGSM otomatik teyit araması ve görüşme kayıtları</p>
+        <h1>{t("pageTitle")}</h1>
+        <p className="arama-muted">{t("pageSubtitle")}</p>
       </div>
       <NetgsmAyarlar client={client} />
       <GorusmeDetay client={client} />
@@ -57,6 +60,7 @@ export function AramaPage(props: { http: BackendHttpClient }) {
 
 function NetgsmAyarlar(props: { client: VoiceClient }) {
   const { client } = props;
+  const t = useT(callsMessages);
   const [ayarlar, setAyarlar] = useState<NetgsmTeyitSettings>(VARSAYILAN);
   const [yukleniyor, setYukleniyor] = useState(true);
   const [kaydediliyor, setKaydediliyor] = useState(false);
@@ -88,9 +92,9 @@ function NetgsmAyarlar(props: { client: VoiceClient }) {
     setKaydediliyor(true);
     try {
       await client.updateTeyitSettings(ayarlar);
-      setMesaj({ tip: "basari", metin: "Ayarlar kaydedildi." });
+      setMesaj({ tip: "basari", metin: t("settingsSaved") });
     } catch (error) {
-      setMesaj({ tip: "hata", metin: "Kaydedilemedi: " + hataMesaji(error, "bilinmeyen hata") });
+      setMesaj({ tip: "hata", metin: t("saveFailed", { error: hataMesaji(error, t("unknownError")) }) });
     } finally {
       setKaydediliyor(false);
     }
@@ -102,7 +106,7 @@ function NetgsmAyarlar(props: { client: VoiceClient }) {
     return (
       <div className="arama-loading">
         <Loader2 size={16} className="arama-spin" />
-        <span>Yükleniyor...</span>
+        <span>{t("loading")}</span>
       </div>
     );
   }
@@ -114,43 +118,44 @@ function NetgsmAyarlar(props: { client: VoiceClient }) {
           <Phone size={20} />
         </div>
         <div>
-          <h3>Otomatik Teyit Araması</h3>
-          <p className="arama-muted">Yeni siparişler için otomatik IVR araması</p>
+          <h3>{t("autoCallTitle")}</h3>
+          <p className="arama-muted">{t("autoCallSubtitle")}</p>
         </div>
       </div>
 
       <div className="arama-toggle-row">
         <div>
-          <p className="arama-strong">Otomatik arama aktif</p>
-          <p className="arama-muted">Yeni sipariş geldiğinde belirtilen süre sonra otomatik arar</p>
+          <p className="arama-strong">{t("autoCallActive")}</p>
+          <p className="arama-muted">{t("autoCallActiveHint")}</p>
         </div>
-        <button type="button" className="arama-toggle" aria-label="Otomatik arama aktif" aria-pressed={ayarlar.aktif} onClick={() => set("aktif", !ayarlar.aktif)}>
+        <button type="button" className="arama-toggle" aria-label={t("autoCallActive")} aria-pressed={ayarlar.aktif} onClick={() => set("aktif", !ayarlar.aktif)}>
           {ayarlar.aktif ? <ToggleRight size={32} className="arama-green" /> : <ToggleLeft size={32} />}
         </button>
       </div>
 
       <div className="arama-number-grid">
         <label>
-          <span>İlk arama (dakika sonra)</span>
+          <span>{t("firstCallLabel")}</span>
           <input type="number" min={1} max={60} value={ayarlar.ilk_arama_dakika} onChange={(e) => set("ilk_arama_dakika", Math.max(1, Number.parseInt(e.target.value, 10) || 1))} />
-          <small>Sipariş oluşturulduktan kaç dakika sonra aransın</small>
+          <small>{t("firstCallHint")}</small>
         </label>
         <label>
-          <span>Maksimum deneme sayısı</span>
+          <span>{t("maxAttemptsLabel")}</span>
           <input type="number" min={1} max={10} value={ayarlar.max_deneme} onChange={(e) => set("max_deneme", Math.max(1, Number.parseInt(e.target.value, 10) || 1))} />
-          <small>Ulaşılamazsa kaç kez tekrar denesin</small>
+          <small>{t("maxAttemptsHint")}</small>
         </label>
         <label>
-          <span>Denemeler arası (dakika)</span>
+          <span>{t("retryIntervalLabel")}</span>
           <input type="number" min={1} max={120} value={ayarlar.deneme_arasi_dakika} onChange={(e) => set("deneme_arasi_dakika", Math.max(1, Number.parseInt(e.target.value, 10) || 1))} />
-          <small>Ulaşılamazsa kaç dakika sonra tekrar denesin</small>
+          <small>{t("retryIntervalHint")}</small>
         </label>
       </div>
 
       {ayarlar.aktif && (
         <div className="arama-summary">
-          Sipariş oluşturulduktan <strong>{ayarlar.ilk_arama_dakika} dakika</strong> sonra aranacak. Ulaşılamazsa{" "}
-          <strong>{ayarlar.deneme_arasi_dakika} dakika</strong> arayla en fazla <strong>{ayarlar.max_deneme} kez</strong> tekrar denenecek.
+          {t("summaryLead")} <strong>{t("summaryMinutes", { count: ayarlar.ilk_arama_dakika })}</strong> {t("summaryAfterFirst")}{" "}
+          <strong>{t("summaryMinutes", { count: ayarlar.deneme_arasi_dakika })}</strong> {t("summaryInterval")}{" "}
+          <strong>{t("summaryTimes", { count: ayarlar.max_deneme })}</strong> {t("summaryTail")}
         </div>
       )}
 
@@ -158,7 +163,7 @@ function NetgsmAyarlar(props: { client: VoiceClient }) {
 
       <button type="button" className="arama-save" onClick={() => void handleKaydet()} disabled={kaydediliyor}>
         {kaydediliyor ? <Loader2 size={16} className="arama-spin" /> : <Save size={16} />}
-        Kaydet
+        {t("save")}
       </button>
     </div>
   );
@@ -168,6 +173,7 @@ type GorusmeTab = "gelen" | "giden" | "istatistik";
 
 function GorusmeDetay(props: { client: VoiceClient }) {
   const { client } = props;
+  const t = useT(callsMessages);
   const [aktifTab, setAktifTab] = useState<GorusmeTab>("gelen");
   const [yukleniyor, setYukleniyor] = useState(false);
   const [yapilandirilmis, setYapilandirilmis] = useState<boolean | null>(null);
@@ -202,15 +208,15 @@ function GorusmeDetay(props: { client: VoiceClient }) {
       });
       audio.addEventListener("ended", () => setOynatilan(null));
       audio.addEventListener("error", () => {
-        setHata("Ses kaydı oynatılamadı");
+        setHata(t("playbackFailed"));
         setOynatilan(null);
       });
       audio.play().catch(() => {
-        setHata("Ses kaydı oynatılamadı");
+        setHata(t("playbackFailed"));
         setOynatilan(null);
       });
     },
-    [oynatilan],
+    [oynatilan, t],
   );
 
   const ileriSar = useCallback(() => {
@@ -263,7 +269,7 @@ function GorusmeDetay(props: { client: VoiceClient }) {
         }
         const data = await client.listCdr({ yon: aktifTab, sayfa, sayfaBoyutu });
         if (data.success === false) {
-          setHata(data.error || "API hatası");
+          setHata(data.error || t("apiError"));
           setAramalar([]);
           setToplamKayit(0);
           return;
@@ -272,14 +278,14 @@ function GorusmeDetay(props: { client: VoiceClient }) {
         setToplamKayit(data.data?.toplamKayit ?? 0);
         setToplamSure(data.data?.toplamSure ?? "00:00:00");
       } catch (error) {
-        setHata(hataMesaji(error, "Veriler yüklenirken bir hata oluştu"));
+        setHata(hataMesaji(error, t("loadFailed")));
         setAramalar([]);
         setToplamKayit(0);
       } finally {
         setYukleniyor(false);
       }
     },
-    [client, yapilandirilmis, aktifTab, sayfa, sayfaBoyutu, filtreler.baslangicTarih, filtreler.bitisTarih],
+    [client, yapilandirilmis, aktifTab, sayfa, sayfaBoyutu, filtreler.baslangicTarih, filtreler.bitisTarih, t],
   );
 
   useEffect(() => {
@@ -294,8 +300,8 @@ function GorusmeDetay(props: { client: VoiceClient }) {
     return (
       <div className="arama-unconfigured" data-testid="netgsm-unconfigured">
         <Phone size={64} />
-        <h2>Net GSM Yapılandırılmamış</h2>
-        <p>Görüşme detaylarını görebilmek için Net GSM API bilgilerinin sunucu ortam değişkenlerinde tanımlanması gerekiyor.</p>
+        <h2>{t("netgsmUnconfiguredTitle")}</h2>
+        <p>{t("netgsmUnconfiguredBody")}</p>
         <div className="arama-code">
           NETGSM_USERCODE=...
           <br />
@@ -306,17 +312,17 @@ function GorusmeDetay(props: { client: VoiceClient }) {
   }
 
   const tabs: Array<{ id: GorusmeTab; label: string; icon: typeof Phone }> = [
-    { id: "gelen", label: "Gelen Arama", icon: PhoneIncoming },
-    { id: "giden", label: "Giden Arama", icon: PhoneOutgoing },
-    { id: "istatistik", label: "İstatistik", icon: BarChart3 },
+    { id: "gelen", label: t("tabIncoming"), icon: PhoneIncoming },
+    { id: "giden", label: t("tabOutgoing"), icon: PhoneOutgoing },
+    { id: "istatistik", label: t("tabStatistics"), icon: BarChart3 },
   ];
   const toplamSayfa = toplamKayit > 0 ? Math.ceil(toplamKayit / sayfaBoyutu) : sayfa;
 
   return (
     <div className="arama-gorusme" data-testid="netgsm-gorusme">
       <div className="arama-gorusme-head">
-        <h2>Görüşme Kayıtları</h2>
-        <p className="arama-muted">Net GSM sabit telefon arama kayıtları</p>
+        <h2>{t("recordsTitle")}</h2>
+        <p className="arama-muted">{t("recordsSubtitle")}</p>
       </div>
 
       <nav className="arama-tabs">
@@ -335,19 +341,19 @@ function GorusmeDetay(props: { client: VoiceClient }) {
         <div className="arama-toolbar-actions">
           <button type="button" className={filtreAcik ? "arama-filter-button active" : "arama-filter-button"} onClick={() => setFiltreAcik(!filtreAcik)}>
             <Filter size={16} />
-            Filtrele
+            {t("filter")}
           </button>
           <button type="button" className="arama-filter-button" onClick={() => void verileriYukle(true)} disabled={yukleniyor}>
             <RefreshCw size={16} className={yukleniyor ? "arama-spin" : undefined} />
-            Yenile
+            {t("refresh")}
           </button>
         </div>
         <div className="arama-totals">
           <span>
-            Kayıt Sayısı: <strong>{toplamKayit}</strong>
+            {t("recordCount")} <strong>{toplamKayit}</strong>
           </span>
           <span>
-            Toplam Süre: <strong>{toplamSure}</strong>
+            {t("totalDuration")} <strong>{toplamSure}</strong>
           </span>
         </div>
       </div>
@@ -355,23 +361,23 @@ function GorusmeDetay(props: { client: VoiceClient }) {
       {filtreAcik && (
         <div className="arama-filter-panel">
           <label>
-            <span>Başlangıç Tarihi</span>
+            <span>{t("startDate")}</span>
             <input type="date" value={filtreler.baslangicTarih} onChange={(e) => setFiltreler({ ...filtreler, baslangicTarih: e.target.value })} />
           </label>
           <label>
-            <span>Bitiş Tarihi</span>
+            <span>{t("endDate")}</span>
             <input type="date" value={filtreler.bitisTarih} onChange={(e) => setFiltreler({ ...filtreler, bitisTarih: e.target.value })} />
           </label>
           <label>
-            <span>Numara Ara</span>
+            <span>{t("searchNumber")}</span>
             <div className="arama-search">
               <Search size={16} />
-              <input type="text" placeholder="Numara ara..." value={filtreler.arama} onChange={(e) => setFiltreler({ ...filtreler, arama: e.target.value })} />
+              <input type="text" placeholder={t("searchNumberPlaceholder")} value={filtreler.arama} onChange={(e) => setFiltreler({ ...filtreler, arama: e.target.value })} />
             </div>
           </label>
           <div className="arama-filter-submit">
             <button type="button" onClick={() => void verileriYukle(true)}>
-              Filtrele
+              {t("filter")}
             </button>
           </div>
         </div>
@@ -381,7 +387,7 @@ function GorusmeDetay(props: { client: VoiceClient }) {
         <div className="arama-error">
           <AlertCircle size={20} />
           <div>
-            <h3>API Hatası</h3>
+            <h3>{t("apiErrorTitle")}</h3>
             <p>{hata}</p>
           </div>
         </div>
@@ -391,7 +397,7 @@ function GorusmeDetay(props: { client: VoiceClient }) {
         yukleniyor ? (
           <div className="arama-loading arama-loading-center">
             <Loader2 size={32} className="arama-spin" />
-            <span>İstatistikler yükleniyor...</span>
+            <span>{t("statisticsLoading")}</span>
           </div>
         ) : (
           <div className="arama-stats" data-testid="netgsm-cdr-stats">
@@ -399,55 +405,53 @@ function GorusmeDetay(props: { client: VoiceClient }) {
               <div className="arama-stat">
                 <PhoneIncoming size={24} className="arama-green" />
                 <div>
-                  <p className="arama-muted">Gelen Aramalar</p>
+                  <p className="arama-muted">{t("incomingCalls")}</p>
                   <strong>{istatistikler?.gelenArama || 0}</strong>
-                  <small>
-                    Cevaplı: {istatistikler?.gelenCevapli || 0} | Cevapsız: {istatistikler?.gelenCevapsiz || 0}
-                  </small>
+                  <small>{t("answeredMissed", { answered: istatistikler?.gelenCevapli || 0, missed: istatistikler?.gelenCevapsiz || 0 })}</small>
                 </div>
               </div>
               <div className="arama-stat">
                 <PhoneOutgoing size={24} className="arama-blue" />
                 <div>
-                  <p className="arama-muted">Giden Aramalar</p>
+                  <p className="arama-muted">{t("outgoingCalls")}</p>
                   <strong>{istatistikler?.gidenArama || 0}</strong>
-                  <small>Toplam giden arama sayısı</small>
+                  <small>{t("outgoingCallsHint")}</small>
                 </div>
               </div>
               <div className="arama-stat">
                 <Phone size={24} className="arama-purple" />
                 <div>
-                  <p className="arama-muted">Toplam Süre</p>
+                  <p className="arama-muted">{t("totalDurationStat")}</p>
                   <strong>{istatistikler?.toplamSure || "00:00:00"}</strong>
-                  <small>Ortalama: {istatistikler?.ortalamaSure || "00:00:00"}</small>
+                  <small>{t("averageDuration", { value: istatistikler?.ortalamaSure || "00:00:00" })}</small>
                 </div>
               </div>
               <div className="arama-stat">
                 <BarChart3 size={24} className="arama-orange" />
                 <div>
-                  <p className="arama-muted">Cevaplanan Oran</p>
-                  <strong>%{istatistikler?.cevaplananOran || 0}</strong>
-                  <small>Gelen aramalardan</small>
+                  <p className="arama-muted">{t("answerRate")}</p>
+                  <strong>{t("percentValue", { value: istatistikler?.cevaplananOran || 0 })}</strong>
+                  <small>{t("answerRateHint")}</small>
                 </div>
               </div>
             </div>
             <div className="arama-card">
-              <h3>Özet</h3>
+              <h3>{t("summaryTitle")}</h3>
               <div className="arama-summary-grid">
                 <div>
-                  <p className="arama-muted">Toplam Görüşme</p>
+                  <p className="arama-muted">{t("totalCalls")}</p>
                   <strong>{istatistikler?.toplamGorisme || 0}</strong>
                 </div>
                 <div>
-                  <p className="arama-muted">Gelen (Cevaplı)</p>
+                  <p className="arama-muted">{t("incomingAnswered")}</p>
                   <strong className="arama-green">{istatistikler?.gelenCevapli || 0}</strong>
                 </div>
                 <div>
-                  <p className="arama-muted">Gelen (Cevapsız)</p>
+                  <p className="arama-muted">{t("incomingMissed")}</p>
                   <strong className="arama-red">{istatistikler?.gelenCevapsiz || 0}</strong>
                 </div>
                 <div>
-                  <p className="arama-muted">Giden</p>
+                  <p className="arama-muted">{t("outgoing")}</p>
                   <strong className="arama-blue">{istatistikler?.gidenArama || 0}</strong>
                 </div>
               </div>
@@ -461,15 +465,15 @@ function GorusmeDetay(props: { client: VoiceClient }) {
               <thead>
                 <tr>
                   <th>
-                    <input type="checkbox" aria-label="Tümünü seç" />
+                    <input type="checkbox" aria-label={t("selectAll")} />
                   </th>
-                  <th>Yön</th>
-                  <th>Tarih</th>
-                  <th>Arayan Numara</th>
-                  <th>Aranan Numara</th>
-                  <th>Durum</th>
-                  <th>Süre</th>
-                  <th>Ses Kaydı</th>
+                  <th>{t("colDirection")}</th>
+                  <th>{t("colDate")}</th>
+                  <th>{t("colCaller")}</th>
+                  <th>{t("colCallee")}</th>
+                  <th>{t("colStatus")}</th>
+                  <th>{t("colDuration")}</th>
+                  <th>{t("colRecording")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -477,13 +481,13 @@ function GorusmeDetay(props: { client: VoiceClient }) {
                   <tr>
                     <td colSpan={8} className="arama-empty">
                       <Loader2 size={32} className="arama-spin" />
-                      <span>Net GSM verileri yükleniyor...</span>
+                      <span>{t("netgsmLoading")}</span>
                     </td>
                   </tr>
                 ) : aramalar.length === 0 ? (
                   <tr>
                     <td colSpan={8} className="arama-empty">
-                      {hata ? "API hatası nedeniyle veri yüklenemedi" : "Kayıt bulunamadı"}
+                      {hata ? t("noDataDueToError") : t("noRecords")}
                     </td>
                   </tr>
                 ) : (
@@ -493,7 +497,7 @@ function GorusmeDetay(props: { client: VoiceClient }) {
                     return (
                       <tr key={`${anahtar}_${index}`}>
                         <td>
-                          <input type="checkbox" aria-label="Seç" />
+                          <input type="checkbox" aria-label={t("select")} />
                         </td>
                         <td>{arama.yonKod === 1 || arama.yonKod === 2 ? <PhoneIncoming size={20} className="arama-green" /> : <PhoneOutgoing size={20} className="arama-blue" />}</td>
                         <td>{arama.tarih}</td>
@@ -512,13 +516,13 @@ function GorusmeDetay(props: { client: VoiceClient }) {
                               <button
                                 type="button"
                                 className={aktif ? "arama-play active" : "arama-play"}
-                                title={aktif ? "Duraklat" : "Oynat"}
-                                aria-label={aktif ? "Duraklat" : "Oynat"}
+                                title={aktif ? t("pause") : t("play")}
+                                aria-label={aktif ? t("pause") : t("play")}
                                 onClick={() => sesOynat(anahtar, arama.sesKaydi!)}
                               >
                                 {aktif ? <Pause size={14} /> : <Play size={14} />}
                               </button>
-                              <button type="button" className="arama-skip" title="10sn İleri" aria-label="10sn İleri" disabled={!aktif} onClick={ileriSar}>
+                              <button type="button" className="arama-skip" title={t("skipForward")} aria-label={t("skipForward")} disabled={!aktif} onClick={ileriSar}>
                                 <SkipForward size={12} />
                               </button>
                               {aktif && kalanSure[anahtar] !== undefined && (
@@ -528,7 +532,7 @@ function GorusmeDetay(props: { client: VoiceClient }) {
                               )}
                             </div>
                           ) : (
-                            <span className="arama-muted">Kayıt Yok</span>
+                            <span className="arama-muted">{t("noRecording")}</span>
                           )}
                         </td>
                       </tr>
@@ -539,22 +543,20 @@ function GorusmeDetay(props: { client: VoiceClient }) {
             </table>
           </div>
           <div className="arama-page-size">
-            <select aria-label="Satır sayısı" value={sayfaBoyutu} onChange={(e) => setSayfaBoyutu(Number(e.target.value))}>
-              <option value={10}>10 Satır</option>
-              <option value={25}>25 Satır</option>
-              <option value={50}>50 Satır</option>
+            <select aria-label={t("rowsPerPage")} value={sayfaBoyutu} onChange={(e) => setSayfaBoyutu(Number(e.target.value))}>
+              <option value={10}>{t("rowsOption", { count: 10 })}</option>
+              <option value={25}>{t("rowsOption", { count: 25 })}</option>
+              <option value={50}>{t("rowsOption", { count: 50 })}</option>
             </select>
           </div>
           {toplamSayfa > 1 && (
             <div className="arama-pagination">
-              <span>
-                Sayfa {sayfa} / {toplamSayfa}
-              </span>
+              <span>{t("pageOf", { page: sayfa, total: toplamSayfa })}</span>
               <button type="button" disabled={sayfa <= 1} onClick={() => setSayfa(sayfa - 1)}>
-                Önceki
+                {t("previous")}
               </button>
               <button type="button" disabled={sayfa >= toplamSayfa} onClick={() => setSayfa(sayfa + 1)}>
-                Sonraki
+                {t("next")}
               </button>
             </div>
           )}

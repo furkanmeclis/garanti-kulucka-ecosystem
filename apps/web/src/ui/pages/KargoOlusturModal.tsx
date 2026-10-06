@@ -8,6 +8,8 @@ import {
   type ShipmentDraft,
   type ShipmentPaymentStatus,
 } from "../../api/shipments-client.js";
+import { localeFor, useLanguage, useT } from "../i18n/index.js";
+import { cargoCreateMessages } from "../i18n/messages/cargoCreate.js";
 
 /**
  * Legacy KargolarPage kargo onay modal ("{Sürat|PTT} Kargo Barkod Oluştur") + row "Sürat'e Aktar" /
@@ -17,12 +19,12 @@ import {
 
 export const cargoFirmaAdi: Record<CargoProviderKey, string> = { ptt: "PTT Kargo", surat: "Sürat Kargo" };
 
-function backendErrorMessage(error: unknown) {
+function backendErrorMessage(error: unknown, unknownErrorText: string) {
   if (error instanceof BackendRequestError) {
     const body = error.body as { error?: { message?: string } } | null;
     return body?.error?.message ?? error.message;
   }
-  return error instanceof Error ? error.message : "Bilinmeyen hata";
+  return error instanceof Error ? error.message : unknownErrorText;
 }
 
 function idempotencyKey(prefix: string, id: string) {
@@ -46,6 +48,11 @@ export function KargoOlusturModal(props: {
   onCreated: (result: CreateShipmentResponse) => void;
   onError: (message: string) => void;
 }) {
+  const t = useT(cargoCreateMessages);
+  const { language } = useLanguage();
+  // Read through a ref so a language switch does not re-run the draft load effect.
+  const tRef = useRef(t);
+  tRef.current = t;
   const client = useMemo(() => createShipmentsClient(props.http), [props.http]);
   const [draft, setDraft] = useState<ShipmentDraft | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -67,7 +74,7 @@ export function KargoOlusturModal(props: {
         setAdres({ adres: next.recipient.address ?? "", il: next.recipient.city ?? "", ilce: next.recipient.district ?? "" });
       })
       .catch((error: unknown) => {
-        if (active) setLoadError(backendErrorMessage(error));
+        if (active) setLoadError(backendErrorMessage(error, tRef.current("unknownError")));
       });
     return () => {
       active = false;
@@ -89,7 +96,7 @@ export function KargoOlusturModal(props: {
       });
       props.onCreated(result);
     } catch (error) {
-      props.onError(`Kargo oluşturulurken hata oluştu: ${backendErrorMessage(error)}`);
+      props.onError(t("createError", { error: backendErrorMessage(error, t("unknownError")) }));
     } finally {
       lock.current = false;
       setOlusturuluyor(false);
@@ -98,14 +105,14 @@ export function KargoOlusturModal(props: {
 
   const firmaAdi = props.firma === "surat" ? "Sürat" : "PTT";
   const eksikAdres = draft ? !draft.recipient.city || !draft.recipient.district || !draft.recipient.address : false;
-  const tutar = draft ? Number.parseFloat(draft.total_amount || "0").toLocaleString("tr-TR") : "0";
+  const tutar = draft ? Number.parseFloat(draft.total_amount || "0").toLocaleString(localeFor(language)) : "0";
 
   return (
     <div className="kargo-modal-backdrop" data-testid="kargo-olustur-modal">
-      <div className="kargo-modal" role="dialog" aria-modal="true" aria-label={`${firmaAdi} Kargo Barkod Oluştur`}>
+      <div className="kargo-modal" role="dialog" aria-modal="true" aria-label={t("barcodeTitle", { provider: firmaAdi })}>
         <div className="kargo-modal-header">
-          <h3>{firmaAdi} Kargo Barkod Oluştur</h3>
-          <button className="kargo-icon-button" type="button" aria-label="Kapat" onClick={props.onClose}>
+          <h3>{t("barcodeTitle", { provider: firmaAdi })}</h3>
+          <button className="kargo-icon-button" type="button" aria-label={t("close")} onClick={props.onClose}>
             <X size={20} aria-hidden="true" />
           </button>
         </div>
@@ -113,7 +120,7 @@ export function KargoOlusturModal(props: {
         {loadError && <p className="kargo-modal-error">{loadError}</p>}
         {!draft && !loadError && (
           <p className="kargo-modal-loading">
-            <Loader2 size={16} className="kargo-spin" aria-hidden="true" /> Yükleniyor...
+            <Loader2 size={16} className="kargo-spin" aria-hidden="true" /> {t("loading")}
           </p>
         )}
 
@@ -121,30 +128,30 @@ export function KargoOlusturModal(props: {
           <div className="kargo-modal-body">
             <div className="kargo-modal-summary">
               <p>
-                <strong>Müşteri:</strong> {draft.recipient.name ?? "-"}
+                <strong>{t("customer")}</strong> {draft.recipient.name ?? "-"}
                 {draft.items.length > 0 && <span className="kargo-muted"> - {draft.items.map((k) => `${k.quantity} ${k.name}`).join(", ")}</span>}
               </p>
               <p>
-                <strong>Tutar:</strong> {tutar} TRY
+                <strong>{t("amount")}</strong> {tutar} TRY
               </p>
             </div>
 
             {draft.existing_shipment && (
               <p className="kargo-modal-error" data-testid="kargo-existing-shipment">
-                Bu sipariş için gönderi daha önce oluşturulmuş.
+                {t("existingShipment")}
                 {draft.existing_shipment.barcode_number || draft.existing_shipment.tracking_number
-                  ? ` Takip: ${draft.existing_shipment.tracking_number ?? draft.existing_shipment.barcode_number}`
+                  ? ` ${t("tracking", { number: String(draft.existing_shipment.tracking_number ?? draft.existing_shipment.barcode_number) })}`
                   : ""}
               </p>
             )}
 
             {eksikAdres && (
               <div className="kargo-missing-address" data-testid="kargo-missing-address">
-                <p>Eksik adres bilgilerini tamamlayın:</p>
+                <p>{t("completeMissingAddress")}</p>
                 {!draft.recipient.address && (
                   <input
                     data-testid="kargo-adres"
-                    placeholder="Adres"
+                    placeholder={t("addressPlaceholder")}
                     type="text"
                     value={adres.adres}
                     onChange={(event) => setAdres((prev) => ({ ...prev, adres: event.target.value }))}
@@ -154,7 +161,7 @@ export function KargoOlusturModal(props: {
                   {!draft.recipient.city && (
                     <input
                       data-testid="kargo-il"
-                      placeholder="İl seçin"
+                      placeholder={t("cityPlaceholder")}
                       type="text"
                       value={adres.il}
                       onChange={(event) => setAdres((prev) => ({ ...prev, il: event.target.value, ilce: "" }))}
@@ -164,7 +171,7 @@ export function KargoOlusturModal(props: {
                     <input
                       data-testid="kargo-ilce"
                       disabled={!adres.il && !draft.recipient.city}
-                      placeholder={!(adres.il || draft.recipient.city) ? "Önce il seçin" : "İlçe seçin"}
+                      placeholder={!(adres.il || draft.recipient.city) ? t("selectCityFirst") : t("districtPlaceholder")}
                       type="text"
                       value={adres.ilce}
                       onChange={(event) => setAdres((prev) => ({ ...prev, ilce: event.target.value }))}
@@ -175,20 +182,20 @@ export function KargoOlusturModal(props: {
             )}
 
             <label className="kargo-field">
-              <span>Ödeme Durumu</span>
+              <span>{t("paymentStatus")}</span>
               <select
                 data-testid="kargo-odeme-durumu"
                 value={odemeDurumu}
                 onChange={(event) => setOdemeDurumu(event.target.value as ShipmentPaymentStatus)}
               >
-                <option value="karsi_odemeli">Kapıda ödemeli</option>
-                <option value="odeme_alindi">Ödeme alındı</option>
+                <option value="karsi_odemeli">{t("paymentCashOnDelivery")}</option>
+                <option value="odeme_alindi">{t("paymentReceived")}</option>
               </select>
             </label>
 
             <div className="kargo-modal-actions">
               <button className="secondary-action" type="button" onClick={props.onClose}>
-                İptal
+                {t("cancel")}
               </button>
               <button
                 className={`kargo-create-button kargo-create-${props.firma}`}
@@ -199,11 +206,11 @@ export function KargoOlusturModal(props: {
               >
                 {olusturuluyor ? (
                   <>
-                    <Loader2 size={16} className="kargo-spin" aria-hidden="true" /> Oluşturuluyor...
+                    <Loader2 size={16} className="kargo-spin" aria-hidden="true" /> {t("creating")}
                   </>
                 ) : (
                   <>
-                    <Truck size={16} aria-hidden="true" /> Barkod Oluştur
+                    <Truck size={16} aria-hidden="true" /> {t("createBarcode")}
                   </>
                 )}
               </button>
@@ -221,6 +228,7 @@ export function KargoSiparisAksiyonlari(props: {
   orderPublicId: string;
   onChanged: (result: CreateShipmentResponse) => void;
 }) {
+  const t = useT(cargoCreateMessages);
   const [modalFirma, setModalFirma] = useState<CargoProviderKey | null>(null);
   const [toast, setToast] = useState<{ orderPublicId: string; tone: "success" | "error" | "info"; text: string } | null>(null);
   const message = toast && toast.orderPublicId === props.orderPublicId ? toast : null;
@@ -233,11 +241,11 @@ export function KargoSiparisAksiyonlari(props: {
 
   return (
     <div className="kargo-order-actions" data-testid="kargo-order-actions">
-      <button className="kargo-aktar-button kargo-aktar-surat" data-testid="kargo-aktar-surat" title="Sürat Kargo'ya Aktar" type="button" onClick={() => setModalFirma("surat")}>
-        <Truck size={12} aria-hidden="true" /> Sürat'e Aktar
+      <button className="kargo-aktar-button kargo-aktar-surat" data-testid="kargo-aktar-surat" title={t("transferToSuratTitle")} type="button" onClick={() => setModalFirma("surat")}>
+        <Truck size={12} aria-hidden="true" /> {t("transferToSurat")}
       </button>
-      <button className="kargo-aktar-button kargo-aktar-ptt" data-testid="kargo-aktar-ptt" title="PTT Kargo'ya Aktar" type="button" onClick={() => setModalFirma("ptt")}>
-        <Truck size={12} aria-hidden="true" /> PTT'ye Aktar
+      <button className="kargo-aktar-button kargo-aktar-ptt" data-testid="kargo-aktar-ptt" title={t("transferToPttTitle")} type="button" onClick={() => setModalFirma("ptt")}>
+        <Truck size={12} aria-hidden="true" /> {t("transferToPtt")}
       </button>
       <KargoToast message={message} />
       {modalFirma && (
@@ -264,6 +272,7 @@ export function KargoTopluAktar(props: {
   selectedOrderPublicIds: string[];
   onChanged: () => void;
 }) {
+  const t = useT(cargoCreateMessages);
   const client = useMemo(() => createShipmentsClient(props.http), [props.http]);
   const [yukleniyor, setYukleniyor] = useState<CargoProviderKey | null>(null);
   const [message, setMessage] = useState<{ tone: "success" | "error" | "info"; text: string } | null>(null);
@@ -271,9 +280,9 @@ export function KargoTopluAktar(props: {
   async function topluKargoAktar(firma: CargoProviderKey) {
     if (yukleniyor || props.selectedOrderPublicIds.length === 0) return;
     const firmaAdi = cargoFirmaAdi[firma];
-    if (!window.confirm(`${props.selectedOrderPublicIds.length} adet sipariş ${firmaAdi}'ya aktarılacak. Devam?`)) return;
+    if (!window.confirm(t("bulkConfirm", { count: props.selectedOrderPublicIds.length, provider: firmaAdi }))) return;
     setYukleniyor(firma);
-    setMessage({ tone: "info", text: `${props.selectedOrderPublicIds.length} sipariş ${firmaAdi}'ya aktarılıyor...` });
+    setMessage({ tone: "info", text: t("bulkInProgress", { count: props.selectedOrderPublicIds.length, provider: firmaAdi }) });
     try {
       const result = await client.bulkCreateShipments({
         provider: firma,
@@ -283,7 +292,7 @@ export function KargoTopluAktar(props: {
       setMessage({ tone: result.created_count > 0 ? "success" : "error", text: result.message });
       props.onChanged();
     } catch (error) {
-      setMessage({ tone: "error", text: backendErrorMessage(error) });
+      setMessage({ tone: "error", text: backendErrorMessage(error, t("unknownError")) });
     } finally {
       setYukleniyor(null);
     }
@@ -299,7 +308,7 @@ export function KargoTopluAktar(props: {
   }
   return (
     <div className="kargo-toplu-bar" data-testid="kargo-toplu-bar">
-      <span className="kargo-toplu-count">{props.selectedOrderPublicIds.length} kargo seçili</span>
+      <span className="kargo-toplu-count">{t("selectedCount", { count: props.selectedOrderPublicIds.length })}</span>
       <span className="kargo-toplu-divider" aria-hidden="true" />
       <button
         className="kargo-aktar-button kargo-aktar-surat"
@@ -309,7 +318,7 @@ export function KargoTopluAktar(props: {
         onClick={() => void topluKargoAktar("surat")}
       >
         {yukleniyor === "surat" ? <Loader2 size={14} className="kargo-spin" aria-hidden="true" /> : <Truck size={14} aria-hidden="true" />}
-        Sürat'e Aktar
+        {t("transferToSurat")}
       </button>
       <button
         className="kargo-aktar-button kargo-aktar-ptt"
@@ -319,7 +328,7 @@ export function KargoTopluAktar(props: {
         onClick={() => void topluKargoAktar("ptt")}
       >
         {yukleniyor === "ptt" ? <Loader2 size={14} className="kargo-spin" aria-hidden="true" /> : <Truck size={14} aria-hidden="true" />}
-        PTT'ye Aktar
+        {t("transferToPtt")}
       </button>
       <KargoToast message={message} />
     </div>

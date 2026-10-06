@@ -1,8 +1,12 @@
 import { Bot, CheckCheck, Download, FileText, Image, MessageCircle, Pencil, Search, Send, Trash2, X, Zap } from "lucide-react";
 import { cx, formatDate, attachmentLabel, FlowPanel, DetailPanel, List, DataRows } from "../../app/shared.js";
 import type { DashboardController } from "../../app/useDashboardController.js";
+import { useUiMessageText } from "../../i18n/messages/status.js";
+import { useLanguage, useT } from "../../i18n/index.js";
+import { inboxMessages } from "../../i18n/messages/inbox.js";
 
 export function InboxFlow({ ctx }: { ctx: DashboardController }) {
+  const labelText = useUiMessageText();
   const {
     aiSuggestion,
     conversationChannelFilter,
@@ -50,14 +54,16 @@ export function InboxFlow({ ctx }: { ctx: DashboardController }) {
     unreadConversationCount,
     visibleConversations,
   } = ctx;
+  const t = useT(inboxMessages);
+  const { language } = useLanguage();
 
   return (
-    <FlowPanel title="Mesajlar" icon={<MessageCircle size={18} />} testId="inbox-flow">
+    <FlowPanel title={t("title")} icon={<MessageCircle size={18} />} testId="inbox-flow">
             <div className="messages-layout">
               <aside className="messages-sidebar" data-testid="conversation-filter-summary">
                 <div className="messages-toolbar" data-testid="conversation-filter-bar">
                   <label className="messages-select-label">
-                    <span>Kanal</span>
+                    <span>{t("channel")}</span>
                     <select
                       className="inline-input"
                       data-testid="channel-filter"
@@ -66,13 +72,13 @@ export function InboxFlow({ ctx }: { ctx: DashboardController }) {
                     >
                       {conversationChannelFilters.map(({ value, label }) => (
                         <option key={value} value={value}>
-                          {label}
+                          {labelText(label)}
                         </option>
                       ))}
                     </select>
                   </label>
                   <label className="messages-select-label">
-                    <span>Durum</span>
+                    <span>{t("status")}</span>
                     <select
                       className="inline-input"
                       data-testid="status-filter"
@@ -81,7 +87,7 @@ export function InboxFlow({ ctx }: { ctx: DashboardController }) {
                     >
                       {conversationStatusFilters.map(({ value, label }) => (
                         <option key={value} value={value}>
-                          {label}
+                          {labelText(label)}
                         </option>
                       ))}
                     </select>
@@ -96,7 +102,7 @@ export function InboxFlow({ ctx }: { ctx: DashboardController }) {
                       type="button"
                       onClick={() => void handleApplyConversationFilters(value, conversationStatusFilter)}
                     >
-                      {label}
+                      {labelText(label)}
                     </button>
                   ))}
                   {conversationStatusFilters.map(({ value, label }) => (
@@ -107,7 +113,7 @@ export function InboxFlow({ ctx }: { ctx: DashboardController }) {
                       type="button"
                       onClick={() => void handleApplyConversationFilters(conversationChannelFilter, value)}
                     >
-                      {label}
+                      {labelText(label)}
                     </button>
                   ))}
                 </div>
@@ -117,21 +123,21 @@ export function InboxFlow({ ctx }: { ctx: DashboardController }) {
                     data-testid="conversation-search"
                     value={conversationSearch}
                     onChange={(event) => setConversationSearch(event.target.value)}
-                    placeholder="Konuşma ara"
+                    placeholder={t("searchPlaceholder")}
                     type="search"
                   />
                 </label>
                 <div className="messages-counts">
-                  <span>Okunmamış {unreadConversationCount}</span>
-                  <span>Havuz {poolConversationCount}</span>
-                  <span>Human Agent {humanAgentConversationCount}</span>
-                  <span>legacy kanal/durum filtreleri</span>
+                  <span>{t("unreadCount", { count: unreadConversationCount })}</span>
+                  <span>{t("poolCount", { count: poolConversationCount })}</span>
+                  <span>{t("humanAgentCount", { count: humanAgentConversationCount })}</span>
+                  <span>{t("legacyFilters")}</span>
                   <span>backend is_in_pool</span>
                   <span>backend human_agent_enabled</span>
-                  <span>Aktif kanal {conversationChannelFilter}</span>
-                  <span>Aktif durum {conversationStatusFilter}</span>
+                  <span>{t("activeChannel", { value: conversationChannelFilter })}</span>
+                  <span>{t("activeStatus", { value: conversationStatusFilter })}</span>
                 </div>
-                <List title="Konuşmalar" testId="conversation-list">
+                <List title={t("conversations")} testId="conversation-list">
                   {visibleConversations.map((conversation) => (
                     <li key={conversation.public_id}>
                       <button
@@ -145,10 +151,10 @@ export function InboxFlow({ ctx }: { ctx: DashboardController }) {
                           <strong>{conversation.customer?.full_name ?? conversation.public_id}</strong>
                           <em>{conversation.channel}</em>
                         </span>
-                        <span>{conversation.last_message_text ?? "Mesaj yok"}</span>
+                        <span>{conversation.last_message_text ?? t("noMessage")}</span>
                         <span>
-                          {conversation.status} / okunmamış {conversation.unread_count}
-                          {conversation.is_in_pool ? " / havuzda" : ""}
+                          {t("rowUnread", { status: conversation.status, count: conversation.unread_count })}
+                          {conversation.is_in_pool ? t("rowInPool") : ""}
                         </span>
                       </button>
                     </li>
@@ -159,8 +165,8 @@ export function InboxFlow({ ctx }: { ctx: DashboardController }) {
               <section className="message-thread">
                 <header className="message-thread-header">
                   <div>
-                    <h2>{selectedConversation?.customer?.full_name ?? "Konuşma seçin"}</h2>
-                    <span>{selectedConversation?.channel ?? "Kanal yok"}</span>
+                    <h2>{selectedConversation?.customer?.full_name ?? t("selectConversation")}</h2>
+                    <span>{selectedConversation?.channel ?? t("noChannel")}</span>
                   </div>
                   {selectedConversation && selectedConversation.unread_count > 0 && (
                     <button
@@ -170,7 +176,7 @@ export function InboxFlow({ ctx }: { ctx: DashboardController }) {
                       onClick={() => void handleUpdateConversationState({ unread_count: 0 })}
                     >
                       <CheckCheck size={16} aria-hidden="true" />
-                      <span>Okundu yap</span>
+                      <span>{t("markRead")}</span>
                     </button>
                   )}
                 </header>
@@ -180,7 +186,7 @@ export function InboxFlow({ ctx }: { ctx: DashboardController }) {
                       {messageAttachments.map((attachment) => (
                         <span key={`${attachment.file_public_id}-${attachment.attachment_type}`}>
                           <FileText size={13} aria-hidden="true" />
-                          {attachmentLabel(attachment.attachment_type)} {attachment.original_name ?? attachment.file_public_id}
+                          {attachmentLabel(attachment.attachment_type, language)} {attachment.original_name ?? attachment.file_public_id}
                         </span>
                       ))}
                     </div>
@@ -190,19 +196,19 @@ export function InboxFlow({ ctx }: { ctx: DashboardController }) {
                     const attachments = message.attachments ?? [];
                     return (
                       <article className={cx("message-bubble", mine && "mine")} key={message.public_id}>
-                        <strong>{message.sender_name ?? (mine ? "Temsilci" : "Müşteri")}</strong>
-                        <span>{message.body ?? (attachments.length > 0 ? "Medya" : "Boş mesaj")}</span>
+                        <strong>{message.sender_name ?? (mine ? t("agent") : t("customer"))}</strong>
+                        <span>{message.body ?? (attachments.length > 0 ? t("media") : t("emptyMessage"))}</span>
                         {attachments.length > 0 && (
                           <div className="message-attachments">
                             {attachments.map((attachment) => (
                               <span key={attachment.file_public_id}>
                                 <FileText size={13} aria-hidden="true" />
-                                {attachmentLabel(attachment.attachment_type)} {attachment.original_name ?? attachment.file_public_id}
+                                {attachmentLabel(attachment.attachment_type, language)} {attachment.original_name ?? attachment.file_public_id}
                               </span>
                             ))}
                           </div>
                         )}
-                        <small>{formatDate(message.sent_at)}</small>
+                        <small>{formatDate(message.sent_at, language)}</small>
                       </article>
                     );
                   })}
@@ -234,7 +240,7 @@ export function InboxFlow({ ctx }: { ctx: DashboardController }) {
                   <div className="message-composer-tools">
                     <button
                       className="secondary-action icon-only"
-                      title="Görsel / video ekle"
+                      title={t("addImageVideo")}
                       type="button"
                       onClick={() => mediaInputRef.current?.click()}
                     >
@@ -242,7 +248,7 @@ export function InboxFlow({ ctx }: { ctx: DashboardController }) {
                     </button>
                     <button
                       className="secondary-action icon-only"
-                      title="PDF ekle"
+                      title={t("addPdf")}
                       type="button"
                       onClick={() => pdfInputRef.current?.click()}
                     >
@@ -251,7 +257,7 @@ export function InboxFlow({ ctx }: { ctx: DashboardController }) {
                     <button
                       className={cx("secondary-action icon-only", shortcutMenuOpen && "selected")}
                       data-testid="shortcut-menu-button"
-                      title="Hızlı cevaplar"
+                      title={t("quickReplies")}
                       type="button"
                       onClick={() => setShortcutMenuOpen((current) => !current)}
                     >
@@ -260,7 +266,7 @@ export function InboxFlow({ ctx }: { ctx: DashboardController }) {
                     <button
                       className="secondary-action icon-only"
                       data-testid="ai-suggestion-button"
-                      title="AI yanıt öner"
+                      title={t("suggestAiReply")}
                       type="button"
                       onClick={() => void handleAiSuggestion()}
                     >
@@ -272,9 +278,9 @@ export function InboxFlow({ ctx }: { ctx: DashboardController }) {
                       <div className="attachment-strip" data-testid="pending-attachments">
                         {pendingAttachments.map((attachment, index) => (
                           <span key={`${attachment.file.name}-${index}`}>
-                            {attachmentLabel(attachment.attachment_type)}: {attachment.file.name}
+                            {attachmentLabel(attachment.attachment_type, language)}: {attachment.file.name}
                             <button
-                              title="Medyayı kaldır"
+                              title={t("removeMedia")}
                               type="button"
                               onClick={() => {
                                 setPendingAttachments((current) => {
@@ -308,13 +314,13 @@ export function InboxFlow({ ctx }: { ctx: DashboardController }) {
                           <input
                             className="inline-input"
                             data-testid="shortcut-code-input"
-                            placeholder="Kısayol kodu"
+                            placeholder={t("shortcutCode")}
                             value={shortcutDraft.code}
                             onChange={(event) => setShortcutDraft((current) => ({ ...current, code: event.target.value }))}
                           />
                           <textarea
                             data-testid="shortcut-message-input"
-                            placeholder={shortcutDraft.attachments.length > 0 ? "Medya başlığı" : "Kısayol mesajı"}
+                            placeholder={shortcutDraft.attachments.length > 0 ? t("mediaCaption") : t("shortcutMessage")}
                             value={shortcutDraft.message}
                             onChange={(event) => setShortcutDraft((current) => ({ ...current, message: event.target.value }))}
                           />
@@ -322,7 +328,7 @@ export function InboxFlow({ ctx }: { ctx: DashboardController }) {
                             <div className="attachment-strip">
                               {shortcutDraft.attachments.map((attachment, index) => (
                                 <span key={`${attachment.file.name}-${index}`}>
-                                  {attachmentLabel(attachment.attachment_type)}: {attachment.file.name}
+                                  {attachmentLabel(attachment.attachment_type, language)}: {attachment.file.name}
                                 </span>
                               ))}
                             </div>
@@ -334,7 +340,7 @@ export function InboxFlow({ ctx }: { ctx: DashboardController }) {
                               onClick={() => shortcutMediaInputRef.current?.click()}
                             >
                               <Image size={14} aria-hidden="true" />
-                              Medya ekle
+                              {t("addMedia")}
                             </button>
                             <button
                               className="primary-action"
@@ -343,7 +349,7 @@ export function InboxFlow({ ctx }: { ctx: DashboardController }) {
                               type="button"
                               onClick={() => void handleSaveShortcut()}
                             >
-                              {editingShortcutId ? "Güncelle" : "Ekle"}
+                              {editingShortcutId ? t("update") : t("add")}
                             </button>
                             <button
                               className="secondary-action"
@@ -353,7 +359,7 @@ export function InboxFlow({ ctx }: { ctx: DashboardController }) {
                                 setShortcutDraft({ code: "", message: "", attachments: [] });
                               }}
                             >
-                              İptal
+                              {t("cancel")}
                             </button>
                           </div>
                         </div>
@@ -362,14 +368,14 @@ export function InboxFlow({ ctx }: { ctx: DashboardController }) {
                             <div className="shortcut-row" key={shortcut.public_id}>
                               <button data-testid="shortcut-row" type="button" onClick={() => handleUseShortcut(shortcut)}>
                                 <code>/{shortcut.code}</code>
-                                <span>{shortcut.message ?? shortcut.attachments[0]?.original_name ?? "Medya"}</span>
-                                {shortcut.attachments.length > 0 && <em>{shortcut.attachments.length} medya</em>}
+                                <span>{shortcut.message ?? shortcut.attachments[0]?.original_name ?? t("media")}</span>
+                                {shortcut.attachments.length > 0 && <em>{t("mediaCount", { count: shortcut.attachments.length })}</em>}
                               </button>
                               {shortcut.attachments.length > 0 && (
                                 <button
                                   className="secondary-action icon-only"
                                   data-testid="shortcut-download-button"
-                                  title="Dosyayı indir"
+                                  title={t("downloadFile")}
                                   type="button"
                                   onClick={() => void handleDownloadShortcutAttachment(shortcut)}
                                 >
@@ -379,7 +385,7 @@ export function InboxFlow({ ctx }: { ctx: DashboardController }) {
                               <button
                                 className="secondary-action icon-only"
                                 data-testid="shortcut-edit-button"
-                                title="Kısayolu düzenle"
+                                title={t("editShortcut")}
                                 type="button"
                                 onClick={() => handleEditShortcut(shortcut)}
                               >
@@ -388,7 +394,7 @@ export function InboxFlow({ ctx }: { ctx: DashboardController }) {
                               <button
                                 className="secondary-action icon-only"
                                 data-testid="shortcut-delete-button"
-                                title="Kısayolu sil"
+                                title={t("deleteShortcut")}
                                 type="button"
                                 onClick={() => void handleDeleteShortcut(shortcut.public_id)}
                               >
@@ -409,14 +415,14 @@ export function InboxFlow({ ctx }: { ctx: DashboardController }) {
                           void handleSendMessage();
                         }
                       }}
-                      placeholder={pendingAttachments.length > 0 ? "Medya başlığı yazın..." : "Mesajınızı yazın..."}
+                      placeholder={pendingAttachments.length > 0 ? t("mediaCaptionPlaceholder") : t("messagePlaceholder")}
                       value={messageDraft}
                     />
                     {aiSuggestion && (
                       <div className="ai-suggestion" data-testid="ai-suggestion">
                         <span>{aiSuggestion}</span>
                         <button type="button" onClick={() => setMessageDraft(aiSuggestion)}>
-                          Kullan
+                          {t("use")}
                         </button>
                       </div>
                     )}
@@ -429,35 +435,35 @@ export function InboxFlow({ ctx }: { ctx: DashboardController }) {
                     onClick={() => void handleSendMessage()}
                   >
                     <Send size={16} aria-hidden="true" />
-                    <span>Cevap gönder</span>
+                    <span>{t("sendReply")}</span>
                   </button>
                 </div>
               </section>
 
               <aside className="messages-detail">
                 {selectedConversation && (
-                  <DetailPanel title="Konuşma Detayı" testId="conversation-detail">
+                  <DetailPanel title={t("conversationDetail")} testId="conversation-detail">
                     <DataRows
                       rows={[
-                        ["Müşteri", selectedConversation.customer?.full_name ?? selectedConversation.public_id, selectedConversation.channel],
-                        ["Durum", selectedConversation.status, selectedConversation.assigned_user_email ?? "havuz"],
-                        ["Okunmamış", String(selectedConversation.unread_count), selectedConversation.last_message_sender_type ?? "-"],
+                        [t("customer"), selectedConversation.customer?.full_name ?? selectedConversation.public_id, selectedConversation.channel],
+                        [t("status"), selectedConversation.status, selectedConversation.assigned_user_email ?? t("pool")],
+                        [t("unread"), String(selectedConversation.unread_count), selectedConversation.last_message_sender_type ?? "-"],
                       ]}
                     />
                     <label className="note-editor">
-                      <span>Konuşma notu</span>
+                      <span>{t("conversationNote")}</span>
                       <textarea
                         data-testid="conversation-note-input"
-                        placeholder="Konuşma için not"
+                        placeholder={t("conversationNotePlaceholder")}
                         value={conversationNoteDraft}
                         onChange={(event) => handleConversationNoteChange(event.target.value)}
                       />
                     </label>
                     <label className="note-editor">
-                      <span>Müşteri notu</span>
+                      <span>{t("customerNote")}</span>
                       <textarea
                         data-testid="customer-note-input"
-                        placeholder="Müşteri için not"
+                        placeholder={t("customerNotePlaceholder")}
                         value={customerNoteDraft}
                         onChange={(event) => handleCustomerNoteChange(event.target.value)}
                       />
@@ -473,7 +479,7 @@ export function InboxFlow({ ctx }: { ctx: DashboardController }) {
                           })
                         }
                       >
-                        {selectedConversation.human_agent_enabled ? "Human agent kapat" : "Human agent aç"}
+                        {selectedConversation.human_agent_enabled ? t("humanAgentOff") : t("humanAgentOn")}
                       </button>
                       <button
                         className="secondary-action"
@@ -487,7 +493,7 @@ export function InboxFlow({ ctx }: { ctx: DashboardController }) {
                           )
                         }
                       >
-                        {selectedConversation.is_in_pool ? "Havuzdan al" : "Havuza bırak"}
+                        {selectedConversation.is_in_pool ? t("takeFromPool") : t("releaseToPool")}
                       </button>
                     </div>
                     <button
@@ -495,7 +501,7 @@ export function InboxFlow({ ctx }: { ctx: DashboardController }) {
                       type="button"
                       onClick={() => openOrderForm("conversation")}
                     >
-                      Konuşmadan sipariş aç
+                      {t("createOrderFromConversation")}
                     </button>
                   </DetailPanel>
                 )}

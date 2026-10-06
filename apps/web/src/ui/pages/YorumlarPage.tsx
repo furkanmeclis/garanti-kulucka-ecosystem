@@ -31,6 +31,8 @@ import {
   type CommentStatus,
   type SocialComment,
 } from "../../api/comments-client.js";
+import { localeFor, useLanguage, useT } from "../i18n/index.js";
+import { commentsMessages } from "../i18n/messages/comments.js";
 
 /**
  * Legacy parity: garanti-kulucka/frontend/src/pages/yorumlar/YorumlarPage.jsx.
@@ -42,32 +44,34 @@ const SAYFA_BOYUTU = 30;
 type DurumFiltre = CommentStatus | "tumu";
 type PlatformFiltre = CommentPlatform | "tumu";
 
-const DURUM_ETIKET: Record<CommentStatus, { label: string; tone: string }> = {
-  pending: { label: "Bekliyor", tone: "slate" },
-  manual: { label: "Manuel", tone: "amber" },
-  auto_replied: { label: "Otomatik", tone: "emerald" },
-  replied: { label: "Cevaplandı", tone: "sky" },
-  deleted: { label: "Silindi", tone: "red" },
-  hidden: { label: "Gizlendi", tone: "violet" },
-  error: { label: "Hata", tone: "rose" },
+type CommentsMessageKey = keyof (typeof commentsMessages)["tr"];
+
+const DURUM_ETIKET: Record<CommentStatus, { labelKey: CommentsMessageKey; tone: string }> = {
+  pending: { labelKey: "statusPending", tone: "slate" },
+  manual: { labelKey: "statusManual", tone: "amber" },
+  auto_replied: { labelKey: "statusAutoReplied", tone: "emerald" },
+  replied: { labelKey: "statusReplied", tone: "sky" },
+  deleted: { labelKey: "statusDeleted", tone: "red" },
+  hidden: { labelKey: "statusHidden", tone: "violet" },
+  error: { labelKey: "statusError", tone: "rose" },
 };
 
-const FILTRELER: Array<{ id: DurumFiltre; label: string }> = [
-  { id: "manual", label: "Manuel bekleyen" },
-  { id: "auto_replied", label: "Otomatik" },
-  { id: "deleted", label: "Silinen" },
-  { id: "hidden", label: "Gizlenen" },
-  { id: "tumu", label: "Tümü" },
+const FILTRELER: Array<{ id: DurumFiltre; labelKey: CommentsMessageKey }> = [
+  { id: "manual", labelKey: "filterManual" },
+  { id: "auto_replied", labelKey: "filterAutoReplied" },
+  { id: "deleted", labelKey: "filterDeleted" },
+  { id: "hidden", labelKey: "filterHidden" },
+  { id: "tumu", labelKey: "filterAll" },
 ];
 
-const OZET_KARTLARI: Array<[CommentStatus, string, LucideIcon]> = [
-  ["manual", "Manuel", Inbox],
-  ["auto_replied", "Otomatik", Bot],
-  ["replied", "Cevaplı", CheckCircle],
-  ["deleted", "Silinen", Trash2],
-  ["hidden", "Gizli", EyeOff],
-  ["pending", "Bekleyen", Loader2],
-  ["error", "Hata", AlertCircle],
+const OZET_KARTLARI: Array<[CommentStatus, CommentsMessageKey, LucideIcon]> = [
+  ["manual", "statManual", Inbox],
+  ["auto_replied", "statAutoReplied", Bot],
+  ["replied", "statReplied", CheckCircle],
+  ["deleted", "statDeleted", Trash2],
+  ["hidden", "statHidden", EyeOff],
+  ["pending", "statPending", Loader2],
+  ["error", "statError", AlertCircle],
 ];
 
 const VARSAYILAN_AYAR: CommentModerationConfig = {
@@ -119,26 +123,27 @@ function AyarlarPanel(props: {
   onKaydet: (config: CommentModerationConfig) => void;
   kaydediyor: boolean;
 }) {
+  const t = useT(commentsMessages);
   const [form, setForm] = useState<CommentModerationConfig>({ ...VARSAYILAN_AYAR, ...(props.config ?? {}) });
   const guncelle = <K extends keyof CommentModerationConfig>(key: K, value: CommentModerationConfig[K]) =>
     setForm((current) => ({ ...current, [key]: value }));
 
   return (
-    <div className="yorumlar-overlay yorumlar-overlay-right" role="dialog" aria-label="Yorum AI Ayarları">
+    <div className="yorumlar-overlay yorumlar-overlay-right" role="dialog" aria-label={t("settingsTitle")}>
       <div className="yorumlar-drawer" data-testid="yorumlar-settings-panel">
         <div className="yorumlar-modal-head">
           <h2>
             <Settings2 size={20} />
-            Yorum AI Ayarları
+            {t("settingsTitle")}
           </h2>
-          <button type="button" className="yorumlar-icon-button" onClick={props.onKapat} aria-label="Kapat">
+          <button type="button" className="yorumlar-icon-button" onClick={props.onKapat} aria-label={t("close")}>
             <X size={20} />
           </button>
         </div>
 
         <div className="yorumlar-form">
           <label className="yorumlar-toggle-row">
-            <span>AI pipeline açık</span>
+            <span>{t("pipelineEnabled")}</span>
             <input
               type="checkbox"
               data-testid="yorumlar-setting-enabled"
@@ -148,7 +153,7 @@ function AyarlarPanel(props: {
           </label>
 
           <div className="yorumlar-box">
-            <div className="yorumlar-box-title">Platformlar</div>
+            <div className="yorumlar-box-title">{t("platforms")}</div>
             <label className="yorumlar-toggle-line">
               <span>
                 <Instagram size={16} className="yorumlar-ig" /> Instagram
@@ -173,19 +178,19 @@ function AyarlarPanel(props: {
           </div>
 
           <div className="yorumlar-box">
-            <div className="yorumlar-box-title">Cevap tipi</div>
+            <div className="yorumlar-box-title">{t("replyType")}</div>
             <select
               data-testid="yorumlar-setting-reply-type"
               value={form.reply_type}
               onChange={(event) => guncelle("reply_type", event.target.value as CommentReplyType)}
             >
-              <option value="public">Herkese açık (yorum cevabı)</option>
-              <option value="private">Özel DM (private reply)</option>
+              <option value="public">{t("replyTypePublicLong")}</option>
+              <option value="private">{t("replyTypePrivateLong")}</option>
             </select>
           </div>
 
           <label className="yorumlar-toggle-row">
-            <span>Küfür içerenleri sil</span>
+            <span>{t("deleteProfanity")}</span>
             <input
               type="checkbox"
               checked={form.delete_profanity}
@@ -194,7 +199,7 @@ function AyarlarPanel(props: {
           </label>
 
           <label className="yorumlar-toggle-row">
-            <span>Marka kötülemeyi sil</span>
+            <span>{t("deleteBrandDisparagement")}</span>
             <input
               type="checkbox"
               checked={form.delete_brand_disparagement}
@@ -203,7 +208,7 @@ function AyarlarPanel(props: {
           </label>
 
           <div className="yorumlar-box">
-            <div className="yorumlar-box-title">Min. güven (0–1)</div>
+            <div className="yorumlar-box-title">{t("minConfidence")}</div>
             <input
               type="number"
               min="0"
@@ -215,23 +220,23 @@ function AyarlarPanel(props: {
           </div>
 
           <div className="yorumlar-box">
-            <div className="yorumlar-box-title">Risk → manuel (satır satır)</div>
+            <div className="yorumlar-box-title">{t("riskManualExamples")}</div>
             <textarea
               rows={6}
               data-testid="yorumlar-setting-risk"
               value={listeMetin(form.risk_manual_examples)}
               onChange={(event) => guncelle("risk_manual_examples", metinListe(event.target.value))}
-              placeholder={"kargom nerede\niade\nşikayet"}
+              placeholder={t("riskManualPlaceholder")}
             />
           </div>
 
           <div className="yorumlar-box">
-            <div className="yorumlar-box-title">Otomatik cevap konuları (satır satır)</div>
+            <div className="yorumlar-box-title">{t("autoReplyTopics")}</div>
             <textarea
               rows={5}
               value={listeMetin(form.auto_reply_topics)}
               onChange={(event) => guncelle("auto_reply_topics", metinListe(event.target.value))}
-              placeholder={"fiyat\ngaranti\nürün özellikleri"}
+              placeholder={t("autoReplyTopicsPlaceholder")}
             />
           </div>
 
@@ -242,7 +247,7 @@ function AyarlarPanel(props: {
             onClick={() => props.onKaydet(form)}
           >
             {props.kaydediyor ? <Loader2 size={16} className="yorumlar-spin" /> : <Save size={16} />}
-            Kaydet
+            {t("save")}
           </button>
         </div>
       </div>
@@ -257,42 +262,43 @@ function CevapModal(props: {
   onGonder: (mesaj: string, cevapTipi: CommentReplyType) => void;
   gonderiliyor: boolean;
 }) {
+  const t = useT(commentsMessages);
   const [mesaj, setMesaj] = useState(props.taslak ?? props.yorum.ai_reply_draft ?? props.yorum.manual_reply ?? "");
   const [cevapTipi, setCevapTipi] = useState<CommentReplyType>(props.yorum.reply_type ?? "public");
 
   return (
-    <div className="yorumlar-overlay" role="dialog" aria-label="Yoruma cevap">
+    <div className="yorumlar-overlay" role="dialog" aria-label={t("replyToComment")}>
       <div className="yorumlar-modal" data-testid="yorumlar-reply-modal">
         <div className="yorumlar-modal-head">
           <div>
-            <h3>Yoruma cevap</h3>
+            <h3>{t("replyToComment")}</h3>
             <p className="yorumlar-muted">
-              @{props.yorum.username || "kullanıcı"} · {props.yorum.platform}
+              @{props.yorum.username || t("fallbackUser")} · {props.yorum.platform}
             </p>
           </div>
-          <button type="button" className="yorumlar-icon-button" onClick={props.onKapat} aria-label="Kapat">
+          <button type="button" className="yorumlar-icon-button" onClick={props.onKapat} aria-label={t("close")}>
             <X size={20} />
           </button>
         </div>
-        <div className="yorumlar-quote">{props.yorum.text || "(boş yorum)"}</div>
+        <div className="yorumlar-quote">{props.yorum.text || t("emptyComment")}</div>
         <select
           data-testid="yorumlar-reply-type"
           value={cevapTipi}
           onChange={(event) => setCevapTipi(event.target.value as CommentReplyType)}
         >
-          <option value="public">Herkese açık</option>
-          <option value="private">Özel DM</option>
+          <option value="public">{t("replyTypePublic")}</option>
+          <option value="private">{t("replyTypePrivate")}</option>
         </select>
         <textarea
           rows={4}
           data-testid="yorumlar-reply-text"
           value={mesaj}
           onChange={(event) => setMesaj(event.target.value)}
-          placeholder="Cevabınızı yazın…"
+          placeholder={t("replyPlaceholder")}
         />
         <div className="yorumlar-modal-actions">
           <button type="button" className="yorumlar-secondary" onClick={props.onKapat}>
-            İptal
+            {t("cancel")}
           </button>
           <button
             type="button"
@@ -302,7 +308,7 @@ function CevapModal(props: {
             onClick={() => props.onGonder(mesaj.trim(), cevapTipi)}
           >
             {props.gonderiliyor ? <Loader2 size={16} className="yorumlar-spin" /> : <Send size={16} />}
-            Gönder
+            {t("send")}
           </button>
         </div>
       </div>
@@ -311,6 +317,8 @@ function CevapModal(props: {
 }
 
 export function YorumlarPage(props: { http: BackendHttpClient }) {
+  const t = useT(commentsMessages);
+  const { language } = useLanguage();
   const client = useMemo(() => createCommentsClient(props.http), [props.http]);
   const [kayitlar, setKayitlar] = useState<SocialComment[]>([]);
   const [toplam, setToplam] = useState(0);
@@ -358,8 +366,8 @@ export function YorumlarPage(props: { http: BackendHttpClient }) {
           {
             id: "kontrol_fail",
             level: "error",
-            title: "Kontrol endpoint’ine ulaşılamadı",
-            detail: hataMesaji(error, "Bilinmeyen hata"),
+            title: t("controlUnreachable"),
+            detail: hataMesaji(error, t("unknownError")),
           },
         ],
         checks: [],
@@ -367,7 +375,7 @@ export function YorumlarPage(props: { http: BackendHttpClient }) {
     } finally {
       setKontrolYukleniyor(false);
     }
-  }, [client]);
+  }, [client, t]);
 
   const istatistikGetir = useCallback(async () => {
     try {
@@ -393,11 +401,11 @@ export function YorumlarPage(props: { http: BackendHttpClient }) {
     } catch (error) {
       setKayitlar([]);
       setToplam(0);
-      bildir("error", hataMesaji(error, "Yorumlar yüklenemedi"));
+      bildir("error", hataMesaji(error, t("commentsLoadFailed")));
     } finally {
       setYukleniyor(false);
     }
-  }, [client, sayfa, durumFiltre, platformFiltre, aktifArama, bildir]);
+  }, [client, sayfa, durumFiltre, platformFiltre, aktifArama, bildir, t]);
 
   useEffect(() => {
     void ayarlariGetir();
@@ -425,7 +433,7 @@ export function YorumlarPage(props: { http: BackendHttpClient }) {
       bildir("success", okMesaj);
       yenile();
     } catch (error) {
-      bildir("error", hataMesaji(error, "İşlem başarısız"));
+      bildir("error", hataMesaji(error, t("actionFailed")));
     } finally {
       setIslemId(null);
     }
@@ -440,11 +448,11 @@ export function YorumlarPage(props: { http: BackendHttpClient }) {
         reply_type: cevapTipi,
         idempotency_key: idempotencyKey(cevapTipi === "private" ? "private_reply" : "reply", cevapYorum),
       });
-      bildir("success", "Cevap gönderildi");
+      bildir("success", t("replySent"));
       setCevapYorum(null);
       yenile();
     } catch (error) {
-      bildir("error", hataMesaji(error, "Gönderilemedi"));
+      bildir("error", hataMesaji(error, t("sendFailed")));
     } finally {
       setCevapGonderiliyor(false);
     }
@@ -455,11 +463,11 @@ export function YorumlarPage(props: { http: BackendHttpClient }) {
     try {
       const response = await client.saveSettings(form);
       setConfig(response.config);
-      bildir("success", "Ayarlar kaydedildi");
+      bildir("success", t("settingsSaved"));
       setAyarAcik(false);
       void kontrolGetir();
     } catch (error) {
-      bildir("error", hataMesaji(error, "Kaydedilemedi"));
+      bildir("error", hataMesaji(error, t("saveFailed")));
     } finally {
       setAyarKaydediyor(false);
     }
@@ -470,9 +478,9 @@ export function YorumlarPage(props: { http: BackendHttpClient }) {
     try {
       const response = await client.suggestReply(yorum.public_id);
       setTaslaklar((current) => ({ ...current, [yorum.public_id]: response.suggestion }));
-      bildir("success", `İşlendi: ${response.action || "ok"} (dry-run)`);
+      bildir("success", t("reprocessed", { action: response.action || "ok" }));
     } catch (error) {
-      bildir("error", hataMesaji(error, "İşlem başarısız"));
+      bildir("error", hataMesaji(error, t("actionFailed")));
     } finally {
       setIslemId(null);
     }
@@ -486,9 +494,9 @@ export function YorumlarPage(props: { http: BackendHttpClient }) {
         <div>
           <h1>
             <MessageSquareText size={24} />
-            Yorumlar
+            {t("title")}
           </h1>
-          <p className="yorumlar-muted">Facebook / Instagram post yorumları — AI otomatik cevap ve manuel kuyruk</p>
+          <p className="yorumlar-muted">{t("subtitle")}</p>
         </div>
         <div className="yorumlar-header-actions">
           <button
@@ -496,7 +504,7 @@ export function YorumlarPage(props: { http: BackendHttpClient }) {
             className="yorumlar-secondary"
             data-testid="yorumlar-control-button"
             onClick={() => void kontrolGetir()}
-            title="AI / önkoşul kontrolünü yenile"
+            title={t("refreshControlTitle")}
           >
             {kontrolYukleniyor ? (
               <Loader2 size={16} className="yorumlar-spin" />
@@ -505,7 +513,7 @@ export function YorumlarPage(props: { http: BackendHttpClient }) {
             ) : (
               <ShieldAlert size={16} className="yorumlar-warn" />
             )}
-            Kontrol
+            {t("control")}
           </button>
           <button
             type="button"
@@ -514,11 +522,11 @@ export function YorumlarPage(props: { http: BackendHttpClient }) {
             onClick={() => setAyarAcik(true)}
           >
             <Settings2 size={16} />
-            Ayarlar
+            {t("settings")}
           </button>
           <button type="button" className="yorumlar-secondary" data-testid="yorumlar-refresh" onClick={yenile}>
             <RefreshCw size={16} className={yukleniyor ? "yorumlar-spin" : undefined} />
-            Yenile
+            {t("refresh")}
           </button>
         </div>
       </div>
@@ -526,7 +534,7 @@ export function YorumlarPage(props: { http: BackendHttpClient }) {
       {bildirim && (
         <div className={`yorumlar-toast yorumlar-toast-${bildirim.tip}`} role="status" data-testid="yorumlar-toast">
           <span>{bildirim.mesaj}</span>
-          <button type="button" className="yorumlar-icon-button" onClick={() => setBildirim(null)} aria-label="Kapat">
+          <button type="button" className="yorumlar-icon-button" onClick={() => setBildirim(null)} aria-label={t("close")}>
             <X size={14} />
           </button>
         </div>
@@ -543,15 +551,15 @@ export function YorumlarPage(props: { http: BackendHttpClient }) {
               <div>
                 <h2>
                   {kontrol.status === "critical"
-                    ? "Yorum AI hazır değil — kritik eksikler var"
-                    : "Yorum AI çalışır ama uyarılar var"}
+                    ? t("controlCritical")
+                    : t("controlWarning")}
                 </h2>
                 <p className="yorumlar-muted">
-                  {kontrol.summary.error} hata · {kontrol.summary.warning} uyarı · {kontrol.summary.ok} tamam
+                  {t("controlSummary", { error: kontrol.summary.error, warning: kontrol.summary.warning, ok: kontrol.summary.ok })}
                 </p>
               </div>
             </div>
-            <button type="button" className="yorumlar-icon-button" onClick={() => setKontrolAcik(false)} aria-label="Kapat">
+            <button type="button" className="yorumlar-icon-button" onClick={() => setKontrolAcik(false)} aria-label={t("close")}>
               <X size={16} />
             </button>
           </div>
@@ -560,7 +568,7 @@ export function YorumlarPage(props: { http: BackendHttpClient }) {
               <li key={uyari.id}>
                 <div className="yorumlar-control-item-title">
                   <span className={`yorumlar-level yorumlar-level-${uyari.level}`}>
-                    {uyari.level === "error" ? "hata" : "uyarı"}
+                    {uyari.level === "error" ? t("levelError") : t("levelWarning")}
                   </span>
                   {uyari.title}
                 </div>
@@ -570,10 +578,10 @@ export function YorumlarPage(props: { http: BackendHttpClient }) {
           </ul>
           <div className="yorumlar-control-actions">
             <button type="button" className="yorumlar-secondary yorumlar-small" onClick={() => setAyarAcik(true)}>
-              Ayarları aç
+              {t("openSettings")}
             </button>
             <button type="button" className="yorumlar-secondary yorumlar-small" onClick={() => void kontrolGetir()}>
-              Tekrar kontrol et
+              {t("recheck")}
             </button>
           </div>
         </div>
@@ -582,12 +590,12 @@ export function YorumlarPage(props: { http: BackendHttpClient }) {
       {kontrol?.status === "ready" && (
         <div className="yorumlar-ready" data-testid="yorumlar-control-ready">
           <ShieldCheck size={16} />
-          Yorum AI kontrolleri tamam — sınıflandırma ve otomatik cevap için hazır.
+          {t("controlReady")}
         </div>
       )}
 
       <div className="yorumlar-stats" data-testid="comments-ai-summary">
-        {OZET_KARTLARI.map(([key, label, Icon]) => (
+        {OZET_KARTLARI.map(([key, labelKey, Icon]) => (
           <button
             key={key}
             type="button"
@@ -600,7 +608,7 @@ export function YorumlarPage(props: { http: BackendHttpClient }) {
           >
             <span className="yorumlar-stat-label">
               <Icon size={12} />
-              {label}
+              {t(labelKey)}
             </span>
             <strong>{counts[key] ?? "—"}</strong>
           </button>
@@ -619,7 +627,7 @@ export function YorumlarPage(props: { http: BackendHttpClient }) {
               setSayfa(1);
             }}
           >
-            {filtre.label}
+            {t(filtre.labelKey)}
           </button>
         ))}
         <select
@@ -630,7 +638,7 @@ export function YorumlarPage(props: { http: BackendHttpClient }) {
             setSayfa(1);
           }}
         >
-          <option value="tumu">Tüm platformlar</option>
+          <option value="tumu">{t("allPlatforms")}</option>
           <option value="instagram">Instagram</option>
           <option value="facebook">Facebook</option>
         </select>
@@ -644,12 +652,12 @@ export function YorumlarPage(props: { http: BackendHttpClient }) {
               setAktifArama(arama);
             }
           }}
-          placeholder="Yorumda ara…"
+          placeholder={t("searchPlaceholder")}
           className="yorumlar-search"
         />
         {config && (
           <span className={`yorumlar-config-pill ${config.enabled ? "on" : "off"}`} data-testid="yorumlar-config-pill">
-            AI {config.enabled ? "açık" : "kapalı"} · {config.reply_type === "private" ? "DM" : "public"}
+            AI {config.enabled ? t("aiOn") : t("aiOff")} · {config.reply_type === "private" ? "DM" : t("replyTypePublicShort")}
           </span>
         )}
       </div>
@@ -662,7 +670,7 @@ export function YorumlarPage(props: { http: BackendHttpClient }) {
         ) : kayitlar.length === 0 ? (
           <div className="yorumlar-empty">
             <Inbox size={32} />
-            <p>Bu filtrede yorum yok</p>
+            <p>{t("noComments")}</p>
           </div>
         ) : (
           <ul>
@@ -680,17 +688,17 @@ export function YorumlarPage(props: { http: BackendHttpClient }) {
                       </span>
                       <span>@{yorum.username || "—"}</span>
                       <span className={`yorumlar-badge yorumlar-tone-${durum.tone}`} data-testid="yorumlar-status">
-                        {durum.label}
+                        {t(durum.labelKey)}
                       </span>
                       {yorum.classification && <span className="yorumlar-badge yorumlar-tone-slate">{yorum.classification}</span>}
-                      {yorum.confidence != null && <span className="yorumlar-tiny">güven {Number(yorum.confidence).toFixed(2)}</span>}
+                      {yorum.confidence != null && <span className="yorumlar-tiny">{t("confidence", { value: Number(yorum.confidence).toFixed(2) })}</span>}
                     </div>
-                    <p className="yorumlar-text">{yorum.text || "(boş)"}</p>
-                    {yorum.classification_reason && <p className="yorumlar-muted">Neden: {yorum.classification_reason}</p>}
-                    {taslak && yorum.status === "manual" && <p className="yorumlar-draft">Taslak: {taslak}</p>}
+                    <p className="yorumlar-text">{yorum.text || t("emptyText")}</p>
+                    {yorum.classification_reason && <p className="yorumlar-muted">{t("reason", { reason: yorum.classification_reason })}</p>}
+                    {taslak && yorum.status === "manual" && <p className="yorumlar-draft">{t("draft", { draft: taslak })}</p>}
                     {yorum.error_message && <p className="yorumlar-error">{yorum.error_message}</p>}
                     <p className="yorumlar-tiny">
-                      {new Date(yorum.received_at).toLocaleString("tr-TR")}
+                      {new Date(yorum.received_at).toLocaleString(localeFor(language))}
                       {yorum.media_id ? ` · media ${yorum.media_id}` : ""}
                       {yorum.post_id ? ` · post ${yorum.post_id}` : ""}
                     </p>
@@ -705,7 +713,7 @@ export function YorumlarPage(props: { http: BackendHttpClient }) {
                         onClick={() => setCevapYorum(yorum)}
                       >
                         <Send size={14} />
-                        Cevapla
+                        {t("reply")}
                       </button>
                     )}
                     <button
@@ -713,20 +721,20 @@ export function YorumlarPage(props: { http: BackendHttpClient }) {
                       className="yorumlar-danger yorumlar-small"
                       data-testid="yorumlar-delete-button"
                       disabled={busy}
-                      onClick={() => void aksiyon(yorum, "delete", "Yorum silindi/gizlendi")}
+                      onClick={() => void aksiyon(yorum, "delete", t("deletedOrHidden"))}
                     >
                       <Trash2 size={14} />
-                      Sil
+                      {t("delete")}
                     </button>
                     <button
                       type="button"
                       className="yorumlar-secondary yorumlar-small"
                       data-testid="yorumlar-hide-button"
                       disabled={busy}
-                      onClick={() => void aksiyon(yorum, "hide", "Yorum gizlendi")}
+                      onClick={() => void aksiyon(yorum, "hide", t("hiddenToast"))}
                     >
                       <EyeOff size={14} />
-                      Gizle
+                      {t("hide")}
                     </button>
                     {yorum.status !== "manual" && (
                       <button
@@ -734,10 +742,10 @@ export function YorumlarPage(props: { http: BackendHttpClient }) {
                         className="yorumlar-warning yorumlar-small"
                         data-testid="yorumlar-manual-button"
                         disabled={busy}
-                        onClick={() => void aksiyon(yorum, "manual", "Manuel kuyruğa alındı")}
+                        onClick={() => void aksiyon(yorum, "manual", t("queuedManual"))}
                       >
                         <Inbox size={14} />
-                        Manuel
+                        {t("manual")}
                       </button>
                     )}
                     <button
@@ -746,7 +754,7 @@ export function YorumlarPage(props: { http: BackendHttpClient }) {
                       data-testid="yorumlar-ai-button"
                       disabled={busy}
                       onClick={() => void yenidenIsle(yorum)}
-                      title="AI ile yeniden işle"
+                      title={t("reprocessWithAi")}
                     >
                       {busy ? <Loader2 size={14} className="yorumlar-spin" /> : <Play size={14} />}
                       AI
@@ -761,10 +769,10 @@ export function YorumlarPage(props: { http: BackendHttpClient }) {
 
       <div className="yorumlar-pagination" data-testid="yorumlar-pagination">
         <button type="button" className="yorumlar-secondary yorumlar-small" disabled={sayfa <= 1} onClick={() => setSayfa(sayfa - 1)}>
-          Önceki
+          {t("previous")}
         </button>
         <span>
-          Sayfa {sayfa} / {toplamSayfa}
+          {t("pageOf", { page: sayfa, total: toplamSayfa })}
         </span>
         <button
           type="button"
@@ -772,7 +780,7 @@ export function YorumlarPage(props: { http: BackendHttpClient }) {
           disabled={sayfa >= toplamSayfa}
           onClick={() => setSayfa(sayfa + 1)}
         >
-          Sonraki
+          {t("next")}
         </button>
       </div>
 

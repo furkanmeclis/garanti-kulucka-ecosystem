@@ -21,6 +21,8 @@ import {
 import type { BackendHttpClient } from "../../api/http-client.js";
 import { createAdminClient } from "../../api/admin-client.js";
 import { createSettingsClient, type AdminLogEntry } from "../../api/settings-client.js";
+import { useLanguage, useT } from "../i18n/index.js";
+import { settingsMessages } from "../i18n/messages/settings.js";
 import { MesajBanner, hataMetni, tarihSaatFormatla, useMesaj } from "./AyarlarShared.js";
 import { EntegrasyonAyarlar, KullanicilarSekmesi } from "./AyarlarAdminTabs.js";
 import { KargoPipelineAyarlar, SantralAyarlar, VapiAyarlar } from "./AyarlarProviderTabs.js";
@@ -67,6 +69,8 @@ export function AyarlarPage({
   const settingsClient = useMemo(() => createSettingsClient(http), [http]);
   const adminClient = useMemo(() => createAdminClient(http), [http]);
   const isAdmin = user.role === "admin" || user.role === "owner";
+  const t = useT(settingsMessages);
+  const { language } = useLanguage();
 
   const [aktifSekme, setAktifSekme] = useState<SekmeId>("profil");
   const { mesaj, setMesaj, mesajGoster } = useMesaj();
@@ -147,16 +151,16 @@ export function AyarlarPage({
   async function handleProfilGuncelle(event: FormEvent) {
     event.preventDefault();
     if (!profilForm.ad.trim()) {
-      mesajGoster("hata", "Ad boş olamaz.");
+      mesajGoster("hata", t("nameRequired"));
       return;
     }
     setProfilKaydediliyor(true);
     try {
       const updated = await settingsClient.updateProfile({ first_name: profilForm.ad.trim(), last_name: profilForm.soyad.trim() });
       onProfileUpdated?.(updated.first_name, updated.last_name);
-      mesajGoster("basari", "Profil güncellendi.");
+      mesajGoster("basari", t("profileUpdated"));
     } catch (error) {
-      mesajGoster("hata", `Güncellenemedi: ${hataMetni(error)}`);
+      mesajGoster("hata", t("updateFailed", { error: hataMetni(error) }));
     } finally {
       setProfilKaydediliyor(false);
     }
@@ -165,21 +169,21 @@ export function AyarlarPage({
   async function handleSifreDegistir(event: FormEvent) {
     event.preventDefault();
     if (yeniSifre.length < 6) {
-      mesajGoster("hata", "Şifre en az 6 karakter olmalı.");
+      mesajGoster("hata", t("passwordMinLength"));
       return;
     }
     if (yeniSifre !== yeniSifreTekrar) {
-      mesajGoster("hata", "Şifreler eşleşmiyor.");
+      mesajGoster("hata", t("passwordsDoNotMatch"));
       return;
     }
     setSifreKaydediliyor(true);
     try {
       await settingsClient.changePassword(yeniSifre, yeniSifreTekrar);
-      mesajGoster("basari", "Şifre güncellendi.");
+      mesajGoster("basari", t("passwordUpdated"));
       setYeniSifre("");
       setYeniSifreTekrar("");
     } catch (error) {
-      mesajGoster("hata", `Şifre güncellenemedi: ${hataMetni(error)}`);
+      mesajGoster("hata", t("passwordUpdateFailed", { error: hataMetni(error) }));
     } finally {
       setSifreKaydediliyor(false);
     }
@@ -187,7 +191,7 @@ export function AyarlarPage({
 
   async function handleToggleAI() {
     if (!isAdmin) {
-      mesajGoster("hata", "Bu ayarı değiştirme yetkiniz yok.");
+      mesajGoster("hata", t("noPermission"));
       return;
     }
     setAiKaydediliyor(true);
@@ -195,9 +199,9 @@ export function AyarlarPage({
       const yeni = !aiEnabled;
       await adminClient.upsertSetting("ai.auto_reply_enabled", yeni);
       setAiEnabled(yeni);
-      mesajGoster("basari", `Yapay zeka ${yeni ? "açıldı" : "kapatıldı"}.`);
+      mesajGoster("basari", t(yeni ? "aiTurnedOn" : "aiTurnedOff"));
     } catch (error) {
-      mesajGoster("hata", `Güncelleme başarısız: ${hataMetni(error)}`);
+      mesajGoster("hata", t("updateRequestFailed", { error: hataMetni(error) }));
     } finally {
       setAiKaydediliyor(false);
     }
@@ -205,16 +209,16 @@ export function AyarlarPage({
 
   async function handlePromptKaydet() {
     if (aiPrompt.trim().length < 10) {
-      mesajGoster("hata", "Prompt en az 10 karakter olmalı.");
+      mesajGoster("hata", t("promptMinLength"));
       return;
     }
     setAiPromptKaydediliyor(true);
     try {
       await adminClient.upsertSetting("ai.system_prompt", aiPrompt.trim());
-      mesajGoster("basari", "AI prompt kaydedildi.");
+      mesajGoster("basari", t("promptSaved"));
       setAiPromptKaynak("veritabani");
     } catch (error) {
-      mesajGoster("hata", `Prompt kaydedilemedi: ${hataMetni(error)}`);
+      mesajGoster("hata", t("promptSaveFailed", { error: hataMetni(error) }));
     } finally {
       setAiPromptKaydediliyor(false);
     }
@@ -226,25 +230,25 @@ export function AyarlarPage({
       await adminClient.upsertSetting("ai.system_prompt", "");
       setAiPrompt("");
       setAiPromptKaynak("varsayilan");
-      mesajGoster("basari", "Prompt varsayılana döndürüldü.");
+      mesajGoster("basari", t("promptReset"));
     } catch (error) {
-      mesajGoster("hata", `Sıfırlama hatası: ${hataMetni(error)}`);
+      mesajGoster("hata", t("promptResetFailed", { error: hataMetni(error) }));
     } finally {
       setAiPromptKaydediliyor(false);
     }
   }
 
   const sekmeler: Array<{ id: SekmeId; baslik: string; ikon: LucideIcon }> = [
-    { id: "profil", baslik: "Profil", ikon: User },
-    { id: "genel", baslik: "Genel", ikon: Settings },
+    { id: "profil", baslik: t("tabProfile"), ikon: User },
+    { id: "genel", baslik: t("tabGeneral"), ikon: Settings },
     ...(isAdmin
       ? [
-          { id: "kullanicilar" as const, baslik: "Kullanıcılar", ikon: Users },
-          { id: "loglar" as const, baslik: "İşlem Logları", ikon: FileText },
-          { id: "entegrasyonlar" as const, baslik: "Entegrasyonlar", ikon: Plug },
-          { id: "santral" as const, baslik: "Santral / Softphone", ikon: Phone },
-          { id: "vapi" as const, baslik: "VAPI AI Arama", ikon: Bot },
-          { id: "kargo-pipeline" as const, baslik: "Teslim Alınmayan Kargo Pipeline", ikon: Package },
+          { id: "kullanicilar" as const, baslik: t("tabUsers"), ikon: Users },
+          { id: "loglar" as const, baslik: t("tabLogs"), ikon: FileText },
+          { id: "entegrasyonlar" as const, baslik: t("tabIntegrations"), ikon: Plug },
+          { id: "santral" as const, baslik: t("tabPbx"), ikon: Phone },
+          { id: "vapi" as const, baslik: t("tabVapi"), ikon: Bot },
+          { id: "kargo-pipeline" as const, baslik: t("tabCargoPipeline"), ikon: Package },
         ]
       : []),
   ];
@@ -252,8 +256,8 @@ export function AyarlarPage({
   return (
     <div className="ayarlar-page" data-testid="admin-flow">
       <div className="ayarlar-header">
-        <h1>Ayarlar</h1>
-        <p>Sistem ve hesap ayarlarını yönet</p>
+        <h1>{t("title")}</h1>
+        <p>{t("subtitle")}</p>
       </div>
 
       <div className="ayarlar-tabs" role="tablist" data-testid="ayarlar-tabs">
@@ -283,16 +287,16 @@ export function AyarlarPage({
             <section className="ayarlar-card">
               <h3 className="ayarlar-card-title">
                 <User size={20} />
-                Profil Bilgileri
+                {t("profileInfo")}
               </h3>
               <form onSubmit={(event) => void handleProfilGuncelle(event)} className="ayarlar-form">
                 <div className="ayarlar-grid-2">
                   <label className="ayarlar-field">
-                    <span>Ad</span>
+                    <span>{t("firstName")}</span>
                     <input value={profilForm.ad} onChange={(event) => setProfilForm((form) => ({ ...form, ad: event.target.value }))} />
                   </label>
                   <label className="ayarlar-field">
-                    <span>Soyad</span>
+                    <span>{t("lastName")}</span>
                     <input
                       value={profilForm.soyad}
                       onChange={(event) => setProfilForm((form) => ({ ...form, soyad: event.target.value }))}
@@ -300,14 +304,14 @@ export function AyarlarPage({
                   </label>
                 </div>
                 <div className="ayarlar-field">
-                  <span>E-posta (Değiştirilemez)</span>
+                  <span>{t("emailLocked")}</span>
                   <div className="ayarlar-locked">
                     {profilForm.email}
                     <Lock size={16} />
                   </div>
                 </div>
                 <div className="ayarlar-field">
-                  <span>Rol</span>
+                  <span>{t("role")}</span>
                   <div className="ayarlar-locked ayarlar-capitalize">
                     {user.role.replace("_", " ")}
                     <Lock size={16} />
@@ -315,7 +319,7 @@ export function AyarlarPage({
                 </div>
                 <button type="submit" className="ayarlar-secondary-btn" disabled={profilKaydediliyor}>
                   {profilKaydediliyor ? <Loader2 size={16} className="ayarlar-spin" /> : <Save size={16} />}
-                  {profilKaydediliyor ? "Yükleniyor..." : "Değişiklikleri Kaydet"}
+                  {profilKaydediliyor ? t("loading") : t("saveChanges")}
                 </button>
               </form>
             </section>
@@ -323,32 +327,32 @@ export function AyarlarPage({
             <section className="ayarlar-card">
               <h3 className="ayarlar-card-title">
                 <Key size={20} />
-                Şifre Değiştir
+                {t("changePassword")}
               </h3>
               <form onSubmit={(event) => void handleSifreDegistir(event)} className="ayarlar-form ayarlar-narrow">
                 <label className="ayarlar-field">
-                  <span>Yeni Şifre</span>
+                  <span>{t("newPassword")}</span>
                   <input
                     type="password"
                     value={yeniSifre}
                     onChange={(event) => setYeniSifre(event.target.value)}
-                    placeholder="En az 6 karakter"
+                    placeholder={t("passwordPlaceholder")}
                     required
                   />
                 </label>
                 <label className="ayarlar-field">
-                  <span>Yeni Şifre (Tekrar)</span>
+                  <span>{t("newPasswordRepeat")}</span>
                   <input
                     type="password"
                     value={yeniSifreTekrar}
                     onChange={(event) => setYeniSifreTekrar(event.target.value)}
-                    placeholder="Şifrenizi tekrar girin"
+                    placeholder={t("passwordRepeatPlaceholder")}
                     required
                   />
                 </label>
                 <button type="submit" className="ayarlar-primary-btn ayarlar-full" disabled={sifreKaydediliyor}>
                   {sifreKaydediliyor ? <Loader2 size={16} className="ayarlar-spin" /> : null}
-                  {sifreKaydediliyor ? "Güncelleniyor..." : "Şifreyi Güncelle"}
+                  {sifreKaydediliyor ? t("updating") : t("updatePassword")}
                 </button>
               </form>
             </section>
@@ -364,17 +368,15 @@ export function AyarlarPage({
                     <Bot size={24} />
                   </div>
                   <div>
-                    <h2 className="ayarlar-h2">Yapay Zeka Otomatik Yanıt</h2>
+                    <h2 className="ayarlar-h2">{t("aiAutoReply")}</h2>
                     <p className="ayarlar-muted">
-                      {aiEnabled
-                        ? "WhatsApp mesajlarına yapay zeka otomatik yanıt veriyor"
-                        : "Otomatik yanıt kapalı — manuel yanıt bekleniyor"}
+                      {aiEnabled ? t("aiAutoReplyOn") : t("aiAutoReplyOff")}
                     </p>
                   </div>
                 </div>
                 <button
                   type="button"
-                  aria-label="Yapay Zeka Otomatik Yanıt"
+                  aria-label={t("aiAutoReply")}
                   className={`ayarlar-switch ${aiEnabled ? "on" : ""}`}
                   onClick={() => void handleToggleAI()}
                   disabled={aiKaydediliyor || aiYukleniyor}
@@ -385,7 +387,7 @@ export function AyarlarPage({
               <div className="ayarlar-row-between ayarlar-mt">
                 <span className={`ayarlar-pill ${aiEnabled ? "green" : "slate"}`}>
                   <Zap size={12} />
-                  {aiEnabled ? "AI AÇIK" : "AI KAPALI"}
+                  {aiEnabled ? t("aiOnBadge") : t("aiOffBadge")}
                 </span>
               </div>
             </section>
@@ -397,21 +399,18 @@ export function AyarlarPage({
                     <Bot size={24} />
                   </div>
                   <div>
-                    <h2 className="ayarlar-h2">AI Agent Sistem Prompt&apos;u</h2>
-                    <p className="ayarlar-muted">
-                      Yapay zekanın nasıl davranacağını, ne bildiğini ve nasıl yanıt vereceğini belirleyen talimatlar. Son 25 konuşma
-                      geçmişi otomatik olarak eklenir.
-                    </p>
+                    <h2 className="ayarlar-h2">{t("aiPromptTitle")}</h2>
+                    <p className="ayarlar-muted">{t("aiPromptDescription")}</p>
                     {aiPromptKaynak && (
                       <span className={`ayarlar-pill small ${aiPromptKaynak === "veritabani" ? "blue" : "slate"}`}>
-                        {aiPromptKaynak === "veritabani" ? "Özel Prompt" : "Varsayılan Prompt"}
+                        {aiPromptKaynak === "veritabani" ? t("customPrompt") : t("defaultPrompt")}
                       </span>
                     )}
                   </div>
                 </div>
                 {aiPromptYukleniyor ? (
                   <div className="ayarlar-loading">
-                    <Loader2 size={18} className="ayarlar-spin" /> Yükleniyor...
+                    <Loader2 size={18} className="ayarlar-spin" /> {t("loading")}
                   </div>
                 ) : (
                   <>
@@ -420,10 +419,10 @@ export function AyarlarPage({
                       value={aiPrompt}
                       onChange={(event) => setAiPrompt(event.target.value)}
                       rows={18}
-                      placeholder="AI sistem promptunu buraya yazın..."
+                      placeholder={t("aiPromptPlaceholder")}
                     />
                     <div className="ayarlar-row-between ayarlar-mt">
-                      <p className="ayarlar-small">{aiPrompt.length} karakter</p>
+                      <p className="ayarlar-small">{t("characterCount", { count: aiPrompt.length })}</p>
                       <div className="ayarlar-row">
                         <button
                           type="button"
@@ -432,7 +431,7 @@ export function AyarlarPage({
                           disabled={aiPromptKaydediliyor}
                         >
                           <RefreshCw size={16} className={aiPromptKaydediliyor ? "ayarlar-spin" : ""} />
-                          Varsayılana Dön
+                          {t("resetToDefault")}
                         </button>
                         <button
                           type="button"
@@ -441,7 +440,7 @@ export function AyarlarPage({
                           disabled={aiPromptKaydediliyor || !aiPrompt.trim()}
                         >
                           {aiPromptKaydediliyor ? <Loader2 size={16} className="ayarlar-spin" /> : <Save size={16} />}
-                          Kaydet
+                          {t("save")}
                         </button>
                       </div>
                     </div>
@@ -458,38 +457,38 @@ export function AyarlarPage({
           <div className="ayarlar-stack" data-testid="ayarlar-loglar">
             <div className="ayarlar-row-between">
               <div>
-                <h2 className="ayarlar-h2">İşlem Logları</h2>
-                <p className="ayarlar-muted">Tüm sistem işlemlerinin kaydı</p>
+                <h2 className="ayarlar-h2">{t("logsTitle")}</h2>
+                <p className="ayarlar-muted">{t("logsSubtitle")}</p>
               </div>
               <button type="button" className="ayarlar-outline-btn" onClick={() => void loglariYenile()} disabled={loglarYukleniyor}>
                 <RefreshCw size={16} className={loglarYukleniyor ? "ayarlar-spin" : ""} />
-                Yenile
+                {t("refresh")}
               </button>
             </div>
             <div className="ayarlar-table-card">
               {loglarYukleniyor ? (
-                <div className="ayarlar-empty">Yükleniyor...</div>
+                <div className="ayarlar-empty">{t("loading")}</div>
               ) : loglar.length === 0 ? (
                 <div className="ayarlar-empty">
                   <FileText size={48} />
-                  <p>Henüz log kaydı yok</p>
+                  <p>{t("noLogs")}</p>
                 </div>
               ) : (
                 <div className="ayarlar-table-scroll">
                   <table className="ayarlar-table">
                     <thead>
                       <tr>
-                        <th>Tarih</th>
-                        <th>Kullanıcı</th>
-                        <th>İşlem</th>
-                        <th>Modül</th>
-                        <th>Açıklama</th>
+                        <th>{t("colDate")}</th>
+                        <th>{t("colUser")}</th>
+                        <th>{t("colAction")}</th>
+                        <th>{t("colModule")}</th>
+                        <th>{t("colDescription")}</th>
                       </tr>
                     </thead>
                     <tbody>
                       {loglar.map((log) => (
                         <tr key={log.id}>
-                          <td className="ayarlar-nowrap">{tarihSaatFormatla(log.created_at)}</td>
+                          <td className="ayarlar-nowrap">{tarihSaatFormatla(log.created_at, language)}</td>
                           <td>{log.actor_name ?? "-"}</td>
                           <td>
                             <span className={`ayarlar-pill ${islemRenkleri[log.action] ?? "slate"}`}>{log.action}</span>
@@ -509,8 +508,8 @@ export function AyarlarPage({
         {aktifSekme === "entegrasyonlar" && isAdmin && (
           <div className="ayarlar-stack" data-testid="ayarlar-entegrasyonlar">
             <div>
-              <h2 className="ayarlar-h2">Entegrasyonlar</h2>
-              <p className="ayarlar-muted">Instagram ve Facebook Messenger entegrasyonları</p>
+              <h2 className="ayarlar-h2">{t("integrationsTitle")}</h2>
+              <p className="ayarlar-muted">{t("integrationsSubtitle")}</p>
             </div>
             <div className="ayarlar-row">
               <button
