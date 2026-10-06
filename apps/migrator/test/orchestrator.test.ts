@@ -875,7 +875,11 @@ describe("conversation dry-run validation", () => {
       unresolvedAssignedUsers: 1,
       resolvedInstagramAccounts: 1,
     });
-    expect(result.dryRunReport?.messageTransform).toEqual({ transformedRows: 3, mediaPayloads: 1 });
+    expect(result.dryRunReport?.messageTransform).toEqual({
+      transformedRows: 3,
+      mediaPayloads: 1,
+      remoteUrlMediaPayloads: 1,
+    });
     expect(result.dryRunReport?.totals).toEqual({ plannedRows: 9, plannedBatches: 6, blockedRows: 0 });
     expect(result.batches).toEqual([]);
   });
@@ -890,6 +894,84 @@ describe("conversation dry-run validation", () => {
       "Message dry-run requires conversations in the same plan",
     );
     expect(source.operations).toEqual([]);
+  });
+
+  it("counts bridge s3:// media per MIME separately and reports malformed URIs as blocked rows", async () => {
+    const hash = "a".repeat(64);
+    const [first, second, third] = legacyMessageRows as [LegacyRecord, LegacyRecord, LegacyRecord];
+    const source = new LegacyTableSource({
+      customers: legacyCustomerRows,
+      conversations: legacyConversationRows,
+      messages: [
+        legacyMessageRow(first.sourceId, {
+          konusma_id: first.payload.konusma_id,
+          media_url: `s3://gk-legacy-media/mesajlar/${hash}.jpg`,
+          media_type: "image",
+        }),
+        legacyMessageRow(second.sourceId, {
+          konusma_id: second.payload.konusma_id,
+          media_url: `s3://gk-legacy-media/mesajlar/${hash.toUpperCase()}.jpg`,
+          media_type: "image",
+        }),
+        legacyMessageRow(third.sourceId, {
+          konusma_id: third.payload.konusma_id,
+          media_url: "data:image/png;base64,aGVsbG8=",
+          media_type: "image",
+        }),
+        legacyMessageRow("6a000000-0000-4000-8000-000000000004", {
+          konusma_id: third.payload.konusma_id,
+          media_url: `s3://gk-legacy-media/mesajlar/${"b".repeat(64)}.ogg`,
+          media_type: "audio/ogg",
+        }),
+        legacyMessageRow("6a000000-0000-4000-8000-000000000005", {
+          konusma_id: third.payload.konusma_id,
+          media_url: `s3://other-bucket/mesajlar/${hash}.png`,
+          media_type: "image",
+        }),
+        legacyMessageRow("6a000000-0000-4000-8000-000000000006", {
+          konusma_id: third.payload.konusma_id,
+          media_url: `s3://gk-legacy-media/mesajlar/${hash}.exe`,
+          media_type: "image",
+        }),
+        legacyMessageRow("6a000000-0000-4000-8000-000000000007", {
+          konusma_id: third.payload.konusma_id,
+          media_url: "https://cdn.example.com/legacy/2.jpg",
+          media_type: "image",
+        }),
+      ],
+    });
+
+    const result = await conversationDryRun(source, ["customers", "conversations", "messages"]);
+
+    expect(result.dryRunReport?.messageTransform).toEqual({
+      transformedRows: 7,
+      mediaPayloads: 7,
+      inlineMediaPayloads: 1,
+      inlineMediaDecodedBytesByMime: { "image/png": 5 },
+      legacyObjectMediaPayloads: 2,
+      legacyObjectMediaByMime: { "audio/ogg": 1, "image/jpeg": 1 },
+      invalidLegacyObjectMediaPayloads: 3,
+      remoteUrlMediaPayloads: 1,
+    });
+    expect(result.dryRunReport?.warnings).toEqual([
+      {
+        entity: "messages",
+        code: "invalid_legacy_media_uri",
+        message: expect.stringContaining(`${second.sourceId} has an invalid s3:// media_url: object key file name`),
+      },
+      {
+        entity: "messages",
+        code: "invalid_legacy_media_uri",
+        message: expect.stringContaining("bucket other-bucket does not match configured legacy media bucket gk-legacy-media"),
+      },
+      {
+        entity: "messages",
+        code: "invalid_legacy_media_uri",
+        message: expect.stringContaining("unknown media extension .exe"),
+      },
+    ]);
+    expect(result.dryRunReport?.entities.find((entity) => entity.entity === "messages")?.blockedRows).toBe(3);
+    expect(result.dryRunReport?.totals.blockedRows).toBe(3);
   });
 
   it("fails the dry-run when a message batch is out of source id order", async () => {

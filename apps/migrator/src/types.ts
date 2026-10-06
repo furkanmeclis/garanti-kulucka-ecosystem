@@ -505,6 +505,13 @@ export interface MessageTransformSummary {
   readonly mediaPayloads: number;
   readonly inlineMediaPayloads?: number;
   readonly inlineMediaDecodedBytesByMime?: Record<string, number>;
+  /** Bridge-extracted media referenced as s3://<legacy-bucket>/mesajlar/<sha256>.<ext>. */
+  readonly legacyObjectMediaPayloads?: number;
+  readonly legacyObjectMediaByMime?: Record<string, number>;
+  /** Malformed s3:// media URIs; each one is also a blocked-row warning in the dry-run report. */
+  readonly invalidLegacyObjectMediaPayloads?: number;
+  /** http(s) media URLs passed through unchanged in raw_payload. */
+  readonly remoteUrlMediaPayloads?: number;
   readonly mediaFieldConflicts?: number;
 }
 

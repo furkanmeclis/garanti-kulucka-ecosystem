@@ -40,7 +40,12 @@ import { legacyOrderTable, transformLegacyOrder } from "./order-mapping.js";
 import { legacyProductTable, transformLegacyProduct } from "./product-mapping.js";
 import { createDryRunReport } from "./reports.js";
 import { legacyShipmentTable, normalizeShipmentTrackingNumber, transformLegacyShipment } from "./shipment-mapping.js";
-import type { MigratorMediaStorage } from "./media-storage.js";
+import {
+  defaultLegacyMediaBucket,
+  isLegacyMediaUri,
+  parseLegacyMediaUri,
+  type MigratorMediaStorage,
+} from "./media-storage.js";
 import {
   assertApplyPrerequisites,
   createLegacyMappingCatalog,
@@ -63,6 +68,7 @@ import type {
   MigrationEntity,
   MigrationPlan,
   MigrationTarget,
+  MigrationWarning,
   OrderItemTransformSummary,
   OrderTransformSummary,
   ProductTransformSummary,
@@ -81,6 +87,8 @@ interface RunMigrationInputBase {
   readonly now?: Date;
   readonly sourceSystem: string;
   readonly sourceDatabaseIdentity: SourceDatabaseIdentity;
+  /** Bucket bridge-extracted s3:// legacy media must reference (MIGRATION_LEGACY_MEDIA_BUCKET). */
+  readonly legacyMediaBucket?: string;
 }
 
 export interface RunMigrationDryRunInput extends RunMigrationInputBase {
@@ -181,6 +189,7 @@ export async function runMigration(input: RunMigrationInput): Promise<MigrationR
         source,
         plan,
         requireDependencyPublicIds(conversations, "Message", "conversations"),
+        input.legacyMediaBucket ?? defaultLegacyMediaBucket,
       )
       : undefined;
     const productTransform = validateProductRows
@@ -234,7 +243,8 @@ export async function runMigration(input: RunMigrationInput): Promise<MigrationR
         plan,
         ...(customers ? { customerTransform: customers.summary } : {}),
         ...(conversations ? { conversationTransform: conversations.summary } : {}),
-        ...(messageTransform ? { messageTransform } : {}),
+        ...(messageTransform ? { messageTransform: messageTransform.summary } : {}),
+        ...(messageTransform && messageTransform.warnings.length > 0 ? { warnings: [...messageTransform.warnings] } : {}),
         ...(productTransform ? { productTransform: productTransform.summary } : {}),
         ...(orders ? { orderTransform: orders.summary } : {}),
         ...(orderItemTransform ? { orderItemTransform } : {}),
@@ -267,6 +277,7 @@ export async function runMigration(input: RunMigrationInput): Promise<MigrationR
       conversationAccounts,
       userPublicIds,
       ...(input.mediaStorage ? { mediaStorage: input.mediaStorage } : {}),
+      ...(input.legacyMediaBucket ? { legacyMediaBucket: input.legacyMediaBucket } : {}),
     }));
   }
   const deferredReconciliation = await reconcileDeferredReconciliations(input.target, input.runId);
@@ -300,6 +311,7 @@ async function applyPlannedBatch(input:
     readonly conversationAccounts: readonly VerifiedConversationAccount[];
     readonly userPublicIds: ReadonlyMap<string, string>;
     readonly mediaStorage?: MigratorMediaStorage;
+    readonly legacyMediaBucket?: string;
   },
 ): Promise<MigrationBatchApplyResult> {
   switch (input.batch.entity) {
@@ -604,12 +616,17 @@ async function validateMessageBatches(
   source: LegacySource,
   plan: MigrationPlan,
   conversationPublicIds: ReadonlyMap<string, string>,
-): Promise<MessageTransformSummary> {
+  legacyMediaBucket: string,
+): Promise<{ readonly summary: MessageTransformSummary; readonly warnings: readonly MigrationWarning[] }> {
   let transformedRows = 0;
   let mediaPayloads = 0;
   let inlineMediaPayloads = 0;
+  let legacyObjectMediaPayloads = 0;
+  let remoteUrlMediaPayloads = 0;
   let mediaFieldConflicts = 0;
   const inlineMediaDecodedBytesByMime = new Map<string, number>();
+  const legacyObjectMediaByMime = new Map<string, number>();
+  const warnings: MigrationWarning[] = [];
   let previousSourceId: string | null = null;
 
   for (const batch of plan.batches) {
@@ -630,6 +647,27 @@ async function validateMessageBatches(
       if (mediaUrl !== null || rawPayload?.media_type !== undefined || rawPayload?.medya_url !== undefined || rawPayload?.medya_tipi !== undefined) {
         mediaPayloads += 1;
       }
+      if (isLegacyMediaUri(mediaUrl)) {
+        const parsed = parseLegacyMediaUri(mediaUrl, { expectedBucket: legacyMediaBucket, mediaType: rawPayload?.media_type });
+        if (parsed.ok) {
+          legacyObjectMediaPayloads += 1;
+          legacyObjectMediaByMime.set(
+            parsed.reference.mimeType,
+            (legacyObjectMediaByMime.get(parsed.reference.mimeType) ?? 0) + 1,
+          );
+        } else {
+          warnings.push(Object.freeze({
+            entity: "messages" as const,
+            code: "invalid_legacy_media_uri",
+            message: `Message ${row.sourceTable}.${row.sourceId} has an invalid s3:// media_url: ${parsed.reason}`,
+          }));
+        }
+        continue;
+      }
+      if (mediaUrl !== null && /^https?:\/\//i.test(mediaUrl)) {
+        remoteUrlMediaPayloads += 1;
+        continue;
+      }
       const inline = mediaUrl === null ? null : parseDataUrlStats(mediaUrl);
       if (inline !== null) {
         inlineMediaPayloads += 1;
@@ -642,13 +680,22 @@ async function validateMessageBatches(
   }
 
   return Object.freeze({
-    transformedRows,
-    mediaPayloads,
-    ...(inlineMediaPayloads > 0 ? { inlineMediaPayloads } : {}),
-    ...(inlineMediaDecodedBytesByMime.size > 0
-      ? { inlineMediaDecodedBytesByMime: Object.fromEntries([...inlineMediaDecodedBytesByMime].sort()) }
-      : {}),
-    ...(mediaFieldConflicts > 0 ? { mediaFieldConflicts } : {}),
+    summary: Object.freeze({
+      transformedRows,
+      mediaPayloads,
+      ...(inlineMediaPayloads > 0 ? { inlineMediaPayloads } : {}),
+      ...(inlineMediaDecodedBytesByMime.size > 0
+        ? { inlineMediaDecodedBytesByMime: Object.fromEntries([...inlineMediaDecodedBytesByMime].sort()) }
+        : {}),
+      ...(legacyObjectMediaPayloads > 0 ? { legacyObjectMediaPayloads } : {}),
+      ...(legacyObjectMediaByMime.size > 0
+        ? { legacyObjectMediaByMime: Object.fromEntries([...legacyObjectMediaByMime].sort()) }
+        : {}),
+      ...(warnings.length > 0 ? { invalidLegacyObjectMediaPayloads: warnings.length } : {}),
+      ...(remoteUrlMediaPayloads > 0 ? { remoteUrlMediaPayloads } : {}),
+      ...(mediaFieldConflicts > 0 ? { mediaFieldConflicts } : {}),
+    }),
+    warnings: Object.freeze(warnings),
   });
 }
 

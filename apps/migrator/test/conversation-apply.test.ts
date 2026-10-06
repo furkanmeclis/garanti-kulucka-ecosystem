@@ -204,6 +204,176 @@ describe("conversation and message apply", () => {
   });
 });
 
+describe("bridge-extracted s3:// legacy media apply", () => {
+  const hash = "c".repeat(64);
+  const legacyUri = `s3://gk-legacy-media/mesajlar/${hash}.jpg`;
+  const legacyKey = `gk-legacy-media/mesajlar/${hash}.jpg`;
+
+  function seededTarget(mapRunId: string): ConversationMemoryTarget {
+    const target = new ConversationMemoryTarget();
+    target.seedMap("public.konusmalar", conversationId, "conversations", "primary", "conv_89abcdef0123456789abcdef", mapRunId);
+    return target;
+  }
+
+  it("links the existing object as a files row without re-uploading, sized by HEAD", async () => {
+    const target = seededTarget("run_s3_media");
+    const storage = new FakeMediaStorage();
+    storage.existingObjects.set(legacyKey, 2048);
+    const source = new MemorySource([messageRecord(messageOneId, { media_url: legacyUri, media_type: "image" })]);
+
+    await expect(applyMessageMigrationBatchWithState({
+      runId: "run_s3_media",
+      source,
+      target,
+      batch: batch("messages", 1),
+      mediaStorage: storage,
+    })).resolves.toMatchObject({ readRows: 1, writtenRows: 3, idMapCreated: 1 });
+
+    expect(storage.objects).toEqual([]);
+    expect(storage.heads).toEqual([legacyKey]);
+    const file = target.records.find((record) => record.targetTable === "files");
+    expect(file).toMatchObject({
+      targetId: expect.stringMatching(/^fil_[0-9a-f]{24}$/),
+      checksum: `sha256:${hash}`,
+      payload: {
+        bucket: "gk-legacy-media",
+        object_key: `mesajlar/${hash}.jpg`,
+        mime_type: "image/jpeg",
+        byte_size: 2048,
+        checksum: `sha256:${hash}`,
+        upload_status: "available",
+        scan_status: "skipped",
+      },
+    });
+    expect(target.records.find((record) => record.targetTable === "message_attachments")).toMatchObject({
+      checksum: `sha256:${hash}`,
+      payload: { attachment_type: "image", file_id: file?.targetId },
+    });
+    const rawPayload = target.records.find((record) => record.targetTable === "messages")?.payload.raw_payload;
+    expect(rawPayload).not.toHaveProperty("media_url");
+    expect(rawPayload).toMatchObject({
+      media_type: "image",
+      media_storage: { bucket: "gk-legacy-media", object_key: `mesajlar/${hash}.jpg`, byte_size: 2048 },
+    });
+
+    // Idempotent rerun: same public ids, no duplicate rows, still no upload.
+    const before = target.records.map((record) => `${record.targetTable}:${record.targetId}`).sort();
+    await expect(applyMessageMigrationBatchWithState({
+      runId: "run_s3_media",
+      source,
+      target,
+      batch: batch("messages", 1),
+      mediaStorage: storage,
+    })).resolves.toMatchObject({ readRows: 1, writtenRows: 3 });
+    expect(target.records.map((record) => `${record.targetTable}:${record.targetId}`).sort()).toEqual(before);
+    expect(storage.objects).toEqual([]);
+  });
+
+  it("uses a full MIME media_type and honours a configured legacy bucket", async () => {
+    const target = seededTarget("run_s3_bucket");
+    const storage = new FakeMediaStorage();
+    storage.existingObjects.set(`bridge-media/mesajlar/${hash}.ogg`, 10);
+
+    await expect(applyMessageMigrationBatchWithState({
+      runId: "run_s3_bucket",
+      source: new MemorySource([messageRecord(messageOneId, {
+        media_url: `s3://bridge-media/mesajlar/${hash}.ogg`,
+        media_type: "audio/ogg",
+      })]),
+      target,
+      batch: batch("messages", 1),
+      mediaStorage: storage,
+      legacyMediaBucket: "bridge-media",
+    })).resolves.toMatchObject({ writtenRows: 3 });
+    expect(target.records.find((record) => record.targetTable === "files")?.payload).toMatchObject({
+      bucket: "bridge-media",
+      mime_type: "audio/ogg",
+      byte_size: 10,
+    });
+  });
+
+  it.each([
+    [`s3://gk-legacy-media/mesajlar/${hash.slice(1)}.jpg`, "object key file name"],
+    [`s3://gk-legacy-media/other/${hash}.jpg`, "object key must be mesajlar/"],
+    [`s3://gk-legacy-media/mesajlar/${hash}.svg`, "unknown media extension .svg"],
+    [`s3://Bad_Bucket/mesajlar/${hash}.jpg`, "bucket name has invalid characters"],
+    [`s3://gk-legacy-media/mesajlar/${hash}.jpg?x=1`, "object key file name"],
+    [`S3://gk-legacy-media/mesajlar/${hash}.jpg`, "scheme must be lowercase"],
+  ])("fails closed before any write on malformed URI %s", async (uri, reason) => {
+    const target = seededTarget("run_s3_malformed");
+    const storage = new FakeMediaStorage();
+
+    await expect(applyMessageMigrationBatchWithState({
+      runId: "run_s3_malformed",
+      source: new MemorySource([messageRecord(messageOneId, { media_url: uri, media_type: "image" })]),
+      target,
+      batch: batch("messages", 1),
+      mediaStorage: storage,
+    })).rejects.toThrow(reason);
+    expect(target.records).toEqual([]);
+    expect(storage.heads).toEqual([]);
+  });
+
+  it("fails the whole batch closed before writes when HEAD reports the object missing", async () => {
+    const target = seededTarget("run_s3_missing");
+    const storage = new FakeMediaStorage();
+
+    await expect(applyMessageMigrationBatchWithState({
+      runId: "run_s3_missing",
+      source: new MemorySource([
+        messageRecord(messageOneId),
+        messageRecord(messageTwoId, { media_url: legacyUri, media_type: "image" }),
+      ]),
+      target,
+      batch: batch("messages", 2),
+      mediaStorage: storage,
+    })).rejects.toThrow(`Legacy media object ${legacyUri} for public.mesajlar.${messageTwoId} is missing in storage`);
+    expect(target.records).toEqual([]);
+  });
+
+  it("fails closed when s3:// media is present without a storage port", async () => {
+    const target = seededTarget("run_s3_nostorage");
+
+    await expect(applyMessageMigrationBatchWithState({
+      runId: "run_s3_nostorage",
+      source: new MemorySource([messageRecord(messageOneId, { media_url: legacyUri, media_type: "image" })]),
+      target,
+      batch: batch("messages", 1),
+    })).rejects.toThrow("Message apply requires migrator media storage configuration for legacy s3:// media");
+    expect(target.records).toEqual([]);
+  });
+
+  it("handles a mixed data:/s3:/https: batch with one upload, one HEAD and one passthrough", async () => {
+    const target = seededTarget("run_s3_mixed");
+    const storage = new FakeMediaStorage();
+    storage.existingObjects.set(legacyKey, 7);
+    const messageThreeId = "3a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d";
+
+    await expect(applyMessageMigrationBatchWithState({
+      runId: "run_s3_mixed",
+      source: new MemorySource([
+        messageRecord(messageOneId, { media_url: "data:image/png;base64,aGVsbG8=", media_type: "image" }),
+        messageRecord(messageTwoId, { media_url: legacyUri, media_type: "image" }),
+        messageRecord(messageThreeId, { media_url: "https://cdn.example.test/b.jpg", media_type: "image" }),
+      ]),
+      target,
+      batch: batch("messages", 3),
+      mediaStorage: storage,
+    })).resolves.toMatchObject({ readRows: 3, writtenRows: 7, idMapCreated: 3 });
+
+    expect(storage.objects).toHaveLength(1);
+    expect(storage.heads).toEqual([legacyKey]);
+    const files = target.records.filter((record) => record.targetTable === "files");
+    expect(files.map((record) => record.payload.bucket).sort()).toEqual(["gk-legacy-media", "migration-media"]);
+    expect(target.records.filter((record) => record.targetTable === "message_attachments")).toHaveLength(2);
+    const remote = target.records.find((record) =>
+      record.targetTable === "messages" && record.payload.body === `body-${messageThreeId}`
+    );
+    expect(remote?.payload.raw_payload).toMatchObject({ media_url: "https://cdn.example.test/b.jpg" });
+    expect(remote?.payload.raw_payload).not.toHaveProperty("media_storage");
+  });
+});
+
 class MemorySource implements LegacySource {
   constructor(private readonly rows: readonly LegacyRecord[]) {}
 
@@ -378,6 +548,8 @@ class ConversationMemoryTarget implements MigrationTarget {
 }
 
 class FakeMediaStorage {
+  readonly heads: string[] = [];
+  readonly existingObjects = new Map<string, number>();
   readonly objects: Array<{
     readonly checksum: string;
     readonly mimeType: string;
@@ -397,6 +569,13 @@ class FakeMediaStorage {
     };
     this.objects.push(object);
     return object;
+  }
+
+  async headObject(input: { readonly bucket: string; readonly objectKey: string }) {
+    const key = `${input.bucket}/${input.objectKey}`;
+    this.heads.push(key);
+    const size = this.existingObjects.get(key);
+    return size === undefined ? null : { size };
   }
 }
 

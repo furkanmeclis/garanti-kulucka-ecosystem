@@ -28,6 +28,9 @@ const conversationTwoId = "7f1c2b3a-4d5e-4f60-8172-93a4b5c6d7e8";
 const messageOneId = "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d";
 const messageTwoId = "2a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d";
 const messageThreeId = "3a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d";
+const messageFourId = "4a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d";
+const legacyMediaHash = "d".repeat(64);
+const legacyMediaKey = `mesajlar/${legacyMediaHash}.jpg`;
 
 describe("PostgreSQL conversation and message apply", () => {
   it("writes conversations/messages idempotently, resumes partial batches, resolves FKs, and preserves media/order", async () => {
@@ -66,11 +69,11 @@ describe("PostgreSQL conversation and message apply", () => {
           tables: [],
           rowCounts: [
             { entity: "conversations", rows: 2 },
-            { entity: "messages", rows: 3 },
+            { entity: "messages", rows: 4 },
           ],
           rowContentChecksums: [
             { entity: "conversations", rows: 2, checksum: "sha256:conversation-rows" },
-            { entity: "messages", rows: 3, checksum: "sha256:message-rows" },
+            { entity: "messages", rows: 4, checksum: "sha256:message-rows" },
           ],
           batchSize: 1,
           mappingCatalogVersion: "p4-conversation-message-test",
@@ -126,17 +129,51 @@ describe("PostgreSQL conversation and message apply", () => {
           media_type: "image",
           gonderici_adi: "Ada",
         }),
+        messageRecord(messageFourId, {
+          media_url: `s3://gk-legacy-media/${legacyMediaKey}`,
+          media_type: "image",
+        }),
       ]);
       const mediaStorage = new FakeMediaStorage();
       await expect(applyMessageMigrationBatchWithState({
         runId,
         source: messageSource,
         target,
-        batch: batch("messages", 1, 0, 3),
+        batch: batch("messages", 1, 0, 4),
         mediaStorage,
-      })).resolves.toMatchObject({ writtenRows: 5, idMapCreated: 3 });
+      })).resolves.toMatchObject({ writtenRows: 8, idMapCreated: 4 });
       expect(mediaStorage.uploads).toEqual([{ sourceTable: "public.mesajlar", sourceId: messageThreeId }]);
-      expect(targetCounts(container)).toBe("2:3:6");
+      expect(mediaStorage.heads).toEqual([`gk-legacy-media/${legacyMediaKey}`]);
+      expect(targetCounts(container)).toBe("2:4:7");
+
+      // Idempotent rerun of the same batch keeps one files row per checksum and no extra uploads/rows.
+      await expect(applyMessageMigrationBatchWithState({
+        runId,
+        source: messageSource,
+        target,
+        batch: batch("messages", 1, 0, 4),
+        mediaStorage,
+      })).resolves.toMatchObject({ writtenRows: 8 });
+      expect(mediaStorage.uploads).toHaveLength(1);
+      expect(targetCounts(container)).toBe("2:4:7");
+      expect(query(container, "canonical_target", `
+        select concat_ws(':', count(*), count(distinct f.checksum))
+        from files f
+      `)).toBe("2:2");
+      expect(query(container, "canonical_target", `
+        select concat_ws(':', f.bucket, f.object_key, f.mime_type, f.byte_size, f.checksum, f.upload_status, f.scan_status)
+        from message_attachments attachment
+        join files f on f.id = attachment.file_id
+        join messages m on m.id = attachment.message_id
+        join legacy_id_map map on map.target_id = m.public_id
+        where map.run_id = '${runId}' and map.source_id = '${messageFourId}'
+      `)).toBe(`gk-legacy-media:${legacyMediaKey}:image/jpeg:4096:sha256:${legacyMediaHash}:available:skipped`);
+      expect(query(container, "canonical_target", `
+        select concat_ws(':', raw_payload ? 'media_url', raw_payload->'media_storage'->>'bucket')
+        from messages m
+        join legacy_id_map map on map.target_id = m.public_id
+        where map.run_id = '${runId}' and map.source_id = '${messageFourId}'
+      `)).toBe("f:gk-legacy-media");
 
       expect(query(container, "canonical_target", `
         select count(*)
@@ -153,7 +190,7 @@ describe("PostgreSQL conversation and message apply", () => {
         from messages m
         join legacy_id_map map on map.target_table = 'messages' and map.target_id = m.public_id
         where map.run_id = '${runId}'
-      `)).toBe(`${messageOneId},${messageTwoId},${messageThreeId}`);
+      `)).toBe(`${messageOneId},${messageTwoId},${messageThreeId},${messageFourId}`);
       expect(query(container, "canonical_target", `
         select raw_payload->>'medya_url'
         from messages m
@@ -217,6 +254,12 @@ class MemorySource implements LegacySource {
 
 class FakeMediaStorage implements MigratorMediaStorage {
   readonly uploads: Array<{ readonly sourceTable: string; readonly sourceId: string }> = [];
+  readonly heads: string[] = [];
+
+  async headObject(input: { readonly bucket: string; readonly objectKey: string }) {
+    this.heads.push(`${input.bucket}/${input.objectKey}`);
+    return input.bucket === "gk-legacy-media" && input.objectKey === legacyMediaKey ? { size: 4096 } : null;
+  }
 
   async storeInlineDataUrl(input: {
     readonly dataUrl: string;

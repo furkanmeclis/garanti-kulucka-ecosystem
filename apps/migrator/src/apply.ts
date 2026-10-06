@@ -16,7 +16,13 @@ import { transformLegacyOrder } from "./order-mapping.js";
 import { transformLegacyOrderItem } from "./order-item-mapping.js";
 import { transformLegacyProduct } from "./product-mapping.js";
 import { transformLegacyShipment } from "./shipment-mapping.js";
-import type { MigratorMediaStorage } from "./media-storage.js";
+import {
+  defaultLegacyMediaBucket,
+  isLegacyMediaUri,
+  parseLegacyMediaUri,
+  type LegacyMediaObjectReference,
+  type MigratorMediaStorage,
+} from "./media-storage.js";
 import type {
   BatchReadOptions,
   CanonicalRecord,
@@ -73,6 +79,8 @@ export interface ApplyMessageMigrationBatchInput {
   readonly runId: string;
   readonly batch: MigrationBatch;
   readonly mediaStorage?: MigratorMediaStorage;
+  /** Bucket that bridge-extracted s3:// legacy media must live in (MIGRATION_LEGACY_MEDIA_BUCKET). */
+  readonly legacyMediaBucket?: string;
 }
 
 export interface ApplyProductMigrationBatchInput {
@@ -716,6 +724,37 @@ async function applyMessageMigrationBatch(
     }
   }
 
+  const legacyMediaBucket = input.legacyMediaBucket ?? defaultLegacyMediaBucket;
+  const legacyObjectReferences = new Map<string, LegacyMediaObjectReference>();
+  for (const item of transformed) {
+    const rawPayload = toRawPayloadRecord(item.result.message.rawPayload);
+    const mediaUrl = rawPayload?.media_url;
+    if (!isLegacyMediaUri(mediaUrl)) continue;
+    const parsed = parseLegacyMediaUri(mediaUrl, { expectedBucket: legacyMediaBucket, mediaType: rawPayload?.media_type });
+    if (!parsed.ok) {
+      throw new Error(
+        `Message apply rejected legacy media URI for ${item.legacyRecord.sourceTable}.${item.legacyRecord.sourceId}: ${parsed.reason}`,
+      );
+    }
+    legacyObjectReferences.set(item.legacyRecord.sourceId, parsed.reference);
+  }
+  const legacyObjectSizes = new Map<string, number>();
+  if (legacyObjectReferences.size > 0) {
+    assertInlineMediaApplyTarget(input.target);
+    if (!input.mediaStorage) {
+      throw new Error("Message apply requires migrator media storage configuration for legacy s3:// media");
+    }
+    for (const [sourceId, reference] of legacyObjectReferences) {
+      const objectKey = `${reference.bucket}/${reference.objectKey}`;
+      if (legacyObjectSizes.has(objectKey)) continue;
+      const head = await input.mediaStorage.headObject({ bucket: reference.bucket, objectKey: reference.objectKey });
+      if (head === null) {
+        throw new Error(`Legacy media object ${reference.uri} for public.mesajlar.${sourceId} is missing in storage`);
+      }
+      legacyObjectSizes.set(objectKey, head.size);
+    }
+  }
+
   transformed.sort((left, right) =>
     left.result.message.sentAt.localeCompare(right.result.message.sentAt)
     || left.legacyRecord.sourceId.localeCompare(right.legacyRecord.sourceId),
@@ -726,8 +765,26 @@ async function applyMessageMigrationBatch(
     const rawPayload = toRawPayloadRecord(message.rawPayload);
     assertMappedLegacyMessageRawPayload(rawPayload);
     const inlineMediaUrl = messageInlineMediaUrl(rawPayload);
+    const legacyObject = legacyObjectReferences.get(item.legacyRecord.sourceId);
     let inlineMedia: Awaited<ReturnType<MigratorMediaStorage["storeInlineDataUrl"]>> | null = null;
-    if (inlineMediaUrl !== null) {
+    if (legacyObject !== undefined) {
+      // Bridge already extracted the bytes: keep the object where it is, no copy/re-upload.
+      inlineMedia = {
+        checksum: legacyObject.checksum,
+        mimeType: legacyObject.mimeType,
+        size: legacyObjectSizes.get(`${legacyObject.bucket}/${legacyObject.objectKey}`)!,
+        bucket: legacyObject.bucket,
+        objectKey: legacyObject.objectKey,
+      };
+      delete rawPayload!.media_url;
+      rawPayload!.media_storage = {
+        bucket: inlineMedia.bucket,
+        object_key: inlineMedia.objectKey,
+        checksum: inlineMedia.checksum,
+        mime_type: inlineMedia.mimeType,
+        byte_size: inlineMedia.size,
+      };
+    } else if (inlineMediaUrl !== null) {
       inlineMedia = await input.mediaStorage!.storeInlineDataUrl({
         dataUrl: inlineMediaUrl,
         sourceTable: item.legacyRecord.sourceTable,

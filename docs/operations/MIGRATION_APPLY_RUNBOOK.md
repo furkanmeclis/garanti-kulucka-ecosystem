@@ -38,7 +38,7 @@ garanti-migrator migrate --dry-run --report-file /secure/migration/dry-run-repor
 
 Review the dry-run report before continuing.
 
-The report includes the full secret-free migration result. Confirm inline media counts/decoded byte totals, customer resolution paths, shipment linkage counts, duplicate product warnings, and order total adjustment warnings before apply.
+The report includes the full secret-free migration result. Confirm inline media counts/decoded byte totals, bridge `s3://` media counts per MIME (and zero `invalid_legacy_media_uri` blocked rows), customer resolution paths, shipment linkage counts, duplicate product warnings, and order total adjustment warnings before apply.
 
 ## 3. Apply
 
@@ -59,6 +59,14 @@ If the dry-run report contains inline `data:` message media, apply also requires
 - optional `MIGRATION_MEDIA_S3_PREFIX`
 
 Missing storage configuration for a batch with inline media is fail-closed before that batch writes messages. The migrator uploads the decoded media, records a `files` row with checksum, size, MIME type, `upload_status=available`, and scan status, then links it through `message_attachments`.
+
+### Bridge-extracted `s3://` media
+
+When the source is the bridge database, inline (and later expired Facebook/Instagram CDN) media is already extracted to Garage and `media_url` holds `s3://<legacy-bucket>/mesajlar/<sha256-hex>.<ext>` (`media_type` unchanged).
+
+- Set `MIGRATION_LEGACY_MEDIA_BUCKET` if the bridge bucket is not the default `gk-legacy-media`. It may differ from `MIGRATION_MEDIA_S3_BUCKET`; the same `MIGRATION_MEDIA_S3_*` credentials must be able to HEAD it.
+- Dry-run: check `messageTransform.legacyObjectMediaPayloads` / `legacyObjectMediaByMime` (separate from `inlineMediaPayloads` and `remoteUrlMediaPayloads`). Any `invalid_legacy_media_uri` warning (wrong bucket, key not `mesajlar/<64-hex>.<known ext>`, uppercase hex, query string, unknown extension) is a blocked row: fix the bridge row and re-run the dry-run before apply.
+- Apply never re-uploads or copies these objects. Before a batch writes anything it HEADs every referenced object; a malformed URI or a missing object fails the whole batch closed. It then writes a `files` row pointing at the original bucket/key (checksum from the key, MIME from a full-MIME `media_type` or the extension, size from HEAD, `upload_status=available`, `scan_status=skipped`) and the `message_attachments` link, exactly like inline media. Public ids derive from the checksum, so reruns are idempotent.
 
 ```bash
 SOURCE_DATABASE_URL=postgres://... \
