@@ -3829,3 +3829,284 @@ nav {
   flex: 1 1 220px;
   min-width: 0;
 }
+
+/* Browser softphone (JsSIP): floating dialer, call controls and incoming-call screen */
+.softphone {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+  pointer-events: none;
+}
+
+.softphone > * {
+  pointer-events: auto;
+}
+
+.softphone-fab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border: 0;
+  border-radius: 999px;
+  color: #fff;
+  background: #2563eb;
+  box-shadow: 0 10px 24px rgba(2, 6, 23, 0.45);
+  cursor: pointer;
+}
+
+.softphone-fab.registered {
+  background: #16a34a;
+}
+
+.softphone-fab.failed {
+  background: #dc2626;
+}
+
+.softphone-fab.in-call {
+  animation: softphone-pulse 1.4s ease-in-out infinite;
+}
+
+.softphone-panel {
+  display: grid;
+  gap: 12px;
+  width: min(320px, calc(100vw - 32px));
+  border: 1px solid #334155;
+  border-radius: 14px;
+  padding: 14px;
+  color: #e2e8f0;
+  background: #0b1220;
+  box-shadow: 0 16px 40px rgba(2, 6, 23, 0.6);
+}
+
+.softphone-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.softphone-header > div {
+  display: grid;
+}
+
+.softphone-sub {
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.softphone-status {
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #cbd5e1;
+  background: rgba(148, 163, 184, 0.16);
+}
+
+.softphone-status.registered {
+  color: #bbf7d0;
+  background: rgba(34, 197, 94, 0.16);
+}
+
+.softphone-status.failed {
+  color: #fecaca;
+  background: rgba(239, 68, 68, 0.16);
+}
+
+.softphone-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  border: 0;
+  border-radius: 8px;
+  color: #cbd5e1;
+  background: transparent;
+  cursor: pointer;
+}
+
+.softphone-call {
+  display: grid;
+  gap: 2px;
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: #111827;
+  text-align: center;
+}
+
+.softphone-call strong {
+  font-size: 18px;
+  overflow-wrap: anywhere;
+}
+
+.softphone-flags {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  color: #fcd34d;
+  font-size: 12px;
+}
+
+.softphone-dial {
+  display: grid;
+  gap: 8px;
+}
+
+.softphone-dial label {
+  display: grid;
+  gap: 4px;
+}
+
+.softphone-dial input {
+  min-height: 44px;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 8px 12px;
+  color: #e2e8f0;
+  background: #0f172a;
+  font: inherit;
+  font-size: 18px;
+  letter-spacing: 0.04em;
+}
+
+.softphone-controls {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.softphone-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 44px;
+  border: 1px solid #334155;
+  border-radius: 10px;
+  padding: 0 10px;
+  color: #e2e8f0;
+  background: #111827;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.softphone-btn.on {
+  border-color: #f59e0b;
+  color: #fde68a;
+}
+
+.softphone-btn.call {
+  border-color: #16a34a;
+  color: #fff;
+  background: #16a34a;
+}
+
+.softphone-btn.hangup {
+  border-color: #dc2626;
+  color: #fff;
+  background: #dc2626;
+}
+
+.softphone-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.softphone-keypad {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.softphone-key {
+  min-height: 44px;
+  border: 1px solid #334155;
+  border-radius: 10px;
+  color: #e2e8f0;
+  background: #0f172a;
+  font-size: 18px;
+  cursor: pointer;
+}
+
+.softphone-incoming-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(2, 6, 23, 0.7);
+}
+
+.softphone-incoming {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  width: min(100%, 360px);
+  border: 1px solid #334155;
+  border-radius: 16px;
+  padding: 24px 18px;
+  color: #e2e8f0;
+  background: #0b1220;
+  text-align: center;
+}
+
+.softphone-incoming h2,
+.softphone-incoming p {
+  margin: 0;
+}
+
+.softphone-incoming-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  width: 100%;
+  margin-top: 8px;
+}
+
+.softphone-ring {
+  color: #22c55e;
+  animation: softphone-pulse 1s ease-in-out infinite;
+}
+
+.softphone-inline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  min-height: 32px;
+  border: 1px solid #334155;
+  border-radius: 999px;
+  color: #86efac;
+  background: transparent;
+  vertical-align: middle;
+  cursor: pointer;
+}
+
+@keyframes softphone-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.08);
+  }
+}
+
+@media (max-width: 640px) {
+  .softphone {
+    right: 12px;
+    bottom: 12px;
+  }
+}

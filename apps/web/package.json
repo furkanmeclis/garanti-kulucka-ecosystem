@@ -13,6 +13,7 @@
   "dependencies": {
     "@garanti-kulucka/shared": "file:../../packages/shared",
     "jsbarcode": "^3.12.3",
+    "jssip": "3.13.8",
     "lucide-react": "^0.303.0",
     "qrcode-generator": "2.0.4",
     "react": "^18.3.1",

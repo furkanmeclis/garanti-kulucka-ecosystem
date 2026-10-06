@@ -5,6 +5,7 @@ import { BackendRequestError } from "../../api/http-client.js";
 import { formatMoney, orderStatusLabel } from "../app/shared.js";
 import { localeFor, useLanguage, useT } from "../i18n/index.js";
 import { customerDetailMessages } from "../i18n/messages/customerDetail.js";
+import { ClickToCall } from "../softphone/Softphone.js";
 
 type DomainClient = ReturnType<typeof createDomainClient>;
 type LoadState = { kind: "loading" } | { kind: "missing" } | { kind: "error" } | { kind: "ready"; detail: CustomerDetail };
@@ -198,7 +199,9 @@ export function CustomerDetailPage(props: {
               ) : (
                 <dl className="customer-detail-fields">
                   <dt>{t("phone")}</dt>
-                  <dd>{state.detail.customer.phone ?? "-"}</dd>
+                  <dd>
+                    {state.detail.customer.phone ?? "-"} <ClickToCall number={state.detail.customer.phone} />
+                  </dd>
                   <dt>{t("email")}</dt>
                   <dd>{state.detail.customer.email ?? "-"}</dd>
                   <dt>{t("username")}</dt>

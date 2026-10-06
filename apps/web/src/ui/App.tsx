@@ -8,6 +8,7 @@ import { useT } from "./i18n/index.js";
 import { layoutMessages } from "./i18n/messages/layout.js";
 import { LoginScreen, PublicPage, ResetPasswordScreen } from "./pages/AuthScreens.js";
 import { OrderCreateModal } from "./pages/flows/OrderCreateModal.js";
+import { SoftphoneProvider } from "./softphone/Softphone.js";
 import {
   AramaPage,
   AyarlarPage,
@@ -86,6 +87,7 @@ export function App() {
     notifications,
     handleSelectConversation,
     setSelectedShipmentId,
+    data,
   } = ctx;
 
   useEffect(() => {
@@ -158,6 +160,7 @@ export function App() {
   }
 
   return (
+    <SoftphoneProvider config={data.webphone}>
     <AppLayout
       activeFlow={activeFlow}
       canTogglePresence={canTogglePresence}
@@ -211,5 +214,6 @@ export function App() {
         {activeFlow === "webphone" && <WebphoneFlow ctx={ctx} />}
       </Suspense>
     </AppLayout>
+    </SoftphoneProvider>
   );
 }
