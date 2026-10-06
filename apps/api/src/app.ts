@@ -25,6 +25,7 @@ import { createWebhookRoutes } from "./http/webhook-routes.js";
 import { createWebphoneRoutes } from "./http/webphone-routes.js";
 import { createVapiRoutes } from "./http/vapi-routes.js";
 import { createNetgsmVoiceRoutes } from "./http/netgsm-voice-routes.js";
+import { createNetgsmWebhookRoutes } from "./http/netgsm-webhook-routes.js";
 import { createRateLimitStore, type RateLimitStore } from "./http/rate-limit.js";
 import type { ApiLogger, AppBindings } from "./http/types.js";
 import { getApiMetrics, httpMetricsMiddleware, metricsRouteHandler, type ApiMetrics } from "./observability/metrics.js";
@@ -172,6 +173,8 @@ export function createApp(options: CreateAppOptions = {}) {
 
   app.route("/auth", createAuthRoutes());
   app.route("/auth/account", createAccountRoutes());
+  // Public NetGSM IVR callback: registered before every authenticated /api/* group so their auth never runs.
+  app.route("/api/netgsm/webhook", createNetgsmWebhookRoutes());
   app.route("/api", createDomainRoutes());
   app.route("/api", createShipmentCreateRoutes());
   app.route("/api/orders", createOrderActionRoutes());

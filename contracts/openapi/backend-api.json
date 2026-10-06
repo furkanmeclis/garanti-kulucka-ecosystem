@@ -6201,6 +6201,163 @@
           }
         }
       }
+    },
+    "/api/netgsm/webhook/sesli-mesaj": {
+      "get": {
+        "operationId": "receiveNetgsmIvrWebhookQuery",
+        "security": [],
+        "parameters": [
+          {
+            "name": "bulkid",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1",
+                "2",
+                "3",
+                "6",
+                "7"
+              ]
+            }
+          },
+          {
+            "name": "push_button",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "bilsec",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Required when the global setting netgsm.ivr_webhook_token is set"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Always 200 for NetGSM (processed=false when the bulk id or state is unknown)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NetgsmIvrWebhookResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "operationId": "receiveNetgsmIvrWebhook",
+        "security": [],
+        "parameters": [
+          {
+            "name": "bulkid",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1",
+                "2",
+                "3",
+                "6",
+                "7"
+              ]
+            }
+          },
+          {
+            "name": "push_button",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "bilsec",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Required when the global setting netgsm.ivr_webhook_token is set"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Always 200 for NetGSM (processed=false when the bulk id or state is unknown)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NetgsmIvrWebhookResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -15622,6 +15779,35 @@
           },
           "answered_only": {
             "type": "boolean"
+          }
+        }
+      },
+      "NetgsmIvrWebhookResult": {
+        "type": "object",
+        "required": [
+          "ok"
+        ],
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "processed": {
+            "type": "boolean"
+          },
+          "order_public_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "confirmation_status": {
+            "type": "string",
+            "enum": [
+              "teyit_edildi",
+              "iptal_istegi",
+              "gecersiz_numara",
+              "ulasilamadi"
+            ]
           }
         }
       }

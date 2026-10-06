@@ -140,6 +140,7 @@ const expectedOperations = new Map<string, string[]>([
   ["/api/netgsm/status", ["get"]],
   ["/api/netgsm/teyit-settings", ["get", "put"]],
   ["/api/netgsm/cdr/sync", ["post"]],
+  ["/api/netgsm/webhook/sesli-mesaj", ["get", "post"]],
   ["/api/netgsm/cdr", ["get"]],
   ["/api/netgsm/cdr/istatistik", ["get"]],
   ["/admin/settings", ["get"]],

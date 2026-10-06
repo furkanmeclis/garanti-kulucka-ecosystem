@@ -168,6 +168,8 @@
   "GET /api/netgsm/teyit-settings": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "deny", "admin": "allow" },
   "PUT /api/netgsm/teyit-settings": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "deny", "admin": "allow" },
   "POST /api/netgsm/cdr/sync": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "deny", "admin": "allow" },
+  "GET /api/netgsm/webhook/sesli-mesaj": { "anonymous": "allow", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" },
+  "POST /api/netgsm/webhook/sesli-mesaj": { "anonymous": "allow", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" },
   "GET /api/netgsm/cdr": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "deny", "admin": "allow" },
   "GET /api/netgsm/cdr/istatistik": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "deny", "admin": "allow" }
 }

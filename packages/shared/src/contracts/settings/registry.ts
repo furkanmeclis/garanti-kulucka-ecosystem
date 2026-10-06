@@ -92,6 +92,8 @@ const literalGlobalSettingSchemas = {
   "vapi.api_key": { schema: nonblankString, secret: true },
   "netgsm.teyit_voice_usercode": { schema: z.string(), secret: false },
   "netgsm.teyit_voice_password": { schema: nonblankString, secret: true },
+  // Shared token the NetGSM IVR callback URL carries (?token=…); NetGSM cannot sign callbacks.
+  "netgsm.ivr_webhook_token": { schema: z.string().regex(/^[A-Za-z0-9_-]{16,128}$/), secret: false },
 } as const;
 
 /** Global setting keys whose values are always stored encrypted and never returned to clients. */

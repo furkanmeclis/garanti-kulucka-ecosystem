@@ -26,7 +26,11 @@ describe("API RBAC permission matrix", () => {
       expect(Object.keys(expectations).sort()).toEqual(["admin", "anonymous", "calisan", "kargo_operatoru"]);
       expect(expectations.admin).toBe("allow");
       expect(expectations.anonymous).toBe(
-        operation.startsWith("GET /health/") || operation === "POST /auth/login" || operation === "POST /auth/refresh"
+        operation.startsWith("GET /health/") ||
+          operation === "POST /auth/login" ||
+          operation === "POST /auth/refresh" ||
+          // Public NetGSM IVR callback (legacy path; optional shared ?token= instead of a session).
+          operation.endsWith(" /api/netgsm/webhook/sesli-mesaj")
           ? "allow"
           : "deny",
       );
