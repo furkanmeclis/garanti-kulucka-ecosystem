@@ -15,6 +15,7 @@ import {
   type WorkerLifecycleRecorder,
   type WorkerProcessorRegistry,
 } from "./processors.js";
+import { DatabaseShipmentWritebackRepository } from "./shipment-writeback.js";
 import { StorageOrphanReconciler } from "./storage-orphans.js";
 import { S3ProviderMediaFileResolver, type ProviderMediaFileResolver } from "./providers/media-files.js";
 import { DatabaseProviderAttemptRepository, type ProviderAttemptRepository } from "./providers/attempts.js";
@@ -104,6 +105,7 @@ export function createWorkerRuntime(options: WorkerRuntimeOptions): WorkerRuntim
     options.providerAccountConfigRepository ??
     (db ? new DatabaseProviderAccountConfigRepository(db, decryptor) : undefined);
   const storageOrphanReconciler = db ? new StorageOrphanReconciler(db) : undefined;
+  const shipmentWritebackRepository = db ? new DatabaseShipmentWritebackRepository(db) : undefined;
   const mediaFileResolver =
     options.mediaFileResolver ?? (db ? new S3ProviderMediaFileResolver(db) : undefined);
   const settingsChangeSubscriber =
@@ -130,6 +132,7 @@ export function createWorkerRuntime(options: WorkerRuntimeOptions): WorkerRuntim
     ...(providerAccountConfigRepository ? { providerAccountConfigRepository } : {}),
     ...(storageOrphanReconciler ? { storageOrphanReconciler } : {}),
     ...(mediaFileResolver ? { mediaFileResolver } : {}),
+    ...(shipmentWritebackRepository ? { shipmentWritebackRepository } : {}),
   });
 
   const workers = new Map<QueueName, Worker<JobEnvelope>>();

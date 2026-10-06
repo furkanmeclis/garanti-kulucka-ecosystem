@@ -45,6 +45,8 @@ export interface ProviderJobHandlingResult {
   status: "accepted_fixture" | "accepted_live";
   live_call_performed: boolean;
   attempt: ProviderAttempt;
+  /** Normalized provider response of a live call (absent for dry runs / fixtures). */
+  response_payload?: Record<string, unknown>;
 }
 
 export interface ProviderDeliveryHandlerOptions {
@@ -439,6 +441,7 @@ export async function handleProviderDeliveryJobWithTransport(
     queue: "provider-delivery",
     status: "accepted_live",
     live_call_performed: true,
+    response_payload: liveResult.response_payload,
     attempt: persistsResult
       ? { ...liveResult.attempt, response_metadata: { ...liveResult.attempt.response_metadata, result: liveResult.response_payload } }
       : liveResult.attempt,
@@ -448,7 +451,9 @@ export async function handleProviderDeliveryJobWithTransport(
 const resultPersistingOperations = new Set<string>([
   "contact.find",
   "contact.create",
+  "contact.update",
   "invoice.create",
+  "invoice.payment.create",
   "invoice.get",
   "invoice.e_document.create",
   "invoice.e_document.cancel",

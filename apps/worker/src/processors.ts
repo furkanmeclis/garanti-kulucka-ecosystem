@@ -29,6 +29,7 @@ import type { MessengerFetchTransport } from "./providers/messenger.js";
 import type { NetgsmFetchTransport } from "./providers/netgsm.js";
 import type { VapiFetchTransport } from "./providers/vapi.js";
 import type { StorageOrphanReconciler } from "./storage-orphans.js";
+import { shipmentWritebackFrom, type ShipmentWritebackRepository } from "./shipment-writeback.js";
 import type { StorageOrphanReconciliationResult } from "./storage-orphans.js";
 
 export type WorkerLifecycleEventName = "started" | "completed" | "failed";
@@ -122,6 +123,7 @@ export interface WorkerProcessorRegistryOptions {
   netgsmTransport?: NetgsmFetchTransport;
   vapiTransport?: VapiFetchTransport;
   storageOrphanReconciler?: StorageOrphanReconciler;
+  shipmentWritebackRepository?: ShipmentWritebackRepository;
 }
 
 export const workerQueueNames: QueueName[] = [
@@ -265,6 +267,7 @@ function createProviderDeliveryProcessor(
   extras: {
     instagramGraphTransport?: InstagramGraphFetchTransport;
     mediaFileResolver?: ProviderMediaFileResolver;
+    shipmentWritebackRepository?: ShipmentWritebackRepository;
   } = {},
 ): QueueProcessor {
   return async (job) => {
@@ -308,6 +311,18 @@ function createProviderDeliveryProcessor(
       throw error;
     }
     await providerAttemptRepository?.persist(result.attempt);
+    if (result.live_call_performed && extras.shipmentWritebackRepository) {
+      const update = shipmentWritebackFrom(requestEnvelope, result.response_payload);
+      if (update) {
+        // A write-back failure must not fail (and so retry) a carrier call that already succeeded.
+        try {
+          const applied = await extras.shipmentWritebackRepository.apply(update);
+          return { ...result, shipment_writeback: applied ? "applied" : "skipped" };
+        } catch {
+          return { ...result, shipment_writeback: "failed" };
+        }
+      }
+    }
     return result;
   };
 }
@@ -541,6 +556,8 @@ export function createWorkerProcessorRegistry(
     typeof options === "function" ? undefined : options.instagramGraphTransport;
   const mediaFileResolver =
     typeof options === "function" ? undefined : options.mediaFileResolver;
+  const shipmentWritebackRepository =
+    typeof options === "function" ? undefined : options.shipmentWritebackRepository;
   const processors = new Map<QueueName, QueueProcessor>([
     ["provider-webhooks", createProviderWebhookProcessor(providerAttemptRepository)],
     [
@@ -559,6 +576,7 @@ export function createWorkerProcessorRegistry(
         {
           ...(instagramGraphTransport ? { instagramGraphTransport } : {}),
           ...(mediaFileResolver ? { mediaFileResolver } : {}),
+          ...(shipmentWritebackRepository ? { shipmentWritebackRepository } : {}),
         },
       ),
     ],
