@@ -116,6 +116,7 @@ Durum anahtari: `yes` = yeni appte gercek akista var; `partial` = ozet/smoke vey
 15. **Layout visual parity and route split (M)**  
     Files: `apps/web/src/ui/App.tsx`, `ui/styles.css`, new route modules/components.  
     Tests: Playwright screenshot parity for desktop/mobile nav, header/profile/lang/logout/presence, protected route redirects, no text overlap.
+    Status: done. `App.tsx` is now a thin route shell: state/handlers in `ui/app/useDashboardController.tsx`, shared helpers in `ui/app/shared.tsx`, header in `ui/layout/AppLayout.tsx`, inline flows in `ui/pages/flows/*`, all pages `React.lazy` via `ui/routes.tsx` (main chunk 1,079 kB → 376 kB, no Vite size warning). Legacy guards: unauthenticated → `/giris` and back, `/` + forbidden/unknown paths → role home (`kargo_operatoru` → `/siparisler`). Header: initials avatar + presence dot, name/role/e-mail, TR/EN (`garanti-lang`), logout. Tests: `tests/playwright/layout-parity.spec.ts` (bounding-box checks, no pixel screenshots).
 
 ## Top 3 Slice
 

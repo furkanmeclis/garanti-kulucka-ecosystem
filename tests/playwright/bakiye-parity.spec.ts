@@ -210,10 +210,16 @@ for (const role of ["admin", "calisan"] as const) {
     });
 
     try {
-      await page.goto(`${app.url}/giris`);
-      await page.getByRole("button", { name: /giriş yap/i }).click();
-      await expect(page.getByRole("link", { name: /bakiyeler/i })).toHaveCount(1);
+      // Deep link: the protected-route guard sends us to /giris and back to /bakiye after login,
+      // so there is no second page.goto racing the post-login redirect.
       await page.goto(`${app.url}/bakiye`);
+      await expect(page).toHaveURL(/\/giris$/);
+      await Promise.all([
+        page.waitForResponse(`${backendBaseUrl}/auth/login`),
+        page.getByRole("button", { name: /giriş yap/i }).click(),
+      ]);
+      await expect(page).toHaveURL(/\/bakiye$/);
+      await expect(page.getByRole("link", { name: /bakiyeler/i })).toHaveCount(1);
 
       const flow = page.getByTestId("balances-flow");
       const hareketler = page.getByTestId("bakiye-hareketler");
