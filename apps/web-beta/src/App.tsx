@@ -21,6 +21,7 @@ import { ReportsPage } from "@/pages/reports-page";
 import { SettingsPage } from "@/pages/settings-page";
 import { SmsPage } from "@/pages/sms-page";
 import { ShipmentsPage } from "@/pages/shipments-page";
+import { CallsPage, PhonebookPage, VoiceMessagesPage } from "@/pages/voice-pages";
 
 /** Legacy ProtectedRoute: anonymous → /giris (and back after login); pages outside the role → role home. */
 function Protected({ children }: { children: ReactNode }) {
@@ -65,6 +66,9 @@ export function App() {
       <Route path="/raporlar" element={<Protected><ReportsPage /></Protected>} />
       <Route path="/faturalar" element={<Protected><InvoicesPage /></Protected>} />
       <Route path="/cari-hesaplar" element={<Protected><AccountsPage /></Protected>} />
+      <Route path="/sesli-asistan" element={<Protected><CallsPage /></Protected>} />
+      <Route path="/sesli-asistan/sesli-mesajlar" element={<Protected><VoiceMessagesPage /></Protected>} />
+      <Route path="/sesli-asistan/rehber" element={<Protected><PhonebookPage /></Protected>} />
       <Route path="*" element={<Protected><Navigate to="/" replace /></Protected>} />
     </Routes>
   );

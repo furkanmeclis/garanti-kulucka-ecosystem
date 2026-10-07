@@ -1,8 +1,8 @@
 import type { LucideIcon } from "lucide-react";
-import { BarChart3, BookUser, FileText, Instagram, LineChart, LayoutDashboard, MessageCircle, MessageSquare, MessageSquareText, Package, Settings, ShoppingCart, Truck, Users, Wallet, XCircle } from "lucide-react";
+import { BarChart3, BookUser, Contact, FileText, Instagram, LineChart, LayoutDashboard, MessageCircle, MessageSquare, MessageSquareText, Package, PhoneCall, Settings, ShoppingCart, Truck, Users, Voicemail, Wallet, XCircle } from "lucide-react";
 import { panelRoleOf, type PanelRole } from "@garanti-kulucka/shared";
 
-export type NavKey = "dashboard" | "orders" | "messages" | "customers" | "shipments" | "settings" | "cancellations" | "invoices" | "accounts" | "inventory" | "balances" | "comments" | "sms" | "reports" | "instagramAnalytics" | "instagramPublish";
+export type NavKey = "dashboard" | "orders" | "messages" | "customers" | "shipments" | "settings" | "cancellations" | "invoices" | "accounts" | "inventory" | "balances" | "comments" | "sms" | "reports" | "instagramAnalytics" | "instagramPublish" | "calls" | "voiceMessages" | "phonebook";
 
 export interface NavItem {
   key: NavKey;
@@ -36,6 +36,9 @@ export const navItems: readonly NavItem[] = [
   { key: "reports", path: "/raporlar", icon: BarChart3, roles: managers, bottomBar: false, section: "more" },
   { key: "invoices", path: "/faturalar", icon: FileText, roles: managers, bottomBar: false, section: "more" },
   { key: "accounts", path: "/cari-hesaplar", icon: BookUser, roles: managers, bottomBar: false, section: "more" },
+  { key: "calls", path: "/sesli-asistan", icon: PhoneCall, roles: managers, bottomBar: false, section: "more" },
+  { key: "voiceMessages", path: "/sesli-asistan/sesli-mesajlar", icon: Voicemail, roles: managers, bottomBar: false, section: "more" },
+  { key: "phonebook", path: "/sesli-asistan/rehber", icon: Contact, roles: managers, bottomBar: false, section: "more" },
 ];
 
 /** Menu for a backend role (owner/admin → manager); unknown roles only get settings/profile. */

@@ -22,7 +22,7 @@ describe("role-based menu", () => {
   });
 
   it("puts the extra pages in the More menu with their legacy roles", () => {
-    const managerMore = ["cancellations", "inventory", "balances", "comments", "sms", "instagramAnalytics", "instagramPublish", "reports", "invoices", "accounts"];
+    const managerMore = ["cancellations", "inventory", "balances", "comments", "sms", "instagramAnalytics", "instagramPublish", "reports", "invoices", "accounts", "calls", "voiceMessages", "phonebook"];
     expect(moreKeys("admin")).toEqual(managerMore);
     expect(moreKeys("owner")).toEqual(managerMore);
     expect(moreKeys("calisan")).toEqual(["cancellations", "inventory", "balances", "comments", "sms", "instagramAnalytics", "instagramPublish"]);

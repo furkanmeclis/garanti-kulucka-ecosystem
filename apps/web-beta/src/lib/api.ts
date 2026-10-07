@@ -62,6 +62,16 @@ import type {
   SmsTemplate,
 } from "./sms-comments";
 import type { InstagramAccountInsights, InstagramInsightsRefresh, InstagramPublication, InstagramPublishRequest, InstagramPublishResponse, ReportAnalysis, ReportCargoProvider } from "./reports-instagram";
+import type {
+  NetgsmCdrListResponse,
+  NetgsmCdrStatistics,
+  NetgsmTeyitSettings,
+  PhonebookEntry,
+  VoiceMessage,
+  VoiceMessageCreateRequest,
+  VoiceMessageMutation,
+  VoiceMessageStatus,
+} from "./voice";
 import type { StoredTokens } from "./session-storage";
 
 /** VITE_BACKEND_BASE_URL (default "/backend"): same-origin proxy in Docker/nginx and the Vite dev server. */
@@ -320,6 +330,20 @@ export function createApiClient(options: ApiClientOptions) {
     refreshInstagramInsights: () => request<InstagramInsightsRefresh>("/api/instagram/insights/account/refresh", { method: "POST", body: {} }),
     publishInstagram: (input: InstagramPublishRequest) => request<InstagramPublishResponse>("/api/instagram/publications", { method: "POST", body: input }),
     getInstagramPublication: (publicId: string) => request<InstagramPublication>(`/api/instagram/publications/${encodeURIComponent(publicId)}`),
+    netgsmStatus: () => request<{ configured: boolean }>("/api/netgsm/status"),
+    teyitSettings: () => request<{ settings: NetgsmTeyitSettings }>("/api/netgsm/teyit-settings"),
+    saveTeyitSettings: (settings: NetgsmTeyitSettings) => request<{ settings: NetgsmTeyitSettings }>("/api/netgsm/teyit-settings", { method: "PUT", body: settings }),
+    syncCdr: (idempotencyKey: string) => request<{ request_id: string; job_id: string | null; queued: boolean }>("/api/netgsm/cdr/sync", { method: "POST", body: { idempotency_key: idempotencyKey } }),
+    listCdr: (query: { yon: "gelen" | "giden"; sayfa: number; sayfa_boyutu: number }) => request<NetgsmCdrListResponse>("/api/netgsm/cdr", { query: { ...query } }),
+    cdrStatistics: () => request<{ success: boolean; data: NetgsmCdrStatistics; synced_at: string | null }>("/api/netgsm/cdr/istatistik"),
+    listVoiceMessages: (query: { status?: VoiceMessageStatus; search?: string; limit: number; offset: number }) =>
+      request<{ data: VoiceMessage[]; total_count: number; recipient_total: number; limit: number; offset: number; live_gate: string }>("/api/netgsm/sesli-mesaj", { query: { ...query } }),
+    sendVoiceMessage: (input: VoiceMessageCreateRequest) => request<VoiceMessageMutation>("/api/netgsm/sesli-mesaj", { method: "POST", body: input }),
+    getVoiceMessage: (publicId: string) => request<{ voice_message: VoiceMessage; live_gate: string }>(`/api/netgsm/sesli-mesaj/${encodeURIComponent(publicId)}`),
+    requestVoiceReport: (publicId: string, idempotencyKey: string) =>
+      request<VoiceMessageMutation>(`/api/netgsm/sesli-mesaj/${encodeURIComponent(publicId)}/rapor`, { method: "POST", body: { idempotency_key: idempotencyKey } }),
+    listPhonebook: (query: { kind?: "customer" | "staff"; search?: string; limit: number; offset: number }) =>
+      request<{ data: PhonebookEntry[]; total_count: number; limit: number; offset: number }>("/api/netgsm/rehber", { query: { ...query } }),
     saveCustomerNotes: (publicId: string, notes: string | null) =>
       request<CustomerSummary>(`/api/customers/${encodeURIComponent(publicId)}/notes`, { method: "PATCH", body: { notes } }),
   };
