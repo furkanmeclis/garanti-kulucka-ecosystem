@@ -26,13 +26,15 @@ import type { LiveProviderTransportPolicy } from "./transport-policy.js";
  *   GET /{creation_id}?fields=status_code, then POST /{ig_user_id}/media_publish.
  * - routes/commentAiRouter.js publicReply / privateReply / hideComment / deleteComment: the
  *   Instagram Graph host first, falling back to the Facebook Graph host on an error response.
+ * - server.js /api/instagram/insights/account: GET /{ig_user_id}?fields=followers_count,media_count and
+ *   GET /{ig_user_id}/insights?metric=impressions,reach,profile_views&period=day&since&until.
  * Legacy sends the token as `access_token` in the JSON body (query string for DELETE/GET); attempt
  * metadata only ever stores redacted copies.
  */
 
 export type InstagramGraphOperation = Extract<
   ProviderOperation,
-  "media.publish" | "comment.reply" | "comment.private_reply" | "comment.hide" | "comment.delete"
+  "media.publish" | "comment.reply" | "comment.private_reply" | "comment.hide" | "comment.delete" | "insights.account"
 >;
 
 export const instagramGraphOperations: readonly InstagramGraphOperation[] = [
@@ -41,6 +43,7 @@ export const instagramGraphOperations: readonly InstagramGraphOperation[] = [
   "comment.private_reply",
   "comment.hide",
   "comment.delete",
+  "insights.account",
 ];
 
 export type InstagramGraphEndpoint =
@@ -50,7 +53,9 @@ export type InstagramGraphEndpoint =
   | "comment_replies"
   | "comment_private_reply"
   | "comment_hide"
-  | "comment_delete";
+  | "comment_delete"
+  | "account_fields"
+  | "account_insights";
 
 export interface InstagramGraphTransportRequest {
   method: "GET" | "POST" | "DELETE";
@@ -469,6 +474,56 @@ async function commentAction(
   }
 }
 
+const defaultInsightMetrics = "impressions,reach,profile_views";
+
+/**
+ * Legacy account insights: followers/media count (best effort, as in legacy) and daily metrics for the
+ * last `days` days. Graph caps a `period=day` window at 30 days.
+ */
+async function accountInsights(
+  input: InstagramGraphLiveAdapterInput,
+  session: GraphSession,
+  creds: InstagramGraphCredentials,
+  startedAt: Date,
+): Promise<Record<string, unknown>> {
+  const policy = input.policy;
+  const igUserId = requirePayload(creds.igUserId, "ig_user_id");
+  const requestedDays = Math.trunc(Number(input.envelope.payload.days ?? 30));
+  const days = Math.min(30, Math.max(1, Number.isFinite(requestedDays) ? requestedDays : 30));
+  const metrics = stringSetting(input.accountConfig.settings, ["insights_metrics", "instagram.insights_metrics"], defaultInsightMetrics)
+    .split(",")
+    .map((metric) => metric.trim())
+    .filter((metric) => /^[a-z_]+$/.test(metric))
+    .join(",") || defaultInsightMetrics;
+
+  let followers: { followers_count: number; media_count: number } | null = null;
+  try {
+    const fields = await session.call(
+      queryTokenRequest("GET", creds.igGraphUrl, `/${igUserId}`, "fields=followers_count,media_count", creds.accessToken, "account_fields", policy),
+    );
+    followers = { followers_count: Number(fields?.followers_count ?? 0) || 0, media_count: Number(fields?.media_count ?? 0) || 0 };
+  } catch (error) {
+    // Legacy swallowed this lookup; a rejected token still fails the whole job.
+    if (!(error instanceof GraphCallFailure) || error.errorCode === "instagram_token_error") throw error;
+  }
+
+  const until = Math.floor(startedAt.getTime() / 1000);
+  const since = until - days * 86_400;
+  const insights = await session.call(
+    queryTokenRequest(
+      "GET",
+      creds.igGraphUrl,
+      `/${igUserId}/insights`,
+      `metric=${metrics}&period=day&since=${since}&until=${until}`,
+      creds.accessToken,
+      "account_insights",
+      policy,
+    ),
+  );
+  const data = Array.isArray(insights?.data) ? insights.data : [];
+  return { success: true, data, followers, period: { days, since, until }, synced_at: startedAt.toISOString() };
+}
+
 export async function sendInstagramGraphLiveRequest(
   input: InstagramGraphLiveAdapterInput,
 ): Promise<InstagramGraphLiveAdapterResult> {
@@ -483,7 +538,9 @@ export async function sendInstagramGraphLiveRequest(
   try {
     payload = input.envelope.operation === "media.publish"
       ? await publishMedia(input, session, creds)
-      : await commentAction(input, session, creds);
+      : input.envelope.operation === "insights.account"
+        ? await accountInsights(input, session, creds, startedAt)
+        : await commentAction(input, session, creds);
   } catch (error) {
     if (!(error instanceof GraphCallFailure)) throw error;
     const endedAt = input.now ? new Date(input.now) : new Date();

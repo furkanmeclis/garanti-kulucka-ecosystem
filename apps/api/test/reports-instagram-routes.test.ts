@@ -516,4 +516,32 @@ describe("Instagram publish and analytics routes", () => {
     await expect(missing.json()).resolves.toMatchObject({ error: { message: "Instagram bagli degil" } });
     expect((await call("GET", "/api/instagram/insights/account", "kargo_operatoru")).status).toBe(403);
   });
+
+  it("reports a live worker snapshot and queues instagram.insights.account refreshes", async () => {
+    const liveAccount = {
+      ...routeMocks.account,
+      metadata: { analytics: { ...routeMocks.account.metadata.analytics, source: "instagram_graph", synced_at: "2026-10-07T06:00:00.000Z" } },
+    };
+    routeMocks.instagramRepository.findAccount.mockImplementation(async () => liveAccount as never);
+    const live = (await (await call("GET", "/api/instagram/insights/account?days=7", "admin")).json()) as { dry_run: boolean; synced_at: string | null; live_gate: string };
+    expect(live).toMatchObject({ dry_run: false, synced_at: "2026-10-07T06:00:00.000Z", live_gate: "providers.instagram.live_mode" });
+
+    published.length = 0;
+    const clock = vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-10-07T09:01:00.000Z"));
+    const refresh = await call("POST", "/api/instagram/insights/account/refresh", "calisan", {});
+    expect(refresh.status).toBe(202);
+    const body = (await refresh.json()) as { request_id: string; queued: boolean; live_call_permitted: boolean };
+    expect(body).toMatchObject({ queued: true, live_call_permitted: false });
+    expect(published).toHaveLength(1);
+    expect(published[0]).toMatchObject({ name: "instagram.insights.account", queue: "provider-delivery" });
+    expect(published[0]?.payload.envelope).toMatchObject({ operation: "insights.account", account_public_id: "iac_1", payload: { days: 30, reason: "manual" } });
+    // Same five-minute bucket → the same job id, so BullMQ dedupes repeated clicks.
+    await call("POST", "/api/instagram/insights/account/refresh", "admin", {});
+    expect(published[1]?.job_id).toBe(published[0]?.job_id);
+    clock.mockRestore();
+
+    routeMocks.instagramRepository.findAccount.mockImplementation(async () => null);
+    expect((await call("POST", "/api/instagram/insights/account/refresh", "admin", {})).status).toBe(400);
+    expect((await call("POST", "/api/instagram/insights/account/refresh", "kargo_operatoru", {})).status).toBe(403);
+  });
 });

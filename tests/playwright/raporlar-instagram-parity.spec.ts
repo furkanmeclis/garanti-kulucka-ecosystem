@@ -142,10 +142,11 @@ interface Recorded {
   uploadBodies: Array<Record<string, unknown>>;
   garagePuts: number;
   insightDays: string[];
+  insightRefreshes: number;
 }
 
 async function setup(page: Page, role: string): Promise<Recorded> {
-  const recorded: Recorded = { reportQueries: [], publishBodies: [], uploadBodies: [], garagePuts: 0, insightDays: [] };
+  const recorded: Recorded = { reportQueries: [], publishBodies: [], uploadBodies: [], garagePuts: 0, insightDays: [], insightRefreshes: 0 };
   const current = user(role);
   await installRealtimeShim(page);
   await page.route(`${backendBaseUrl}/**`, async (route) => {
@@ -240,6 +241,10 @@ async function setup(page: Page, role: string): Promise<Recorded> {
         created_at: "2026-10-06T09:00:00.000Z",
       });
     }
+    if (url.pathname === "/api/instagram/insights/account/refresh") {
+      recorded.insightRefreshes += 1;
+      return json({ account_public_id: "iac_1", request_id: "req_instagram_insights_iac_1_manual_1", job_id: "job_instagram_insights_iac_1_manual_1", queued: true, live_gate: "providers.instagram.live_mode", live_call_permitted: false });
+    }
     if (url.pathname === "/api/instagram/insights/account") {
       const days = url.searchParams.get("days") ?? "7";
       recorded.insightDays.push(days);
@@ -257,7 +262,9 @@ async function setup(page: Page, role: string): Promise<Recorded> {
         ],
         followers: { followers_count: 15230, media_count: 88 },
         period: { days: Number(days), since: 0, until: 0 },
-        dry_run: true,
+        dry_run: recorded.insightRefreshes === 0,
+        synced_at: recorded.insightRefreshes > 0 ? "2026-10-07T06:00:00.000Z" : null,
+        live_gate: "providers.instagram.live_mode",
         live_call_permitted: false,
       });
     }
@@ -429,9 +436,14 @@ for (const role of ["admin", "calisan"] as const) {
       await expect(ozet).toContainText("Son 14 gün");
       await expect(page.getByTestId("instagram-gunluk-performans").locator(".ig-gunluk-satir")).toHaveCount(3);
 
+      await expect(page.getByTestId("instagram-senkron")).toContainText("Canlı senkron yok");
+      await expect(page.getByTestId("instagram-senkron")).toContainText("providers.instagram.live_mode");
       const beforeRefresh = recorded.insightDays.length;
       await page.getByRole("button", { name: "Yenile" }).click();
       await expect.poll(() => recorded.insightDays.length).toBe(beforeRefresh + 1);
+      expect(recorded.insightRefreshes).toBe(1);
+      await expect(page.getByTestId("instagram-senkron")).toContainText("Son canlı senkron");
+      await expect(page.getByTestId("instagram-senkron")).toContainText("Instagram istatistikleri için yenileme kuyruğa alındı.");
     } finally {
       await closeWebApp(app.server);
     }

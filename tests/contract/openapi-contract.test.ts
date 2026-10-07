@@ -42,6 +42,7 @@ const expectedOperations = new Map<string, string[]>([
   ["/api/instagram/publications", ["post"]],
   ["/api/instagram/publications/{publication_public_id}", ["get"]],
   ["/api/instagram/insights/account", ["get"]],
+  ["/api/instagram/insights/account/refresh", ["post"]],
   ["/api/conversations/{conversation_public_id}/messages", ["get", "post"]],
   ["/api/conversations/{conversation_public_id}/state", ["patch"]],
   ["/api/conversations/{conversation_public_id}/notes", ["patch"]],

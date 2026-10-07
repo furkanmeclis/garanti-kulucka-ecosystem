@@ -106,6 +106,13 @@
       "fixture_file": "instagram/fixtures/comment_delete_minimal.json"
     },
     {
+      "provider": "instagram",
+      "operation": "insights.account",
+      "direction": "outbound",
+      "status": "covered",
+      "fixture_file": "instagram/fixtures/insights_account_minimal.json"
+    },
+    {
       "provider": "messenger",
       "operation": "message.webhook",
       "direction": "inbound",

@@ -44,6 +44,16 @@ const publishSchema = z
 
 const daysSchema = z.coerce.number().int().min(1).max(90).catch(7);
 
+/** Where the stored analytics snapshot came from (`instagram_graph` = written by a live worker job). */
+function instagramAnalyticsSync(metadata: unknown) {
+  const record = metadata && typeof metadata === "object" && !Array.isArray(metadata) ? (metadata as Record<string, unknown>) : {};
+  const analytics = record.analytics && typeof record.analytics === "object" && !Array.isArray(record.analytics) ? (record.analytics as Record<string, unknown>) : {};
+  return {
+    synced_at: typeof analytics.synced_at === "string" ? analytics.synced_at : null,
+    source: typeof analytics.source === "string" ? analytics.source : null,
+  };
+}
+
 function canUseInstagram(role: string | undefined) {
   return role === "admin" || role === "owner" || role === "calisan";
 }
@@ -250,16 +260,62 @@ export function createInstagramRoutes() {
     if (!account) {
       return context.json({ error: { code: "instagram_not_connected", message: "Instagram bagli degil" } }, 400);
     }
+    const sync = instagramAnalyticsSync(account.metadata);
     return context.json({
       success: true,
-      cached: false,
+      cached: sync.synced_at !== null,
       account_public_id: account.public_id,
       ...instagramAccountInsightsFromMetadata(account.metadata, days),
       provider: "instagram",
       operation: "insights.account",
-      dry_run: true,
+      // The API never calls Graph; the worker's `instagram.insights.account` job refreshes the snapshot.
+      dry_run: sync.source !== "instagram_graph",
+      synced_at: sync.synced_at,
+      live_gate: "providers.instagram.live_mode",
       live_call_permitted: false,
     });
+  });
+
+  routes.post("/insights/account/refresh", async (context) => {
+    const body = await readJson(context);
+    const requested = body && typeof body === "object" && "account_public_id" in body ? String((body as { account_public_id: unknown }).account_public_id ?? "").trim() : "";
+    const db = context.get("db");
+    if (!db) return databaseUnavailable(context);
+    const account = await new InstagramRepository(db).findAccount(requested || null);
+    if (!account) {
+      return context.json({ error: { code: "instagram_not_connected", message: "Instagram bagli degil" } }, 400);
+    }
+    // One manual refresh per account per 5 minutes (legacy cached Graph answers for the same span).
+    const bucket = Math.floor(Date.now() / 300_000);
+    const key = `${slug(account.public_id, 60)}_manual_${bucket}`;
+    const occurredAt = new Date().toISOString();
+    const requestId = `req_instagram_insights_${key}`;
+    const jobId = await context.get("providerDeliveryQueuePublisher").publish(
+      jobEnvelopeSchema.parse({
+        job_id: `job_instagram_insights_${key}`,
+        queue: "provider-delivery",
+        name: "instagram.insights.account",
+        payload: providerDeliveryJobPayloadSchema.parse({
+          envelope: {
+            request_id: requestId,
+            provider: "instagram",
+            operation: "insights.account",
+            direction: "outbound",
+            channel: "instagram",
+            account_public_id: account.public_id,
+            occurred_at: occurredAt,
+            payload: { days: 30, reason: "manual" },
+            legacy_contract: { source: "server.js GET /api/instagram/insights/account", legacy_event: "instagram_insights_account" },
+          },
+        }),
+        requested_at: occurredAt,
+        request_id: context.get("requestId"),
+      }),
+    );
+    return context.json(
+      { account_public_id: account.public_id, request_id: requestId, job_id: jobId, queued: jobId !== null, live_gate: "providers.instagram.live_mode", live_call_permitted: false },
+      202,
+    );
   });
 
   return routes;

@@ -68,6 +68,8 @@ function providerPath(envelope: ProviderRequestEnvelope): string {
       return "/meta/instagram/comments/hide";
     case "instagram:comment.delete":
       return "/meta/instagram/comments/delete";
+    case "instagram:insights.account":
+      return "/meta/instagram/insights";
     case "netgsm:sms.send":
       return "/netgsm/sms";
     case "vapi:call.create":

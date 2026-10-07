@@ -125,6 +125,8 @@ function buildBody(envelope: ProviderRequestEnvelope): Record<string, unknown> {
     case "comment.hide":
     case "comment.delete":
       return pick(payload, ["comment_id"]);
+    case "insights.account":
+      return pick(payload, ["days", "reason"]);
   }
 }
 

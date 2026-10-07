@@ -14,7 +14,8 @@
         "comment.reply",
         "comment.private_reply",
         "comment.hide",
-        "comment.delete"
+        "comment.delete",
+        "insights.account"
       ]
     },
     "direction": { "enum": ["inbound", "outbound"] },

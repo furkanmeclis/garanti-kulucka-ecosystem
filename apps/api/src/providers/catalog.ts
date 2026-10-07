@@ -50,6 +50,7 @@ export const apiProviderCatalog: ApiProviderCatalogItem[] = [
     "comment.private_reply",
     "comment.hide",
     "comment.delete",
+    "insights.account",
   ]),
   catalogItem("messenger", ["messenger"], ["message.webhook", "message.send"]),
   catalogItem("netgsm", ["sms", "voice"], ["sms.send", "call.confirmation.create", "call.confirmation.status", "call.report", "voice.message.send", "voice.message.report"]),

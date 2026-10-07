@@ -42,6 +42,7 @@ export const providerOperationSchema = z.enum([
   "comment.private_reply",
   "comment.hide",
   "comment.delete",
+  "insights.account",
 ]);
 
 export const providerDirectionSchema = z.enum(["inbound", "outbound"]);

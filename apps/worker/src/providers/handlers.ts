@@ -463,6 +463,7 @@ const resultPersistingOperations = new Set<string>([
   "call.confirmation.status",
   "voice.message.send",
   "voice.message.report",
+  "insights.account",
 ]);
 
 export function isProviderLiveTransportError(

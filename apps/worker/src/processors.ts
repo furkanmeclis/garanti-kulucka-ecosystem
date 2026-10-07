@@ -30,6 +30,7 @@ import type { NetgsmFetchTransport } from "./providers/netgsm.js";
 import type { VapiFetchTransport } from "./providers/vapi.js";
 import type { StorageOrphanReconciler } from "./storage-orphans.js";
 import { shipmentWritebackFrom, type ShipmentWritebackRepository } from "./shipment-writeback.js";
+import { instagramAnalyticsFrom, type InstagramAnalyticsRepository } from "./instagram-insights.js";
 import type { StorageOrphanReconciliationResult } from "./storage-orphans.js";
 
 export type WorkerLifecycleEventName = "started" | "completed" | "failed";
@@ -124,6 +125,7 @@ export interface WorkerProcessorRegistryOptions {
   vapiTransport?: VapiFetchTransport;
   storageOrphanReconciler?: StorageOrphanReconciler;
   shipmentWritebackRepository?: ShipmentWritebackRepository;
+  instagramAnalyticsRepository?: InstagramAnalyticsRepository;
 }
 
 export const workerQueueNames: QueueName[] = [
@@ -268,6 +270,7 @@ function createProviderDeliveryProcessor(
     instagramGraphTransport?: InstagramGraphFetchTransport;
     mediaFileResolver?: ProviderMediaFileResolver;
     shipmentWritebackRepository?: ShipmentWritebackRepository;
+    instagramAnalyticsRepository?: InstagramAnalyticsRepository;
   } = {},
 ): QueueProcessor {
   return async (job) => {
@@ -320,6 +323,18 @@ function createProviderDeliveryProcessor(
           return { ...result, shipment_writeback: applied ? "applied" : "skipped" };
         } catch {
           return { ...result, shipment_writeback: "failed" };
+        }
+      }
+    }
+    if (result.live_call_performed && extras.instagramAnalyticsRepository) {
+      const analytics = instagramAnalyticsFrom(requestEnvelope, result.response_payload);
+      if (analytics) {
+        // Same rule as the shipment write-back: storing the snapshot never retries the Graph call.
+        try {
+          const stored = await extras.instagramAnalyticsRepository.store(analytics.accountPublicId, analytics.snapshot);
+          return { ...result, instagram_analytics: stored ? "stored" : "skipped" };
+        } catch {
+          return { ...result, instagram_analytics: "failed" };
         }
       }
     }
@@ -558,6 +573,8 @@ export function createWorkerProcessorRegistry(
     typeof options === "function" ? undefined : options.mediaFileResolver;
   const shipmentWritebackRepository =
     typeof options === "function" ? undefined : options.shipmentWritebackRepository;
+  const instagramAnalyticsRepository =
+    typeof options === "function" ? undefined : options.instagramAnalyticsRepository;
   const processors = new Map<QueueName, QueueProcessor>([
     ["provider-webhooks", createProviderWebhookProcessor(providerAttemptRepository)],
     [
@@ -577,6 +594,7 @@ export function createWorkerProcessorRegistry(
           ...(instagramGraphTransport ? { instagramGraphTransport } : {}),
           ...(mediaFileResolver ? { mediaFileResolver } : {}),
           ...(shipmentWritebackRepository ? { shipmentWritebackRepository } : {}),
+          ...(instagramAnalyticsRepository ? { instagramAnalyticsRepository } : {}),
         },
       ),
     ],

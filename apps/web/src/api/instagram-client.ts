@@ -57,7 +57,18 @@ export interface InstagramAccountInsights {
   followers: { followers_count: number; media_count: number } | null;
   period: { days: number; since: number; until: number };
   dry_run: boolean;
+  synced_at?: string | null;
+  live_gate?: string;
   live_call_permitted: boolean;
+}
+
+export interface InstagramInsightsRefresh {
+  account_public_id: string;
+  request_id: string;
+  job_id: string | null;
+  queued: boolean;
+  live_gate: string;
+  live_call_permitted: false;
 }
 
 export function createInstagramClient(http: BackendHttpClient) {
@@ -68,6 +79,8 @@ export function createInstagramClient(http: BackendHttpClient) {
       http.request<InstagramPublication>(`/api/instagram/publications/${encodeURIComponent(publicId)}`),
     getAccountInsights: (days: number) =>
       http.request<InstagramAccountInsights>(`/api/instagram/insights/account?days=${encodeURIComponent(String(days))}`),
+    refreshAccountInsights: () =>
+      http.request<InstagramInsightsRefresh>("/api/instagram/insights/account/refresh", { method: "POST", body: {} }),
   };
 }
 

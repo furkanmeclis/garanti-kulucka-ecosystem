@@ -16,6 +16,7 @@ import {
   type WorkerProcessorRegistry,
 } from "./processors.js";
 import { DatabaseShipmentWritebackRepository } from "./shipment-writeback.js";
+import { DatabaseInstagramAnalyticsRepository, enqueueInstagramInsights, instagramInsightsIntervalMs } from "./instagram-insights.js";
 import { StorageOrphanReconciler } from "./storage-orphans.js";
 import { S3ProviderMediaFileResolver, type ProviderMediaFileResolver } from "./providers/media-files.js";
 import { DatabaseProviderAttemptRepository, type ProviderAttemptRepository } from "./providers/attempts.js";
@@ -106,6 +107,7 @@ export function createWorkerRuntime(options: WorkerRuntimeOptions): WorkerRuntim
     (db ? new DatabaseProviderAccountConfigRepository(db, decryptor) : undefined);
   const storageOrphanReconciler = db ? new StorageOrphanReconciler(db) : undefined;
   const shipmentWritebackRepository = db ? new DatabaseShipmentWritebackRepository(db) : undefined;
+  const instagramAnalyticsRepository = db ? new DatabaseInstagramAnalyticsRepository(db) : undefined;
   const mediaFileResolver =
     options.mediaFileResolver ?? (db ? new S3ProviderMediaFileResolver(db) : undefined);
   const settingsChangeSubscriber =
@@ -133,6 +135,7 @@ export function createWorkerRuntime(options: WorkerRuntimeOptions): WorkerRuntim
     ...(storageOrphanReconciler ? { storageOrphanReconciler } : {}),
     ...(mediaFileResolver ? { mediaFileResolver } : {}),
     ...(shipmentWritebackRepository ? { shipmentWritebackRepository } : {}),
+    ...(instagramAnalyticsRepository ? { instagramAnalyticsRepository } : {}),
   });
 
   const workers = new Map<QueueName, Worker<JobEnvelope>>();
@@ -233,6 +236,33 @@ export function createWorkerRuntime(options: WorkerRuntimeOptions): WorkerRuntim
   );
   registerQueueDepthCollector(metrics, metricQueues);
 
+  // Live Instagram statistics: refresh every active account each interval (INSTAGRAM_INSIGHTS_INTERVAL_MS,
+  // default 6 h, 0 disables). The worker's live gate still decides whether Graph is actually called.
+  const insightsIntervalMs = instagramInsightsIntervalMs();
+  const deliveryQueue = metricQueues.get("provider-delivery");
+  const enqueueInsights = () => {
+    if (!instagramAnalyticsRepository || !deliveryQueue) return;
+    void enqueueInstagramInsights({
+      repository: instagramAnalyticsRepository,
+      publish: (job) => deliveryQueue.add(job.name, job, { jobId: job.job_id }),
+      intervalMs: insightsIntervalMs,
+    }).catch((error: unknown) => {
+      options.logger.error(
+        createStructuredLog({
+          level: "error",
+          service: "worker",
+          event: "worker.instagram_insights_schedule_failed",
+          msg: "Instagram insights refresh could not be scheduled",
+          context: { err: error },
+        }),
+        "Instagram insights refresh could not be scheduled",
+      );
+    });
+  };
+  const insightsTimer = insightsIntervalMs > 0 && instagramAnalyticsRepository ? setInterval(enqueueInsights, insightsIntervalMs) : null;
+  insightsTimer?.unref();
+  if (insightsTimer) enqueueInsights();
+
   return {
     connection,
     registry,
@@ -242,6 +272,7 @@ export function createWorkerRuntime(options: WorkerRuntimeOptions): WorkerRuntim
     metrics,
     db,
     close: async () => {
+      if (insightsTimer) clearInterval(insightsTimer);
       const result = await drainWorkers(workers.values(), options.shutdownTimeoutMs ?? 30_000);
       await Promise.all([...metricQueues.values()].map((queue) => queue.close()));
       await Promise.all([...schedulers.values()].map((scheduler) => scheduler.close()));

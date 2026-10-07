@@ -7,7 +7,8 @@ import { instagramAnalyticsMessages } from "../i18n/messages/instagramAnalytics.
 
 /**
  * Legacy frontend/src/pages/instagram/AnalitikPage.jsx parity (admin, calisan). Account insights
- * come from `GET /api/instagram/insights/account?days=N` (backend boundary, never Meta directly).
+ * come from `GET /api/instagram/insights/account?days=N` (backend boundary, never Meta directly);
+ * "Yenile" also queues the worker's live `instagram.insights.account` refresh.
  */
 
 function errorMessage(error: unknown, fallback: string) {
@@ -30,6 +31,7 @@ export function InstagramAnalitikPage(props: { http: BackendHttpClient }) {
   const [accountData, setAccountData] = useState<InstagramAccountInsights | null>(null);
   const [yukleniyor, setYukleniyor] = useState(false);
   const [hata, setHata] = useState<string | null>(null);
+  const [bilgi, setBilgi] = useState<string | null>(null);
 
   const yukle = useCallback(async () => {
     setYukleniyor(true);
@@ -51,6 +53,17 @@ export function InstagramAnalitikPage(props: { http: BackendHttpClient }) {
   useEffect(() => {
     void yukle();
   }, [yukle]);
+
+  async function yenile() {
+    setBilgi(null);
+    try {
+      await client.refreshAccountInsights();
+      setBilgi(t("refreshQueued"));
+    } catch (error) {
+      setHata(errorMessage(error, t("insightsLoadFailed")));
+    }
+    await yukle();
+  }
 
   const ozet = useMemo(
     () =>
@@ -82,7 +95,7 @@ export function InstagramAnalitikPage(props: { http: BackendHttpClient }) {
             <option value={14}>{t("last14Days")}</option>
             <option value={28}>{t("last28Days")}</option>
           </select>
-          <button type="button" onClick={() => void yukle()}>
+          <button type="button" onClick={() => void yenile()}>
             <RefreshCw size={16} className={yukleniyor ? "ig-spin" : ""} /> {t("refresh")}
           </button>
         </div>
@@ -92,6 +105,14 @@ export function InstagramAnalitikPage(props: { http: BackendHttpClient }) {
         <div className="ig-mesaj ig-mesaj-hata" role="alert">
           <p>{hata}</p>
         </div>
+      )}
+      {accountData && (
+        <p className="ig-senkron" data-testid="instagram-senkron">
+          {accountData.synced_at
+            ? t("syncedAt", { date: new Date(accountData.synced_at).toLocaleString(localeFor(language), { dateStyle: "medium", timeStyle: "short" }) })
+            : t("notSynced", { gate: accountData.live_gate ?? "providers.instagram.live_mode" })}
+          {bilgi && <span role="status"> {bilgi}</span>}
+        </p>
       )}
 
       <div className="ig-ozet-grid" data-testid="instagram-ozet-kartlari">

@@ -4504,7 +4504,7 @@
     "/api/instagram/insights/account": {
       "get": {
         "operationId": "getInstagramAccountInsights",
-        "description": "Legacy /api/instagram/insights/account?days=N served as a backend dry-run boundary over the stored account analytics snapshot; the browser never calls Meta.",
+        "description": "Legacy /api/instagram/insights/account?days=N served from the stored account analytics snapshot; the browser and the API never call Meta. The worker's instagram.insights.account job (scheduled and via POST /api/instagram/insights/account/refresh) refreshes the snapshot when providers.instagram.live_mode allows it; dry_run is false once a live snapshot exists.",
         "parameters": [
           {
             "name": "days",
@@ -6662,6 +6662,78 @@
                     },
                     "offset": {
                       "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/instagram/insights/account/refresh": {
+      "post": {
+        "operationId": "refreshInstagramAccountInsights",
+        "description": "Queues an instagram.insights.account provider-delivery job (followers + 30 days of daily insights from Graph) for the account; the worker stores the result as the analytics snapshot when providers.instagram.live_mode allows the live call. One job per account per five minutes.",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "account_public_id": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Refresh queued on provider-delivery",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "account_public_id",
+                    "request_id",
+                    "job_id",
+                    "queued",
+                    "live_gate",
+                    "live_call_permitted"
+                  ],
+                  "properties": {
+                    "account_public_id": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    },
+                    "job_id": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "queued": {
+                      "type": "boolean"
+                    },
+                    "live_gate": {
+                      "type": "string"
+                    },
+                    "live_call_permitted": {
+                      "type": "boolean",
+                      "const": false
                     }
                   }
                 }
@@ -13606,6 +13678,17 @@
           },
           "live_call_permitted": {
             "type": "boolean"
+          },
+          "synced_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "When the worker last stored a live Graph snapshot; null while only seeded/dry-run data exists."
+          },
+          "live_gate": {
+            "type": "string"
           }
         }
       },

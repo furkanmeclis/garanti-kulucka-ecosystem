@@ -77,6 +77,7 @@ export const providerAdapters: ProviderAdapterDefinition[] = [
       "comment.private_reply",
       "comment.hide",
       "comment.delete",
+      "insights.account",
     ],
     live_calls_enabled: true,
   },

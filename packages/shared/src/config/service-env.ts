@@ -177,6 +177,11 @@ export const workerEnvSchema = z.object({
   STORAGE_ORPHAN_DELETE_ENABLED: optionalBooleanFlag(),
   STORAGE_ORPHAN_RECONCILIATION_LIMIT: optionalPositiveInt(100_000),
   STORAGE_ORPHAN_RECONCILIATION_INTERVAL_MS: optionalPositiveInt(),
+  // Live Instagram statistics refresh (instagram.insights.account per active account); 0 disables.
+  INSTAGRAM_INSIGHTS_INTERVAL_MS: z.preprocess(
+    emptyToUndefined,
+    z.string().regex(/^\d+$/, "must be 0 or a positive integer").transform((value) => Number.parseInt(value, 10)).optional(),
+  ),
 });
 
 export const migratorEnvSchema = z.object({

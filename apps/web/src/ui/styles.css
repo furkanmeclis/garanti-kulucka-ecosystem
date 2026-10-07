@@ -4364,3 +4364,4 @@ nav {
   .voice-ringtime { max-width: none; }
   .voice-content-cell { max-width: 160px; }
 }
+.ig-senkron { margin: 0 0 16px; font-size: 13px; color: #94a3b8; overflow-wrap: anywhere; }
