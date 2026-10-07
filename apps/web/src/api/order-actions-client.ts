@@ -101,6 +101,33 @@ function orderPath(publicId: string, suffix = "") {
   return `/api/orders/${encodeURIComponent(publicId)}${suffix}`;
 }
 
+/** Legacy SiparislerPage "Düzenle" modal snapshot (`GET /api/orders/{id}/edit`). */
+export interface EditableOrder {
+  public_id: string;
+  order_number: string;
+  status: string;
+  cargo_provider: string | null;
+  notes: string | null;
+  currency: string;
+  total_amount: string;
+  items_total: string;
+  manual_total: boolean;
+  customer: { public_id: string; full_name: string; phone: string | null } | null;
+  address: { address_line: string; city: string | null; district: string | null } | null;
+  items: Array<{ public_id: string; product_public_id: string | null; name: string; quantity: number; unit_price: string; total_amount: string }>;
+  locked_reason: "kolaybi" | "deleted" | "cancelled" | null;
+  updated_at: string;
+}
+
+export interface EditOrderInput {
+  customer: { full_name: string; phone: string };
+  address: { address_line: string; city: string; district: string };
+  notes: string | null;
+  cargo_provider: "ptt" | "surat" | null;
+  items: Array<{ public_id?: string | null; product_public_id?: string | null; name: string; quantity: number; unit_price: string }>;
+  total_amount?: string | null;
+}
+
 export function newIdempotencyKey(prefix: string) {
   const random = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}_${Math.random().toString(36).slice(2)}`;
   return `${prefix}_${random}`;
@@ -109,6 +136,8 @@ export function newIdempotencyKey(prefix: string) {
 export function createOrderActionsClient(http: BackendHttpClient) {
   return {
     getActions: (publicId: string) => http.request<OrderActionsResponse>(orderPath(publicId, "/actions")),
+    getEditable: (publicId: string) => http.request<{ order: EditableOrder }>(orderPath(publicId, "/edit")),
+    editOrder: (publicId: string, input: EditOrderInput) => http.request<{ order: EditableOrder }>(orderPath(publicId), { method: "PATCH", body: input }),
     syncProviderSteps: (publicId: string) => http.request<OrderProviderSyncResponse>(orderPath(publicId, "/provider-sync"), { method: "POST" }),
     updateStatus: (publicId: string, status: string) => http.request<unknown>(orderPath(publicId, "/status"), { method: "PATCH", body: { status } }),
     updateNotes: (publicId: string, notes: string | null) =>

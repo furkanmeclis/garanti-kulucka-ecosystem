@@ -4549,3 +4549,20 @@ nav {
 @media (max-width: 768px) {
   .cargo-pipeline-test-grid { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* ─── Sipariş düzenle modalı (legacy SiparislerPage duzenleModal) ─── */
+.kargo-modal.order-edit-modal { max-width: 640px; max-height: calc(100vh - 32px); overflow-y: auto; }
+.order-edit-number { font-size: 14px; font-weight: 400; color: #94a3b8; }
+.order-edit-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 0; border: 0; padding: 0; min-width: 0; }
+.order-edit-wide { grid-column: 1 / -1; }
+.order-edit-grid input, .order-edit-grid textarea { width: 100%; min-width: 0; border: 1px solid #475569; border-radius: 8px; background: #334155; padding: 8px 12px; font-size: 14px; color: #fff; }
+.order-edit-lines { display: grid; gap: 8px; font-size: 14px; color: #cbd5e1; }
+.order-edit-line { display: grid; grid-template-columns: minmax(0, 1fr) 72px 96px 80px 32px; align-items: center; gap: 8px; }
+.order-edit-line-total { text-align: right; font-variant-numeric: tabular-nums; color: #e2e8f0; }
+.order-edit-manual { display: flex; align-items: center; gap: 8px; font-size: 14px; color: #cbd5e1; }
+.order-edit-manual input { width: auto; }
+@media (max-width: 640px) {
+  .order-edit-grid { grid-template-columns: minmax(0, 1fr); }
+  .order-edit-line { grid-template-columns: minmax(0, 1fr) 64px 80px; }
+  .order-edit-line-total { display: none; }
+}

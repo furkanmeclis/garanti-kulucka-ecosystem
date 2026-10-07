@@ -3923,6 +3923,180 @@
             "$ref": "#/components/responses/Error"
           }
         }
+      },
+      "patch": {
+        "operationId": "editOrder",
+        "description": "Legacy duzenlemeyiKaydet: updates customer name/phone, default address, note, cargo firm, line items (delete/update/insert) and the total. KolayBi-transferred, deleted or cancelled orders return 409 order_locked. Audited.",
+        "parameters": [
+          {
+            "name": "order_public_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "customer",
+                  "address",
+                  "notes",
+                  "cargo_provider",
+                  "items"
+                ],
+                "properties": {
+                  "customer": {
+                    "type": "object",
+                    "required": [
+                      "full_name",
+                      "phone"
+                    ],
+                    "properties": {
+                      "full_name": {
+                        "type": "string",
+                        "maxLength": 200
+                      },
+                      "phone": {
+                        "type": "string",
+                        "maxLength": 32
+                      }
+                    }
+                  },
+                  "address": {
+                    "type": "object",
+                    "required": [
+                      "address_line",
+                      "city",
+                      "district"
+                    ],
+                    "properties": {
+                      "address_line": {
+                        "type": "string",
+                        "maxLength": 1000
+                      },
+                      "city": {
+                        "type": "string",
+                        "maxLength": 100
+                      },
+                      "district": {
+                        "type": "string",
+                        "maxLength": 100
+                      }
+                    }
+                  },
+                  "notes": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 10000
+                  },
+                  "cargo_provider": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "enum": [
+                      "ptt",
+                      "surat",
+                      null
+                    ]
+                  },
+                  "items": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 100,
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "name",
+                        "quantity",
+                        "unit_price"
+                      ],
+                      "properties": {
+                        "public_id": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "description": "Existing line to update; omitted lines are deleted, lines without public_id are inserted"
+                        },
+                        "product_public_id": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "name": {
+                          "type": "string",
+                          "maxLength": 300
+                        },
+                        "quantity": {
+                          "type": "integer",
+                          "minimum": 1
+                        },
+                        "unit_price": {
+                          "type": "string",
+                          "pattern": "^\\d+(\\.\\d{1,2})?$"
+                        }
+                      }
+                    }
+                  },
+                  "total_amount": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d+(\\.\\d{1,2})?$",
+                    "description": "Manual grand total (legacy fiyat_manuel); null = sum of lines"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Editable order snapshot",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "order"
+                  ],
+                  "properties": {
+                    "order": {
+                      "$ref": "#/components/schemas/EditableOrder"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
       }
     },
     "/api/orders/{order_public_id}/actions": {
@@ -7595,6 +7769,51 @@
                   "properties": {
                     "deleted": {
                       "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/orders/{order_public_id}/edit": {
+      "get": {
+        "operationId": "getEditableOrder",
+        "description": "Legacy SiparislerPage Düzenle modal data: customer, address, lines, totals and lock reason.",
+        "parameters": [
+          {
+            "name": "order_public_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Editable order snapshot",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "order"
+                  ],
+                  "properties": {
+                    "order": {
+                      "$ref": "#/components/schemas/EditableOrder"
                     }
                   }
                 }
@@ -17717,6 +17936,175 @@
             "minLength": 1,
             "maxLength": 2000,
             "description": "Placeholders {musteri_adi} {takip_no} {son_hareket} {takip_link}"
+          }
+        }
+      },
+      "EditableOrder": {
+        "type": "object",
+        "required": [
+          "public_id",
+          "order_number",
+          "status",
+          "cargo_provider",
+          "notes",
+          "currency",
+          "total_amount",
+          "items_total",
+          "manual_total",
+          "customer",
+          "address",
+          "items",
+          "locked_reason",
+          "updated_at"
+        ],
+        "properties": {
+          "public_id": {
+            "type": "string"
+          },
+          "order_number": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "cargo_provider": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "notes": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "currency": {
+            "type": "string"
+          },
+          "total_amount": {
+            "type": "string"
+          },
+          "items_total": {
+            "type": "string"
+          },
+          "manual_total": {
+            "type": "boolean",
+            "description": "Legacy fiyat_manuel: total differs from the line sum"
+          },
+          "customer": {
+            "oneOf": [
+              {
+                "type": "object",
+                "required": [
+                  "public_id",
+                  "full_name",
+                  "phone"
+                ],
+                "properties": {
+                  "public_id": {
+                    "type": "string"
+                  },
+                  "full_name": {
+                    "type": "string"
+                  },
+                  "phone": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "address": {
+            "oneOf": [
+              {
+                "type": "object",
+                "required": [
+                  "address_line",
+                  "city",
+                  "district"
+                ],
+                "properties": {
+                  "address_line": {
+                    "type": "string"
+                  },
+                  "city": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "district": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "public_id",
+                "product_public_id",
+                "name",
+                "quantity",
+                "unit_price",
+                "total_amount"
+              ],
+              "properties": {
+                "public_id": {
+                  "type": "string"
+                },
+                "product_public_id": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "name": {
+                  "type": "string"
+                },
+                "quantity": {
+                  "type": "integer"
+                },
+                "unit_price": {
+                  "type": "string"
+                },
+                "total_amount": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "locked_reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "kolaybi",
+              "deleted",
+              "cancelled",
+              null
+            ]
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       }

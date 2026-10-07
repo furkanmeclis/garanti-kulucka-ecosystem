@@ -94,6 +94,8 @@ import type {
   OrderProviderStepResponse,
   ProductOption,
   ShipmentDraft,
+  EditableOrder,
+  EditOrderInput,
   ShipmentPaymentStatus,
   ShipmentPrintData,
 } from "./orders";
@@ -420,6 +422,8 @@ export function createApiClient(options: ApiClientOptions) {
     bulkKolaybiTransfer: (publicIds: string[], idempotencyKey: string) =>
       request<OrderBulkActionResponse>("/api/orders/bulk/kolaybi-transfer", { method: "POST", body: { order_public_ids: publicIds, idempotency_key: idempotencyKey } }),
     getShipmentDraft: (orderPublicId: string) => request<ShipmentDraft>(`/api/orders/${encodeURIComponent(orderPublicId)}/shipment-draft`),
+    getEditableOrder: (orderPublicId: string) => request<{ order: EditableOrder }>(`/api/orders/${encodeURIComponent(orderPublicId)}/edit`),
+    editOrder: (orderPublicId: string, input: EditOrderInput) => request<{ order: EditableOrder }>(`/api/orders/${encodeURIComponent(orderPublicId)}`, { method: "PATCH", body: input }),
     createShipment: (
       orderPublicId: string,
       input: { provider: CargoProviderKey; payment_status: ShipmentPaymentStatus; idempotency_key: string; recipient_address?: string; recipient_city?: string; recipient_district?: string },

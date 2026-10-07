@@ -1,6 +1,9 @@
-import { Calendar, CheckSquare, Download, Search, ShoppingCart, Square, Trash2, XCircle } from "lucide-react";
+import { useState } from "react";
+import { Calendar, CheckSquare, Download, Pencil, Search, ShoppingCart, Square, Trash2, XCircle } from "lucide-react";
 import { SiparisAksiyonlari, SiparisTopluAksiyonlar } from "../SiparisAksiyonlari.js";
 import { KargoSiparisAksiyonlari, KargoTopluAktar } from "../KargoOlusturModal.js";
+import { SiparisDuzenleModal } from "../SiparisDuzenleModal.js";
+import { orderEditMessages } from "../../i18n/messages/orderEdit.js";
 import { cx, orderStatusLabel, cargoProviderLabel, formatMoney, parseMoneyInput, FlowPanel, DetailPanel, Metric, DataRows } from "../../app/shared.js";
 import type { DashboardController } from "../../app/useDashboardController.js";
 import { useUiMessageText } from "../../i18n/messages/status.js";
@@ -10,7 +13,9 @@ import { ordersMessages } from "../../i18n/messages/orders.js";
 export function OrdersFlow({ ctx }: { ctx: DashboardController }) {
   const orderFormText = useUiMessageText();
   const t = useT(ordersMessages);
+  const editText = useT(orderEditMessages);
   const { language } = useLanguage();
+  const [editingOrderId, setEditingOrderId] = useState<string | null>(null);
   const {
     addOrderFormItem,
     allVisibleOrdersSelected,
@@ -434,6 +439,12 @@ export function OrdersFlow({ ctx }: { ctx: DashboardController }) {
                     [t("detailNote"), selectedOrder.notes ?? "-", selectedOrder.updated_at],
                   ]}
                 />
+                <div className="detail-actions">
+                  <button type="button" className="secondary-action" onClick={() => setEditingOrderId(selectedOrder.public_id)} data-testid="order-edit-open">
+                    <Pencil size={14} />
+                    {editText("open")}
+                  </button>
+                </div>
                 <KargoSiparisAksiyonlari
                   http={http}
                   orderPublicId={selectedOrder.public_id}
@@ -441,6 +452,17 @@ export function OrdersFlow({ ctx }: { ctx: DashboardController }) {
                 />
                 <SiparisAksiyonlari http={http} orderPublicId={selectedOrder.public_id} onChanged={() => refreshOrders({ page: orderPage })} />
               </DetailPanel>
+            )}
+            {editingOrderId && (
+              <SiparisDuzenleModal
+                http={http}
+                orderPublicId={editingOrderId}
+                onClose={() => setEditingOrderId(null)}
+                onSaved={() => {
+                  setEditingOrderId(null);
+                  void refreshOrders({ page: orderPage });
+                }}
+              />
             )}
           </FlowPanel>
   );

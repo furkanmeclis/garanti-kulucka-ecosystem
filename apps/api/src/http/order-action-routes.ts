@@ -5,6 +5,8 @@ import { jobEnvelopeSchema, providerDeliveryJobPayloadSchema } from "@garanti-ku
 import type { AppBindings } from "./types.js";
 import { authenticate, requireDatabase } from "./middleware.js";
 import { DomainRepository } from "../domain/repository.js";
+import { moneyToCents } from "../domain/order-totals.js";
+import { OrderEditItemNotFoundError, OrderEditLockedError, OrderEditRepository } from "../orders/order-edit-repository.js";
 import {
   OrderActionRepository,
   serializeOrderActionState,
@@ -37,6 +39,26 @@ const keyBody = z.object({ idempotency_key: idempotencyKeySchema });
 const eDocumentSchema = z.object({ action: z.enum(["create", "cancel"]), idempotency_key: idempotencyKeySchema });
 const cancelSchema = z.object({ status: z.enum(["cancelled", "returned"]), reason: z.string().trim().max(500).nullable().optional(), idempotency_key: idempotencyKeySchema });
 const notesSchema = z.object({ notes: z.string().max(10_000).nullable() });
+const moneySchema = z.string().trim().regex(/^\d+(\.\d{1,2})?$/);
+const editOrderSchema = z.object({
+  customer: z.object({ full_name: z.string().trim().min(1).max(200), phone: z.string().trim().min(1).max(32) }),
+  address: z.object({ address_line: z.string().trim().min(1).max(1000), city: z.string().trim().min(1).max(100), district: z.string().trim().min(1).max(100) }),
+  notes: z.string().max(10_000).nullable(),
+  cargo_provider: z.enum(["ptt", "surat"]).nullable(),
+  items: z
+    .array(
+      z.object({
+        public_id: z.string().trim().min(1).nullable().optional(),
+        product_public_id: z.string().trim().min(1).nullable().optional(),
+        name: z.string().trim().min(1).max(300),
+        quantity: z.number().int().min(1).max(10_000),
+        unit_price: moneySchema,
+      }),
+    )
+    .min(1)
+    .max(100),
+  total_amount: moneySchema.nullable().optional(),
+});
 const manualConfirmationSchema = z.object({ confirmation_status: z.enum(["teyit_edildi", "ulasilamadi", "bekliyor"]) });
 const bulkSchema = z.object({ order_public_ids: z.array(z.string().trim().min(1)).min(1).max(200), idempotency_key: idempotencyKeySchema });
 
@@ -503,6 +525,48 @@ export function createOrderActionRoutes() {
     });
     const refreshed = (await repo.getOrderState(order.public_id)) ?? order;
     return context.json({ order: serializeOrderActionState(refreshed) });
+  });
+
+  // Legacy SiparislerPage "Düzenle" modal: read the editable snapshot, then save customer/address/items/total.
+  routes.get("/:order_public_id/edit", async (context) => {
+    const order = await new OrderEditRepository(context.get("db")!).get(context.req.param("order_public_id"));
+    if (!order) return notFound(context);
+    return context.json({ order });
+  });
+
+  routes.patch("/:order_public_id", async (context) => {
+    const payload = editOrderSchema.safeParse(await readJson(context));
+    if (!payload.success) return invalid(context, "Invalid order edit payload");
+    const data = payload.data;
+    const total = data.total_amount ?? null;
+    if (total !== null && moneyToCents(total) <= 0) {
+      return context.json({ error: { code: "invalid_order_total", message: "Sipariş tutarı 0 TL olamaz. Lütfen fiyat bilgisini kontrol edin." } }, 400);
+    }
+    const itemsCents = data.items.reduce((sum, item) => sum + moneyToCents(item.unit_price) * item.quantity, 0);
+    if (total === null && itemsCents <= 0) {
+      return context.json({ error: { code: "invalid_order_total", message: "Sipariş tutarı 0 TL olamaz. Lütfen fiyat bilgisini kontrol edin." } }, 400);
+    }
+    try {
+      const order = await new OrderEditRepository(context.get("db")!).update(context.req.param("order_public_id"), {
+        customer: { fullName: data.customer.full_name, phone: data.customer.phone },
+        address: { addressLine: data.address.address_line, city: data.address.city, district: data.address.district },
+        notes: data.notes?.trim() ? data.notes.trim() : null,
+        cargoProvider: data.cargo_provider,
+        items: data.items.map((item) => ({ publicId: item.public_id ?? null, productPublicId: item.product_public_id ?? null, name: item.name, quantity: item.quantity, unitPrice: item.unit_price })),
+        totalAmount: total,
+        actorUserId: context.get("actorUserId"),
+      });
+      if (!order) return notFound(context);
+      return context.json({ order });
+    } catch (error) {
+      if (error instanceof OrderEditLockedError) {
+        const message =
+          error.reason === "kolaybi" ? "Bu sipariş KolayBi'ye aktarılmış, düzenlenemez." : error.reason === "deleted" ? "Silinmiş sipariş düzenlenemez." : "İptal edilmiş sipariş düzenlenemez.";
+        return context.json({ error: { code: "order_locked", message, reason: error.reason } }, 409);
+      }
+      if (error instanceof OrderEditItemNotFoundError) return invalid(context, "Sipariş kalemi bulunamadı");
+      throw error;
+    }
   });
 
   routes.delete("/:order_public_id", async (context) => {

@@ -1,4 +1,4 @@
-import { Loader2, Phone, RefreshCw, RotateCcw, Trash2, Truck, XCircle } from "lucide-react";
+import { Loader2, Pencil, Phone, RefreshCw, RotateCcw, Trash2, Truck, XCircle } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/app/auth";
@@ -9,6 +9,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { formatMoney } from "@/lib/format";
 import { confirmationBadge, kolaybiBadge, type CargoProviderKey, type OrderActionDetail, type OrderProviderStep, type ShipmentDraft, type ShipmentPaymentStatus } from "@/lib/orders";
 import { errorText, FeedbackLine, Field, idempotencyKey, NativeSelect, type Feedback } from "./accounting-shared";
+import { OrderEditForm } from "./order-edit-form";
 
 const statusKeys: Record<string, "statusCreated" | "statusPendingConfirmation" | "statusConfirmed" | "statusPreparing" | "statusShipped" | "statusDelivered" | "statusCancelled" | "statusReturned"> = {
   draft: "statusCreated",
@@ -51,6 +52,7 @@ export function OrderDetailSheet({ publicId, onClose, onChanged }: { publicId: s
   const [feedback, setFeedback] = useState<Feedback>(null);
   const [deleted, setDeleted] = useState(false);
   const [cargo, setCargo] = useState<CargoProviderKey | null>(null);
+  const [editing, setEditing] = useState(false);
   const tRef = useRef(t);
   tRef.current = t;
 
@@ -71,6 +73,7 @@ export function OrderDetailSheet({ publicId, onClose, onChanged }: { publicId: s
     setFeedback(null);
     setDeleted(false);
     setCargo(null);
+    setEditing(false);
     if (publicId) void load(publicId);
   }, [publicId, load]);
 
@@ -172,6 +175,23 @@ export function OrderDetailSheet({ publicId, onClose, onChanged }: { publicId: s
                 {order.kolaybi.status === "failed" && <Badge tone="danger">{t("orderActions.transferFailedBadge")}</Badge>}
               </div>
               {order.kolaybi.error && <p className="text-destructive">{order.kolaybi.error}</p>}
+              {editing ? (
+                <OrderEditForm
+                  publicId={order.public_id}
+                  onCancel={() => setEditing(false)}
+                  onSaved={() => {
+                    setEditing(false);
+                    setFeedback({ tone: "success", text: t("orderEdit.saved") });
+                    void load(order.public_id);
+                    onChanged();
+                  }}
+                />
+              ) : (
+                <>
+              <Button variant="outline" className="min-h-11 self-start" disabled={disabled} onClick={() => setEditing(true)} data-testid="order-edit-open">
+                <Pencil className="size-4" aria-hidden="true" />
+                {t("orderEdit.open")}
+              </Button>
 
               <Section title={t("orderActions.sectionChangeStatus")}>
                 <div className="flex flex-wrap gap-2">
@@ -400,6 +420,8 @@ export function OrderDetailSheet({ publicId, onClose, onChanged }: { publicId: s
                     </li>
                   ))}
                 </ul>
+              )}
+                </>
               )}
             </>
           )}

@@ -141,6 +141,8 @@
   "POST /api/orders/bulk/confirmation-calls": { "anonymous": "deny", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" },
   "POST /api/orders/bulk/kolaybi-transfer": { "anonymous": "deny", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" },
   "DELETE /api/orders/{order_public_id}": { "anonymous": "deny", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" },
+  "GET /api/orders/{order_public_id}/edit": { "anonymous": "deny", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" },
+  "PATCH /api/orders/{order_public_id}": { "anonymous": "deny", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" },
   "GET /api/orders/{order_public_id}/actions": { "anonymous": "deny", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" },
   "POST /api/orders/{order_public_id}/provider-sync": { "anonymous": "deny", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" },
   "PATCH /api/orders/{order_public_id}/notes": { "anonymous": "deny", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" },

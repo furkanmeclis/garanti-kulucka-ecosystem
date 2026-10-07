@@ -144,3 +144,30 @@ export interface ShipmentPrintData {
   recipient: { name: string | null; phone: string | null; address: string | null; city: string | null; district: string | null };
   items: Array<{ name: string; quantity: number; unit_price: string; total_amount: string }>;
 }
+
+/** Legacy SiparislerPage "Düzenle" modal snapshot (`GET /api/orders/{id}/edit`). */
+export interface EditableOrder {
+  public_id: string;
+  order_number: string;
+  status: string;
+  cargo_provider: string | null;
+  notes: string | null;
+  currency: string;
+  total_amount: string;
+  items_total: string;
+  manual_total: boolean;
+  customer: { public_id: string; full_name: string; phone: string | null } | null;
+  address: { address_line: string; city: string | null; district: string | null } | null;
+  items: Array<{ public_id: string; product_public_id: string | null; name: string; quantity: number; unit_price: string; total_amount: string }>;
+  locked_reason: "kolaybi" | "deleted" | "cancelled" | null;
+  updated_at: string;
+}
+
+export interface EditOrderInput {
+  customer: { full_name: string; phone: string };
+  address: { address_line: string; city: string; district: string };
+  notes: string | null;
+  cargo_provider: "ptt" | "surat" | null;
+  items: Array<{ public_id: string | null; product_public_id: string | null; name: string; quantity: number; unit_price: string }>;
+  total_amount: string | null;
+}
