@@ -29,6 +29,22 @@ import type {
   ListMeta,
   SyncStatus,
 } from "./accounting";
+import type {
+  BalanceListQuery,
+  BalanceMovement,
+  BalancePaymentRequest,
+  BalancePaymentRequestResult,
+  BalancePaymentRequestStatus,
+  LedgerBalanceSummary,
+  ProcessBalancePaymentRequestResult,
+  ProductCategory,
+  ProductInput,
+  ProductSummary,
+  ProductSummaryStats,
+  StaffBalance,
+  StaffOrder,
+  StockMovementSummary,
+} from "./inventory-balances";
 import type { StoredTokens } from "./session-storage";
 
 /** VITE_BACKEND_BASE_URL (default "/backend"): same-origin proxy in Docker/nginx and the Vite dev server. */
@@ -241,6 +257,27 @@ export function createApiClient(options: ApiClientOptions) {
       request<AccountingContact>(`/api/accounting/contacts/${encodeURIComponent(publicId)}`, { method: "PATCH", body: input }),
     kolaybiStatus: () => request<KolaybiSyncStatus>("/api/accounting/kolaybi/status"),
     syncKolaybi: (idempotencyKey: string) => request<KolaybiSyncResult>("/api/accounting/kolaybi/sync", { method: "POST", body: { idempotency_key: idempotencyKey } }),
+    productSummary: () => request<ProductSummaryStats>("/api/products/summary"),
+    listProducts: (query: { category?: ProductCategory; search?: string; active?: "true" | "false" | "all"; limit?: number } = {}) =>
+      request<{ data: ProductSummary[] }>("/api/products", { query: { limit: 200, ...query } }),
+    createProduct: (input: ProductInput) => request<ProductSummary>("/api/products", { method: "POST", body: input }),
+    updateProduct: (publicId: string, input: Partial<ProductInput>) => request<ProductSummary>(`/api/products/${encodeURIComponent(publicId)}`, { method: "PATCH", body: input }),
+    deactivateProduct: (publicId: string) => request<ProductSummary>(`/api/products/${encodeURIComponent(publicId)}`, { method: "DELETE" }),
+    listStockMovements: (publicId: string) => request<{ data: StockMovementSummary[] }>(`/api/products/${encodeURIComponent(publicId)}/stock-movements`, { query: { limit: 50 } }),
+    createStockMovement: (publicId: string, input: { movement_type: "in" | "out"; quantity: number; notes?: string | null }) =>
+      request<{ product: ProductSummary; movement: StockMovementSummary }>(`/api/products/${encodeURIComponent(publicId)}/stock-movements`, { method: "POST", body: input }),
+    balanceSummary: () => request<LedgerBalanceSummary>("/api/balances/summary"),
+    listStaffBalances: () => request<{ data: StaffBalance[] }>("/api/balances/staff"),
+    listStaffOrders: (userPublicId: string) => request<{ data: StaffOrder[] }>(`/api/balances/staff/${encodeURIComponent(userPublicId)}/orders`),
+    resetStaffBalance: (userPublicId: string) =>
+      request<{ previous_balance: number; message: string }>(`/api/balances/staff/${encodeURIComponent(userPublicId)}/reset`, { method: "POST", body: {} }),
+    listBalanceMovements: (query: BalanceListQuery = {}) => request<{ data: BalanceMovement[]; total: number }>("/api/balances/movements", { query: { ...query } }),
+    listPaymentRequests: (query: BalanceListQuery & { status?: BalancePaymentRequestStatus } = {}) =>
+      request<{ data: BalancePaymentRequest[]; total: number }>("/api/balances/payment-requests", { query: { ...query } }),
+    createPaymentRequest: (input: { amount: string; idempotency_key: string }) =>
+      request<BalancePaymentRequestResult>("/api/balances/payment-requests", { method: "POST", body: input }),
+    processPaymentRequest: (publicId: string, decision: "approve" | "reject") =>
+      request<ProcessBalancePaymentRequestResult>(`/api/balances/payment-requests/${encodeURIComponent(publicId)}/${decision}`, { method: "POST", body: {} }),
     saveCustomerNotes: (publicId: string, notes: string | null) =>
       request<CustomerSummary>(`/api/customers/${encodeURIComponent(publicId)}/notes`, { method: "PATCH", body: { notes } }),
   };

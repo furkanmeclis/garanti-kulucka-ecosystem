@@ -49,7 +49,7 @@ test("mobile: hamburger sheet and bottom bar navigate; header keeps search, bell
   const sheet = page.getByTestId("mobile-menu");
   await expect(sheet).toBeVisible();
   await expect(sheet.getByTestId("mobile-menu-main").getByRole("link")).toHaveText(["Pano", "Siparişler", "Mesajlar", "Müşteriler", "Kargolar", "Ayarlar"]);
-  await expect(sheet.getByTestId("mobile-menu-more").getByRole("link")).toHaveText(["İptaller"]);
+  await expect(sheet.getByTestId("mobile-menu-more").getByRole("link")).toHaveText(["İptaller", "Stoklar", "Bakiyeler"]);
   await expectResponsiveLayout(page, { checkTouchTargets: true });
   await sheet.getByRole("link", { name: "Müşteriler" }).click();
   await expect(sheet).toBeHidden();

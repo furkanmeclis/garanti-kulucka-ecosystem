@@ -10,6 +10,8 @@ import { CancellationsPage } from "@/pages/cancellations-page";
 import { CustomerDetailPage } from "@/pages/customer-detail-page";
 import { CustomersPage } from "@/pages/customers-page";
 import { DashboardPage } from "@/pages/dashboard-page";
+import { BalancesPage } from "@/pages/balances-page";
+import { InventoryPage } from "@/pages/inventory-page";
 import { InvoicesPage } from "@/pages/invoices-page";
 import { MessagesPage } from "@/pages/messages-page";
 import { OrdersPage } from "@/pages/orders-page";
@@ -50,6 +52,8 @@ export function App() {
       <Route path="/kargolar" element={<Protected><ShipmentsPage /></Protected>} />
       <Route path="/ayarlar" element={<Protected><SettingsPage /></Protected>} />
       <Route path="/iptaller" element={<Protected><CancellationsPage /></Protected>} />
+      <Route path="/stok" element={<Protected><InventoryPage /></Protected>} />
+      <Route path="/bakiye" element={<Protected><BalancesPage /></Protected>} />
       <Route path="/faturalar" element={<Protected><InvoicesPage /></Protected>} />
       <Route path="/cari-hesaplar" element={<Protected><AccountsPage /></Protected>} />
       <Route path="*" element={<Protected><Navigate to="/" replace /></Protected>} />

@@ -1,8 +1,8 @@
 import type { LucideIcon } from "lucide-react";
-import { BookUser, FileText, LayoutDashboard, MessageCircle, Settings, ShoppingCart, Truck, Users, XCircle } from "lucide-react";
+import { BookUser, FileText, LayoutDashboard, MessageCircle, Package, Settings, ShoppingCart, Truck, Users, Wallet, XCircle } from "lucide-react";
 import { panelRoleOf, type PanelRole } from "@garanti-kulucka/shared";
 
-export type NavKey = "dashboard" | "orders" | "messages" | "customers" | "shipments" | "settings" | "cancellations" | "invoices" | "accounts";
+export type NavKey = "dashboard" | "orders" | "messages" | "customers" | "shipments" | "settings" | "cancellations" | "invoices" | "accounts" | "inventory" | "balances";
 
 export interface NavItem {
   key: NavKey;
@@ -27,6 +27,8 @@ export const navItems: readonly NavItem[] = [
   { key: "shipments", path: "/kargolar", icon: Truck, roles: everyone, bottomBar: true },
   { key: "settings", path: "/ayarlar", icon: Settings, roles: everyone, bottomBar: false },
   { key: "cancellations", path: "/iptaller", icon: XCircle, roles: office, bottomBar: false, section: "more" },
+  { key: "inventory", path: "/stok", icon: Package, roles: office, bottomBar: false, section: "more" },
+  { key: "balances", path: "/bakiye", icon: Wallet, roles: office, bottomBar: false, section: "more" },
   { key: "invoices", path: "/faturalar", icon: FileText, roles: managers, bottomBar: false, section: "more" },
   { key: "accounts", path: "/cari-hesaplar", icon: BookUser, roles: managers, bottomBar: false, section: "more" },
 ];
