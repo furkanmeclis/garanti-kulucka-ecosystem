@@ -1,4 +1,4 @@
-import { Ban, FileDown, Loader2, Plus, Trash2, Wallet } from "lucide-react";
+import { Ban, FileDown, Loader2, Plus, Send, Trash2, Wallet } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/app/auth";
@@ -145,7 +145,7 @@ function InvoiceDetailSheet({ publicId, onClose, onChanged }: { publicId: string
   const { api } = useAuth();
   const [detail, setDetail] = useState<InvoiceDetail | null>(null);
   const [feedback, setFeedback] = useState<Feedback>(null);
-  const [busy, setBusy] = useState<"pdf" | "pay" | "cancel" | null>(null);
+  const [busy, setBusy] = useState<"pdf" | "pay" | "cancel" | "resend" | "delete" | `payment:${string}` | null>(null);
   const [amount, setAmount] = useState("");
   const [method, setMethod] = useState<PaymentMethod>("cash");
   const [vaultId, setVaultId] = useState("");
@@ -220,6 +220,51 @@ function InvoiceDetailSheet({ publicId, onClose, onChanged }: { publicId: string
     }
   }
 
+  async function removePayment(paymentPublicId: string, amount: string) {
+    if (!detail || !window.confirm(t("accounting.deletePaymentConfirm", { amount: money(amount) }))) return;
+    setBusy(`payment:${paymentPublicId}`);
+    setFeedback(null);
+    try {
+      const result = await api.deleteInvoicePayment(detail.public_id, paymentPublicId);
+      setDetail(result.invoice);
+      setFeedback({ tone: "success", text: result.kolaybi ? t("accounting.paymentDeletedKolaybi") : t("accounting.paymentDeleted") });
+      onChanged();
+    } catch (error) {
+      setFeedback({ tone: "error", text: t("accounting.error", { message: errorText(error) }) });
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function resend() {
+    if (!detail) return;
+    setBusy("resend");
+    setFeedback(null);
+    try {
+      const result = await api.resendInvoiceEDocument(detail.public_id);
+      if (result.invoice) setDetail(result.invoice);
+      setFeedback({ tone: "success", text: t("accounting.eDocumentResendQueued") });
+    } catch (error) {
+      setFeedback({ tone: "error", text: t("accounting.error", { message: errorText(error) }) });
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function removeInvoice() {
+    if (!detail || !window.confirm(t("accounting.deleteInvoiceConfirm", { number: detail.invoice_number }))) return;
+    setBusy("delete");
+    setFeedback(null);
+    try {
+      await api.deleteInvoice(detail.public_id);
+      onChanged();
+      onClose();
+    } catch (error) {
+      setFeedback({ tone: "error", text: t("accounting.error", { message: errorText(error) }) });
+      setBusy(null);
+    }
+  }
+
   const open = Number(detail?.open_amount ?? 0) > 0 && detail?.status !== "cancelled";
 
   return (
@@ -274,6 +319,18 @@ function InvoiceDetailSheet({ publicId, onClose, onChanged }: { publicId: string
                     {t("accounting.cancelInvoice")}
                   </Button>
                 )}
+                {detail.kolaybi_invoice_id && detail.status !== "cancelled" && (
+                  <Button variant="outline" className="min-h-11" disabled={busy !== null} onClick={() => void resend()} data-testid="invoice-resend">
+                    {busy === "resend" ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Send className="size-4" aria-hidden="true" />}
+                    {t("accounting.resendEDocument")}
+                  </Button>
+                )}
+                {Number(detail.paid_total) === 0 && (
+                  <Button variant="outline" className="min-h-11 text-destructive" disabled={busy !== null} onClick={() => void removeInvoice()} data-testid="invoice-delete">
+                    <Trash2 className="size-4" aria-hidden="true" />
+                    {t("accounting.deleteInvoice")}
+                  </Button>
+                )}
               </div>
               <section className="flex flex-col gap-2">
                 <h3 className="text-sm font-semibold">{t("accounting.payments")}</h3>
@@ -289,6 +346,18 @@ function InvoiceDetailSheet({ publicId, onClose, onChanged }: { publicId: string
                         <span className="flex items-center gap-2">
                           {money(payment.amount)}
                           <SyncBadge sync={payment.sync} />
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-11 text-destructive md:size-8"
+                            aria-label={t("accounting.deletePayment")}
+                            title={t("accounting.deletePayment")}
+                            disabled={busy !== null}
+                            onClick={() => void removePayment(payment.public_id, payment.amount)}
+                            data-testid="invoice-payment-delete"
+                          >
+                            <Trash2 className="size-4" aria-hidden="true" />
+                          </Button>
                         </span>
                       </li>
                     ))}

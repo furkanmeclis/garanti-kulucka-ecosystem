@@ -491,7 +491,15 @@
     "detailTitle": "Fatura {{number}}",
     "syncNow": "KolayBi'ye gönder",
     "syncQueuedCount": "{{count}} kayıt KolayBi kuyruğuna alındı.",
-    "openDetail": "Detay"
+    "openDetail": "Detay",
+    "deletePayment": "Tahsilatı sil",
+    "deletePaymentConfirm": "{{amount}} tutarındaki tahsilat silinsin mi?",
+    "paymentDeleted": "Tahsilat silindi.",
+    "paymentDeletedKolaybi": "Tahsilat silindi; KolayBi silme isteği kuyruğa alındı.",
+    "resendEDocument": "e-Faturayı yeniden gönder",
+    "eDocumentResendQueued": "e-Fatura yeniden gönderimi kuyruğa alındı.",
+    "deleteInvoice": "Kalıcı sil",
+    "deleteInvoiceConfirm": "{{number}} numaralı fatura kalıcı olarak silinsin mi? KolayBi'deki e-belge varsa önce iptal edilir."
   },
   "inventory": {
     "categoryIncubatorTitle": "Kuluçka Makineleri",

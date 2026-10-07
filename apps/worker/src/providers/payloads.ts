@@ -75,6 +75,11 @@ function buildBody(envelope: ProviderRequestEnvelope): Record<string, unknown> {
       return pick(payload, ["contact_id", "contact_public_id", "name", "surname", "idempotency_key"]);
     case "invoice.payment.create":
       return pick(payload, ["document_id", "invoice_public_id", "payment_public_id", "amount", "idempotency_key"]);
+    case "invoice.payment.delete":
+    case "invoice.e_document.resend":
+      return pick(payload, ["document_id", "invoice_public_id", "idempotency_key"]);
+    case "invoice.delete":
+      return pick(payload, ["document_id", "invoice_public_id", "cancel_date", "cancel_time", "idempotency_key"]);
     case "product.list":
       return pick(payload, ["per_page", "max_pages"]);
     case "call.confirmation.create":

@@ -491,7 +491,15 @@
     "detailTitle": "Invoice {{number}}",
     "syncNow": "Send to KolayBi",
     "syncQueuedCount": "{{count}} records queued for KolayBi.",
-    "openDetail": "Details"
+    "openDetail": "Details",
+    "deletePayment": "Delete payment",
+    "deletePaymentConfirm": "Delete the payment of {{amount}}?",
+    "paymentDeleted": "Payment deleted.",
+    "paymentDeletedKolaybi": "Payment deleted; the KolayBi delete request was queued.",
+    "resendEDocument": "Resend e-invoice",
+    "eDocumentResendQueued": "e-Invoice resend queued.",
+    "deleteInvoice": "Delete permanently",
+    "deleteInvoiceConfirm": "Permanently delete invoice {{number}}? An issued KolayBi e-document is cancelled first."
   },
   "inventory": {
     "categoryIncubatorTitle": "Incubators",

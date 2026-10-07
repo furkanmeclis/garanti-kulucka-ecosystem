@@ -293,6 +293,45 @@ async function enqueueSync(
   return { request_id: requestId, job_id: jobId, queued: jobId !== null };
 }
 
+/** One KolayBi follow-up job that does not change the row's sync status (payment delete, e-document resend/cancel, invoice delete). */
+async function queueKolaybiFollowUp(
+  context: Context<AppBindings>,
+  repo: AccountingRepository,
+  input: { operation: "invoice.payment.delete" | "invoice.e_document.resend" | "invoice.delete"; key: string; payload: Record<string, unknown> },
+) {
+  const readiness = await repo.kolaybiReadiness(liveGate);
+  const accountPublicId = readiness.account?.public_id ?? null;
+  const suffix = `${slug(input.key, 60)}_${shortHash(input.key)}`;
+  const requestId = `req_acct_${suffix}`;
+  const occurredAt = new Date().toISOString();
+  const envelope = providerDeliveryJobPayloadSchema.parse({
+    envelope: {
+      request_id: requestId,
+      provider: "kolaybi",
+      operation: input.operation,
+      direction: "outbound",
+      channel: "accounting",
+      ...(accountPublicId ? { account_public_id: accountPublicId } : {}),
+      occurred_at: occurredAt,
+      payload: { ...input.payload, idempotency_key: input.key },
+      legacy_contract: { source: "frontend/src/services/kolaybi.js faturalar", legacy_event: `accounting.${input.operation}` },
+    },
+  });
+  const job = jobEnvelopeSchema.parse({
+    job_id: `job_acct_${suffix}`,
+    queue: "provider-delivery",
+    name: `kolaybi.${input.operation}`,
+    payload: envelope,
+    requested_at: occurredAt,
+    request_id: context.get("requestId"),
+  });
+  const jobId = await context.get("providerDeliveryQueuePublisher").publish(job);
+  return { operation: input.operation, request_id: requestId, job_id: jobId, queued: jobId !== null };
+}
+
+/** Legacy "e-belge oluşturulmuşsa önce iptal" statuses. */
+const cancellableEDocumentStatuses = new Set(["ready", "sent", "delivered", "accepted", "waiting", "queued", "resend_queued"]);
+
 function contactPayload(contact: AccountingContactRecord) {
   return {
     contact_public_id: contact.public_id,
@@ -557,6 +596,72 @@ export function createAccountingRoutes() {
         { invoice: serializeInvoiceDetail(result.detail), payment: serializePayment(result.payment), replayed: result.replayed },
         result.replayed ? 200 : 201,
       );
+    } catch (error) {
+      return errorResponse(context, error);
+    }
+  });
+
+  routes.delete("/invoices/:invoice_public_id/payments/:payment_public_id", async (context) => {
+    const repo = repoFor(context);
+    try {
+      const result = await repo.deletePayment({
+        invoicePublicId: context.req.param("invoice_public_id"),
+        paymentPublicId: context.req.param("payment_public_id"),
+        actorUserId: context.get("actorUserId"),
+      });
+      // KolayBi deletes the tahsilat per document; only payments that reached KolayBi need the call.
+      const kolaybi =
+        result.kolaybiInvoiceId && result.payment.sync_status === "synced"
+          ? await queueKolaybiFollowUp(context, repo, {
+              operation: "invoice.payment.delete",
+              key: `payment_delete_${result.payment.public_id}`,
+              payload: { document_id: result.kolaybiInvoiceId, invoice_public_id: context.req.param("invoice_public_id"), payment_public_id: result.payment.public_id },
+            })
+          : null;
+      return context.json({ invoice: serializeInvoiceDetail(result.detail), deleted_payment_public_id: result.payment.public_id, kolaybi, live_gate: liveGate });
+    } catch (error) {
+      return errorResponse(context, error);
+    }
+  });
+
+  routes.post("/invoices/:invoice_public_id/e-document/resend", async (context) => {
+    const repo = repoFor(context);
+    try {
+      const documentId = await repo.markEDocumentResend(context.req.param("invoice_public_id"));
+      const kolaybi = await queueKolaybiFollowUp(context, repo, {
+        operation: "invoice.e_document.resend",
+        key: `e_document_resend_${context.req.param("invoice_public_id")}_${Date.now()}`,
+        payload: { document_id: documentId, invoice_public_id: context.req.param("invoice_public_id") },
+      });
+      const detail = await repo.getInvoice(context.req.param("invoice_public_id"));
+      return context.json({ invoice: detail ? serializeInvoiceDetail(detail) : null, kolaybi, live_gate: liveGate }, 202);
+    } catch (error) {
+      return errorResponse(context, error);
+    }
+  });
+
+  routes.delete("/invoices/:invoice_public_id", async (context) => {
+    const repo = repoFor(context);
+    const publicId = context.req.param("invoice_public_id");
+    try {
+      const removed = await repo.deleteInvoice({ invoicePublicId: publicId, actorUserId: context.get("actorUserId") });
+      let kolaybi = null;
+      if (removed.kolaybiInvoiceId) {
+        // One job: the worker cancels the e-document first (when one was issued) and then deletes the invoice.
+        const now = new Date();
+        const cancel = removed.eDocumentStatus && cancellableEDocumentStatuses.has(removed.eDocumentStatus)
+          ? {
+              cancel_date: now.toLocaleDateString("sv-SE", { timeZone: "Europe/Istanbul" }),
+              cancel_time: now.toLocaleTimeString("tr-TR", { timeZone: "Europe/Istanbul", hour12: false }),
+            }
+          : {};
+        kolaybi = await queueKolaybiFollowUp(context, repo, {
+          operation: "invoice.delete",
+          key: `invoice_delete_${publicId}`,
+          payload: { document_id: removed.kolaybiInvoiceId, invoice_public_id: publicId, ...cancel },
+        });
+      }
+      return context.json({ deleted: true, invoice_number: removed.invoiceNumber, kolaybi, live_gate: liveGate });
     } catch (error) {
       return errorResponse(context, error);
     }

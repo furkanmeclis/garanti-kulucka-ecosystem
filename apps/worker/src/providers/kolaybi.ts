@@ -13,7 +13,7 @@ export interface KolaybiTransportResponse {
 }
 
 export interface KolaybiTransportRequest {
-  method: "GET" | "POST" | "PUT";
+  method: "GET" | "POST" | "PUT" | "DELETE";
   url: string;
   headers: Record<string, string>;
   body: string;
@@ -31,6 +31,9 @@ export type KolaybiEndpoint =
   | "associates.create"
   | "associates.update"
   | "invoices.proceed"
+  | "invoices.proceed.delete"
+  | "invoices.resend"
+  | "invoices.delete"
   | "products.list";
 
 export type KolaybiFetchTransport = (request: KolaybiTransportRequest) => Promise<KolaybiTransportResponse>;
@@ -533,6 +536,17 @@ function postFormRequest(
   };
 }
 
+function deleteRequest(input: KolaybiLiveAdapterInput, path: string, endpoint: KolaybiEndpoint, token: string): KolaybiTransportRequest {
+  return {
+    method: "DELETE",
+    url: `${credentials(input.accountConfig).apiUrl}${path}`,
+    headers: authHeaders(input.accountConfig, token),
+    body: "",
+    timeout_ms: input.policy.timeout_ms,
+    kolaybi_endpoint: endpoint,
+  };
+}
+
 /**
  * Performs one authorized KolayBi call, refreshing the bearer token once on HTTP 401
  * (legacy getKolayBiToken cache semantics). Any HTTP status >= 400 becomes a provider failure.
@@ -862,6 +876,52 @@ async function invoicePaymentCreate(context: KolaybiCallContext): Promise<Kolayb
   return { request, response, payload: { success: true, document_id: documentId, payment_id: data.id ?? null, data } };
 }
 
+/** Legacy faturalar.tahsilatSil: DELETE /invoices/proceed/{document_id}. */
+async function invoicePaymentDelete(context: KolaybiCallContext): Promise<KolaybiOperationResult> {
+  const documentId = requiredPayloadString(context.input.envelope.payload, ["document_id", "invoice_id", "kolaybi_invoice_id"], "tahsilat delete document_id");
+  const { request, response } = await authorizedCall(context, (token) =>
+    deleteRequest(context.input, `/invoices/proceed/${encodeURIComponent(documentId)}`, "invoices.proceed.delete", token),
+  );
+  const parsed = parseJsonRecord(context, request, response);
+  return { request, response, payload: { success: true, document_id: documentId, data: isRecord(parsed.data) ? parsed.data : parsed } };
+}
+
+/** Legacy faturalar.eFaturaYenidenGonder: POST /invoices/resend/{document_id} for e-documents that failed at GIB. */
+async function eDocumentResend(context: KolaybiCallContext): Promise<KolaybiOperationResult> {
+  const documentId = requiredPayloadString(context.input.envelope.payload, ["document_id", "invoice_id", "kolaybi_invoice_id"], "e-document resend document_id");
+  const { request, response } = await authorizedCall(context, (token) =>
+    postFormRequest(context.input, `/invoices/resend/${encodeURIComponent(documentId)}`, "invoices.resend", token, new URLSearchParams()),
+  );
+  const parsed = parseJsonRecord(context, request, response);
+  return { request, response, payload: { success: true, document_id: documentId, data: isRecord(parsed.data) ? parsed.data : parsed } };
+}
+
+/**
+ * Legacy faturalar tam silme: when the payload carries cancel_date the e-document is cancelled first
+ * (POST /invoices/e-document/cancel), then the invoice is removed (DELETE /invoices/{document_id}).
+ */
+async function invoiceDelete(context: KolaybiCallContext): Promise<KolaybiOperationResult> {
+  const payload = context.input.envelope.payload;
+  const documentId = requiredPayloadString(payload, ["document_id", "invoice_id", "kolaybi_invoice_id"], "invoice delete document_id");
+  const cancelDate = payloadString(payload, ["cancel_date"]);
+  if (cancelDate) {
+    const cancelTime = payloadString(payload, ["cancel_time"]);
+    const cancelled = await authorizedCall(context, (token) => {
+      const form = new URLSearchParams();
+      form.append("document_id", documentId);
+      form.append("cancel_date", cancelDate);
+      if (cancelTime) form.append("cancel_time", cancelTime);
+      return postFormRequest(context.input, "/invoices/e-document/cancel", "invoices.e_document.cancel", token, form);
+    });
+    parseJsonRecord(context, cancelled.request, cancelled.response);
+  }
+  const { request, response } = await authorizedCall(context, (token) =>
+    deleteRequest(context.input, `/invoices/${encodeURIComponent(documentId)}`, "invoices.delete", token),
+  );
+  const parsed = parseJsonRecord(context, request, response);
+  return { request, response, payload: { success: true, document_id: documentId, deleted: true, data: isRecord(parsed.data) ? parsed.data : parsed } };
+}
+
 async function productList(context: KolaybiCallContext): Promise<KolaybiOperationResult> {
   const payload = context.input.envelope.payload;
   const perPage = Math.max(1, Math.trunc(payloadNumber(payload, ["per_page"], 200)));
@@ -910,6 +970,9 @@ const kolaybiOperations: Partial<Record<ProviderRequestEnvelope["operation"], (c
   "contact.create": contactCreate,
   "contact.update": contactUpdate,
   "invoice.payment.create": invoicePaymentCreate,
+  "invoice.payment.delete": invoicePaymentDelete,
+  "invoice.e_document.resend": eDocumentResend,
+  "invoice.delete": invoiceDelete,
   "product.list": productList,
 };
 

@@ -455,4 +455,48 @@ describe("KolayBi follow-up operation live gating", () => {
     expect(persisted[0]).toMatchObject({ operation: "invoice.get", status: "success" });
     expectNoSecrets(persisted[0] as ProviderAttempt, "gating-secret");
   });
+
+  it("deletes a payment, resends an e-document and deletes an invoice with the legacy endpoints", async () => {
+    const cases = [
+      { operation: "invoice.payment.delete" as const, method: "DELETE", path: "/invoices/proceed/5001", endpoint: "invoices.proceed.delete", body: "" },
+      { operation: "invoice.e_document.resend" as const, method: "POST", path: "/invoices/resend/5001", endpoint: "invoices.resend", body: "" },
+      { operation: "invoice.delete" as const, method: "DELETE", path: "/invoices/5001", endpoint: "invoices.delete", body: "" },
+    ];
+    for (const entry of cases) {
+      const captured: KolaybiTransportRequest[] = [];
+      const result = await sendKolaybiLiveRequest(
+        adapterInput(entry.operation, { document_id: "5001", idempotency_key: `${entry.operation}-5001` }, `${entry.operation}-secret`, sequence(captured, [token, json(200, { success: true, data: { id: 5001 } })])),
+      );
+      expect(captured[1]).toMatchObject({
+        method: entry.method,
+        url: `${origin}/kolaybi/v1${entry.path}`,
+        headers: { Authorization: "Bearer ops-token-secret", Channel: "GARANTI" },
+        body: entry.body,
+        kolaybi_endpoint: entry.endpoint,
+      });
+      expect(result.response_payload).toMatchObject({ success: true, document_id: "5001" });
+      expect(result.attempt).toMatchObject({ status: "success", operation: entry.operation });
+      expectNoSecrets(result.attempt, `${entry.operation}-secret`);
+    }
+  });
+
+  it("requires a document id for the delete and resend operations", async () => {
+    const error = await sendKolaybiLiveRequest(
+      adapterInput("invoice.delete", { idempotency_key: "no-doc" }, "no-doc-secret", sequence([], [token])),
+    ).catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(Error);
+  });
+
+  it("cancels the e-document before deleting the invoice when cancel_date is given", async () => {
+    const captured: KolaybiTransportRequest[] = [];
+    await sendKolaybiLiveRequest(
+      adapterInput("invoice.delete", { document_id: "77", cancel_date: "2026-10-07", cancel_time: "12:00:00", idempotency_key: "del-77" }, "del-77-secret", sequence(captured, [
+        token,
+        json(200, { success: true }),
+        json(200, { success: true }),
+      ])),
+    );
+    expect(captured.map((request) => `${request.method} ${request.kolaybi_endpoint}`)).toEqual(["POST access_token", "POST invoices.e_document.cancel", "DELETE invoices.delete"]);
+    expect(captured[1]?.body).toBe("document_id=77&cancel_date=2026-10-07&cancel_time=12%3A00%3A00");
+  });
 });

@@ -70,7 +70,7 @@ async function mockBackend(page: Page, role = "admin") {
     return {
       public_id: invoice.public_id, invoice_number: invoice.invoice_number, invoice_type: "sale", status: invoice.status, currency: "TRY", issue_date: invoice.issue_date, due_date: null, description: null,
       subtotal: money(invoice.subtotal), vat_total: money(invoice.vat), grand_total: money(invoice.grand), paid_total: money(invoice.paid), open_amount: money(invoice.status === "cancelled" ? 0 : invoice.grand - invoice.paid),
-      contact: { public_id: owner.public_id, name: owner.name }, order: null, kolaybi_invoice_id: null, e_document_status: null, sync: sync(), created_at: now, updated_at: now,
+      contact: { public_id: owner.public_id, name: owner.name }, order: null, kolaybi_invoice_id: (invoice as { kolaybi?: string }).kolaybi ?? null, e_document_status: null, sync: sync(), created_at: now, updated_at: now,
     };
   };
   const detailView = (invoice: (typeof state.invoices)[number]) => ({ ...invoiceView(invoice), contact: contactView(state.contacts.find((row) => row.public_id === invoice.contact_public_id)!), items: invoice.items, payments: invoice.payments });
@@ -126,6 +126,27 @@ async function mockBackend(page: Page, role = "admin") {
       const invoice = { public_id: `inv_${state.sequence}`, invoice_number: `GK2026${String(state.sequence).padStart(6, "0")}`, contact_public_id: String(body?.contact_public_id), issue_date: String(body?.issue_date), status: "issued", subtotal, vat, grand: subtotal + vat, paid: 0, items, payments: [] as unknown[] };
       state.invoices.unshift(invoice);
       return json(201, { ...detailView(invoice), replayed: false });
+    }
+    const paymentDelete = /^\/api\/accounting\/invoices\/([^/]+)\/payments\/([^/]+)$/.exec(url.pathname);
+    if (paymentDelete && method === "DELETE") {
+      const invoice = state.invoices.find((row) => row.public_id === paymentDelete[1])!;
+      const payment = (invoice.payments as Array<{ public_id: string; amount: string }>).find((row) => row.public_id === paymentDelete[2])!;
+      invoice.payments = invoice.payments.filter((row) => (row as { public_id: string }).public_id !== payment.public_id);
+      invoice.paid -= cents(payment.amount);
+      invoice.status = invoice.paid > 0 ? "partially_paid" : "issued";
+      (invoice as { kolaybi?: string }).kolaybi = "5001";
+      return json(200, { invoice: detailView(invoice), deleted_payment_public_id: payment.public_id, kolaybi: null, live_gate: "providers.kolaybi.live_mode" });
+    }
+    const resend = /^\/api\/accounting\/invoices\/([^/]+)\/e-document\/resend$/.exec(url.pathname);
+    if (resend && method === "POST") {
+      const invoice = state.invoices.find((row) => row.public_id === resend[1])!;
+      return json(202, { invoice: detailView(invoice), kolaybi: { operation: "invoice.e_document.resend", request_id: "req_1", job_id: "job_1", queued: true }, live_gate: "providers.kolaybi.live_mode" });
+    }
+    const invoiceDelete = /^\/api\/accounting\/invoices\/([^/]+)$/.exec(url.pathname);
+    if (invoiceDelete && method === "DELETE") {
+      const invoice = state.invoices.find((row) => row.public_id === invoiceDelete[1])!;
+      state.invoices = state.invoices.filter((row) => row !== invoice);
+      return json(200, { deleted: true, invoice_number: invoice.invoice_number, kolaybi: null, live_gate: "providers.kolaybi.live_mode" });
     }
     const invoiceMatch = /^\/api\/accounting\/invoices\/([^/]+)(\/[a-z]+)?$/.exec(url.pathname);
     if (invoiceMatch) {
@@ -269,6 +290,21 @@ test.describe("muhasebe pages", () => {
     await expect(page.getByTestId("acct-notice")).toContainText("Tahsilat kaydedildi.");
     await expect(page.getByTestId("invoice-detail-open")).toHaveText("₺4.264,99");
     await expect(page.getByTestId("invoice-payments")).toContainText("Nakit");
+    await expect(page.getByTestId("invoice-delete")).toHaveCount(0);
+    page.once("dialog", (dialog) => void dialog.accept());
+    await page.getByTestId("invoice-payment-delete").click();
+    await expect(page.getByTestId("acct-notice")).toContainText("Tahsilat silindi.");
+    await expect(page.getByTestId("invoice-detail-open")).toHaveText("₺5.264,99");
+    await expect(page.getByTestId("invoice-delete")).toBeVisible();
+    await page.getByTestId("invoice-resend").click();
+    await expect(page.getByTestId("acct-notice")).toContainText("e-Fatura yeniden gönderimi kuyruğa alındı.");
+    expect(state.requests.some((request) => request.method === "POST" && request.path.endsWith("/e-document/resend"))).toBe(true);
+    await page.getByTestId("invoice-collect").click();
+    await page.getByTestId("payment-amount").fill("1000");
+    await page.getByTestId("payment-method").selectOption("cash");
+    await page.getByTestId("payment-vault").fill("3");
+    await page.getByTestId("payment-save").click();
+    await expect(page.getByTestId("acct-notice")).toContainText("Tahsilat kaydedildi.");
     await page.keyboard.press("Escape");
 
     await expect(page.getByTestId("invoice-row")).toHaveCount(1);

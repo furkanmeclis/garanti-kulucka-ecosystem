@@ -318,6 +318,15 @@ export function createApiClient(options: ApiClientOptions) {
     addInvoicePayment: (publicId: string, input: CreatePaymentInput) =>
       request<{ invoice: InvoiceDetail; payment: InvoicePayment; replayed: boolean }>(`/api/accounting/invoices/${encodeURIComponent(publicId)}/payments`, { method: "POST", body: input }),
     cancelInvoice: (publicId: string) => request<InvoiceDetail>(`/api/accounting/invoices/${encodeURIComponent(publicId)}/cancel`, { method: "POST" }),
+    deleteInvoicePayment: (publicId: string, paymentPublicId: string) =>
+      request<{ invoice: InvoiceDetail; deleted_payment_public_id: string; kolaybi: { operation: string; queued: boolean } | null }>(
+        `/api/accounting/invoices/${encodeURIComponent(publicId)}/payments/${encodeURIComponent(paymentPublicId)}`,
+        { method: "DELETE" },
+      ),
+    resendInvoiceEDocument: (publicId: string) =>
+      request<{ invoice: InvoiceDetail | null; kolaybi: { operation: string; queued: boolean } }>(`/api/accounting/invoices/${encodeURIComponent(publicId)}/e-document/resend`, { method: "POST" }),
+    deleteInvoice: (publicId: string) =>
+      request<{ deleted: boolean; invoice_number: string; kolaybi: { operation: string; queued: boolean } | null }>(`/api/accounting/invoices/${encodeURIComponent(publicId)}`, { method: "DELETE" }),
     invoiceDocument: (publicId: string, format: "pdf" | "html") => requestBlob(`/api/accounting/invoices/${encodeURIComponent(publicId)}/document`, { format }),
     listAccountingContacts: (query: { search?: string; sync_status?: SyncStatus; limit?: number; offset?: number } = {}) =>
       request<{ data: AccountingContact[]; meta: ListMeta }>("/api/accounting/contacts", { query: { ...query } }),

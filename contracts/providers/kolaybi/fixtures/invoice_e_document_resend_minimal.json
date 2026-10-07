@@ -1,0 +1,17 @@
+{
+  "request_id": "req_kolaybi_invoice_e_document_resend_minimal_fixture_1",
+  "provider": "kolaybi",
+  "operation": "invoice.e_document.resend",
+  "direction": "outbound",
+  "channel": "accounting",
+  "occurred_at": "2026-10-07T00:00:00.000Z",
+  "payload": {
+    "document_id": "5001",
+    "invoice_public_id": "inv_fixture",
+    "idempotency_key": "accounting:invoice.e_document.resend:inv_fixture"
+  },
+  "legacy_contract": {
+    "source": "frontend/src/services/kolaybi.js faturalar.eFaturaYenidenGonder (POST /invoices/resend/{id})",
+    "fixture_name": "kolaybi_invoice_e_document_resend_minimal"
+  }
+}

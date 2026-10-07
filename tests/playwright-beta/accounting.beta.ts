@@ -16,7 +16,7 @@ function accountingRoutes() {
     subtotal: (Number(grand) / 1.2).toFixed(2), vat_total: (Number(grand) - Number(grand) / 1.2).toFixed(2), grand_total: grand, paid_total: paid, open_amount: (Number(grand) - Number(paid)).toFixed(2),
     contact: { public_id: contact.public_id, name: contact.name }, order: null, kolaybi_invoice_id: null, e_document_status: null, sync: sync("local"), created_at: now, updated_at: now,
   });
-  let invoices = [invoice("inv_1", "GK2026000001", "issued", "600.00", "0.00"), invoice("inv_2", "GK2026000002", "paid", "1200.00", "1200.00")];
+  let invoices = [invoice("inv_1", "GK2026000001", "issued", "600.00", "0.00"), { ...invoice("inv_2", "GK2026000002", "paid", "1200.00", "1200.00"), kolaybi_invoice_id: "5001" as string | null, e_document_status: "sent" as string | null }];
   const payments: Record<string, unknown[]> = { inv_1: [], inv_2: [{ public_id: "pay_1", amount: "1200.00", method: "bank_transfer", vault_id: null, paid_at: now, notes: null, sync: sync("synced"), created_at: now }] };
   const detail = (row: (typeof invoices)[number]) => ({
     ...row,
@@ -57,6 +57,22 @@ function accountingRoutes() {
       const created = invoice("inv_new", "GK2026000003", "issued", (net * 1.2).toFixed(2), "0.00", contacts.find((entry) => entry.public_id === input.contact_public_id)!);
       invoices = [created, ...invoices];
       return { status: 201, body: { ...detail(created), replayed: false } };
+    }
+    const paymentDelete = path.match(/^\/api\/accounting\/invoices\/(inv_\w+)\/payments\/(pay_\w+)$/);
+    if (paymentDelete && method === "DELETE") {
+      const row = invoices.find((entry) => entry.public_id === paymentDelete[1])!;
+      payments[row.public_id] = [];
+      row.paid_total = "0.00";
+      row.open_amount = row.grand_total;
+      row.status = "issued";
+      return { status: 200, body: { invoice: detail(row), deleted_payment_public_id: paymentDelete[2], kolaybi: { operation: "invoice.payment.delete", queued: true } } };
+    }
+    if (path === "/api/accounting/invoices/inv_2/e-document/resend") {
+      return { status: 202, body: { invoice: detail(invoices.find((entry) => entry.public_id === "inv_2")!), kolaybi: { operation: "invoice.e_document.resend", queued: true } } };
+    }
+    if (path.match(/^\/api\/accounting\/invoices\/inv_\w+$/) && method === "DELETE") {
+      invoices = invoices.filter((entry) => !path.endsWith(entry.public_id));
+      return { status: 200, body: { deleted: true, invoice_number: "GK2026000002", kolaybi: { operation: "invoice.delete", queued: true } } };
     }
     const match = path.match(/^\/api\/accounting\/invoices\/(inv_\w+)(\/\w+)?$/);
     if (!match) return undefined;
@@ -214,4 +230,29 @@ test("staff cannot open accounting pages", async ({ page }) => {
   await page.keyboard.press("Escape");
   await page.goto("/faturalar");
   await expect.poll(() => pathOf(page)).toBe("/");
+});
+
+test("invoices: delete a KolayBi payment, resend the e-invoice and delete the invoice", async ({ page }) => {
+  const state = await signIn(page);
+  await page.goto("/faturalar");
+  const table = page.getByTestId("invoices-table");
+  await table.getByTestId("invoice-open").nth(1).click();
+  const detail = page.getByTestId("invoice-detail");
+  await expect(detail.getByTestId("invoice-payments")).toContainText("1.200");
+  await expect(detail.getByTestId("invoice-delete")).toHaveCount(0);
+  page.once("dialog", (dialog) => void dialog.accept());
+  await detail.getByTestId("invoice-payment-delete").click();
+  await expect(detail.getByTestId("invoice-feedback")).toHaveText("Tahsilat silindi; KolayBi silme isteği kuyruğa alındı.");
+  await expect(detail.getByTestId("invoice-open-amount")).toContainText("1.200");
+  await detail.getByTestId("invoice-resend").click();
+  await expect(detail.getByTestId("invoice-feedback")).toHaveText("e-Fatura yeniden gönderimi kuyruğa alındı.");
+  page.once("dialog", (dialog) => void dialog.accept());
+  await detail.getByTestId("invoice-delete").click();
+  await expect(detail).toHaveCount(0);
+  await expect(table.getByTestId("invoices-row")).toHaveCount(1);
+  expect(state.requests.filter((entry) => entry.method !== "GET" && entry.path.startsWith("/api/accounting/invoices/inv_2")).map((entry) => `${entry.method} ${entry.path}`)).toEqual([
+    "DELETE /api/accounting/invoices/inv_2/payments/pay_1",
+    "POST /api/accounting/invoices/inv_2/e-document/resend",
+    "DELETE /api/accounting/invoices/inv_2",
+  ]);
 });

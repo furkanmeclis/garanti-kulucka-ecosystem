@@ -1,0 +1,17 @@
+{
+  "request_id": "req_kolaybi_invoice_payment_delete_minimal_fixture_1",
+  "provider": "kolaybi",
+  "operation": "invoice.payment.delete",
+  "direction": "outbound",
+  "channel": "accounting",
+  "occurred_at": "2026-10-07T00:00:00.000Z",
+  "payload": {
+    "document_id": "5001",
+    "invoice_public_id": "inv_fixture",
+    "idempotency_key": "accounting:invoice.payment.delete:inv_fixture"
+  },
+  "legacy_contract": {
+    "source": "frontend/src/services/kolaybi.js faturalar.tahsilatSil (DELETE /invoices/proceed/{id})",
+    "fixture_name": "kolaybi_invoice_payment_delete_minimal"
+  }
+}

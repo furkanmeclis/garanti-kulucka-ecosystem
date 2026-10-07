@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
-import { Ban, Eye, FileDown, FileText, Plus, Printer, Search, Trash2, Wallet } from "lucide-react";
+import { Ban, Eye, FileDown, FileText, Plus, Printer, Search, Send, Trash2, Wallet } from "lucide-react";
 import {
   createAccountingClient,
   type AccountingClient,
@@ -127,6 +127,40 @@ export function FaturalarPage({ http }: { http: BackendHttpClient }) {
     try {
       setDetail(await client.cancelInvoice(invoice.public_id));
       setNotice({ tone: "success", text: t("invoiceCancelled") });
+      void load();
+    } catch (error) {
+      setNotice({ tone: "error", text: t("error", { message: errorText(error) }) });
+    }
+  }
+
+  async function removePayment(invoice: InvoiceDetail, paymentPublicId: string, amount: string) {
+    if (!window.confirm(t("deletePaymentConfirm", { amount: money(amount, invoice.currency) }))) return;
+    try {
+      const result = await client.deletePayment(invoice.public_id, paymentPublicId);
+      setDetail(result.invoice);
+      setNotice({ tone: "success", text: result.kolaybi ? t("paymentDeletedKolaybi") : t("paymentDeleted") });
+      void load();
+    } catch (error) {
+      setNotice({ tone: "error", text: t("error", { message: errorText(error) }) });
+    }
+  }
+
+  async function resendEDocument(invoice: InvoiceDetail) {
+    try {
+      const result = await client.resendEDocument(invoice.public_id);
+      if (result.invoice) setDetail(result.invoice);
+      setNotice({ tone: "success", text: t("eDocumentResendQueued") });
+    } catch (error) {
+      setNotice({ tone: "error", text: t("error", { message: errorText(error) }) });
+    }
+  }
+
+  async function removeInvoice(invoice: InvoiceDetail) {
+    if (!window.confirm(t("deleteInvoiceConfirm", { number: invoice.invoice_number }))) return;
+    try {
+      await client.deleteInvoice(invoice.public_id);
+      setDetail(null);
+      setNotice({ tone: "success", text: t("invoiceDeleted", { number: invoice.invoice_number }) });
       void load();
     } catch (error) {
       setNotice({ tone: "error", text: t("error", { message: errorText(error) }) });
@@ -334,6 +368,16 @@ export function FaturalarPage({ http }: { http: BackendHttpClient }) {
                   <span>{t(paymentMethodKeys[payment.method])}</span>
                   <span className="num acct-strong">{money(payment.amount, detail.currency)}</span>
                   <SyncPill status={payment.sync.status} error={payment.sync.error} />
+                  <button
+                    type="button"
+                    className="acct-icon-button acct-danger"
+                    onClick={() => void removePayment(detail, payment.public_id, payment.amount)}
+                    aria-label={t("deletePayment")}
+                    title={t("deletePayment")}
+                    data-testid="invoice-payment-delete"
+                  >
+                    <Trash2 size={14} aria-hidden="true" />
+                  </button>
                 </li>
               ))}
             </ul>
@@ -353,6 +397,16 @@ export function FaturalarPage({ http }: { http: BackendHttpClient }) {
             {detail.status !== "cancelled" && Number(detail.paid_total) === 0 && (
               <button type="button" className="secondary-action acct-danger" onClick={() => void cancel(detail)} data-testid="invoice-cancel">
                 <Ban size={16} aria-hidden="true" /> {t("cancelInvoice")}
+              </button>
+            )}
+            {detail.kolaybi_invoice_id && detail.status !== "cancelled" && (
+              <button type="button" className="secondary-action" onClick={() => void resendEDocument(detail)} data-testid="invoice-resend">
+                <Send size={16} aria-hidden="true" /> {t("resendEDocument")}
+              </button>
+            )}
+            {Number(detail.paid_total) === 0 && (
+              <button type="button" className="secondary-action acct-danger" onClick={() => void removeInvoice(detail)} data-testid="invoice-delete">
+                <Trash2 size={16} aria-hidden="true" /> {t("deleteInvoice")}
               </button>
             )}
           </div>

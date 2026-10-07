@@ -251,6 +251,27 @@
       "direction": "outbound",
       "status": "covered",
       "fixture_file": "netgsm/fixtures/voice_message_report_minimal.json"
+    },
+    {
+      "provider": "kolaybi",
+      "operation": "invoice.payment.delete",
+      "direction": "outbound",
+      "status": "covered",
+      "fixture_file": "kolaybi/fixtures/invoice_payment_delete_minimal.json"
+    },
+    {
+      "provider": "kolaybi",
+      "operation": "invoice.e_document.resend",
+      "direction": "outbound",
+      "status": "covered",
+      "fixture_file": "kolaybi/fixtures/invoice_e_document_resend_minimal.json"
+    },
+    {
+      "provider": "kolaybi",
+      "operation": "invoice.delete",
+      "direction": "outbound",
+      "status": "covered",
+      "fixture_file": "kolaybi/fixtures/invoice_delete_minimal.json"
     }
   ]
 }

@@ -5920,6 +5920,64 @@
             "$ref": "#/components/responses/Error"
           }
         }
+      },
+      "delete": {
+        "operationId": "deleteInvoice",
+        "description": "Legacy fatura tam silme: deletes the local invoice (409 has_payments while payments exist); for KolayBi invoices queues one invoice.delete job that cancels an issued e-document first. Audited.",
+        "parameters": [
+          {
+            "name": "invoice_public_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "deleted",
+                    "invoice_number",
+                    "kolaybi",
+                    "live_gate"
+                  ],
+                  "properties": {
+                    "deleted": {
+                      "type": "boolean"
+                    },
+                    "invoice_number": {
+                      "type": "string"
+                    },
+                    "kolaybi": {
+                      "$ref": "#/components/schemas/KolaybiFollowUpJob"
+                    },
+                    "live_gate": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
       }
     },
     "/api/accounting/invoices/{invoice_public_id}/document": {
@@ -7827,6 +7885,130 @@
             "$ref": "#/components/responses/Error"
           },
           "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/accounting/invoices/{invoice_public_id}/payments/{payment_public_id}": {
+      "delete": {
+        "operationId": "deleteInvoicePayment",
+        "description": "Legacy faturalar.tahsilatSil: removes the payment, lowers paid_total and (for payments synced to KolayBi) queues kolaybi invoice.payment.delete. Audited.",
+        "parameters": [
+          {
+            "name": "invoice_public_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "payment_public_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Updated invoice",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "invoice",
+                    "deleted_payment_public_id",
+                    "kolaybi",
+                    "live_gate"
+                  ],
+                  "properties": {
+                    "invoice": {
+                      "type": "object"
+                    },
+                    "deleted_payment_public_id": {
+                      "type": "string"
+                    },
+                    "kolaybi": {
+                      "$ref": "#/components/schemas/KolaybiFollowUpJob"
+                    },
+                    "live_gate": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/accounting/invoices/{invoice_public_id}/e-document/resend": {
+      "post": {
+        "operationId": "resendInvoiceEDocument",
+        "description": "Legacy eFaturaYenidenGonder: queues kolaybi invoice.e_document.resend (POST /invoices/resend/{id}); e_document_status becomes resend_queued. 409 not_synced when the invoice has no KolayBi id.",
+        "parameters": [
+          {
+            "name": "invoice_public_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Resend queued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "invoice",
+                    "kolaybi",
+                    "live_gate"
+                  ],
+                  "properties": {
+                    "invoice": {
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "kolaybi": {
+                      "$ref": "#/components/schemas/KolaybiFollowUpJob"
+                    },
+                    "live_gate": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
             "$ref": "#/components/responses/Error"
           }
         }
@@ -18107,6 +18289,39 @@
             "format": "date-time"
           }
         }
+      },
+      "KolaybiFollowUpJob": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "operation",
+              "request_id",
+              "job_id",
+              "queued"
+            ],
+            "properties": {
+              "operation": {
+                "type": "string"
+              },
+              "request_id": {
+                "type": "string"
+              },
+              "job_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "queued": {
+                "type": "boolean"
+              }
+            }
+          },
+          {
+            "type": "null"
+          }
+        ]
       }
     }
   }

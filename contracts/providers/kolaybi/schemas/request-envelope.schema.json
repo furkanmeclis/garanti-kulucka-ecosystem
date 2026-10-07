@@ -29,6 +29,9 @@
         "contact.create",
         "contact.update",
         "invoice.payment.create",
+        "invoice.payment.delete",
+        "invoice.e_document.resend",
+        "invoice.delete",
         "product.list"
       ]
     },

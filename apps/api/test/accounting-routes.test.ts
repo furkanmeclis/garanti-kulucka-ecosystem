@@ -132,6 +132,9 @@ const mocks = vi.hoisted(() => {
         payments: [{ ...payment, kolaybi_invoice_id: null, invoice_public_id: "inv_1" }],
       })),
       markQueued: vi.fn(async () => undefined),
+      deletePayment: vi.fn(async (input: { paymentPublicId: string }): Promise<unknown> => ({ detail: mocks.detail(), payment: { ...payment, public_id: input.paymentPublicId, sync_status: "synced" }, kolaybiInvoiceId: "5001" })),
+      markEDocumentResend: vi.fn(async (): Promise<string> => "5001"),
+      deleteInvoice: vi.fn(async (): Promise<unknown> => ({ invoiceNumber: "GK-F-1", kolaybiInvoiceId: "5001", eDocumentStatus: "sent" })),
     },
   };
 });
@@ -330,5 +333,35 @@ describe("accounting routes (fatura / cari / tahsilat / KolayBi)", () => {
     expect(mocks.published.map((job) => job.payload.envelope.operation)).toEqual(["invoice.create", "invoice.payment.create"]);
     expect(mocks.published[0]?.payload.envelope.payload).toMatchObject({ contact_id: "1001", currency: "try", order_date: "2026-10-06", items: [{ quantity: "1.000", unit_price: "100.00", vat_rate: "20.00" }] });
     expect(mocks.published[1]?.payload.envelope.payload).toMatchObject({ document_id: "5001", vault_id: "2", amount: "50.00" });
+  });
+
+  it("deletes a payment and queues the KolayBi tahsilat delete only for synced payments", async () => {
+    const response = await call("DELETE", "/api/accounting/invoices/inv_1/payments/pay_1");
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({ deleted_payment_public_id: "pay_1", kolaybi: { operation: "invoice.payment.delete", queued: true } });
+    expect(mocks.repository.deletePayment).toHaveBeenCalledWith({ invoicePublicId: "inv_1", paymentPublicId: "pay_1", actorUserId: 10 });
+    expect(mocks.published.at(-1)).toMatchObject({ name: "kolaybi.invoice.payment.delete", payload: { envelope: { payload: { document_id: "5001" } } } });
+
+    mocks.repository.deletePayment.mockResolvedValueOnce({ detail: mocks.detail(), payment: { public_id: "pay_2", amount: "10.00", sync_status: "local" }, kolaybiInvoiceId: "5001" });
+    const local = await call("DELETE", "/api/accounting/invoices/inv_1/payments/pay_2");
+    await expect(local.json()).resolves.toMatchObject({ kolaybi: null });
+    expect((await call("DELETE", "/api/accounting/invoices/inv_1/payments/pay_1", undefined, "calisan")).status).toBe(403);
+  });
+
+  it("queues an e-document resend and a combined cancel + delete for KolayBi invoices", async () => {
+    const resend = await call("POST", "/api/accounting/invoices/inv_1/e-document/resend");
+    expect(resend.status).toBe(202);
+    expect(mocks.published.at(-1)).toMatchObject({ name: "kolaybi.invoice.e_document.resend", payload: { envelope: { payload: { document_id: "5001" } } } });
+
+    const removed = await call("DELETE", "/api/accounting/invoices/inv_1");
+    expect(removed.status).toBe(200);
+    await expect(removed.json()).resolves.toMatchObject({ deleted: true, invoice_number: "GK-F-1", kolaybi: { operation: "invoice.delete", queued: true } });
+    const job = mocks.published.at(-1) as unknown as { name: string; payload: { envelope: { payload: Record<string, unknown> } } };
+    expect(job.name).toBe("kolaybi.invoice.delete");
+    expect(job.payload.envelope.payload).toMatchObject({ document_id: "5001", cancel_date: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/) });
+
+    mocks.repository.deleteInvoice.mockResolvedValueOnce({ invoiceNumber: "GK-F-2", kolaybiInvoiceId: null, eDocumentStatus: null });
+    const local = await call("DELETE", "/api/accounting/invoices/inv_2");
+    await expect(local.json()).resolves.toMatchObject({ deleted: true, kolaybi: null });
   });
 });

@@ -40,7 +40,7 @@ export interface InvoiceDetailRecord {
 
 export class AccountingError extends Error {
   constructor(
-    readonly code: "not_found" | "contact_not_found" | "order_not_found" | "product_not_found" | "invoice_cancelled" | "overpayment" | "has_payments" | "idempotency_conflict",
+    readonly code: "not_found" | "contact_not_found" | "order_not_found" | "product_not_found" | "invoice_cancelled" | "overpayment" | "has_payments" | "idempotency_conflict" | "payment_not_found" | "not_synced",
     message: string,
   ) {
     super(message);
@@ -501,6 +501,92 @@ export class AccountingRepository {
     const detail = await this.getInvoice(input.invoicePublicId);
     if (!detail) throw new AccountingError("not_found", "Fatura bulunamadı");
     return { detail, payment, replayed: false };
+  }
+
+  /** Legacy faturalar.tahsilatSil: removes one payment and lowers paid_total; KolayBi deletion is queued by the route. */
+  async deletePayment(input: { invoicePublicId: string; paymentPublicId: string; actorUserId: number | null }) {
+    const removed = await this.db.transaction().execute(async (transaction) => {
+      const db = transaction as AppDatabase;
+      const invoice = await db
+        .selectFrom("invoices")
+        .select(["id", "grand_total", "paid_total", "kolaybi_invoice_id"])
+        .where("public_id", "=", input.invoicePublicId)
+        .forUpdate()
+        .executeTakeFirst();
+      if (!invoice) throw new AccountingError("not_found", "Fatura bulunamadı");
+      const payment = await db
+        .selectFrom("invoice_payments")
+        .selectAll()
+        .where("public_id", "=", input.paymentPublicId)
+        .where("invoice_id", "=", invoice.id)
+        .executeTakeFirst();
+      if (!payment) throw new AccountingError("payment_not_found", "Tahsilat bulunamadı");
+      await db.deleteFrom("invoice_payments").where("id", "=", payment.id).execute();
+      const paidTotal = fromKurus(Math.max(0, toKurus(invoice.paid_total) - toKurus(payment.amount)));
+      await db
+        .updateTable("invoices")
+        .set({ paid_total: paidTotal, status: statusForPaidTotal(invoice.grand_total, paidTotal), updated_at: new Date() })
+        .where("id", "=", invoice.id)
+        .execute();
+      await db
+        .insertInto("audit_logs")
+        .values({
+          actor_user_id: input.actorUserId,
+          action: "delete",
+          entity_type: "invoice_payments",
+          entity_id: payment.public_id,
+          old_value: { invoice_public_id: input.invoicePublicId, amount: payment.amount, sync_status: payment.sync_status },
+          new_value: null,
+          ip_address: null,
+          user_agent: null,
+        })
+        .execute();
+      return { payment, kolaybiInvoiceId: invoice.kolaybi_invoice_id };
+    });
+    const detail = await this.getInvoice(input.invoicePublicId);
+    if (!detail) throw new AccountingError("not_found", "Fatura bulunamadı");
+    return { detail, ...removed };
+  }
+
+  /** Legacy faturalar tam silme: the local invoice and its lines are removed; KolayBi e-document cancel + delete are queued by the route. */
+  async deleteInvoice(input: { invoicePublicId: string; actorUserId: number | null }) {
+    return this.db.transaction().execute(async (transaction) => {
+      const db = transaction as AppDatabase;
+      const invoice = await db
+        .selectFrom("invoices")
+        .select(["id", "public_id", "invoice_number", "paid_total", "grand_total", "kolaybi_invoice_id", "e_document_status", "status"])
+        .where("public_id", "=", input.invoicePublicId)
+        .forUpdate()
+        .executeTakeFirst();
+      if (!invoice) throw new AccountingError("not_found", "Fatura bulunamadı");
+      if (toKurus(invoice.paid_total) > 0) throw new AccountingError("has_payments", "Tahsilatı olan fatura silinemez; önce tahsilatları silin");
+      await db.deleteFrom("invoice_payments").where("invoice_id", "=", invoice.id).execute();
+      await db.deleteFrom("invoice_items").where("invoice_id", "=", invoice.id).execute();
+      await db.deleteFrom("invoices").where("id", "=", invoice.id).execute();
+      await db
+        .insertInto("audit_logs")
+        .values({
+          actor_user_id: input.actorUserId,
+          action: "delete",
+          entity_type: "invoices",
+          entity_id: invoice.public_id,
+          old_value: { invoice_number: invoice.invoice_number, grand_total: invoice.grand_total, status: invoice.status, kolaybi_invoice_id: invoice.kolaybi_invoice_id },
+          new_value: null,
+          ip_address: null,
+          user_agent: null,
+        })
+        .execute();
+      return { invoiceNumber: invoice.invoice_number, kolaybiInvoiceId: invoice.kolaybi_invoice_id, eDocumentStatus: invoice.e_document_status };
+    });
+  }
+
+  /** Marks a queued e-document resend (legacy eFaturaYenidenGonder). */
+  async markEDocumentResend(invoicePublicId: string) {
+    const invoice = await this.db.selectFrom("invoices").select(["id", "kolaybi_invoice_id"]).where("public_id", "=", invoicePublicId).executeTakeFirst();
+    if (!invoice) throw new AccountingError("not_found", "Fatura bulunamadı");
+    if (!invoice.kolaybi_invoice_id) throw new AccountingError("not_synced", "Fatura henüz KolayBi'ye gönderilmedi");
+    await this.db.updateTable("invoices").set({ e_document_status: "resend_queued", updated_at: new Date() }).where("id", "=", invoice.id).execute();
+    return invoice.kolaybi_invoice_id;
   }
 
   /** Cancels an unpaid invoice (legacy "fatura sil" on a draft); paid invoices must be refunded first. */

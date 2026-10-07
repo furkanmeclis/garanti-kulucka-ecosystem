@@ -99,6 +99,14 @@ export interface InvoiceDetail extends Omit<Invoice, "contact"> {
   payments: InvoicePayment[];
 }
 
+/** A queued KolayBi follow-up (tahsilat sil, e-fatura yeniden gönder, fatura sil). */
+export interface KolaybiFollowUpJob {
+  operation: string;
+  request_id: string;
+  job_id: string | null;
+  queued: boolean;
+}
+
 export interface ListMeta {
   total_count: number;
   limit: number;
@@ -186,6 +194,15 @@ export function createAccountingClient(http: BackendHttpClient) {
         body: input,
       }),
     cancelInvoice: (publicId: string) => http.request<InvoiceDetail>(`${base}/invoices/${encodeURIComponent(publicId)}/cancel`, { method: "POST" }),
+    deletePayment: (publicId: string, paymentPublicId: string) =>
+      http.request<{ invoice: InvoiceDetail; deleted_payment_public_id: string; kolaybi: KolaybiFollowUpJob | null }>(
+        `${base}/invoices/${encodeURIComponent(publicId)}/payments/${encodeURIComponent(paymentPublicId)}`,
+        { method: "DELETE" },
+      ),
+    resendEDocument: (publicId: string) =>
+      http.request<{ invoice: InvoiceDetail | null; kolaybi: KolaybiFollowUpJob }>(`${base}/invoices/${encodeURIComponent(publicId)}/e-document/resend`, { method: "POST" }),
+    deleteInvoice: (publicId: string) =>
+      http.request<{ deleted: boolean; invoice_number: string; kolaybi: KolaybiFollowUpJob | null }>(`${base}/invoices/${encodeURIComponent(publicId)}`, { method: "DELETE" }),
     downloadDocument: async (publicId: string, format: "html" | "pdf") => {
       if (!http.requestBlob) throw new Error("Document download is not supported by this client");
       return http.requestBlob(`${base}/invoices/${encodeURIComponent(publicId)}/document?format=${format}`);
