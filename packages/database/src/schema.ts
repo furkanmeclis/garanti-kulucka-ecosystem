@@ -39,6 +39,7 @@ export interface Database {
   invoices: InvoicesTable;
   invoice_items: InvoiceItemsTable;
   invoice_payments: InvoicePaymentsTable;
+  voice_messages: VoiceMessagesTable;
   vapi_call_queue: VapiCallQueueTable;
   vapi_calls: VapiCallsTable;
   products: ProductsTable;
@@ -349,6 +350,24 @@ export interface InvoicePaymentsTable extends BaseTable, KolaybiSyncColumns {
   vault_id: string | null;
   paid_at: Timestamp;
   notes: string | null;
+  idempotency_key: string;
+  created_by_user_id: number | null;
+}
+
+export interface VoiceMessagesTable extends BaseTable {
+  recipients: Json;
+  recipient_count: number;
+  message_text: string | null;
+  audio_id: string | null;
+  ringtime: ColumnType<number, number | undefined, number>;
+  status: ColumnType<string, string | undefined, string>;
+  bulk_id: string | null;
+  error_message: string | null;
+  request_id: string;
+  job_id: string | null;
+  report_request_id: string | null;
+  report: Json | null;
+  report_checked_at: Timestamp | null;
   idempotency_key: string;
   created_by_user_id: number | null;
 }

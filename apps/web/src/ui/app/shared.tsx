@@ -148,6 +148,8 @@ export const navigationItems: NavigationItem[] = [
   { key: "sms", label: "SMS", icon: MessageSquare, roles: ["admin", "calisan", "kargo_operatoru"], path: "/sms" },
   { key: "calls", label: "Arama", icon: Phone, roles: ["admin"], path: "/sesli-asistan" },
   { key: "vapi", label: "VAPI AI", icon: Bot, roles: ["admin"], path: "/sesli-asistan/vapi" },
+  { key: "voiceMessages", label: "Sesli Mesajlar", icon: Phone, roles: ["admin"], path: "/sesli-asistan/sesli-mesajlar", hidden: true },
+  { key: "phonebook", label: "Rehber", icon: Phone, roles: ["admin"], path: "/sesli-asistan/rehber", hidden: true },
   { key: "reports", label: "İş Analizi", icon: BarChart3, roles: ["admin"], path: "/raporlar" },
   { key: "invoices", label: "Faturalar", icon: FileText, roles: ["admin"], path: "/faturalar" },
   { key: "accounts", label: "Cari Hesaplar", icon: BookUser, roles: ["admin"], path: "/cari-hesaplar" },

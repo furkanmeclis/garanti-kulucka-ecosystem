@@ -32,6 +32,8 @@ export const providerOperationSchema = z.enum([
   "call.webhook",
   "call.confirmation.create",
   "call.confirmation.status",
+  "voice.message.send",
+  "voice.message.report",
   "call.get",
   "call.report",
   "sip.config.sync",

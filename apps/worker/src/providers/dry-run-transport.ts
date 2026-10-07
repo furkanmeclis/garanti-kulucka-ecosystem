@@ -48,7 +48,10 @@ function providerPath(envelope: ProviderRequestEnvelope): string {
     case "netgsm:call.confirmation.create":
       return "/netgsm/voicesms/send";
     case "netgsm:call.confirmation.status":
+    case "netgsm:voice.message.report":
       return "/netgsm/voicesms/report";
+    case "netgsm:voice.message.send":
+      return "/netgsm/voicesms/send";
     case "whatsapp:message.send":
       return "/meta/whatsapp/messages";
     case "instagram:message.send":

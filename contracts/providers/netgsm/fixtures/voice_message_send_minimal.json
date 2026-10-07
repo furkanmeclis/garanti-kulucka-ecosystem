@@ -1,0 +1,23 @@
+{
+  "request_id": "req_netgsm_voice_message_send_fixture_1",
+  "provider": "netgsm",
+  "operation": "voice.message.send",
+  "direction": "outbound",
+  "channel": "voice",
+  "occurred_at": "2026-10-06T00:00:00.000Z",
+  "payload": {
+    "voice_message_public_id": "vms_fixture",
+    "recipients": [
+      "05551112233",
+      "05559998877"
+    ],
+    "message": "Siparişiniz kargoya verilmiştir.",
+    "ringtime": 20,
+    "recipient_count": 2,
+    "idempotency_key": "voice:vms_fixture"
+  },
+  "legacy_contract": {
+    "source": "server.js POST /api/netgsm/sesli-mesaj/gonder",
+    "fixture_name": "netgsm_voice_message_send_minimal"
+  }
+}

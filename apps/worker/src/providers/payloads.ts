@@ -79,6 +79,10 @@ function buildBody(envelope: ProviderRequestEnvelope): Record<string, unknown> {
       return pick(payload, ["per_page", "max_pages"]);
     case "call.confirmation.create":
       return pick(payload, ["order_public_id", "telefon", "phone", "idempotency_key"]);
+    case "voice.message.send":
+      return pick(payload, ["voice_message_public_id", "recipient_count", "audio_id", "ringtime", "idempotency_key"]);
+    case "voice.message.report":
+      return pick(payload, ["voice_message_public_id", "bulk_id"]);
     case "call.confirmation.status":
       return pick(payload, ["order_public_id", "bulk_id", "ivr_bulk_id"]);
     case "message.send":

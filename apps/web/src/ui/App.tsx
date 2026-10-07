@@ -36,6 +36,8 @@ import {
   SuratDebugPage,
   VapiAramalarPage,
   WhatsAppDebugPage,
+  SesliMesajlarPage,
+  RehberPage,
   WebphoneFlow,
   YorumlarPage,
 } from "./routes.js";
@@ -209,6 +211,8 @@ export function App() {
         {activeFlow === "sms" && <SmsPage http={http} />}
         {activeFlow === "calls" && <AramaPage http={http} />}
         {activeFlow === "vapi" && <VapiAramalarPage http={http} />}
+        {activeFlow === "voiceMessages" && <SesliMesajlarPage http={http} />}
+        {activeFlow === "phonebook" && <RehberPage http={http} />}
         {activeFlow === "reports" && <RaporlarPage http={http} />}
         {activeFlow === "invoices" && <FaturalarPage http={http} />}
         {activeFlow === "accounts" && <CariHesaplarPage http={http} />}

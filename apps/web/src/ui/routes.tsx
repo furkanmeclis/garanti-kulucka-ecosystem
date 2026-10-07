@@ -63,6 +63,8 @@ export const InstagramAnalitikPage = lazyPage(() =>
 );
 export const FaturalarPage = lazyPage(() => import("./pages/FaturalarPage.js").then((m) => m.FaturalarPage));
 export const CariHesaplarPage = lazyPage(() => import("./pages/CariHesaplarPage.js").then((m) => m.CariHesaplarPage));
+export const SesliMesajlarPage = lazyPage(() => import("./pages/SesliMesajlarPage.js").then((m) => m.SesliMesajlarPage));
+export const RehberPage = lazyPage(() => import("./pages/SesliMesajlarPage.js").then((m) => m.RehberPage));
 export const WhatsAppDebugPage = lazyPage(() => import("./pages/DebugPages.js").then((m) => m.WhatsAppDebugPage));
 export const InstagramDebugPage = lazyPage(() => import("./pages/DebugPages.js").then((m) => m.InstagramDebugPage));
 export const AiDebugPage = lazyPage(() => import("./pages/DebugPages.js").then((m) => m.AiDebugPage));

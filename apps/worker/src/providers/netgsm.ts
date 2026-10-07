@@ -367,7 +367,12 @@ function throwFailure(
 
 export async function sendNetgsmLiveRequest(input: NetgsmLiveAdapterInput): Promise<NetgsmLiveAdapterResult> {
   const startedAt = input.now ?? new Date();
-  if (input.envelope.operation === "call.confirmation.create" || input.envelope.operation === "call.confirmation.status") {
+  if (
+    input.envelope.operation === "call.confirmation.create" ||
+    input.envelope.operation === "call.confirmation.status" ||
+    input.envelope.operation === "voice.message.send" ||
+    input.envelope.operation === "voice.message.report"
+  ) {
     return sendNetgsmConfirmationCall(input, startedAt);
   }
   if (input.envelope.operation === "call.report") {
@@ -573,6 +578,74 @@ function confirmationCallRequest(input: NetgsmLiveAdapterInput, now: Date): Netg
   };
 }
 
+/** Legacy POST /api/netgsm/sesli-mesaj/gonder: TTS text or an uploaded audio id to one or more numbers. */
+function voiceMessageRequest(input: NetgsmLiveAdapterInput, now: Date): NetgsmTransportRequest {
+  const { settings } = input.accountConfig;
+  const payload = input.envelope.payload;
+  const creds = voiceCredentials(input.accountConfig);
+  if (!creds.usercode || !creds.password) throw new Error("NetGSM voice credentials are missing");
+  const recipients = (Array.isArray(payload.recipients) ? payload.recipients : [])
+    .map((value) => cleanPhone(typeof value === "string" ? value : String(value ?? "")))
+    .filter(Boolean);
+  if (recipients.length === 0) throw new Error("NetGSM voice message recipients are missing");
+  const audioId = payloadString(payload, ["audio_id", "audioId"]);
+  const text = payloadString(payload, ["message", "metin", "text"]);
+  if (!audioId && !text) throw new Error("NetGSM voice message needs text or an audio id");
+  const ringtime = Math.min(30, Math.max(10, Math.trunc(Number(payload.ringtime ?? 20)) || 20));
+  const timeZone = stringSetting(settings, ["timezone", "netgsm.timezone"], "Europe/Istanbul");
+  const stop = new Date(now.getTime() + 21 * 60 * 60 * 1000);
+  const xmlBody = `<?xml version='1.0' encoding='UTF-8'?>
+<mainbody>
+  <header>
+    <usercode>${creds.usercode}</usercode>
+    <password>${creds.password}</password>
+    <startdate>${netgsmVoiceDate(now, timeZone)}</startdate>
+    <starttime>${netgsmVoiceTime(now, 1, timeZone)}</starttime>
+    <stopdate>${netgsmVoiceDate(stop, timeZone)}</stopdate>
+    <stoptime>${netgsmVoiceTime(stop, 0, timeZone)}</stoptime>
+    <key>0</key>
+    <ringtime>${ringtime}</ringtime>
+  </header>
+  <body>
+    ${audioId ? `<audioid>${escapeXml(audioId)}</audioid>` : `<text>${escapeXml(text)}</text>`}
+    ${recipients.map((phone) => `<no>${phone}</no>`).join("\n    ")}
+  </body>
+</mainbody>`;
+  return {
+    method: "POST",
+    url: `${creds.apiUrl}/voicesms/send`,
+    headers: { "Content-Type": "text/xml; charset=utf-8" },
+    body: xmlBody,
+    timeout_ms: input.policy.timeout_ms,
+    netgsm_endpoint: "voicesms.send",
+  };
+}
+
+/**
+ * Legacy /api/netgsm/sesli-mesaj/rapor/:bulkId rows. NetGSM answers either `bulkid tel durum tus sure`
+ * (whitespace) or `tel|durum|operator|sure|tus` (pipe) lines separated by <br>.
+ */
+export function parseNetgsmVoiceReport(body: string): Record<string, unknown> {
+  const trimmed = body.trim();
+  if (trimmed === "50" || reportErrorMessages[trimmed]) {
+    return { report_ready: false, netgsm_code: trimmed, message: reportErrorMessages[trimmed] ?? null, rows: [] };
+  }
+  const rows = trimmed
+    .replace(/<br\s*\/?>/gi, "\n")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      if (line.includes("|")) {
+        const fields = line.split("|").map((field) => field.trim());
+        return { phone: fields[0] ?? "", status: callStatusMap[fields[1] ?? ""] ?? "araniyor", pressed_key: fields[4] || null, listen_seconds: Number.parseInt(fields[3] ?? "0", 10) || 0 };
+      }
+      const fields = line.split(/\s+/);
+      return { phone: fields[1] ?? "", status: callStatusMap[fields[2] ?? ""] ?? "araniyor", pressed_key: fields[3] && fields[3] !== "0" ? fields[3] : null, listen_seconds: Number.parseInt(fields[4] ?? "0", 10) || 0 };
+    });
+  return { report_ready: rows.length > 0 && rows.every((row) => row.status !== "araniyor"), netgsm_code: null, rows };
+}
+
 function confirmationStatusRequest(input: NetgsmLiveAdapterInput): NetgsmTransportRequest {
   const creds = voiceCredentials(input.accountConfig);
   const bulkId = payloadString(input.envelope.payload, ["bulk_id", "ivr_bulk_id", "bulkid"]);
@@ -634,8 +707,13 @@ export function parseNetgsmConfirmationReport(body: string): Record<string, unkn
 }
 
 async function sendNetgsmConfirmationCall(input: NetgsmLiveAdapterInput, startedAt: Date): Promise<NetgsmLiveAdapterResult> {
-  const isStatus = input.envelope.operation === "call.confirmation.status";
-  const request = isStatus ? confirmationStatusRequest(input) : confirmationCallRequest(input, startedAt);
+  const operation = input.envelope.operation;
+  const isStatus = operation === "call.confirmation.status" || operation === "voice.message.report";
+  const request = isStatus
+    ? confirmationStatusRequest(input)
+    : operation === "voice.message.send"
+      ? voiceMessageRequest(input, startedAt)
+      : confirmationCallRequest(input, startedAt);
   const transport = input.transport ?? defaultNetgsmFetchTransport;
   let response: NetgsmTransportResponse;
   try {
@@ -672,8 +750,17 @@ async function sendNetgsmConfirmationCall(input: NetgsmLiveAdapterInput, started
     responsePayload = {
       success: true,
       bulk_id: payloadString(input.envelope.payload, ["bulk_id", "ivr_bulk_id", "bulkid"]),
-      ...parseNetgsmConfirmationReport(response.body),
+      ...(operation === "voice.message.report" ? parseNetgsmVoiceReport(response.body) : parseNetgsmConfirmationReport(response.body)),
     };
+  } else if (operation === "voice.message.send") {
+    if (!parsed) {
+      throwFailure(input, startedAt, request, response, "malformed_response", "NetGSM response could not be normalized", parsed);
+    }
+    if (!successCodes.has(parsed.code)) {
+      const message = confirmationErrorMessages[parsed.code] ?? `Bilinmeyen hata kodu: ${parsed.code}`;
+      throwFailure(input, startedAt, request, response, "netgsm_error_code", message, parsed);
+    }
+    responsePayload = { success: true, bulkId: parsed.jobId, netgsm_code: parsed.code };
   } else {
     if (!parsed) {
       throwFailure(input, startedAt, request, response, "malformed_response", "NetGSM response could not be normalized", parsed);

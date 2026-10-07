@@ -90,6 +90,8 @@ const explicitOptInOperations = new Set<ProviderOperation>([
   "call.confirmation.create",
   "call.confirmation.status",
   "call.report",
+  "voice.message.send",
+  "voice.message.report",
 ]);
 
 function liveModeEnabledFor(
@@ -459,6 +461,8 @@ const resultPersistingOperations = new Set<string>([
   "invoice.e_document.cancel",
   "call.confirmation.create",
   "call.confirmation.status",
+  "voice.message.send",
+  "voice.message.report",
 ]);
 
 export function isProviderLiveTransportError(

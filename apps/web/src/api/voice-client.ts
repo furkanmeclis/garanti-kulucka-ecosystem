@@ -172,6 +172,56 @@ export interface NetgsmCdrStatistics {
   cevaplananOran: number;
 }
 
+export type VoiceMessageStatus = "queued" | "sent" | "failed" | "dry_run";
+
+export interface VoiceMessageReportRow {
+  phone: string;
+  status: string;
+  pressed_key: string | null;
+  listen_seconds: number;
+}
+
+export interface VoiceMessage {
+  public_id: string;
+  recipients: string[];
+  recipient_count: number;
+  message: string | null;
+  audio_id: string | null;
+  ringtime: number;
+  status: VoiceMessageStatus;
+  bulk_id: string | null;
+  error_message: string | null;
+  report: { report_ready: boolean; message: string | null; rows: VoiceMessageReportRow[] } | null;
+  report_checked_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface VoiceMessageCreateRequest {
+  recipients: string[];
+  message?: string;
+  audio_id?: string;
+  ringtime: number;
+  idempotency_key: string;
+}
+
+export interface VoiceMessageMutation {
+  voice_message: VoiceMessage;
+  replayed: boolean;
+  queued: boolean;
+  live_gate: string;
+  live_call_permitted: false;
+}
+
+export interface PhonebookEntry {
+  kind: "customer" | "staff";
+  public_id: string;
+  name: string;
+  phone: string | null;
+  extension: string | null;
+  role: string | null;
+}
+
 function query(params: Record<string, string | number | undefined | null>) {
   const search = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
@@ -224,6 +274,20 @@ export function createVoiceClient(http: BackendHttpClient) {
     listCdr: (params: { yon: "gelen" | "giden"; sayfa: number; sayfaBoyutu: number }) =>
       http.request<NetgsmCdrListResponse>(`/api/netgsm/cdr${query({ yon: params.yon, sayfa: params.sayfa, sayfa_boyutu: params.sayfaBoyutu })}`),
     getCdrStatistics: () => http.request<{ success: boolean; data: NetgsmCdrStatistics; synced_at: string | null }>("/api/netgsm/cdr/istatistik"),
+    listVoiceMessages: (params: { status?: VoiceMessageStatus | undefined; search?: string | undefined; limit: number; offset: number }) =>
+      http.request<{ data: VoiceMessage[]; total_count: number; recipient_total: number; limit: number; offset: number; live_gate: string }>(
+        `/api/netgsm/sesli-mesaj${query(params)}`,
+      ),
+    sendVoiceMessage: (input: VoiceMessageCreateRequest) => http.request<VoiceMessageMutation>("/api/netgsm/sesli-mesaj", { method: "POST", body: input }),
+    getVoiceMessage: (publicId: string) =>
+      http.request<{ voice_message: VoiceMessage; live_gate: string }>(`/api/netgsm/sesli-mesaj/${encodeURIComponent(publicId)}`),
+    requestVoiceMessageReport: (publicId: string, idempotencyKey: string) =>
+      http.request<VoiceMessageMutation>(`/api/netgsm/sesli-mesaj/${encodeURIComponent(publicId)}/rapor`, {
+        method: "POST",
+        body: { idempotency_key: idempotencyKey },
+      }),
+    listPhonebook: (params: { kind?: "customer" | "staff" | undefined; search?: string | undefined; limit: number; offset: number }) =>
+      http.request<{ data: PhonebookEntry[]; total_count: number; limit: number; offset: number }>(`/api/netgsm/rehber${query(params)}`),
   };
 }
 

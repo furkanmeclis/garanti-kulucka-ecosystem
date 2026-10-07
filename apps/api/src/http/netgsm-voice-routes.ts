@@ -5,6 +5,7 @@ import type { AppBindings } from "./types.js";
 import { authenticate, requireAdmin, requireDatabase } from "./middleware.js";
 import { NetgsmVoiceRepository, cdrStatistics, filterCdrByDirection, formatCdrDuration } from "../voice/netgsm-repository.js";
 import { readNetgsmTeyitSettings, writeNetgsmTeyitSettings } from "../voice/policy.js";
+import { registerVoiceMessageRoutes } from "./voice-message-routes.js";
 
 /**
  * Legacy Arama sayfası (AramaPage = NetgsmAyarlar + GorusmeDetayPage) backed by server.js `/api/netgsm/status`,
@@ -137,5 +138,6 @@ export function createNetgsmVoiceRoutes() {
     return context.json({ success: true, data: cdrStatistics(records), synced_at: snapshot ? snapshot.synced_at.toISOString() : null });
   });
 
+  registerVoiceMessageRoutes(routes);
   return routes;
 }

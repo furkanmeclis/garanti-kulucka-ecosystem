@@ -93,7 +93,7 @@ export const providerAdapters: ProviderAdapterDefinition[] = [
     display_name: "NetGSM",
     channels: ["sms", "voice"],
     webhook_operations: [],
-    delivery_operations: ["sms.send", "call.confirmation.create", "call.confirmation.status", "call.report"],
+    delivery_operations: ["sms.send", "call.confirmation.create", "call.confirmation.status", "call.report", "voice.message.send", "voice.message.report"],
     live_calls_enabled: true,
   },
   {

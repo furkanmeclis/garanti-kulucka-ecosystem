@@ -24,7 +24,9 @@
         "sms.send",
         "call.confirmation.create",
         "call.confirmation.status",
-        "call.report"
+        "call.report",
+        "voice.message.send",
+        "voice.message.report"
       ]
     },
     "direction": {

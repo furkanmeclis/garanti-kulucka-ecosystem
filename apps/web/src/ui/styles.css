@@ -4330,3 +4330,37 @@ nav {
 .debug-link:hover {
   background: #1e293b;
 }
+
+/* Sesli Mesajlar + Rehber (legacy SesliMesajlarPage / RehberPage) */
+.voice-page { display: grid; gap: 24px; min-width: 0; }
+.voice-page-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.voice-page-head h2 { margin: 0; font-size: 18px; color: #f1f5f9; }
+.voice-link { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; text-decoration: none; }
+.voice-form { gap: 16px; }
+.voice-field { display: grid; gap: 6px; font-size: 14px; font-weight: 500; color: #cbd5e1; }
+.voice-page .voice-field textarea, .voice-page .voice-field input, .voice-page .voice-field select { width: 100%; background: #0f172a; }
+.voice-mode { margin: 0; border: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 16px; }
+.voice-mode legend { margin-bottom: 6px; padding: 0; }
+.voice-radio { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; font-weight: 400; }
+.voice-ringtime { max-width: 220px; }
+.voice-actions { display: flex; flex-wrap: wrap; gap: 12px; }
+.voice-search { flex: 1; min-width: 200px; }
+.voice-page .voice-search input { width: 100%; }
+.voice-content-cell { max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.voice-status, .voice-kind { display: inline-flex; border-radius: 999px; padding: 2px 10px; font-size: 12px; font-weight: 500; background: #334155; color: #cbd5e1; }
+.voice-status-sent { background: rgba(20, 83, 45, 0.3); color: #4ade80; }
+.voice-status-failed { background: rgba(127, 29, 29, 0.3); color: #f87171; }
+.voice-status-dry_run { background: rgba(113, 63, 18, 0.3); color: #facc15; }
+.voice-status-queued, .voice-kind-staff { background: rgba(30, 58, 138, 0.3); color: #60a5fa; }
+.voice-pager { display: flex; align-items: center; justify-content: center; gap: 12px; }
+.voice-detail { gap: 12px; padding: 20px; overflow-y: auto; }
+.voice-detail h3 { margin: 8px 0 0; font-size: 15px; color: #e2e8f0; }
+.voice-detail-fields { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0; font-size: 14px; }
+.voice-detail-fields dt { color: #94a3b8; }
+.voice-detail-fields dd { margin: 0; color: #e2e8f0; overflow-wrap: anywhere; }
+@media (max-width: 640px) {
+  .voice-page h1 { font-size: 20px; }
+  .voice-detail-fields { grid-template-columns: 1fr; }
+  .voice-ringtime { max-width: none; }
+  .voice-content-cell { max-width: 160px; }
+}

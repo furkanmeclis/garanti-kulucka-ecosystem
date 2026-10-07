@@ -230,6 +230,20 @@
       "direction": "outbound",
       "status": "covered",
       "fixture_file": "netgsm/fixtures/call_report_minimal.json"
+    },
+    {
+      "provider": "netgsm",
+      "operation": "voice.message.send",
+      "direction": "outbound",
+      "status": "covered",
+      "fixture_file": "netgsm/fixtures/voice_message_send_minimal.json"
+    },
+    {
+      "provider": "netgsm",
+      "operation": "voice.message.report",
+      "direction": "outbound",
+      "status": "covered",
+      "fixture_file": "netgsm/fixtures/voice_message_report_minimal.json"
     }
   ]
 }

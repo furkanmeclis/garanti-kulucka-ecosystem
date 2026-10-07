@@ -1,0 +1,16 @@
+{
+  "request_id": "req_netgsm_voice_message_report_fixture_1",
+  "provider": "netgsm",
+  "operation": "voice.message.report",
+  "direction": "outbound",
+  "channel": "voice",
+  "occurred_at": "2026-10-06T00:00:00.000Z",
+  "payload": {
+    "voice_message_public_id": "vms_fixture",
+    "bulk_id": "123456"
+  },
+  "legacy_contract": {
+    "source": "server.js GET /api/netgsm/sesli-mesaj/rapor/:bulkId",
+    "fixture_name": "netgsm_voice_message_report_minimal"
+  }
+}

@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   AlertCircle,
   BarChart3,
+  BookUser,
   Filter,
   Loader2,
+  MessageSquare,
   Pause,
   Phone,
   PhoneIncoming,
@@ -26,6 +29,7 @@ import {
 } from "../../api/voice-client.js";
 import { useT } from "../i18n/index.js";
 import { callsMessages } from "../i18n/messages/calls.js";
+import { voiceMessagesMessages } from "../i18n/messages/voiceMessages.js";
 
 /**
  * Legacy parity: garanti-kulucka/frontend/src/pages/sesli-asistan/AramaPage.jsx
@@ -46,11 +50,24 @@ function hataMesaji(error: unknown, fallback: string) {
 export function AramaPage(props: { http: BackendHttpClient }) {
   const client = useMemo(() => createVoiceClient(props.http), [props.http]);
   const t = useT(callsMessages);
+  const tv = useT(voiceMessagesMessages);
   return (
     <section className="arama-page" data-testid="calls-flow">
-      <div>
-        <h1>{t("pageTitle")}</h1>
-        <p className="arama-muted">{t("pageSubtitle")}</p>
+      <div className="voice-page-head">
+        <div>
+          <h1>{t("pageTitle")}</h1>
+          <p className="arama-muted">{t("pageSubtitle")}</p>
+        </div>
+        <div className="voice-actions">
+          <Link to="/sesli-asistan/sesli-mesajlar" className="secondary-action voice-link" data-testid="calls-voice-messages-link">
+            <MessageSquare size={16} aria-hidden="true" />
+            {tv("openVoiceMessages")}
+          </Link>
+          <Link to="/sesli-asistan/rehber" className="secondary-action voice-link" data-testid="calls-phonebook-link">
+            <BookUser size={16} aria-hidden="true" />
+            {tv("openPhonebook")}
+          </Link>
+        </div>
       </div>
       <NetgsmAyarlar client={client} />
       <GorusmeDetay client={client} />
