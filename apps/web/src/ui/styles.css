@@ -4365,3 +4365,25 @@ nav {
   .voice-content-cell { max-width: 160px; }
 }
 .ig-senkron { margin: 0 0 16px; font-size: 13px; color: #94a3b8; overflow-wrap: anywhere; }
+
+/* İptaller list (legacy IptallerPage) */
+.iptal-list { display: grid; gap: 12px; min-width: 0; }
+.iptal-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.iptal-filters { display: flex; flex-wrap: wrap; gap: 8px; }
+.iptal-search { position: relative; display: flex; flex: 1; min-width: 200px; align-items: center; }
+.iptal-search svg { position: absolute; left: 10px; color: #64748b; }
+.iptal-search input { width: 100%; padding-left: 34px; }
+.iptal-table-scroll { overflow-x: auto; }
+.iptal-table { width: 100%; min-width: 720px; border-collapse: collapse; font-size: 14px; }
+.iptal-table th { padding: 8px 10px; text-align: left; font-size: 12px; font-weight: 500; text-transform: uppercase; color: #94a3b8; }
+.iptal-table td { border-top: 1px solid rgba(51, 65, 85, 0.5); padding: 8px 10px; vertical-align: middle; }
+.iptal-empty { padding: 32px 10px !important; text-align: center; color: #64748b; }
+.iptal-note-cell { display: flex; gap: 6px; align-items: center; min-width: 180px; }
+.iptal-note-cell input { flex: 1; min-width: 0; }
+.iptal-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.iptal-actions .danger, .iptal-detail .danger { color: #f87171; }
+.iptal-status-cancelled { color: #f87171; }
+.iptal-status-returned { color: #fb923c; }
+.iptal-pager { display: flex; align-items: center; justify-content: center; gap: 12px; }
+.iptal-detail { overflow-y: auto; }
+.iptal-detail-fields { padding: 16px 20px; }

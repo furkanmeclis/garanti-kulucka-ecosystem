@@ -3,9 +3,11 @@ import { cx, FlowPanel, DetailPanel, DataRows } from "../../app/shared.js";
 import type { DashboardController } from "../../app/useDashboardController.js";
 import { useT } from "../../i18n/index.js";
 import { cancellationsMessages } from "../../i18n/messages/cancellations.js";
+import { IptallerListesi } from "../IptallerListesi.js";
 
 export function CancellationsFlow({ ctx }: { ctx: DashboardController }) {
   const {
+    http,
     data,
     handleCancelSelectedOrder,
     selectedOrder,
@@ -15,6 +17,7 @@ export function CancellationsFlow({ ctx }: { ctx: DashboardController }) {
 
   return (
     <FlowPanel title={t("title")} icon={<XCircle size={18} />} testId="cancellations-flow">
+            <IptallerListesi http={http} />
             <DataRows rows={data.orders.map((order) => [order.order_number, order.status, order.customer_full_name ?? "-"])} />
             <div className="detail-actions">
               {data.orders.map((order) => (

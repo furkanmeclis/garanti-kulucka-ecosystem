@@ -255,7 +255,7 @@ export interface ListOrdersFilter {
   createdFrom?: Date;
   createdTo?: Date;
   customerPublicId?: string;
-  sortBy?: "created_at" | "order_number" | "status" | "total_amount";
+  sortBy?: "created_at" | "updated_at" | "order_number" | "status" | "total_amount";
   sortDirection?: "asc" | "desc";
   offset?: number;
   limit: number;
@@ -1188,7 +1188,11 @@ export class DomainRepository {
       .$if(filter.status === "active", (builder) =>
         builder.where("orders.status", "not in", ["cancelled", "returned", "delivered"]),
       )
-      .$if(Boolean(filter.status && filter.status !== "active"), (builder) =>
+      // Legacy IptallerPage lists iptal + iade together.
+      .$if(filter.status === "cancellations", (builder) =>
+        builder.where("orders.status", "in", ["cancelled", "returned"]),
+      )
+      .$if(Boolean(filter.status && filter.status !== "active" && filter.status !== "cancellations"), (builder) =>
         builder.where("orders.status", "=", filter.status as string),
       )
       .$if(filter.confirmationStatus === "pending", (builder) =>

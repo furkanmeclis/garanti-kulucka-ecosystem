@@ -547,7 +547,7 @@ export function createDomainClient(http: BackendHttpClient) {
       created_by_user_public_id?: string;
       created_from?: string;
       created_to?: string;
-      sort_by?: "created_at" | "order_number" | "status" | "total_amount";
+      sort_by?: "created_at" | "updated_at" | "order_number" | "status" | "total_amount";
       sort_direction?: "asc" | "desc";
       offset?: number;
       limit?: number;

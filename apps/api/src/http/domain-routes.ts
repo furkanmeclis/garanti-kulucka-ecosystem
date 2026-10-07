@@ -30,7 +30,7 @@ import { calculateVatInclusiveOrder, moneyToCents } from "../domain/order-totals
 
 const limitSchema = z.coerce.number().int().min(1).max(200).default(50);
 const offsetSchema = z.coerce.number().int().min(0).default(0);
-const orderSortSchema = z.enum(["created_at", "order_number", "status", "total_amount"]).default("created_at");
+const orderSortSchema = z.enum(["created_at", "updated_at", "order_number", "status", "total_amount"]).default("created_at");
 const sortDirectionSchema = z.enum(["asc", "desc"]).default("desc");
 
 const createMessageSchema = z.object({
