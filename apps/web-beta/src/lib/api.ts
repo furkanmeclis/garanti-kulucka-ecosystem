@@ -101,6 +101,7 @@ import type {
 } from "./orders";
 import type { ConversationStateInput, MessageShortcut, ThreadMessage, UploadedFile } from "./inbox";
 import { sha256Base64 } from "./inbox";
+import type { AiDebug, AiTrainingExportQuery, AiTrainingStats, CronProvider, InstagramDebug, ProviderAttempt, ProviderCatalogItem, WhatsappDebug } from "./debug";
 import type { DataDeletionInput, DataDeletionRequest, DataDeletionStatus, DataDeletionStatusLookup } from "./privacy";
 import type { StoredTokens } from "./session-storage";
 import type { AdminLogEntry, CreateManagedUserInput, ManagedRole, ManagedUser, UpdateManagedUserInput } from "./users";
@@ -522,6 +523,22 @@ export function createApiClient(options: ApiClientOptions) {
         body: { value, expires_at: null },
       }),
     netgsmBalance: () => request<NetgsmBalance>("/admin/integrations/netgsm/balance"),
+    debugWhatsapp: () => request<WhatsappDebug>("/api/debug/whatsapp"),
+    debugWhatsappTestSend: (to: string, idempotencyKey: string) =>
+      request<{ request_id: string; queued: boolean; live_call_permitted: boolean }>("/api/debug/whatsapp/test-send", { method: "POST", body: { to, idempotency_key: idempotencyKey } }),
+    /** Replays Meta's GET verification against the public webhook route and returns the raw body. */
+    debugVerifyWebhook: async (path: string, verifyToken: string, challenge: string) =>
+      (await requestBlob(path, { "hub.mode": "subscribe", "hub.verify_token": verifyToken, "hub.challenge": challenge })).blob.text(),
+    debugInstagram: () => request<InstagramDebug>("/api/debug/instagram"),
+    debugAi: () => request<AiDebug>("/api/debug/ai"),
+    debugAiTest: (message: string) => request<{ reply: string; dry_run: boolean }>("/api/debug/ai/test", { method: "POST", body: { message } }),
+    aiTrainingStats: (answeredOnly: boolean) => request<AiTrainingStats>("/api/debug/ai-training/stats", { query: { answered_only: answeredOnly } }),
+    aiTrainingExport: (query: AiTrainingExportQuery) =>
+      requestBlob("/api/debug/ai-training/export", { format: query.format, answered_only: query.answeredOnly, offset: query.offset, limit: query.limit, channel: query.channel }),
+    listProviderCatalog: () => request<{ data: ProviderCatalogItem[] }>("/admin/integrations/provider-catalog"),
+    listProviderAttempts: (query: { provider_key?: string; limit?: number }) => request<{ data: ProviderAttempt[] }>("/admin/integrations/provider-attempts", { query: { ...query } }),
+    triggerProviderCronDebug: (provider: CronProvider, idempotencyKey: string) =>
+      request<ProviderAttempt>(`/admin/integrations/provider-cron-triggers/${encodeURIComponent(provider)}`, { method: "POST", body: { idempotency_key: idempotencyKey } }),
     saveCustomerNotes: (publicId: string, notes: string | null) =>
       request<CustomerSummary>(`/api/customers/${encodeURIComponent(publicId)}/notes`, { method: "PATCH", body: { notes } }),
   };

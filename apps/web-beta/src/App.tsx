@@ -27,6 +27,8 @@ import { VapiPage } from "@/pages/vapi-page";
 import { DataDeletionPage, LegalPage } from "@/pages/public-pages";
 import { DataDeletionRequestsPage } from "@/pages/data-deletion-requests-page";
 import { CallsPage, PhonebookPage, VoiceMessagesPage } from "@/pages/voice-pages";
+import { AiDebugPage, AiTrainingPage, InstagramDebugPage, WhatsappDebugPage } from "@/pages/debug-pages";
+import { CronDebugPage, SuratDebugPage } from "@/pages/provider-debug-pages";
 
 /** Legacy ProtectedRoute: anonymous → /giris (and back after login); pages outside the role → role home. */
 function Protected({ children }: { children: ReactNode }) {
@@ -65,7 +67,15 @@ export function App() {
       <Route path="/kargolar" element={<Protected><ShipmentsPage /></Protected>} />
       <Route path="/kargolar/pipeline" element={<Protected><CargoPipelinePage /></Protected>} />
       <Route path="/kargo/pipeline" element={<Navigate to="/kargolar/pipeline" replace />} />
+      <Route path="/kargolar/surat-debug" element={<Protected><SuratDebugPage /></Protected>} />
+      <Route path="/kargolar/cron-debug" element={<Protected><CronDebugPage /></Protected>} />
+      <Route path="/kargo/surat-debug" element={<Navigate to="/kargolar/surat-debug" replace />} />
+      <Route path="/kargo/cron-debug" element={<Navigate to="/kargolar/cron-debug" replace />} />
       <Route path="/ayarlar" element={<Protected><SettingsPage /></Protected>} />
+      <Route path="/ayarlar/whatsapp-debug" element={<Protected><WhatsappDebugPage /></Protected>} />
+      <Route path="/ayarlar/instagram-debug" element={<Protected><InstagramDebugPage /></Protected>} />
+      <Route path="/ayarlar/ai-debug" element={<Protected><AiDebugPage /></Protected>} />
+      <Route path="/ayarlar/ai-egitim" element={<Protected><AiTrainingPage /></Protected>} />
       <Route path="/iptaller" element={<Protected><CancellationsPage /></Protected>} />
       <Route path="/stok" element={<Protected><InventoryPage /></Protected>} />
       <Route path="/bakiye" element={<Protected><BalancesPage /></Protected>} />

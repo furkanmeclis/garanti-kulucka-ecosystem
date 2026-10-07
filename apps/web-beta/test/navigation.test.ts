@@ -22,7 +22,7 @@ describe("role-based menu", () => {
   });
 
   it("puts the extra pages in the More menu with their legacy roles", () => {
-    const managerMore = ["cargoPipeline", "cancellations", "inventory", "balances", "comments", "sms", "instagramAnalytics", "instagramPublish", "reports", "invoices", "accounts", "calls", "voiceMessages", "vapi", "phonebook", "users", "activityLogs", "dataDeletionRequests"];
+    const managerMore = ["cargoPipeline", "cancellations", "inventory", "balances", "comments", "sms", "instagramAnalytics", "instagramPublish", "reports", "invoices", "accounts", "calls", "voiceMessages", "vapi", "phonebook", "users", "activityLogs", "dataDeletionRequests", "suratDebug", "cronDebug", "whatsappDebug", "instagramDebug", "aiDebug", "aiTraining"];
     expect(moreKeys("admin")).toEqual(managerMore);
     expect(moreKeys("owner")).toEqual(managerMore);
     expect(moreKeys("calisan")).toEqual(["cargoPipeline", "cancellations", "inventory", "balances", "comments", "sms", "instagramAnalytics", "instagramPublish"]);
@@ -48,6 +48,16 @@ describe("role-based menu", () => {
     expect(homePathFor("kargo_operatoru")).toBe("/siparisler");
     expect(homePathFor("unknown-role")).toBe("/ayarlar");
     expect(keys("unknown-role")).toEqual(["settings"]);
+  });
+
+  it("keeps the debug pages manager-only even under /ayarlar and /kargolar", () => {
+    for (const path of ["/ayarlar/whatsapp-debug", "/ayarlar/instagram-debug", "/ayarlar/ai-debug", "/ayarlar/ai-egitim", "/kargolar/surat-debug", "/kargolar/cron-debug"]) {
+      expect(canAccessPath("admin", path), path).toBe(true);
+      expect(canAccessPath("calisan", path), path).toBe(false);
+      expect(canAccessPath("kargo_operatoru", path), path).toBe(false);
+    }
+    expect(canAccessPath("calisan", "/ayarlar")).toBe(true);
+    expect(canAccessPath("kargo_operatoru", "/kargolar/pipeline")).toBe(true);
   });
 
   it("matches nested paths but never treats / as a prefix", () => {

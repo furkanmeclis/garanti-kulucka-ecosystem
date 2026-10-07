@@ -124,3 +124,5 @@ Durum anahtari: `yes` = yeni appte gercek akista var; `partial` = ozet/smoke vey
 1. Mesajlar temel parity: staff daily-use entrypoint; unlocks support response, assignment, read state, and realtime confidence.
 2. Mesajlar medya + kisayol + notlar: high-frequency operator workflow; without it customer replies are materially weaker than legacy.
 3. Siparisler liste/filtre/secim/export: second daily-use surface; gives staff operational control before deeper create/provider actions.
+
+Beta (2026-10-07): WhatsApp/Instagram/AI debug, AI eğitim, Sürat ve Cron debug sayfaları beta panelde de var (`provider-debug-pages.tsx`, `debug-pages.tsx`, yönetici).

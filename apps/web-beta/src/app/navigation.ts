@@ -1,8 +1,8 @@
 import type { LucideIcon } from "lucide-react";
-import { BarChart3, BookUser, Bot, Contact, FileText, Instagram, LineChart, LayoutDashboard, MessageCircle, MessageSquare, MessageSquareText, Package, PhoneCall, ScrollText, Settings, ShieldX, ShoppingCart, Truck, UserCog, Users, Voicemail, Wallet, XCircle, Zap } from "lucide-react";
+import { BarChart3, BookUser, Bot, BrainCircuit, Bug, Contact, FileText, GraduationCap, Instagram, LineChart, LayoutDashboard, MessageCircle, MessageSquare, MessageSquareCode, MessageSquareText, Package, PhoneCall, ScrollText, Settings, ShieldX, ShoppingCart, TimerReset, Truck, UserCog, Users, Voicemail, Wallet, Webhook, XCircle, Zap } from "lucide-react";
 import { panelRoleOf, type PanelRole } from "@garanti-kulucka/shared";
 
-export type NavKey = "dashboard" | "orders" | "messages" | "customers" | "shipments" | "settings" | "cancellations" | "invoices" | "accounts" | "inventory" | "balances" | "comments" | "sms" | "reports" | "instagramAnalytics" | "instagramPublish" | "calls" | "voiceMessages" | "phonebook" | "vapi" | "users" | "activityLogs" | "dataDeletionRequests" | "cargoPipeline";
+export type NavKey = "dashboard" | "orders" | "messages" | "customers" | "shipments" | "settings" | "cancellations" | "invoices" | "accounts" | "inventory" | "balances" | "comments" | "sms" | "reports" | "instagramAnalytics" | "instagramPublish" | "calls" | "voiceMessages" | "phonebook" | "vapi" | "users" | "activityLogs" | "dataDeletionRequests" | "cargoPipeline" | "suratDebug" | "cronDebug" | "whatsappDebug" | "instagramDebug" | "aiDebug" | "aiTraining";
 
 export interface NavItem {
   key: NavKey;
@@ -44,6 +44,13 @@ export const navItems: readonly NavItem[] = [
   { key: "users", path: "/kullanicilar", icon: UserCog, roles: managers, bottomBar: false, section: "more" },
   { key: "activityLogs", path: "/islem-loglari", icon: ScrollText, roles: managers, bottomBar: false, section: "more" },
   { key: "dataDeletionRequests", path: "/veri-silme-talepleri", icon: ShieldX, roles: managers, bottomBar: false, section: "more" },
+  // Admin debug pages (web: /kargo/surat-debug, /kargo/cron-debug and the /ayarlar/* debug routes).
+  { key: "suratDebug", path: "/kargolar/surat-debug", icon: Bug, roles: managers, bottomBar: false, section: "more" },
+  { key: "cronDebug", path: "/kargolar/cron-debug", icon: TimerReset, roles: managers, bottomBar: false, section: "more" },
+  { key: "whatsappDebug", path: "/ayarlar/whatsapp-debug", icon: MessageSquareCode, roles: managers, bottomBar: false, section: "more" },
+  { key: "instagramDebug", path: "/ayarlar/instagram-debug", icon: Webhook, roles: managers, bottomBar: false, section: "more" },
+  { key: "aiDebug", path: "/ayarlar/ai-debug", icon: BrainCircuit, roles: managers, bottomBar: false, section: "more" },
+  { key: "aiTraining", path: "/ayarlar/ai-egitim", icon: GraduationCap, roles: managers, bottomBar: false, section: "more" },
 ];
 
 /** Menu for a backend role (owner/admin → manager); unknown roles only get settings/profile. */
@@ -66,8 +73,12 @@ export function homePathFor(role: string | null | undefined) {
   return navigationFor(role)[0]?.path ?? "/ayarlar";
 }
 
+/** The most specific menu entry owns a path, so /ayarlar/ai-debug follows the debug page's roles, not /ayarlar's. */
 export function canAccessPath(role: string | null | undefined, pathname: string) {
-  return navigationFor(role).some((item) => (item.path === "/" ? pathname === "/" : pathname === item.path || pathname.startsWith(`${item.path}/`)));
+  const owner = navItems
+    .filter((item) => (item.path === "/" ? pathname === "/" : pathname === item.path || pathname.startsWith(`${item.path}/`)))
+    .reduce<NavItem | undefined>((best, item) => (!best || item.path.length > best.path.length ? item : best), undefined);
+  return Boolean(owner && navigationFor(role).includes(owner));
 }
 
 /** Bottom bar: at most 4 frequent pages for the role, the rest live in the hamburger sheet. */
