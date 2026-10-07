@@ -24,7 +24,7 @@ import { SmsPage } from "@/pages/sms-page";
 import { ShipmentsPage } from "@/pages/shipments-page";
 import { ActivityLogsPage, UsersPage } from "@/pages/users-page";
 import { VapiPage } from "@/pages/vapi-page";
-import { DataDeletionPage, LegalPage } from "@/pages/public-pages";
+import { DataDeletionPage, LegalPage, ResetPasswordPage } from "@/pages/public-pages";
 import { DataDeletionRequestsPage } from "@/pages/data-deletion-requests-page";
 import { CallsPage, PhonebookPage, VoiceMessagesPage } from "@/pages/voice-pages";
 import { AiDebugPage, AiTrainingPage, InstagramDebugPage, WhatsappDebugPage } from "@/pages/debug-pages";
@@ -57,6 +57,7 @@ export function App() {
     <Routes>
       <Route path="/giris" element={<LoginRoute />} />
       <Route path="/veri-silme" element={<DataDeletionPage />} />
+      <Route path="/sifre-sifirla" element={<ResetPasswordPage />} />
       <Route path="/gizlilik-politikasi" element={<LegalPage document="privacy" />} />
       <Route path="/kullanim-kosullari" element={<LegalPage document="terms" />} />
       <Route path="/" element={<Protected><DashboardPage /></Protected>} />

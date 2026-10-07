@@ -34,7 +34,10 @@ describe("API RBAC permission matrix", () => {
           // Public KVKK / Meta data deletion endpoints (legacy paths, rate limited per IP).
           operation === "POST /api/veri-silme-talebi" ||
           operation === "GET /api/veri-silme-talebi/{reference}" ||
-          operation === "POST /api/facebook/data-deletion"
+          operation === "POST /api/facebook/data-deletion" ||
+          // Public password reset (legacy Supabase reset e-mail; rate limited per IP).
+          operation === "POST /auth/password-reset/request" ||
+          operation === "POST /auth/password-reset/confirm"
           ? "allow"
           : "deny",
       );

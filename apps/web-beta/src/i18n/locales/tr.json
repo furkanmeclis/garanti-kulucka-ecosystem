@@ -90,7 +90,8 @@
     "rememberMe": "Beni hatırla",
     "privacy": "Gizlilik Politikası",
     "terms": "Kullanım Koşulları",
-    "deletion": "Veri Silme Talebi"
+    "deletion": "Veri Silme Talebi",
+    "forgotPassword": "Şifremi unuttum"
   },
   "common": {
     "all": "Tümü",
@@ -1929,5 +1930,22 @@
       "response": "Yanıt:",
       "noLiveCall": "canlı çağrı yok"
     }
+  },
+  "passwordReset": {
+    "title": "Şifre Sıfırlama",
+    "subtitle": "Hesabınızın e-posta adresini girin; size şifre sıfırlama bağlantısı gönderelim.",
+    "newSubtitle": "Hesabınız için yeni bir şifre belirleyin.",
+    "email": "E-posta",
+    "send": "Sıfırlama bağlantısı gönder",
+    "sent": "E-posta adresiniz kayıtlıysa şifre sıfırlama bağlantısı gönderildi. Gelen kutunuzu kontrol edin.",
+    "invalidEmail": "Geçerli bir e-posta adresi girin",
+    "failed": "İstek gönderilemedi: {{error}}",
+    "newPassword": "Yeni şifre",
+    "newPasswordRepeat": "Yeni şifre (tekrar)",
+    "update": "Şifreyi güncelle",
+    "tooShort": "Şifre en az 6 karakter olmalı",
+    "mismatch": "Şifreler eşleşmiyor",
+    "done": "Şifreniz güncellendi. Yeni şifrenizle giriş yapabilirsiniz.",
+    "toLogin": "Giriş sayfasına dön"
   }
 }

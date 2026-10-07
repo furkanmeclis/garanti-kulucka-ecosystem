@@ -80,6 +80,9 @@ function buildBody(envelope: ProviderRequestEnvelope): Record<string, unknown> {
       return pick(payload, ["document_id", "invoice_public_id", "idempotency_key"]);
     case "invoice.delete":
       return pick(payload, ["document_id", "invoice_public_id", "cancel_date", "cancel_time", "idempotency_key"]);
+    case "email.send":
+      // Never preview subject/body: the reset link is a one-time credential.
+      return pick(payload, ["template", "idempotency_key"]);
     case "product.list":
       return pick(payload, ["per_page", "max_pages"]);
     case "call.confirmation.create":

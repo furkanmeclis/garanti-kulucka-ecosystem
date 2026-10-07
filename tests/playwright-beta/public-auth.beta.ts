@@ -47,3 +47,46 @@ test("legacy /kargo redirects to the beta shipments list", async ({ page }) => {
   await page.goto("/kargo");
   await expect.poll(() => pathOf(page)).toBe("/kargolar");
 });
+
+test("forgot password: request the e-mail, then set a new password from the link", async ({ page }) => {
+  await page.setViewportSize(viewports.phone390);
+  const state = await mockBackend(page, mockUser("admin"), {
+    anonymous: (path) => path.startsWith("/auth/password-reset/"),
+    extra: ({ path, body }) => {
+      if (path === "/auth/password-reset/request") return { status: 202, body: { accepted: true } };
+      if (path === "/auth/password-reset/confirm") {
+        return (body as { token: string }).token === "tok_beta_reset_token_123456"
+          ? { status: 200, body: { reset: true } }
+          : { status: 400, body: { error: { code: "invalid_token", message: "Bağlantı geçersiz ya da süresi dolmuş. Yeni bir sıfırlama isteği gönderin." } } };
+      }
+      return undefined;
+    },
+  });
+  await page.goto("/giris");
+  await page.getByTestId("login-forgot").click();
+  await expect.poll(() => pathOf(page)).toBe("/sifre-sifirla");
+  const form = page.getByTestId("reset-password-form");
+  await page.getByTestId("reset-password-submit").click();
+  await expect(page.getByTestId("reset-password-error")).toHaveText("Geçerli bir e-posta adresi girin");
+  await form.locator('input[name="email"]').fill("admin@example.com");
+  await page.getByTestId("reset-password-submit").click();
+  await expect(page.getByTestId("reset-password-done")).toContainText("şifre sıfırlama bağlantısı gönderildi");
+  expect(state.bodies.find((entry) => entry.path === "/auth/password-reset/request")?.body).toEqual({ email: "admin@example.com" });
+  await expectResponsiveLayout(page, { checkTouchTargets: true });
+
+  await page.goto("/sifre-sifirla?token=tok_expired_token_0000000");
+  await form.locator('input[name="password"]').fill("yeni-sifre");
+  await form.locator('input[name="password-repeat"]').fill("yeni-sifre");
+  await page.getByTestId("reset-password-submit").click();
+  await expect(page.getByTestId("reset-password-error")).toContainText("Bağlantı geçersiz ya da süresi dolmuş");
+  await page.goto("/sifre-sifirla?token=tok_beta_reset_token_123456");
+  await form.locator('input[name="password"]').fill("yeni-sifre");
+  await form.locator('input[name="password-repeat"]').fill("farkli");
+  await page.getByTestId("reset-password-submit").click();
+  await expect(page.getByTestId("reset-password-error")).toHaveText("Şifreler eşleşmiyor");
+  await form.locator('input[name="password-repeat"]').fill("yeni-sifre");
+  await page.getByTestId("reset-password-submit").click();
+  await expect(page.getByTestId("reset-password-done")).toContainText("Şifreniz güncellendi");
+  await page.getByTestId("reset-password-done").getByRole("link", { name: "Giriş sayfasına dön" }).click();
+  await expect.poll(() => pathOf(page)).toBe("/giris");
+});

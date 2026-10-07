@@ -49,6 +49,8 @@ function providerPath(envelope: ProviderRequestEnvelope): string {
       return "/kolaybi/invoices/resend";
     case "kolaybi:invoice.delete":
       return "/kolaybi/invoices/delete";
+    case "smtp:email.send":
+      return "/smtp/messages";
     case "kolaybi:product.list":
       return "/kolaybi/products";
     case "netgsm:call.confirmation.create":
@@ -121,6 +123,7 @@ function providerHeaders(provider: ProviderName): Record<string, string> {
         "x-vapi-signature": redactedSecret,
       };
     case "sip":
+    case "smtp":
       return {
         "content-type": "application/json",
       };

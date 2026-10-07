@@ -116,6 +116,14 @@ export const providerAdapters: ProviderAdapterDefinition[] = [
     delivery_operations: ["sip.config.sync"],
     live_calls_enabled: false,
   },
+  {
+    provider: "smtp",
+    display_name: "SMTP E-posta",
+    channels: ["email"],
+    webhook_operations: [],
+    delivery_operations: ["email.send"],
+    live_calls_enabled: true,
+  },
 ];
 
 export function findProviderAdapter(provider: ProviderName): ProviderAdapterDefinition {

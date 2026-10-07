@@ -27,6 +27,7 @@ import { createWebphoneRoutes } from "./http/webphone-routes.js";
 import { createVapiRoutes } from "./http/vapi-routes.js";
 import { createCargoPipelineRoutes } from "./http/cargo-pipeline-routes.js";
 import { createKolaybiProductRoutes } from "./http/kolaybi-product-routes.js";
+import { createPasswordResetRoutes } from "./http/password-reset-routes.js";
 import { createNetgsmVoiceRoutes } from "./http/netgsm-voice-routes.js";
 import { createNetgsmWebhookRoutes } from "./http/netgsm-webhook-routes.js";
 import { createRateLimitStore, type RateLimitStore } from "./http/rate-limit.js";
@@ -176,6 +177,7 @@ export function createApp(options: CreateAppOptions = {}) {
 
   app.route("/auth", createAuthRoutes());
   app.route("/auth/account", createAccountRoutes());
+  app.route("/auth/password-reset", createPasswordResetRoutes());
   // Public NetGSM IVR callback: registered before every authenticated /api/* group so their auth never runs.
   app.route("/api/netgsm/webhook", createNetgsmWebhookRoutes());
   // Public KVKK / Meta data deletion endpoints (legacy paths), also ahead of the authenticated /api/* groups.

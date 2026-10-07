@@ -3,7 +3,7 @@ import { apiProviderCatalog, getApiProviderCatalogItem } from "../src/providers/
 
 describe("API provider catalog", () => {
   it("exposes provider contracts in fixture-only mode", () => {
-    expect(apiProviderCatalog).toHaveLength(10);
+    expect(apiProviderCatalog).toHaveLength(11);
     expect(apiProviderCatalog.every((item) => item.contract_mode === "fixture_only")).toBe(true);
     expect(apiProviderCatalog.every((item) => item.live_call_permitted === false)).toBe(true);
     expect(apiProviderCatalog.every((item) => item.live_block_reason === "fixture_replay_contract_required")).toBe(true);
@@ -21,6 +21,7 @@ describe("API provider catalog", () => {
 
   it("keeps SIP scoped to config sync", () => {
     expect(getApiProviderCatalogItem("sip").supported_operations).toEqual(["sip.config.sync"]);
+    expect(getApiProviderCatalogItem("smtp")).toMatchObject({ channels: ["email"], supported_operations: ["email.send"], live_feature_flag_key: "providers.smtp.live_mode" });
   });
 
   it("keeps VAPI test calls out of the provider contract", () => {

@@ -213,6 +213,15 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     const url = new URL(route.request().url());
     requestedUrls.push(url.pathname);
 
+    if (url.pathname === "/auth/password-reset/request") {
+      await route.fulfill({ status: 202, contentType: "application/json", body: JSON.stringify({ accepted: true }) });
+      return;
+    }
+    if (url.pathname === "/auth/password-reset/confirm") {
+      await route.fulfill({ contentType: "application/json", body: JSON.stringify({ reset: true }) });
+      return;
+    }
+
     if (url.pathname === "/auth/login") {
       await route.fulfill({
         contentType: "application/json",
@@ -2088,7 +2097,18 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await page.goto(`${app.url}/sifre-sifirla`);
     await expect(page.getByTestId("reset-password-flow")).toContainText("Şifre sıfırlama");
     await page.getByRole("button", { name: /sıfırlama bağlantısı gönder/i }).click();
-    await expect(page.getByTestId("reset-password-flow")).toContainText("backend auth");
+    await expect(page.getByTestId("reset-password-error")).toHaveText("Geçerli bir e-posta adresi girin");
+    await page.getByTestId("reset-password-flow").locator('input[name="email"]').fill("admin@example.com");
+    await page.getByRole("button", { name: /sıfırlama bağlantısı gönder/i }).click();
+    await expect(page.getByTestId("reset-password-done")).toContainText("şifre sıfırlama bağlantısı gönderildi");
+    await page.goto(`${app.url}/sifre-sifirla?token=tok_playwright_reset_token_1234`);
+    await page.getByTestId("reset-password-flow").locator('input[name="password"]').fill("yeni-sifre");
+    await page.getByTestId("reset-password-flow").locator('input[name="password-repeat"]').fill("farkli");
+    await page.getByRole("button", { name: /şifreyi güncelle/i }).click();
+    await expect(page.getByTestId("reset-password-error")).toHaveText("Şifreler eşleşmiyor");
+    await page.getByTestId("reset-password-flow").locator('input[name="password-repeat"]').fill("yeni-sifre");
+    await page.getByRole("button", { name: /şifreyi güncelle/i }).click();
+    await expect(page.getByTestId("reset-password-done")).toContainText("Şifreniz güncellendi");
     await page.goto(`${app.url}/giris`);
     await page.getByRole("button", { name: /giriş yap/i }).click();
     await expect(page.getByTestId("inbox-flow")).toContainText("Playwright Customer");

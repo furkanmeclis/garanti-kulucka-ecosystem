@@ -42,6 +42,7 @@ export interface Database {
   voice_messages: VoiceMessagesTable;
   data_deletion_requests: DataDeletionRequestsTable;
   cargo_pipeline_items: CargoPipelineItemsTable;
+  password_reset_tokens: PasswordResetTokensTable;
   vapi_call_queue: VapiCallQueueTable;
   vapi_calls: VapiCallsTable;
   products: ProductsTable;
@@ -372,6 +373,14 @@ export interface VoiceMessagesTable extends BaseTable {
   report_checked_at: Timestamp | null;
   idempotency_key: string;
   created_by_user_id: number | null;
+}
+
+export interface PasswordResetTokensTable extends BaseTable {
+  user_id: number;
+  token_hash: string;
+  expires_at: Timestamp;
+  used_at: Timestamp | null;
+  requested_ip: string | null;
 }
 
 export interface CargoPipelineItemsTable extends BaseTable {

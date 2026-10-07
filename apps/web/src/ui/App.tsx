@@ -106,7 +106,7 @@ export function App() {
   }
 
   if (location.pathname === "/sifre-sifirla") {
-    return <ResetPasswordScreen />;
+    return <ResetPasswordScreen http={http} />;
   }
 
   if (token && !authChecked) {

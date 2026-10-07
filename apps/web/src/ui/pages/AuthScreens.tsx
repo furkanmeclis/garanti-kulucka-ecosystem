@@ -1,11 +1,12 @@
 import { useState, type FormEvent } from "react";
-import { NavLink } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
 import { ArrowLeft, CheckCircle, FileText, LogIn, Shield, Trash2 } from "lucide-react";
 import { DataRows } from "../app/shared.js";
 import { useUiMessageText, type UiMessage } from "../i18n/messages/status.js";
 import { useLanguage, useT } from "../i18n/index.js";
 import { legalDocuments } from "@garanti-kulucka/shared";
 import { authMessages } from "../i18n/messages/auth.js";
+import type { BackendHttpClient } from "../../api/http-client.js";
 
 const rememberEmailKey = "garanti-remember-email";
 
@@ -75,18 +76,56 @@ export function PublicPage(props: { page: "privacy" | "terms" }) {
   );
 }
 
-export function ResetPasswordScreen() {
-  const t = useT(authMessages);
-  const [submitted, setSubmitted] = useState(false);
+function requestErrorText(error: unknown) {
+  if (error && typeof error === "object" && "body" in error) {
+    const body = (error as { body?: { error?: { message?: string } } }).body;
+    if (body?.error?.message) return body.error.message;
+  }
+  return error instanceof Error ? error.message : String(error);
+}
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+/**
+ * Legacy ResetPasswordPage: without `?token` it asks for the e-mail (`POST /auth/password-reset/request`,
+ * always the same answer); with the e-mailed `?token` it sets the new password (`/confirm`).
+ */
+export function ResetPasswordScreen({ http }: { http: BackendHttpClient }) {
+  const t = useT(authMessages);
+  const location = useLocation();
+  const token = new URLSearchParams(location.search).get("token");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [repeat, setRepeat] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setSubmitted(true);
+    setError(null);
+    if (token) {
+      if (password.length < 6) return setError(t("passwordTooShort"));
+      if (password !== repeat) return setError(t("passwordMismatch"));
+    } else if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim())) {
+      return setError(t("resetInvalidEmail"));
+    }
+    setBusy(true);
+    try {
+      if (token) {
+        await http.request<{ reset: boolean }>("/auth/password-reset/confirm", { method: "POST", body: { token, password } });
+      } else {
+        await http.request<{ accepted: boolean }>("/auth/password-reset/request", { method: "POST", body: { email: email.trim() } });
+      }
+      setDone(true);
+    } catch (requestError) {
+      setError(token ? requestErrorText(requestError) : t("resetFailed", { error: requestErrorText(requestError) }));
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
     <main className="login-screen">
-      <form className="login-card" onSubmit={handleSubmit} data-testid="reset-password-flow">
+      <form className="login-card" onSubmit={(event) => void handleSubmit(event)} data-testid="reset-password-flow" noValidate>
         <NavLink className="back-link" to="/giris">
           <ArrowLeft size={16} aria-hidden="true" />
           {t("backToLogin")}
@@ -95,18 +134,35 @@ export function ResetPasswordScreen() {
           <span className="brand-mark">G</span>
           <span>{t("resetTitle")}</span>
         </div>
-        {submitted ? (
-          <p className="success-line">
+        {done ? (
+          <p className="success-line" data-testid="reset-password-done">
             <CheckCircle size={16} aria-hidden="true" />
-            {t("resetSubmitted")}
+            {token ? t("resetDone") : t("resetSubmitted")}
           </p>
-        ) : (
+        ) : token ? (
           <>
             <label>
-              {t("email")}
-              <input name="email" type="email" defaultValue="admin@example.com" />
+              {t("newPassword")}
+              <input name="password" type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} />
             </label>
-            <button className="primary-action" type="submit">
+            <label>
+              {t("newPasswordRepeat")}
+              <input name="password-repeat" type="password" autoComplete="new-password" value={repeat} onChange={(event) => setRepeat(event.target.value)} />
+            </label>
+            {error && <p className="error-line" data-testid="reset-password-error">{error}</p>}
+            <button className="primary-action" type="submit" disabled={busy}>
+              {t("setNewPassword")}
+            </button>
+          </>
+        ) : (
+          <>
+            <p className="muted-line">{t("resetIntro")}</p>
+            <label>
+              {t("email")}
+              <input name="email" type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} />
+            </label>
+            {error && <p className="error-line" data-testid="reset-password-error">{error}</p>}
+            <button className="primary-action" type="submit" disabled={busy}>
               {t("sendResetLink")}
             </button>
           </>

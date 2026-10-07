@@ -38,6 +38,7 @@ const nonIdempotentOperations = new Set<ProviderOperation>([
   "call.create",
   "call.confirmation.create",
   "message.send",
+  "email.send",
   "shipment.create",
   "sms.send",
   "media.publish",

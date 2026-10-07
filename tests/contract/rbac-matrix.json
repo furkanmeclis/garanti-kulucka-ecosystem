@@ -4,6 +4,8 @@
   "POST /auth/login": { "anonymous": "allow", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" },
   "POST /auth/refresh": { "anonymous": "allow", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" },
   "POST /auth/logout": { "anonymous": "deny", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" },
+  "POST /auth/password-reset/request": { "anonymous": "allow", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" },
+  "POST /auth/password-reset/confirm": { "anonymous": "allow", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" },
   "GET /auth/me": { "anonymous": "deny", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" },
   "GET /api/conversations": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "allow", "admin": "allow" },
   "POST /api/conversations/mark-all-read": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "allow", "admin": "allow" },

@@ -1,0 +1,19 @@
+{
+  "request_id": "req_smtp_email_send_fixture_1",
+  "provider": "smtp",
+  "operation": "email.send",
+  "direction": "outbound",
+  "channel": "email",
+  "occurred_at": "2026-10-07T00:00:00.000Z",
+  "payload": {
+    "to": "ayse@example.com",
+    "template": "password_reset",
+    "subject": "Şifre sıfırlama",
+    "text": "Şifrenizi sıfırlamak için bağlantı: https://panel.example.com/sifre-sifirla?token=fixture",
+    "idempotency_key": "password_reset:prt_fixture"
+  },
+  "legacy_contract": {
+    "source": "frontend/src/services/supabase.js auth.resetPasswordForEmail",
+    "fixture_name": "smtp_email_send_minimal"
+  }
+}

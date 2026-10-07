@@ -490,6 +490,9 @@ export function createApiClient(options: ApiClientOptions) {
       }
       return response.file;
     },
+    requestPasswordReset: (email: string) => request<{ accepted: boolean }>("/auth/password-reset/request", { method: "POST", body: { email }, auth: false }),
+    confirmPasswordReset: (token: string, password: string) =>
+      request<{ reset: boolean }>("/auth/password-reset/confirm", { method: "POST", body: { token, password }, auth: false }),
     submitDataDeletion: (input: DataDeletionInput) =>
       request<{ success: boolean; message: string; reference: string }>("/api/veri-silme-talebi", { method: "POST", body: input, auth: false }),
     dataDeletionStatus: (reference: string) => request<DataDeletionStatusLookup>(`/api/veri-silme-talebi/${encodeURIComponent(reference)}`, { auth: false }),

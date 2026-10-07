@@ -126,3 +126,5 @@ Durum anahtari: `yes` = yeni appte gercek akista var; `partial` = ozet/smoke vey
 3. Siparisler liste/filtre/secim/export: second daily-use surface; gives staff operational control before deeper create/provider actions.
 
 Beta (2026-10-07): WhatsApp/Instagram/AI debug, AI eğitim, Sürat ve Cron debug sayfaları beta panelde de var (`provider-debug-pages.tsx`, `debug-pages.tsx`, yönetici).
+
+Şifre sıfırlama (2026-10-07): legacy Supabase reset e-postası yerine `smtp.email.send` + `/auth/password-reset/request|confirm`; web ve beta `/sifre-sifirla`. Canlı e-posta için SMTP hesabı ve `providers.smtp.live_mode` gerekir.

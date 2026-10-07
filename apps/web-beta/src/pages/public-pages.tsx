@@ -253,3 +253,83 @@ export function LegalPage({ document: key }: { document: LegalDocumentKey }) {
     </PublicLayout>
   );
 }
+
+/** /sifre-sifirla — legacy ResetPasswordPage: e-mail request, then the e-mailed `?token` sets a new password. */
+export function ResetPasswordPage() {
+  const { t } = useTranslation();
+  const { api } = useAuth();
+  const [params] = useSearchParams();
+  const token = params.get("token");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [repeat, setRepeat] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setError(null);
+    if (token) {
+      if (password.length < 6) return setError(t("passwordReset.tooShort"));
+      if (password !== repeat) return setError(t("passwordReset.mismatch"));
+    } else if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim())) {
+      return setError(t("passwordReset.invalidEmail"));
+    }
+    setBusy(true);
+    try {
+      if (token) await api.confirmPasswordReset(token, password);
+      else await api.requestPasswordReset(email.trim());
+      setDone(true);
+    } catch (requestError) {
+      setError(token ? errorText(requestError) : t("passwordReset.failed", { error: errorText(requestError) }));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <PublicLayout title={t("passwordReset.title")} subtitle={token ? t("passwordReset.newSubtitle") : t("passwordReset.subtitle")} icon={<ShieldCheck className="size-5" aria-hidden="true" />} testId="reset-password-page">
+      <Card className="p-4 sm:p-6">
+        {done ? (
+          <div className="flex flex-col items-start gap-3" data-testid="reset-password-done">
+            <p className="flex items-center gap-2 text-sm">
+              <CheckCircle2 className="size-5 text-emerald-600" aria-hidden="true" />
+              {token ? t("passwordReset.done") : t("passwordReset.sent")}
+            </p>
+            <Button asChild className="min-h-11">
+              <Link to="/giris">{t("passwordReset.toLogin")}</Link>
+            </Button>
+          </div>
+        ) : (
+          <form className="flex flex-col gap-3" onSubmit={(event) => void submit(event)} noValidate data-testid="reset-password-form">
+            {token ? (
+              <>
+                <Field label={t("passwordReset.newPassword")}>
+                  <Input type="password" name="password" autoComplete="new-password" className="h-11" value={password} onChange={(event) => setPassword(event.target.value)} />
+                </Field>
+                <Field label={t("passwordReset.newPasswordRepeat")}>
+                  <Input type="password" name="password-repeat" autoComplete="new-password" className="h-11" value={repeat} onChange={(event) => setRepeat(event.target.value)} />
+                </Field>
+              </>
+            ) : (
+              <Field label={t("passwordReset.email")}>
+                <Input type="email" name="email" autoComplete="email" inputMode="email" className="h-11" value={email} onChange={(event) => setEmail(event.target.value)} />
+              </Field>
+            )}
+            {error && (
+              <p className="flex items-center gap-2 text-sm text-destructive" role="alert" data-testid="reset-password-error">
+                <AlertTriangle className="size-4 shrink-0" aria-hidden="true" />
+                {error}
+              </p>
+            )}
+            <Button type="submit" className="min-h-11" disabled={busy} data-testid="reset-password-submit">
+              {busy && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}
+              {token ? t("passwordReset.update") : t("passwordReset.send")}
+            </Button>
+          </form>
+        )}
+      </Card>
+    </PublicLayout>
+  );
+}

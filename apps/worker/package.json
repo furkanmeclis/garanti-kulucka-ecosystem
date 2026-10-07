@@ -19,9 +19,11 @@
     "@garanti-kulucka/shared": "file:../../packages/shared",
     "bullmq": "^5.63.0",
     "ioredis": "^5.8.1",
+    "nodemailer": "^10.0.16",
     "pino": "^10.1.0"
   },
   "devDependencies": {
+    "@types/nodemailer": "^8.0.2",
     "tsx": "^4.20.6"
   }
 }

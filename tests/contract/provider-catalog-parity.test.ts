@@ -40,7 +40,8 @@ describe("provider catalog parity", () => {
           provider === "instagram" ||
           provider === "messenger" ||
           provider === "netgsm" ||
-          provider === "vapi",
+          provider === "vapi" ||
+          provider === "smtp",
       );
     }
   });

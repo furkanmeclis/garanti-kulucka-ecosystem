@@ -35,6 +35,7 @@ import type { ProviderMediaFileResolver } from "./media-files.js";
 import { MessengerLiveTransportError, sendMessengerLiveRequest, type MessengerFetchTransport } from "./messenger.js";
 import { NetgsmLiveTransportError, sendNetgsmLiveRequest, type NetgsmFetchTransport } from "./netgsm.js";
 import { VapiLiveTransportError, sendVapiLiveRequest, type VapiFetchTransport } from "./vapi.js";
+import { SmtpLiveTransportError, sendSmtpLiveRequest, type SmtpTransport } from "./smtp.js";
 
 export { decideProviderRetry, type ProviderFailureInput, type ProviderRetryDecision, type ProviderRetryReason };
 
@@ -61,6 +62,7 @@ export interface ProviderDeliveryHandlerOptions {
   messengerTransport?: MessengerFetchTransport;
   netgsmTransport?: NetgsmFetchTransport;
   vapiTransport?: VapiFetchTransport;
+  smtpTransport?: SmtpTransport;
   attemptNumber?: number;
   maxAttempts?: number;
   now?: Date;
@@ -108,6 +110,7 @@ function liveModeEnabledFor(
     provider === "instagram" ||
     provider === "messenger" ||
     provider === "vapi" ||
+    provider === "smtp" ||
     explicitOptInOperations.has(operation)
   ) {
     return booleanSetting(accountConfig.settings, `providers.${provider}.live_mode`) === true;
@@ -422,7 +425,18 @@ export async function handleProviderDeliveryJobWithTransport(
                       ...(options.vapiTransport ? { transport: options.vapiTransport } : {}),
                       ...(options.now ? { now: options.now } : {}),
                     })
-                  : null;
+                  : payload.envelope.provider === "smtp"
+                    ? await sendSmtpLiveRequest({
+                        envelope: payload.envelope,
+                        job,
+                        accountConfig,
+                        policy,
+                        attemptNumber: options.attemptNumber ?? 1,
+                        maxAttempts: options.maxAttempts ?? policy.max_attempts,
+                        ...(options.smtpTransport ? { transport: options.smtpTransport } : {}),
+                        ...(options.now ? { now: options.now } : {}),
+                      })
+                    : null;
 
   if (!liveResult) {
     return handleProviderDeliveryJob(job);
@@ -474,7 +488,7 @@ const resultPersistingOperations = new Set<string>([
 
 export function isProviderLiveTransportError(
   error: unknown,
-): error is PttLiveTransportError | SuratLiveTransportError | KolaybiLiveTransportError | WhatsappLiveTransportError | InstagramLiveTransportError | MessengerLiveTransportError | NetgsmLiveTransportError | VapiLiveTransportError {
+): error is PttLiveTransportError | SuratLiveTransportError | KolaybiLiveTransportError | WhatsappLiveTransportError | InstagramLiveTransportError | MessengerLiveTransportError | NetgsmLiveTransportError | VapiLiveTransportError | SmtpLiveTransportError {
   return error instanceof PttLiveTransportError ||
     error instanceof SuratLiveTransportError ||
     error instanceof KolaybiLiveTransportError ||
@@ -482,5 +496,6 @@ export function isProviderLiveTransportError(
     error instanceof InstagramLiveTransportError ||
     error instanceof MessengerLiveTransportError ||
     error instanceof NetgsmLiveTransportError ||
-    error instanceof VapiLiveTransportError;
+    error instanceof VapiLiveTransportError ||
+    error instanceof SmtpLiveTransportError;
 }

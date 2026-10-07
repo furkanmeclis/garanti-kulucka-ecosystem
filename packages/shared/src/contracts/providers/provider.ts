@@ -11,6 +11,7 @@ export const providerNameSchema = z.enum([
   "netgsm",
   "vapi",
   "sip",
+  "smtp",
 ]);
 
 export const providerOperationSchema = z.enum([
@@ -46,6 +47,7 @@ export const providerOperationSchema = z.enum([
   "comment.hide",
   "comment.delete",
   "insights.account",
+  "email.send",
 ]);
 
 export const providerDirectionSchema = z.enum(["inbound", "outbound"]);
@@ -59,6 +61,7 @@ export const providerChannelSchema = z.enum([
   "sms",
   "voice",
   "sip",
+  "email",
 ]);
 
 export const providerLegacyContractSchema = z.object({

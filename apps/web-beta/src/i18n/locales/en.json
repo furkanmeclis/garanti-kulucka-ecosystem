@@ -90,7 +90,8 @@
     "rememberMe": "Remember me",
     "privacy": "Privacy Policy",
     "terms": "Terms of Service",
-    "deletion": "Data Deletion Request"
+    "deletion": "Data Deletion Request",
+    "forgotPassword": "Forgot password"
   },
   "common": {
     "all": "All",
@@ -1929,5 +1930,22 @@
       "response": "Response:",
       "noLiveCall": "no live call"
     }
+  },
+  "passwordReset": {
+    "title": "Password Reset",
+    "subtitle": "Enter your account e-mail and we will send you a password reset link.",
+    "newSubtitle": "Choose a new password for your account.",
+    "email": "E-mail",
+    "send": "Send reset link",
+    "sent": "If the address is registered, a password reset link has been sent. Check your inbox.",
+    "invalidEmail": "Enter a valid e-mail address",
+    "failed": "The request could not be sent: {{error}}",
+    "newPassword": "New password",
+    "newPasswordRepeat": "New password (again)",
+    "update": "Update password",
+    "tooShort": "The password must be at least 6 characters",
+    "mismatch": "The passwords do not match",
+    "done": "Your password was updated. You can sign in with the new password.",
+    "toLogin": "Back to sign in"
   }
 }
