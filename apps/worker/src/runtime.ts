@@ -16,6 +16,7 @@ import {
   type WorkerProcessorRegistry,
 } from "./processors.js";
 import { DatabaseShipmentWritebackRepository } from "./shipment-writeback.js";
+import { DatabaseDataRetentionStore } from "./data-retention.js";
 import { DatabaseInstagramAnalyticsRepository, enqueueInstagramInsights, instagramInsightsIntervalMs } from "./instagram-insights.js";
 import { StorageOrphanReconciler } from "./storage-orphans.js";
 import { S3ProviderMediaFileResolver, type ProviderMediaFileResolver } from "./providers/media-files.js";
@@ -108,6 +109,7 @@ export function createWorkerRuntime(options: WorkerRuntimeOptions): WorkerRuntim
   const storageOrphanReconciler = db ? new StorageOrphanReconciler(db) : undefined;
   const shipmentWritebackRepository = db ? new DatabaseShipmentWritebackRepository(db) : undefined;
   const instagramAnalyticsRepository = db ? new DatabaseInstagramAnalyticsRepository(db) : undefined;
+  const dataRetentionStore = db ? new DatabaseDataRetentionStore(db) : undefined;
   const mediaFileResolver =
     options.mediaFileResolver ?? (db ? new S3ProviderMediaFileResolver(db) : undefined);
   const settingsChangeSubscriber =
@@ -136,6 +138,7 @@ export function createWorkerRuntime(options: WorkerRuntimeOptions): WorkerRuntim
     ...(mediaFileResolver ? { mediaFileResolver } : {}),
     ...(shipmentWritebackRepository ? { shipmentWritebackRepository } : {}),
     ...(instagramAnalyticsRepository ? { instagramAnalyticsRepository } : {}),
+    ...(dataRetentionStore ? { dataRetentionStore } : {}),
   });
 
   const workers = new Map<QueueName, Worker<JobEnvelope>>();
@@ -227,6 +230,28 @@ export function createWorkerRuntime(options: WorkerRuntimeOptions): WorkerRuntim
       jobId: "storage_orphans_reconcile_scheduled",
       repeat: {
         every: Number.parseInt(process.env.STORAGE_ORPHAN_RECONCILIATION_INTERVAL_MS ?? "86400000", 10),
+      },
+    },
+  );
+
+  // provider_attempts / webhook_events pruning (LOG_RETENTION_AND_PERSONAL_DATA.md); counts only
+  // unless DATA_RETENTION_DELETE_ENABLED=true.
+  const retentionScheduler = new Queue<JobEnvelope>("data-retention", { connection });
+  schedulers.set("data-retention", retentionScheduler);
+  void retentionScheduler.add(
+    "data.retention.prune",
+    {
+      job_id: "data_retention_prune_scheduled",
+      queue: "data-retention",
+      name: "data.retention.prune",
+      payload: { mode: process.env.DATA_RETENTION_DELETE_ENABLED === "true" ? "apply" : "dry_run" },
+      requested_at: new Date().toISOString(),
+      request_id: "data_retention_prune_scheduled",
+    },
+    {
+      jobId: "data_retention_prune_scheduled",
+      repeat: {
+        every: Number.parseInt(process.env.DATA_RETENTION_INTERVAL_MS ?? "86400000", 10),
       },
     },
   );

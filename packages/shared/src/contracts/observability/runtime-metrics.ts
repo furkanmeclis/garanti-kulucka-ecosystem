@@ -13,6 +13,8 @@ export const runtimeMetricNameSchema = z.enum([
   "provider_attempt_errors_total",
   "migration_rows",
   "migration_report_last_received_timestamp_seconds",
+  "data_retention_candidate_rows",
+  "data_retention_deleted_rows_total",
 ]);
 
 export const runtimeMetricContractSchema = z.object({
@@ -36,6 +38,8 @@ export const runtimeMetricContracts = [
   { name: "provider_attempt_errors_total", type: "counter", description: "Provider attempts that did not succeed.", labels: ["provider", "operation"], source: "worker" },
   { name: "migration_rows", type: "gauge", description: "Rows per migration entity and state from the latest migrator report of a run.", labels: ["run_id", "report_type", "entity", "state"], source: "worker" },
   { name: "migration_report_last_received_timestamp_seconds", type: "gauge", description: "Unix time the worker last accepted a migrator report for a run.", labels: ["run_id", "report_type"], source: "worker" },
+  { name: "data_retention_candidate_rows", type: "gauge", description: "Rows past their retention window still present after the last data.retention.prune run.", labels: ["table"], source: "worker" },
+  { name: "data_retention_deleted_rows_total", type: "counter", description: "Rows deleted by data.retention.prune.", labels: ["table"], source: "worker" },
 ] as const satisfies readonly z.infer<typeof runtimeMetricContractSchema>[];
 
 export type RuntimeMetricName = z.infer<typeof runtimeMetricNameSchema>;

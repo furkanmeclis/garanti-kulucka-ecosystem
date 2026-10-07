@@ -177,6 +177,13 @@ export const workerEnvSchema = z.object({
   STORAGE_ORPHAN_DELETE_ENABLED: optionalBooleanFlag(),
   STORAGE_ORPHAN_RECONCILIATION_LIMIT: optionalPositiveInt(100_000),
   STORAGE_ORPHAN_RECONCILIATION_INTERVAL_MS: optionalPositiveInt(),
+  // data.retention.prune: provider_attempts / processed webhook_events pruning; counts only unless enabled.
+  DATA_RETENTION_DELETE_ENABLED: optionalBooleanFlag(),
+  DATA_RETENTION_INTERVAL_MS: optionalPositiveInt(),
+  DATA_RETENTION_PROVIDER_ATTEMPTS_DAYS: optionalPositiveInt(3650),
+  DATA_RETENTION_WEBHOOK_EVENTS_DAYS: optionalPositiveInt(3650),
+  DATA_RETENTION_BATCH_SIZE: optionalPositiveInt(10_000),
+  DATA_RETENTION_MAX_BATCHES: optionalPositiveInt(1000),
   // Live Instagram statistics refresh (instagram.insights.account per active account); 0 disables.
   INSTAGRAM_INSIGHTS_INTERVAL_MS: z.preprocess(
     emptyToUndefined,

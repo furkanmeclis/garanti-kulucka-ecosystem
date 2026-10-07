@@ -13,6 +13,7 @@ export const queueNames: QueueName[] = [
   "ai-replies",
   "migration-reports",
   "storage-orphan-reconciliation",
+  "data-retention",
 ];
 
 export interface QueueRegistry {

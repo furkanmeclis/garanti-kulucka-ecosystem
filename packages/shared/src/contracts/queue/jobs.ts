@@ -7,6 +7,7 @@ export const queueNameSchema = z.enum([
   "ai-replies",
   "migration-reports",
   "storage-orphan-reconciliation",
+  "data-retention",
 ]);
 
 export const jobEnvelopeSchema = z.object({

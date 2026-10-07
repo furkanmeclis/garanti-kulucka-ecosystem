@@ -43,6 +43,14 @@ export function createWorkerMetrics(registry = new MetricsRegistry({ service: "w
       "storage_orphan_cleanup_apply_total",
       "Total controlled orphan cleanup apply attempts that reached the delete gate.",
     ),
+    dataRetentionCandidates: registry.gauge(
+      "data_retention_candidate_rows",
+      "Rows past their retention window still present after the last data.retention.prune run.",
+    ),
+    dataRetentionDeleted: registry.counter(
+      "data_retention_deleted_rows_total",
+      "Rows deleted by data.retention.prune.",
+    ),
     storageOrphanErrors: registry.counter(
       "storage_orphan_cleanup_error_total",
       "Total controlled orphan cleanup failures grouped by operational result code.",
@@ -105,6 +113,15 @@ export function recordJobCompletion(
       );
     }
     metrics.migrationReportReceived.set({ run_id: runId, report_type: reportType }, Math.floor(now.getTime() / 1000));
+  }
+
+  if (queue === "data-retention" && returnValue && typeof returnValue === "object") {
+    const result = returnValue as { tables?: Array<{ table?: string; candidates?: number; deleted?: number }> };
+    for (const entry of result.tables ?? []) {
+      const table = entry.table ?? "unknown";
+      metrics.dataRetentionCandidates.set({ table }, Math.max(0, (entry.candidates ?? 0) - (entry.deleted ?? 0)));
+      if (entry.deleted) metrics.dataRetentionDeleted.inc({ table }, entry.deleted);
+    }
   }
 
   if (queue === "storage-orphan-reconciliation" && returnValue && typeof returnValue === "object") {

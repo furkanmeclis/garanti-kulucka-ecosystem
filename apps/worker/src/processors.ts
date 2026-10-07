@@ -31,6 +31,7 @@ import type { VapiFetchTransport } from "./providers/vapi.js";
 import type { StorageOrphanReconciler } from "./storage-orphans.js";
 import { shipmentWritebackFrom, type ShipmentWritebackRepository } from "./shipment-writeback.js";
 import { instagramAnalyticsFrom, type InstagramAnalyticsRepository } from "./instagram-insights.js";
+import { dataRetentionPolicyFromEnv, runDataRetention, type DataRetentionStore } from "./data-retention.js";
 import type { StorageOrphanReconciliationResult } from "./storage-orphans.js";
 
 export type WorkerLifecycleEventName = "started" | "completed" | "failed";
@@ -126,6 +127,7 @@ export interface WorkerProcessorRegistryOptions {
   storageOrphanReconciler?: StorageOrphanReconciler;
   shipmentWritebackRepository?: ShipmentWritebackRepository;
   instagramAnalyticsRepository?: InstagramAnalyticsRepository;
+  dataRetentionStore?: DataRetentionStore;
 }
 
 export const workerQueueNames: QueueName[] = [
@@ -135,6 +137,7 @@ export const workerQueueNames: QueueName[] = [
   "ai-replies",
   "migration-reports",
   "storage-orphan-reconciliation",
+  "data-retention",
 ];
 
 function assertJobMatchesQueue(queue: QueueName, job: WorkerJob): JobEnvelope {
@@ -540,6 +543,25 @@ function createStorageOrphanReconciliationProcessor(
   };
 }
 
+function createDataRetentionProcessor(dataRetentionStore?: DataRetentionStore): QueueProcessor {
+  return async (job) => {
+    const envelope = assertJobMatchesQueue("data-retention", job);
+    if (envelope.name !== "data.retention.prune") {
+      throw new Error(`Unknown data retention job name: ${envelope.name}`);
+    }
+    if (!dataRetentionStore) {
+      throw new Error("Data retention requires a database-backed store");
+    }
+    const payload = asRecord(envelope.payload, "Data retention payload");
+    return runDataRetention({
+      store: dataRetentionStore,
+      policy: dataRetentionPolicyFromEnv(),
+      mode: payload.mode === "apply" ? "apply" : "dry_run",
+      deleteEnabled: process.env.DATA_RETENTION_DELETE_ENABLED === "true",
+    });
+  };
+}
+
 export function createWorkerProcessorRegistry(
   options: WorkerLifecycleRecorder | WorkerProcessorRegistryOptions = {},
 ): WorkerProcessorRegistry {
@@ -575,6 +597,8 @@ export function createWorkerProcessorRegistry(
     typeof options === "function" ? undefined : options.shipmentWritebackRepository;
   const instagramAnalyticsRepository =
     typeof options === "function" ? undefined : options.instagramAnalyticsRepository;
+  const dataRetentionStore =
+    typeof options === "function" ? undefined : options.dataRetentionStore;
   const processors = new Map<QueueName, QueueProcessor>([
     ["provider-webhooks", createProviderWebhookProcessor(providerAttemptRepository)],
     [
@@ -602,6 +626,7 @@ export function createWorkerProcessorRegistry(
     ["ai-replies", createAiReplyProcessor()],
     ["migration-reports", createMigrationReportProcessor()],
     ["storage-orphan-reconciliation", createStorageOrphanReconciliationProcessor(storageOrphanReconciler)],
+    ["data-retention", createDataRetentionProcessor(dataRetentionStore)],
   ]);
 
   return {

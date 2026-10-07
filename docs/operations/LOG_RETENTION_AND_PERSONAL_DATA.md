@@ -31,7 +31,9 @@ When personal data is needed to debug, look it up in the database through the ad
 | Admin and integration audit rows | PostgreSQL | 2 years, append-only |
 | BullMQ completed / failed jobs | Redis | last 500 completed / 1000 failed per queue (`removeOnComplete`, `removeOnFail`) |
 
-Database-side pruning for `provider_attempts` and webhook event records is not automated yet; until the scheduled pruning job exists, operators run the pruning as a reviewed manual SQL change once per month.
+Database-side pruning runs as the worker job `data.retention.prune` on the `data-retention` queue (every `DATA_RETENTION_INTERVAL_MS`, default 24 h). It deletes `provider_attempts` by `started_at` and webhook event records by `processed_at` (unprocessed events are kept) in id batches (`DATA_RETENTION_BATCH_SIZE`, default 1000; at most `DATA_RETENTION_MAX_BATCHES`, default 50, per run). Windows come from `DATA_RETENTION_PROVIDER_ATTEMPTS_DAYS` (180) and `DATA_RETENTION_WEBHOOK_EVENTS_DAYS` (90) and never go below 30 days.
+
+Deletion is off until `DATA_RETENTION_DELETE_ENABLED=true`; until then each run only counts candidates, published as `data_retention_candidate_rows{table}` (Grafana "Göç ve Depolama"). Enable deletion per environment after reviewing the counts; migration `023` adds the supporting indexes.
 
 Business records (customers, conversations, messages, orders, shipments, invoices) follow legal retention for commercial and tax records, not this log policy.
 
