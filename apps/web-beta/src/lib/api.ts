@@ -15,6 +15,20 @@ import type {
   TokenPair,
   UpdateCustomerRequest,
 } from "@garanti-kulucka/shared";
+import type {
+  AccountingContact,
+  AccountingContactInput,
+  CreateInvoiceInput,
+  CreatePaymentInput,
+  InvoiceDetail,
+  InvoiceListQuery,
+  InvoiceListResponse,
+  InvoicePayment,
+  KolaybiSyncResult,
+  KolaybiSyncStatus,
+  ListMeta,
+  SyncStatus,
+} from "./accounting";
 import type { StoredTokens } from "./session-storage";
 
 /** VITE_BACKEND_BASE_URL (default "/backend"): same-origin proxy in Docker/nginx and the Vite dev server. */
@@ -163,8 +177,21 @@ export function createApiClient(options: ApiClientOptions) {
     return (await response.json()) as T;
   }
 
+  /** Authenticated file download (invoice PDF/HTML): the blob plus the server's file name. */
+  async function requestBlob(path: string, query?: Record<string, QueryValue>): Promise<{ blob: Blob; filename: string | null }> {
+    let response = await send(path, { ...(query ? { query } : {}) });
+    if (response.status === 401 && options.getTokens() && (await refreshSession())) {
+      response = await send(path, { ...(query ? { query } : {}) });
+    }
+    if (!response.ok) throw new ApiError(response.status, null, `HTTP ${response.status}`);
+    const disposition = response.headers.get("content-disposition") ?? "";
+    const match = disposition.match(/filename="?([^";]+)"?/i);
+    return { blob: await response.blob(), filename: match?.[1] ?? null };
+  }
+
   return {
     baseUrl,
+    requestBlob,
     async login(email: string, password: string) {
       const session = await request<AuthSession>("/auth/login", { method: "POST", body: { email, password }, auth: false });
       options.setTokens({ access_token: session.access_token, refresh_token: session.refresh_token });
@@ -200,6 +227,20 @@ export function createApiClient(options: ApiClientOptions) {
       request<OrderDeleteResult>(`/api/orders/${encodeURIComponent(publicId)}`, { method: "DELETE", body: { idempotency_key: idempotencyKey } }),
     updateOrderNotes: (publicId: string, notes: string | null) =>
       request<{ order: OrderActionState }>(`/api/orders/${encodeURIComponent(publicId)}/notes`, { method: "PATCH", body: { notes } }),
+    listInvoices: (query: InvoiceListQuery = {}) => request<InvoiceListResponse>("/api/accounting/invoices", { query: { ...query } }),
+    getInvoice: (publicId: string) => request<InvoiceDetail>(`/api/accounting/invoices/${encodeURIComponent(publicId)}`),
+    createInvoice: (input: CreateInvoiceInput) => request<InvoiceDetail & { replayed: boolean }>("/api/accounting/invoices", { method: "POST", body: input }),
+    addInvoicePayment: (publicId: string, input: CreatePaymentInput) =>
+      request<{ invoice: InvoiceDetail; payment: InvoicePayment; replayed: boolean }>(`/api/accounting/invoices/${encodeURIComponent(publicId)}/payments`, { method: "POST", body: input }),
+    cancelInvoice: (publicId: string) => request<InvoiceDetail>(`/api/accounting/invoices/${encodeURIComponent(publicId)}/cancel`, { method: "POST" }),
+    invoiceDocument: (publicId: string, format: "pdf" | "html") => requestBlob(`/api/accounting/invoices/${encodeURIComponent(publicId)}/document`, { format }),
+    listAccountingContacts: (query: { search?: string; sync_status?: SyncStatus; limit?: number; offset?: number } = {}) =>
+      request<{ data: AccountingContact[]; meta: ListMeta }>("/api/accounting/contacts", { query: { ...query } }),
+    createAccountingContact: (input: AccountingContactInput & { name: string }) => request<AccountingContact>("/api/accounting/contacts", { method: "POST", body: input }),
+    updateAccountingContact: (publicId: string, input: AccountingContactInput) =>
+      request<AccountingContact>(`/api/accounting/contacts/${encodeURIComponent(publicId)}`, { method: "PATCH", body: input }),
+    kolaybiStatus: () => request<KolaybiSyncStatus>("/api/accounting/kolaybi/status"),
+    syncKolaybi: (idempotencyKey: string) => request<KolaybiSyncResult>("/api/accounting/kolaybi/sync", { method: "POST", body: { idempotency_key: idempotencyKey } }),
     saveCustomerNotes: (publicId: string, notes: string | null) =>
       request<CustomerSummary>(`/api/customers/${encodeURIComponent(publicId)}/notes`, { method: "PATCH", body: { notes } }),
   };

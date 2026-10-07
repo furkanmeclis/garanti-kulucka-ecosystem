@@ -22,11 +22,14 @@ describe("role-based menu", () => {
   });
 
   it("puts the extra pages in the More menu with their legacy roles", () => {
-    expect(moreKeys("admin")).toEqual(["cancellations"]);
+    expect(moreKeys("admin")).toEqual(["cancellations", "invoices", "accounts"]);
+    expect(moreKeys("owner")).toEqual(["cancellations", "invoices", "accounts"]);
     expect(moreKeys("calisan")).toEqual(["cancellations"]);
     expect(moreKeys("kargo_operatoru")).toEqual([]);
     expect(canAccessPath("calisan", "/iptaller")).toBe(true);
     expect(canAccessPath("kargo_operatoru", "/iptaller")).toBe(false);
+    expect(canAccessPath("calisan", "/faturalar")).toBe(false);
+    expect(canAccessPath("admin", "/cari-hesaplar")).toBe(true);
     expect(navigationFor("admin").map((item) => item.key)).toContain("cancellations");
   });
 

@@ -1,8 +1,8 @@
 import type { LucideIcon } from "lucide-react";
-import { LayoutDashboard, MessageCircle, Settings, ShoppingCart, Truck, Users, XCircle } from "lucide-react";
+import { BookUser, FileText, LayoutDashboard, MessageCircle, Settings, ShoppingCart, Truck, Users, XCircle } from "lucide-react";
 import { panelRoleOf, type PanelRole } from "@garanti-kulucka/shared";
 
-export type NavKey = "dashboard" | "orders" | "messages" | "customers" | "shipments" | "settings" | "cancellations";
+export type NavKey = "dashboard" | "orders" | "messages" | "customers" | "shipments" | "settings" | "cancellations" | "invoices" | "accounts";
 
 export interface NavItem {
   key: NavKey;
@@ -17,6 +17,7 @@ export interface NavItem {
 
 const everyone: readonly PanelRole[] = ["manager", "calisan", "kargo_operatoru"];
 const office: readonly PanelRole[] = ["manager", "calisan"];
+const managers: readonly PanelRole[] = ["manager"];
 
 export const navItems: readonly NavItem[] = [
   { key: "dashboard", path: "/", icon: LayoutDashboard, roles: office, bottomBar: true },
@@ -26,6 +27,8 @@ export const navItems: readonly NavItem[] = [
   { key: "shipments", path: "/kargolar", icon: Truck, roles: everyone, bottomBar: true },
   { key: "settings", path: "/ayarlar", icon: Settings, roles: everyone, bottomBar: false },
   { key: "cancellations", path: "/iptaller", icon: XCircle, roles: office, bottomBar: false, section: "more" },
+  { key: "invoices", path: "/faturalar", icon: FileText, roles: managers, bottomBar: false, section: "more" },
+  { key: "accounts", path: "/cari-hesaplar", icon: BookUser, roles: managers, bottomBar: false, section: "more" },
 ];
 
 /** Menu for a backend role (owner/admin → manager); unknown roles only get settings/profile. */
