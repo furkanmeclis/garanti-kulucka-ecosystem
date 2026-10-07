@@ -66,7 +66,16 @@ import type {
   NetgsmCdrListResponse,
   NetgsmCdrStatistics,
   NetgsmTeyitSettings,
+  PagedList,
   PhonebookEntry,
+  VapiBulkCallResponse,
+  VapiCall,
+  VapiCargoNotReceived,
+  VapiQueueAddItem,
+  VapiQueueItem,
+  VapiStartCallRequest,
+  VapiStartCallResponse,
+  VapiStatistics,
   VoiceMessage,
   VoiceMessageCreateRequest,
   VoiceMessageMutation,
@@ -344,6 +353,18 @@ export function createApiClient(options: ApiClientOptions) {
       request<VoiceMessageMutation>(`/api/netgsm/sesli-mesaj/${encodeURIComponent(publicId)}/rapor`, { method: "POST", body: { idempotency_key: idempotencyKey } }),
     listPhonebook: (query: { kind?: "customer" | "staff"; search?: string; limit: number; offset: number }) =>
       request<{ data: PhonebookEntry[]; total_count: number; limit: number; offset: number }>("/api/netgsm/rehber", { query: { ...query } }),
+    vapiStatistics: () => request<{ statistics: VapiStatistics }>("/api/vapi/statistics"),
+    listVapiCargoNotReceived: (query: { provider: string; page: number; page_size: number }) => request<PagedList<VapiCargoNotReceived>>("/api/vapi/cargo-not-received", { query: { ...query } }),
+    addToVapiQueue: (items: VapiQueueAddItem[], idempotencyKey: string) =>
+      request<{ eklenen: number; atlanan: number; replayed?: boolean }>("/api/vapi/queue", { method: "POST", body: { items, idempotency_key: idempotencyKey } }),
+    listVapiQueue: (query: { status: string; page: number; page_size: number }) => request<PagedList<VapiQueueItem>>("/api/vapi/queue", { query: { ...query } }),
+    deleteVapiQueueItem: (publicId: string) => request<{ deleted: boolean }>(`/api/vapi/queue/${encodeURIComponent(publicId)}`, { method: "DELETE" }),
+    startVapiCall: (input: VapiStartCallRequest) => request<VapiStartCallResponse>("/api/vapi/calls", { method: "POST", body: input }),
+    startVapiBulkCalls: (idempotencyKey: string) => request<VapiBulkCallResponse>("/api/vapi/calls/bulk", { method: "POST", body: { idempotency_key: idempotencyKey } }),
+    listVapiCalls: (query: { status: string; q?: string; page: number; page_size: number }) => request<PagedList<VapiCall>>("/api/vapi/calls", { query: { ...query } }),
+    getVapiCall: (publicId: string) => request<{ call: VapiCall; backfill_queued: boolean }>(`/api/vapi/calls/${encodeURIComponent(publicId)}`),
+    createVapiTestCall: (input: { customer_name: string; customer_phone: string; cargo_provider: string; tracking_number: string; last_event_text: string; idempotency_key: string }) =>
+      request<{ operation: string; request_id: string }>("/api/webphone/test-call", { method: "POST", body: input }),
     saveCustomerNotes: (publicId: string, notes: string | null) =>
       request<CustomerSummary>(`/api/customers/${encodeURIComponent(publicId)}/notes`, { method: "PATCH", body: { notes } }),
   };

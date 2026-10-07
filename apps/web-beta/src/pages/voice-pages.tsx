@@ -1,4 +1,4 @@
-import { BookUser, Loader2, MessageSquare, Phone, PhoneIncoming, PhoneOutgoing, RefreshCw, Save, Send } from "lucide-react";
+import { BookUser, Bot, Loader2, MessageSquare, Phone, PhoneIncoming, PhoneOutgoing, RefreshCw, Save, Send } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
@@ -18,11 +18,12 @@ import { cn } from "@/lib/utils";
 import type { NetgsmCdrRecord, NetgsmTeyitSettings, PhonebookEntry, VoiceMessage, VoiceMessageStatus } from "@/lib/voice";
 import { errorText, FeedbackLine, Field, idempotencyKey, NativeSelect, type Feedback } from "./accounting-shared";
 
-function VoiceLinks({ current }: { current: "calls" | "voiceMessages" | "phonebook" }) {
+export function VoiceLinks({ current }: { current: "calls" | "voiceMessages" | "vapi" | "phonebook" }) {
   const { t } = useTranslation();
   const links = [
     { key: "calls", to: "/sesli-asistan", icon: Phone },
     { key: "voiceMessages", to: "/sesli-asistan/sesli-mesajlar", icon: MessageSquare },
+    { key: "vapi", to: "/sesli-asistan/vapi", icon: Bot },
     { key: "phonebook", to: "/sesli-asistan/rehber", icon: BookUser },
   ] as const;
   return (
