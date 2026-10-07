@@ -1,0 +1,29 @@
+# Routes alerts by severity (docs/operations/ALERTS_AND_INCIDENT_RUNBOOKS.md): `page` → on-call,
+# `ticket` → work queue. The receivers ship without integrations so the local stack never sends
+# anything; add webhook/email/Slack configs per environment (secrets via *_file, never in git).
+route:
+  receiver: ticket
+  group_by: ["alertname", "queue", "provider"]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    - matchers: ['severity="page"']
+      receiver: page
+      repeat_interval: 1h
+
+inhibit_rules:
+  # A critical backlog / error-rate page already covers its ticket-level twin.
+  - source_matchers: ['alertname="QueueBacklogCritical"']
+    target_matchers: ['alertname="QueueBacklogHigh"']
+    equal: ["queue"]
+  - source_matchers: ['alertname="ProviderErrorRateCritical"']
+    target_matchers: ['alertname="ProviderErrorRateHigh"']
+    equal: ["provider"]
+  - source_matchers: ['alertname="DeadLettersBurst"']
+    target_matchers: ['alertname="DeadLettersIncreasing"']
+    equal: ["queue"]
+
+receivers:
+  - name: page
+  - name: ticket

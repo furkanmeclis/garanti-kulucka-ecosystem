@@ -1,0 +1,154 @@
+# Alert rules from docs/operations/ALERTS_AND_INCIDENT_RUNBOOKS.md (thresholds change only together
+# with that document). `severity: page` pages on-call, `severity: ticket` opens a ticket.
+# ReadinessDegraded, DatabaseDown, RedisDown and DiskSpaceLow need a blackbox / node exporter and
+# are not part of this stack (see MONITORING_STACK.md).
+groups:
+  - name: queues
+    rules:
+      - alert: QueueBacklogHigh
+        expr: sum by (queue) (queue_jobs{state=~"waiting|delayed|prioritized"}) > 500
+        for: 10m
+        labels: { severity: ticket }
+        annotations:
+          summary: "Queue {{ $labels.queue }} backlog is {{ $value }} jobs"
+          runbook: docs/operations/ALERTS_AND_INCIDENT_RUNBOOKS.md#queue-backlog
+      - alert: QueueBacklogCritical
+        expr: >
+          sum by (queue) (queue_jobs{state=~"waiting|delayed|prioritized"}) > 2000
+          or sum by (queue) (queue_jobs{queue="provider-webhooks", state="waiting"}) > 200
+        for: 5m
+        labels: { severity: page }
+        annotations:
+          summary: "Queue {{ $labels.queue }} backlog is critical ({{ $value }} jobs)"
+          runbook: docs/operations/ALERTS_AND_INCIDENT_RUNBOOKS.md#queue-backlog
+      - alert: QueueStalled
+        expr: >
+          sum by (queue) (queue_jobs{state="waiting"}) > 0
+          and sum by (queue) (queue_jobs{state="active"}) == 0
+          and sum by (queue) (rate(queue_job_retries_total[10m]) + rate(queue_job_dead_letters_total[10m])) == 0
+        for: 15m
+        labels: { severity: page }
+        annotations:
+          summary: "Queue {{ $labels.queue }} has waiting jobs but nothing is being processed"
+          runbook: docs/operations/ALERTS_AND_INCIDENT_RUNBOOKS.md#queue-backlog
+      - alert: DeadLettersIncreasing
+        expr: sum by (queue) (increase(queue_job_dead_letters_total[15m])) > 0
+        labels: { severity: ticket }
+        annotations:
+          summary: "Queue {{ $labels.queue }} moved jobs to the dead-letter set"
+          runbook: docs/operations/ALERTS_AND_INCIDENT_RUNBOOKS.md#dead-letters
+      - alert: DeadLettersBurst
+        expr: >
+          sum by (queue) (increase(queue_job_dead_letters_total[15m])) > 20
+          or sum by (queue) (queue_jobs{state="failed"}) > 500
+        labels: { severity: page }
+        annotations:
+          summary: "Dead-letter burst on queue {{ $labels.queue }} ({{ $value }})"
+          runbook: docs/operations/ALERTS_AND_INCIDENT_RUNBOOKS.md#dead-letters
+      - alert: RetryStorm
+        expr: sum by (queue) (rate(queue_job_retries_total[5m])) > 1
+        for: 10m
+        labels: { severity: ticket }
+        annotations:
+          summary: "Queue {{ $labels.queue }} retries {{ $value | humanize }} jobs/s"
+          runbook: docs/operations/ALERTS_AND_INCIDENT_RUNBOOKS.md#dead-letters
+
+  - name: providers
+    rules:
+      - alert: ProviderErrorRateHigh
+        expr: >
+          (sum by (provider) (rate(provider_attempt_errors_total[5m])) / sum by (provider) (rate(provider_attempts_total[5m]))) > 0.10
+          and sum by (provider) (increase(provider_attempts_total[5m])) >= 20
+        for: 10m
+        labels: { severity: ticket }
+        annotations:
+          summary: "{{ $labels.provider }} error rate is {{ $value | humanizePercentage }}"
+          runbook: docs/operations/ALERTS_AND_INCIDENT_RUNBOOKS.md#provider-error-rate-or-latency
+      - alert: ProviderErrorRateCritical
+        expr: >
+          (sum by (provider) (rate(provider_attempt_errors_total[5m])) / sum by (provider) (rate(provider_attempts_total[5m]))) > 0.50
+          and sum by (provider) (increase(provider_attempts_total[5m])) >= 20
+        for: 5m
+        labels: { severity: page }
+        annotations:
+          summary: "{{ $labels.provider }} error rate is {{ $value | humanizePercentage }}"
+          runbook: docs/operations/ALERTS_AND_INCIDENT_RUNBOOKS.md#provider-error-rate-or-latency
+      - alert: ProviderLatencyHigh
+        expr: histogram_quantile(0.95, sum by (le, provider, operation) (rate(provider_attempt_duration_seconds_bucket[5m]))) > 5
+        for: 15m
+        labels: { severity: ticket }
+        annotations:
+          summary: "{{ $labels.provider }} {{ $labels.operation }} p95 latency is {{ $value | humanizeDuration }}"
+          runbook: docs/operations/ALERTS_AND_INCIDENT_RUNBOOKS.md#provider-error-rate-or-latency
+
+  - name: api
+    rules:
+      - alert: WebhookLatencyHigh
+        expr: histogram_quantile(0.95, sum by (le, provider) (rate(webhook_ingress_duration_seconds_bucket[5m]))) > 1
+        for: 10m
+        labels: { severity: page }
+        annotations:
+          summary: "{{ $labels.provider }} webhook p95 is {{ $value | humanizeDuration }} (Meta retries and disables slow webhooks)"
+          runbook: docs/operations/ALERTS_AND_INCIDENT_RUNBOOKS.md#webhook-latency-or-errors
+      - alert: WebhookErrors
+        expr: sum by (provider) (rate(webhook_ingress_duration_seconds_count{status=~"5.."}[5m])) > 0
+        for: 5m
+        labels: { severity: page }
+        annotations:
+          summary: "{{ $labels.provider }} webhook ingress answers 5xx"
+          runbook: docs/operations/ALERTS_AND_INCIDENT_RUNBOOKS.md#webhook-latency-or-errors
+      - alert: ApiErrorRate
+        expr: sum(rate(http_requests_total{status=~"5.."}[5m])) / sum(rate(http_requests_total[5m])) > 0.02
+        for: 10m
+        labels: { severity: page }
+        annotations:
+          summary: "API 5xx rate is {{ $value | humanizePercentage }}"
+          runbook: docs/operations/ALERTS_AND_INCIDENT_RUNBOOKS.md#common-first-steps
+      - alert: ApiLatencyHigh
+        expr: histogram_quantile(0.95, sum by (le, route) (rate(http_request_duration_seconds_bucket[5m]))) > 1.5
+        for: 15m
+        labels: { severity: ticket }
+        annotations:
+          summary: "API route {{ $labels.route }} p95 is {{ $value | humanizeDuration }}"
+          runbook: docs/operations/ALERTS_AND_INCIDENT_RUNBOOKS.md#common-first-steps
+      - alert: RealtimeConnectionsDrop
+        # Business hours 08:00-20:00 Europe/Istanbul (UTC+3) = 05:00-17:00 UTC.
+        expr: >
+          sum(realtime_socket_connections) < 0.5 * sum(realtime_socket_connections offset 30m)
+          and on() hour() >= 5 and on() hour() < 17
+        for: 5m
+        labels: { severity: ticket }
+        annotations:
+          summary: "Socket.IO connections dropped by more than half in 30 minutes"
+          runbook: docs/operations/ALERTS_AND_INCIDENT_RUNBOOKS.md#common-first-steps
+      - alert: MetricsScrapeMissing
+        expr: up{job=~"api|worker"} == 0
+        for: 5m
+        labels: { severity: page }
+        annotations:
+          summary: "Prometheus cannot scrape {{ $labels.job }} ({{ $labels.instance }})"
+          runbook: docs/operations/OBSERVABILITY.md
+
+  - name: migration-and-storage
+    rules:
+      - alert: MigrationRunStalled
+        # Only runs that reported within the last 6 hours count as in progress.
+        expr: >
+          (time() - max by (run_id) (migration_report_last_received_timestamp_seconds)) > 1800
+          and (time() - max by (run_id) (migration_report_last_received_timestamp_seconds)) < 21600
+        labels: { severity: ticket }
+        annotations:
+          summary: "Migration run {{ $labels.run_id }} sent no report for {{ $value | humanizeDuration }}"
+          runbook: docs/operations/MIGRATION_APPLY_RUNBOOK.md
+      - alert: BackupStale
+        expr: max by (bucket) (garage_backup_age_seconds) > 93600
+        labels: { severity: page }
+        annotations:
+          summary: "Garage bucket {{ $labels.bucket }} backup is {{ $value | humanizeDuration }} old"
+          runbook: docs/operations/STORAGE_ALERTS_AND_INCIDENTS.md
+      - alert: StorageOrphanCleanupErrors
+        expr: sum by (bucket) (increase(storage_orphan_cleanup_error_total[1h])) > 0
+        labels: { severity: ticket }
+        annotations:
+          summary: "Orphan cleanup failed on bucket {{ $labels.bucket }}"
+          runbook: docs/operations/STORAGE_ALERTS_AND_INCIDENTS.md

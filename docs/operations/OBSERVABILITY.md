@@ -1,5 +1,7 @@
 # Observability: Metrics, Health And Readiness
 
+Ready-made Prometheus, Alertmanager and Grafana configuration for these metrics lives in the compose `monitoring` profile, see `MONITORING_STACK.md`.
+
 API and worker expose Prometheus-compatible metrics (text exposition format `0.0.4`) through a dependency-free registry in `packages/shared/src/observability/metrics.ts`. Metric names, types and labels are frozen in `packages/shared/src/contracts/observability/runtime-metrics.ts` and `storage-metrics.ts`.
 
 ## Exposure And Protection

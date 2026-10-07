@@ -1,0 +1,33 @@
+# Local/staging monitoring profile (`docker compose --profile monitoring up`), see
+# docs/operations/MONITORING_STACK.md. Scrapes the internal metrics listeners only:
+# API METRICS_PORT 9464 and the worker health listener 3001 (never published to the host).
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    stack: garanti-kulucka
+
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
+
+scrape_configs:
+  - job_name: api
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["api:9464"]
+        labels:
+          service: api
+  - job_name: worker
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["worker:3001"]
+        labels:
+          service: worker
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
