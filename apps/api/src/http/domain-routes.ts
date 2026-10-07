@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { Hono, type Context } from "hono";
 import { z } from "zod";
 import type { AppDatabase } from "@garanti-kulucka/database";
-import { jobEnvelopeSchema, providerDeliveryJobPayloadSchema } from "@garanti-kulucka/shared";
+import { jobEnvelopeSchema, planOutboundDelivery, providerDeliveryJobPayloadSchema } from "@garanti-kulucka/shared";
 import type { AppBindings } from "./types.js";
 import { authenticate, requireDatabase } from "./middleware.js";
 import {
@@ -28,7 +28,7 @@ import {
   serializeStockMovement,
 } from "../domain/repository.js";
 import { calculateVatInclusiveOrder, moneyToCents } from "../domain/order-totals.js";
-import { planOutboundDelivery } from "../messaging/outbound-delivery.js";
+
 
 const limitSchema = z.coerce.number().int().min(1).max(200).default(50);
 const offsetSchema = z.coerce.number().int().min(0).default(0);

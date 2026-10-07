@@ -25,6 +25,7 @@ import { createDataDeletionAdminRoutes, createPrivacyPublicRoutes } from "./http
 import { createWebhookRoutes } from "./http/webhook-routes.js";
 import { createWebphoneRoutes } from "./http/webphone-routes.js";
 import { createVapiRoutes } from "./http/vapi-routes.js";
+import { createCargoPipelineRoutes } from "./http/cargo-pipeline-routes.js";
 import { createNetgsmVoiceRoutes } from "./http/netgsm-voice-routes.js";
 import { createNetgsmWebhookRoutes } from "./http/netgsm-webhook-routes.js";
 import { createRateLimitStore, type RateLimitStore } from "./http/rate-limit.js";
@@ -192,6 +193,7 @@ export function createApp(options: CreateAppOptions = {}) {
   app.route("/api/webphone", createWebphoneRoutes());
   app.route("/api/app-settings", createAppSettingsRoutes());
   app.route("/api/vapi", createVapiRoutes());
+  app.route("/api/cargo-pipeline", createCargoPipelineRoutes());
   app.route("/api/netgsm", createNetgsmVoiceRoutes());
   app.route(
     "/webhooks",

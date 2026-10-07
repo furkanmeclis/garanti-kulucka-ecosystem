@@ -8,39 +8,8 @@ export type VapiCallStatus = (typeof vapiCallStatuses)[number];
 export const vapiQueueStatuses = ["bekliyor", "araniyor", "tamamlandi", "basarisiz"] as const;
 export type VapiQueueStatus = (typeof vapiQueueStatuses)[number];
 
-export const cargoNotReceivedKeywords = [
-  "işyerinde bekliyor",
-  "şubede bekliyor",
-  "adreste yok",
-  "adreste bulunam",
-  "kapalı-",
-  "teslim edilemedi",
-  "haber kağıdı",
-  "teslimat gerçekleştirilemedi",
-  "müşteri bulunamadı",
-  "teslimat yapılamadı",
-  "teslim alınmadı",
-  "telefon ihbarlı",
-  "alıcı kabul etmedi",
-  "müşteri şubeden alacak",
-] as const;
-
-const cargoNotReceivedExclusions = [
-  "iade",
-  "geri gönderildi",
-  "teslim edildi",
-  "teslimat yapıldı",
-  "teslimat gerçekleştirildi",
-  "teslimat tamamlandı",
-];
-
-/** Legacy kargo-almayan filter: returned / delivered texts are excluded, then a keyword must match. */
-export function isCargoNotReceived(lastEventText: string | null | undefined): boolean {
-  if (!lastEventText) return false;
-  const lower = lastEventText.toLocaleLowerCase("tr-TR");
-  if (cargoNotReceivedExclusions.some((text) => lower.includes(text))) return false;
-  return cargoNotReceivedKeywords.some((keyword) => lower.includes(keyword.toLocaleLowerCase("tr-TR")));
-}
+// Shared with the cargo pipeline engine (packages/shared cargo/pipeline.ts).
+export { cargoNotReceivedKeywords, isCargoNotReceived } from "@garanti-kulucka/shared";
 
 export interface VapiCallPolicy {
   enabled: boolean;

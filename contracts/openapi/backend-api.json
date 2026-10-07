@@ -7200,6 +7200,418 @@
           }
         }
       }
+    },
+    "/api/cargo-pipeline": {
+      "get": {
+        "operationId": "listCargoPipelineItems",
+        "description": "Legacy GET /api/kargo-pipeline (teslim alınmayan kargo: mesaj → sms → vapi). Reconciles open VAPI calls first.",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "tumu",
+                "bekliyor",
+                "isleniyor",
+                "tamamlandi",
+                "hata",
+                "iptal",
+                "teslim"
+              ]
+            }
+          },
+          {
+            "name": "step",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "tumu",
+                "mesaj",
+                "sms",
+                "vapi",
+                "tamamlandi",
+                "teslim"
+              ]
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Pipeline rows, newest first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "total",
+                    "page",
+                    "page_size"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/CargoPipelineItem"
+                      }
+                    },
+                    "total": {
+                      "type": "integer"
+                    },
+                    "page": {
+                      "type": "integer"
+                    },
+                    "page_size": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/cargo-pipeline/config": {
+      "get": {
+        "operationId": "getCargoPipelineConfig",
+        "responses": {
+          "200": {
+            "description": "Pipeline config (global setting kargo_pipeline_ayarlar)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "config"
+                  ],
+                  "properties": {
+                    "config": {
+                      "$ref": "#/components/schemas/CargoPipelineConfig"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "put": {
+        "operationId": "updateCargoPipelineConfig",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CargoPipelineConfig"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Pipeline config (global setting kargo_pipeline_ayarlar)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "config"
+                  ],
+                  "properties": {
+                    "config": {
+                      "$ref": "#/components/schemas/CargoPipelineConfig"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/cargo-pipeline/test": {
+      "post": {
+        "operationId": "testCargoPipelineStep",
+        "description": "Legacy POST /api/kargo-pipeline/test: queues one SMS, channel message or VAPI test call with the filled template; never writes pipeline rows. Provider live gates still apply.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "type",
+                  "phone",
+                  "idempotency_key"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "sms",
+                      "mesaj",
+                      "vapi"
+                    ]
+                  },
+                  "phone": {
+                    "type": "string",
+                    "maxLength": 32
+                  },
+                  "customer_name": {
+                    "type": "string",
+                    "maxLength": 200
+                  },
+                  "tracking_number": {
+                    "type": "string",
+                    "maxLength": 120
+                  },
+                  "last_event_text": {
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  "cargo_provider": {
+                    "type": "string",
+                    "maxLength": 40
+                  },
+                  "conversation_public_id": {
+                    "type": "string",
+                    "description": "Required for type=mesaj"
+                  },
+                  "idempotency_key": {
+                    "type": "string",
+                    "maxLength": 160
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Test delivery queued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "type",
+                    "queued",
+                    "job_ids",
+                    "message",
+                    "live_gate"
+                  ],
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "sms",
+                        "mesaj",
+                        "vapi"
+                      ]
+                    },
+                    "queued": {
+                      "type": "boolean"
+                    },
+                    "job_ids": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "call_id": {
+                      "type": "string"
+                    },
+                    "live_gate": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/cargo-pipeline/{public_id}/actions": {
+      "post": {
+        "operationId": "applyCargoPipelineAction",
+        "description": "Legacy aksiyon: run_now (force_run, ignores working hours once), skip (next step), complete, cancel.",
+        "parameters": [
+          {
+            "name": "public_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "action"
+                ],
+                "properties": {
+                  "action": {
+                    "type": "string",
+                    "enum": [
+                      "run_now",
+                      "skip",
+                      "complete",
+                      "cancel"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated row",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "item"
+                  ],
+                  "properties": {
+                    "item": {
+                      "$ref": "#/components/schemas/CargoPipelineItem"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/cargo-pipeline/{public_id}": {
+      "delete": {
+        "operationId": "deleteCargoPipelineItem",
+        "parameters": [
+          {
+            "name": "public_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "deleted"
+                  ],
+                  "properties": {
+                    "deleted": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -17127,6 +17539,186 @@
             }
           }
         ]
+      },
+      "CargoPipelineItem": {
+        "type": "object",
+        "required": [
+          "public_id",
+          "step",
+          "status",
+          "next_run_at",
+          "force_run",
+          "attempt_count",
+          "max_attempts",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "public_id": {
+            "type": "string"
+          },
+          "shipment_public_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "order_public_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "conversation_public_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "vapi_call_public_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "channel": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "phone": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "customer_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tracking_number": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "cargo_provider": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "last_event_text": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "step": {
+            "type": "string",
+            "enum": [
+              "mesaj",
+              "sms",
+              "vapi",
+              "tamamlandi",
+              "teslim"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "bekliyor",
+              "isleniyor",
+              "tamamlandi",
+              "hata",
+              "iptal",
+              "teslim"
+            ]
+          },
+          "next_run_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "force_run": {
+            "type": "boolean"
+          },
+          "attempt_count": {
+            "type": "integer"
+          },
+          "max_attempts": {
+            "type": "integer"
+          },
+          "error_message": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "CargoPipelineConfig": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "aktif",
+          "baslangic_saati",
+          "bitis_saati",
+          "mesaj_gecikme_dk",
+          "sms_gecikme_dk",
+          "vapi_gecikme_dk",
+          "max_deneme",
+          "mesaj_sablonu"
+        ],
+        "properties": {
+          "aktif": {
+            "type": "boolean"
+          },
+          "baslangic_saati": {
+            "type": "string",
+            "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+          },
+          "bitis_saati": {
+            "type": "string",
+            "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+          },
+          "mesaj_gecikme_dk": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1440
+          },
+          "sms_gecikme_dk": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1440
+          },
+          "vapi_gecikme_dk": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1440
+          },
+          "max_deneme": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10
+          },
+          "mesaj_sablonu": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "description": "Placeholders {musteri_adi} {takip_no} {son_hareket} {takip_link}"
+          }
+        }
       }
     }
   }

@@ -41,6 +41,7 @@ export interface Database {
   invoice_payments: InvoicePaymentsTable;
   voice_messages: VoiceMessagesTable;
   data_deletion_requests: DataDeletionRequestsTable;
+  cargo_pipeline_items: CargoPipelineItemsTable;
   vapi_call_queue: VapiCallQueueTable;
   vapi_calls: VapiCallsTable;
   products: ProductsTable;
@@ -371,6 +372,26 @@ export interface VoiceMessagesTable extends BaseTable {
   report_checked_at: Timestamp | null;
   idempotency_key: string;
   created_by_user_id: number | null;
+}
+
+export interface CargoPipelineItemsTable extends BaseTable {
+  shipment_id: number | null;
+  order_id: number | null;
+  conversation_id: number | null;
+  vapi_call_id: number | null;
+  channel: string | null;
+  phone: string | null;
+  customer_name: string | null;
+  tracking_number: string | null;
+  cargo_provider: string | null;
+  last_event_text: string | null;
+  step: string;
+  status: string;
+  next_run_at: Timestamp;
+  force_run: boolean;
+  attempt_count: number;
+  max_attempts: number;
+  error_message: string | null;
 }
 
 export interface DataDeletionRequestsTable extends BaseTable {

@@ -19,6 +19,7 @@ import { DatabaseShipmentWritebackRepository } from "./shipment-writeback.js";
 import { DatabaseDataRetentionStore } from "./data-retention.js";
 import { DatabaseInstagramAnalyticsRepository, enqueueInstagramInsights, instagramInsightsIntervalMs } from "./instagram-insights.js";
 import { StorageOrphanReconciler } from "./storage-orphans.js";
+import { cargoPipelineIntervalMs, DatabaseCargoPipelineStore, runCargoPipelineTick } from "./cargo-pipeline.js";
 import { S3ProviderMediaFileResolver, type ProviderMediaFileResolver } from "./providers/media-files.js";
 import { DatabaseProviderAttemptRepository, type ProviderAttemptRepository } from "./providers/attempts.js";
 import {
@@ -288,6 +289,37 @@ export function createWorkerRuntime(options: WorkerRuntimeOptions): WorkerRuntim
   insightsTimer?.unref();
   if (insightsTimer) enqueueInsights();
 
+  // Legacy kargoPipelineCron (teslim alınmayan kargo: mesaj → sms → vapi). CARGO_PIPELINE_INTERVAL_MS, default 60 s,
+  // 0 disables; the pipeline itself stays off until global setting kargo_pipeline_ayarlar.aktif is true.
+  const cargoPipelineStore = db ? new DatabaseCargoPipelineStore(db) : undefined;
+  const cargoPipelineInterval = cargoPipelineIntervalMs();
+  let cargoPipelineRunning = false;
+  const tickCargoPipeline = () => {
+    if (!cargoPipelineStore || !deliveryQueue || cargoPipelineRunning) return;
+    cargoPipelineRunning = true;
+    void runCargoPipelineTick({
+      store: cargoPipelineStore,
+      publish: async (job) => (await deliveryQueue.add(job.name, job, { jobId: job.job_id })).id ?? null,
+    })
+      .catch((error: unknown) => {
+        options.logger.error(
+          createStructuredLog({
+            level: "error",
+            service: "worker",
+            event: "worker.cargo_pipeline_tick_failed",
+            msg: "Cargo pipeline tick failed",
+            context: { err: error },
+          }),
+          "Cargo pipeline tick failed",
+        );
+      })
+      .finally(() => {
+        cargoPipelineRunning = false;
+      });
+  };
+  const cargoPipelineTimer = cargoPipelineInterval > 0 && cargoPipelineStore ? setInterval(tickCargoPipeline, cargoPipelineInterval) : null;
+  cargoPipelineTimer?.unref();
+
   return {
     connection,
     registry,
@@ -298,6 +330,7 @@ export function createWorkerRuntime(options: WorkerRuntimeOptions): WorkerRuntim
     db,
     close: async () => {
       if (insightsTimer) clearInterval(insightsTimer);
+      if (cargoPipelineTimer) clearInterval(cargoPipelineTimer);
       const result = await drainWorkers(workers.values(), options.shutdownTimeoutMs ?? 30_000);
       await Promise.all([...metricQueues.values()].map((queue) => queue.close()));
       await Promise.all([...schedulers.values()].map((scheduler) => scheduler.close()));

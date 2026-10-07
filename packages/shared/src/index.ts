@@ -12,3 +12,5 @@ export * from "./observability/redaction.js";
 export * from "./observability/structured-log.js";
 export * from "./config/service-env.js";
 export * from "./legal/documents.js";
+export * from "./cargo/pipeline.js";
+export * from "./messaging/outbound.js";

@@ -1,5 +1,11 @@
-import { jobEnvelopeSchema, providerDeliveryJobPayloadSchema, type JobEnvelope } from "@garanti-kulucka/shared";
-import type { ConversationDeliveryTarget } from "../domain/repository.js";
+import { jobEnvelopeSchema, type JobEnvelope } from "../contracts/queue/jobs.js";
+import { providerDeliveryJobPayloadSchema } from "../contracts/providers/provider.js";
+export interface ConversationDeliveryTarget {
+  public_id: string;
+  channel: string;
+  external_thread_id: string | null;
+  customer_phone: string | null;
+}
 
 export type OutboundProvider = "whatsapp" | "instagram" | "messenger";
 
@@ -50,6 +56,9 @@ export function planOutboundDelivery(input: {
   attachments: OutboundAttachment[];
   requestId: string | undefined;
   occurredAt?: string;
+  /** Idempotency prefix; panel replies use `panel`, the cargo pipeline uses its own. */
+  idempotencyPrefix?: string;
+  legacyContract?: { source: string; legacy_event: string };
 }): OutboundDeliveryPlan | OutboundDeliverySkip {
   const provider = outboundProviderForChannel(input.target.channel);
   if (!provider) return { provider: null, reason: "unsupported_channel" };
@@ -78,7 +87,7 @@ export function planOutboundDelivery(input: {
   }
 
   const jobs = parts.map((part, index) => {
-    const idempotencyKey = `panel_${input.messagePublicId}_${index}`;
+    const idempotencyKey = `${input.idempotencyPrefix ?? "panel"}_${input.messagePublicId}_${index}`;
     const suffix = jobSuffix(idempotencyKey);
     const payload = providerDeliveryJobPayloadSchema.parse({
       envelope: {
@@ -96,7 +105,7 @@ export function planOutboundDelivery(input: {
           message_public_id: input.messagePublicId,
           idempotency_key: idempotencyKey,
         },
-        legacy_contract: { source: "server.js POST /api/mesajlar/gonder", legacy_event: "panel_message_send" },
+        legacy_contract: input.legacyContract ?? { source: "server.js POST /api/mesajlar/gonder", legacy_event: "panel_message_send" },
       },
     });
     return jobEnvelopeSchema.parse({

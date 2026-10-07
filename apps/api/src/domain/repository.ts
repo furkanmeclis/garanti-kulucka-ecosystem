@@ -1,3 +1,4 @@
+import type { ConversationDeliveryTarget as SharedConversationDeliveryTarget } from "@garanti-kulucka/shared";
 import { sql, type AppDatabase, type Selectable } from "@garanti-kulucka/database";
 import type {
   ConversationsTable,
@@ -504,12 +505,7 @@ function pipelineStatusFromShipment(shipment: ShipmentRecord): ShipmentPipelineS
   return "bekliyor";
 }
 
-export interface ConversationDeliveryTarget {
-  public_id: string;
-  channel: string;
-  external_thread_id: string | null;
-  customer_phone: string | null;
-}
+export type { ConversationDeliveryTarget } from "@garanti-kulucka/shared";
 
 export class DomainRepository {
   constructor(private readonly db: AppDatabase) {}
@@ -926,7 +922,7 @@ export class DomainRepository {
     });
   }
 
-  async getConversationDeliveryTarget(conversationPublicId: string): Promise<ConversationDeliveryTarget | null> {
+  async getConversationDeliveryTarget(conversationPublicId: string): Promise<SharedConversationDeliveryTarget | null> {
     const row = await this.db
       .selectFrom("conversations")
       .leftJoin("customers", "customers.id", "conversations.customer_id")

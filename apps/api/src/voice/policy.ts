@@ -48,12 +48,12 @@ function repository(context: Context<AppBindings>) {
   return new SettingsRepository(db, context.get("encryptor"), context.get("settingsCache"));
 }
 
-async function readSetting(context: Context<AppBindings>, scope: string, key: string): Promise<unknown> {
+export async function readSetting(context: Context<AppBindings>, scope: string, key: string): Promise<unknown> {
   const settings = await repository(context).list(scope);
   return settings.find((setting) => setting.key === key && !setting.is_secret)?.value ?? null;
 }
 
-async function writeSetting(context: Context<AppBindings>, scope: string, key: string, value: unknown) {
+export async function writeSetting(context: Context<AppBindings>, scope: string, key: string, value: unknown) {
   const { setting, version } = await repository(context).upsert({
     key,
     scope,

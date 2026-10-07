@@ -85,7 +85,7 @@ function statusFilter(value: string | undefined, allowed: readonly string[]) {
   return allowed.includes(value) ? { ok: true as const, value } : { ok: false as const };
 }
 
-interface CallTarget {
+export interface CallTarget {
   customerPhone: string;
   customerName: string | null;
   cargoProvider: string | null;
@@ -93,7 +93,7 @@ interface CallTarget {
   lastEventText: string | null;
 }
 
-async function queueVapiCall(context: Context<AppBindings>, callPublicId: string, target: CallTarget, idempotencyKey: string) {
+export async function queueVapiCall(context: Context<AppBindings>, callPublicId: string, target: CallTarget, idempotencyKey: string) {
   const occurredAt = new Date().toISOString();
   const requestId = `req_vapi_call_${slug(idempotencyKey, 96)}`;
   const envelope = providerDeliveryJobPayloadSchema.parse({
@@ -127,7 +127,7 @@ async function queueVapiCall(context: Context<AppBindings>, callPublicId: string
   return context.get("providerDeliveryQueuePublisher").publish(job);
 }
 
-function requestIdFor(idempotencyKey: string) {
+export function requestIdFor(idempotencyKey: string) {
   return `req_vapi_call_${slug(idempotencyKey, 96)}`;
 }
 
