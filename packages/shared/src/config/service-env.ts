@@ -199,6 +199,9 @@ export const migratorEnvSchema = z.object({
   MIGRATION_APPLY_ENABLED: optionalBooleanFlag(),
   MIGRATION_BATCH_SIZE: optionalPositiveInt(),
   MIGRATION_BACKUP_MAX_AGE_HOURS: optionalPositiveNumber(),
+  // Optional: every command report is also published to the worker's migration-reports queue.
+  REDIS_URL: redisUrl,
+  MIGRATION_REPORT_QUEUE_ENABLED: optionalBooleanFlag(),
 });
 
 export type ApiEnv = z.infer<typeof apiEnvSchema>;

@@ -35,7 +35,7 @@ Rules:
 | `provider_attempts_total` | counter | `provider`, `operation`, `status` | worker, every persisted provider attempt |
 | `provider_attempt_duration_seconds` | histogram | `provider`, `operation`, `status` | worker |
 | `provider_attempt_errors_total` | counter | `provider`, `operation` | worker, `retryable_failure` + `terminal_failure` |
-| `migration_rows` | gauge | `run_id`, `report_type`, `entity`, `state` (`planned`, `blocked`, `applied`, `inserted`) | worker, from `migration.report` jobs |
+| `migration_rows` | gauge | `run_id`, `report_type`, `entity`, `state` (`planned`, `blocked`, `applied`, `inserted`) | worker, from `migration.report` jobs the migrator publishes after every command (`MIGRATION_APPLY_RUNBOOK.md`) |
 | `migration_report_last_received_timestamp_seconds` | gauge | `run_id`, `report_type` | worker |
 | `data_retention_candidate_rows` | gauge | `table` (`provider_attempts`, `webhook_events`) | worker `data.retention.prune`: rows past retention still present after the run |
 | `data_retention_deleted_rows_total` | counter | `table` | worker `data.retention.prune` deletes (only with `DATA_RETENTION_DELETE_ENABLED=true`) |

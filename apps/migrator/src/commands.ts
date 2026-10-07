@@ -1,4 +1,5 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { createMigrationReportPublisher, publishMigrationReport, type MigrationReportPublisher } from "./report-queue.js";
 import { dirname } from "node:path";
 import { Client } from "pg";
 import { createMigrationApplyApproval, type MigrationApplyApproval } from "./apply-approval.js";
@@ -31,6 +32,8 @@ export interface MigratorCommandOptions {
 export interface MigratorCommandDependencies {
   readonly executeMigration: (input: ExecutePostgresMigrationInput) => Promise<unknown>;
   readonly verifyTarget: (databaseUrl: string, runId: string) => Promise<VerificationReport>;
+  /** Defaults to a BullMQ publisher on REDIS_URL; `null` disables queue publishing. */
+  readonly publishReport?: MigrationReportPublisher | null;
 }
 
 export interface ExecutePostgresDryRunInput {
@@ -102,6 +105,13 @@ export async function runMigratorCommand(
   dependencies: MigratorCommandDependencies = defaultCommandDependencies,
 ): Promise<void> {
   const startedAt = new Date();
+  const publisher = dependencies.publishReport !== undefined ? dependencies.publishReport : createMigrationReportPublisher(env);
+  // Every report goes to the file (when asked) and to the migration-reports queue (when REDIS_URL is set).
+  const reportCommand = async (report: MigratorCommandReport) => {
+    await writeMigratorCommandReport(options, report);
+    const published = await publishMigrationReport({ command, report, env, publisher });
+    if (published === "failed") process.emitWarning("Migration report could not be published to the migration-reports queue");
+  };
   let failedVerification: VerificationReport | undefined;
   let commandMigration: unknown;
   let commandReconciliation: DeferredReconciliationResult | undefined;
@@ -116,8 +126,7 @@ export async function runMigratorCommand(
         throw new Error("Canonical database verification failed");
       }
 
-      await writeMigratorCommandReport(
-        options,
+      await reportCommand(
         createCommandReport(command, "passed", startedAt, undefined, { verification }),
       );
       return;
@@ -159,8 +168,7 @@ export async function runMigratorCommand(
         failedVerification = commandVerification;
         throw new Error("Canonical database verification failed");
       }
-      await writeMigratorCommandReport(
-        options,
+      await reportCommand(
         createCommandReport(command, "passed", startedAt, undefined, {
           migration: commandMigration,
           verification: commandVerification,
@@ -178,15 +186,13 @@ export async function runMigratorCommand(
       ...(conversationAccounts ? { conversationAccounts } : {}),
       ...(userPublicIds ? { userPublicIds } : {}),
     });
-    await writeMigratorCommandReport(
-      options,
+    await reportCommand(
       createCommandReport(command, "passed", startedAt, undefined, { migration: commandMigration }),
     );
   } catch (error) {
     const safeError = toSafeMigratorError(error);
     try {
-      await writeMigratorCommandReport(
-        options,
+      await reportCommand(
         createCommandReport(command, "failed", startedAt, safeError, {
           ...(commandMigration ? { migration: commandMigration } : {}),
           ...(commandReconciliation ? { reconciliation: commandReconciliation } : {}),

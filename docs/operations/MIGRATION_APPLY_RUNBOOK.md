@@ -2,6 +2,10 @@
 
 `migrate --apply` is manual-only and fail-closed by default. Do not enable it from deployment defaults, scheduled jobs, or unattended scripts.
 
+## Progress Reports
+
+Every `migrate --dry-run`, `migrate --apply` and `verify` command (passed or failed) also publishes its report to the worker's `migration-reports` queue as a `migration.report` job when `REDIS_URL` is set (compose sets it; `MIGRATION_REPORT_QUEUE_ENABLED=false` turns it off). The queued report holds only counts: per-entity planned / blocked / applied / inserted rows, totals and verification check names with pass/fail. Warnings, row data, URLs and identities stay in the `--report-file` output. The worker turns it into `migration_rows` and `migration_report_last_received_timestamp_seconds` (`OBSERVABILITY.md`), which drive the "Göç ve Depolama" dashboard and the `MigrationRunStalled` alert. Publishing is best effort: an unreachable Redis prints a warning and never changes the command result. `run_id` is `MIGRATION_RUN_ID`, or `dry-run-<timestamp>` for a dry-run without one.
+
 ## 1. Backup
 
 1. Confirm the source and target PostgreSQL URLs point to different databases.
