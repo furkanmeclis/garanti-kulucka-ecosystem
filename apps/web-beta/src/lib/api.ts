@@ -51,10 +51,31 @@ export interface OrderListQuery {
   search?: string;
   status?: string;
   cargo_provider?: string;
-  sort_by?: "created_at" | "order_number" | "status" | "total_amount";
+  sort_by?: "created_at" | "updated_at" | "order_number" | "status" | "total_amount";
   sort_direction?: "asc" | "desc";
   limit?: number;
   offset?: number;
+}
+
+/** Order action state (`GET /api/orders/{id}/actions`), the fields the beta panel reads. */
+export interface OrderActionState {
+  public_id: string;
+  order_number: string;
+  status: string;
+  notes: string | null;
+  total_amount: string;
+  currency: string;
+  customer_full_name: string | null;
+  customer_phone: string | null;
+  confirmation_status: string | null;
+  kolaybi: { invoice_id: string | null; e_document_status: string | null };
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OrderDeleteResult {
+  deleted: boolean;
+  e_document_cancel: { public_id: string } | null;
 }
 
 export interface ShipmentListQuery {
@@ -173,6 +194,12 @@ export function createApiClient(options: ApiClientOptions) {
     getCustomer: (publicId: string) => request<CustomerDetail>(`/api/customers/${encodeURIComponent(publicId)}`),
     updateCustomer: (publicId: string, input: UpdateCustomerRequest) =>
       request<CustomerSummary>(`/api/customers/${encodeURIComponent(publicId)}`, { method: "PATCH", body: input }),
+    getOrderActions: (publicId: string) => request<{ order: OrderActionState }>(`/api/orders/${encodeURIComponent(publicId)}/actions`),
+    restoreOrder: (publicId: string) => request<{ order: OrderActionState }>(`/api/orders/${encodeURIComponent(publicId)}/restore`, { method: "POST" }),
+    deleteOrder: (publicId: string, idempotencyKey: string) =>
+      request<OrderDeleteResult>(`/api/orders/${encodeURIComponent(publicId)}`, { method: "DELETE", body: { idempotency_key: idempotencyKey } }),
+    updateOrderNotes: (publicId: string, notes: string | null) =>
+      request<{ order: OrderActionState }>(`/api/orders/${encodeURIComponent(publicId)}/notes`, { method: "PATCH", body: { notes } }),
     saveCustomerNotes: (publicId: string, notes: string | null) =>
       request<CustomerSummary>(`/api/customers/${encodeURIComponent(publicId)}/notes`, { method: "PATCH", body: { notes } }),
   };

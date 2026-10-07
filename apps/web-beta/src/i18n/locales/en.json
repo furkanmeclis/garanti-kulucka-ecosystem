@@ -20,7 +20,9 @@
     "messages": "Messages",
     "customers": "Customers",
     "shipments": "Shipments",
-    "settings": "Settings"
+    "settings": "Settings",
+    "more": "More",
+    "cancellations": "Cancellations"
   },
   "header": {
     "search": "Search",
@@ -227,5 +229,40 @@
     "noConversations": "No conversations with this customer.",
     "unread": "{{count}} unread",
     "openDetail": "Open {{name}} details"
+  },
+  "cancellations": {
+    "title": "Cancellations",
+    "subtitle": "Cancelled and returned orders; restore, permanent delete and notes",
+    "searchPlaceholder": "Customer, order no, phone or tracking no",
+    "filterAll": "All",
+    "filterCancelled": "Cancelled",
+    "filterReturned": "Returned",
+    "order": "Order",
+    "customer": "Customer",
+    "amount": "Amount",
+    "status": "Status",
+    "updated": "Updated",
+    "note": "Note",
+    "notePlaceholder": "Add a note",
+    "saveNote": "Save note",
+    "actions": "Action",
+    "restore": "Restore",
+    "delete": "Delete permanently",
+    "details": "Details",
+    "confirmRestore": "Order \"{{order}}\" will be restored to \"Created\".\n\nContinue?",
+    "confirmDelete": "Order \"{{order}}\" will be deleted permanently!\n\nThis cannot be undone. Continue?",
+    "confirmDeleteInvoiced": "Order \"{{order}}\" will be deleted permanently!\n\nThe KolayBi e-document cancellation will be queued and the order removed from the panel.\n\nThis cannot be undone. Continue?",
+    "restored": "Order restored to 'Created'",
+    "deleted": "Order deleted permanently",
+    "deletedWithInvoice": "Order deleted; KolayBi e-document cancellation queued",
+    "noteSaved": "Note saved",
+    "actionFailed": "Action failed: {{error}}",
+    "phone": "Phone",
+    "confirmation": "Confirmation",
+    "invoice": "KolayBi invoice",
+    "eDocument": "E-document",
+    "created": "Created",
+    "detailTitle": "Order {{order}}",
+    "empty": "No cancelled or returned orders"
   }
 }

@@ -1,12 +1,13 @@
-import { Menu, Search, WifiOff } from "lucide-react";
+import { ChevronDown, LayoutGrid, Menu, Search, WifiOff } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { NavLink, useLocation } from "react-router-dom";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { displayName, initialsOf, useAuth } from "@/app/auth";
-import { bottomBarFor, homePathFor, navigationFor, type NavItem } from "@/app/navigation";
+import { bottomBarFor, homePathFor, mainNavigationFor, moreNavigationFor, type NavItem } from "@/app/navigation";
 import { useOnlineStatus } from "@/app/pwa-hooks";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
@@ -23,7 +24,23 @@ function MobileMenu() {
   const { user } = useAuth();
   const { pathname } = useLocation();
   const [open, setOpen] = useState(false);
-  const items = navigationFor(user?.role);
+  const items = mainNavigationFor(user?.role);
+  const more = moreNavigationFor(user?.role);
+  const link = (item: NavItem) => (
+    <NavLink
+      key={item.key}
+      to={item.path}
+      end={item.path === "/"}
+      onClick={() => setOpen(false)}
+      className={cn(
+        "flex min-h-12 items-center gap-3 rounded-md px-3 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+        isActive(item, pathname) && "bg-accent text-accent-foreground",
+      )}
+    >
+      <item.icon className="size-5" aria-hidden="true" />
+      {t(`nav.${item.key}`)}
+    </NavLink>
+  );
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild>
@@ -44,23 +61,17 @@ function MobileMenu() {
           </SheetTitle>
           <SheetDescription className="sr-only">{t("nav.main")}</SheetDescription>
         </SheetHeader>
-        <nav aria-label={t("nav.main")} className="flex flex-1 flex-col gap-1 overflow-y-auto p-3">
-          {items.map((item) => (
-            <NavLink
-              key={item.key}
-              to={item.path}
-              end={item.path === "/"}
-              onClick={() => setOpen(false)}
-              className={cn(
-                "flex min-h-12 items-center gap-3 rounded-md px-3 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground",
-                isActive(item, pathname) && "bg-accent text-accent-foreground",
-              )}
-            >
-              <item.icon className="size-5" aria-hidden="true" />
-              {t(`nav.${item.key}`)}
-            </NavLink>
-          ))}
-        </nav>
+        <div className="flex flex-1 flex-col overflow-y-auto">
+          <nav aria-label={t("nav.main")} className="flex flex-col gap-1 p-3" data-testid="mobile-menu-main">
+            {items.map(link)}
+          </nav>
+          {more.length > 0 && (
+            <nav aria-label={t("nav.more")} className="flex flex-col gap-1 border-t p-3" data-testid="mobile-menu-more">
+              <p className="px-3 pb-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase">{t("nav.more")}</p>
+              {more.map(link)}
+            </nav>
+          )}
+        </div>
         <Separator />
         <div className="flex items-center justify-between gap-2 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <span className="text-sm text-muted-foreground">
@@ -134,12 +145,47 @@ function BottomNav() {
   );
 }
 
+/** Desktop "More" menu for pages outside the main bar (accounting, cancellations, …). */
+function MoreMenu() {
+  const { t } = useTranslation();
+  const { user } = useAuth();
+  const { pathname } = useLocation();
+  const navigate = useNavigate();
+  const more = moreNavigationFor(user?.role);
+  if (more.length === 0) return null;
+  const active = more.some((item) => isActive(item, pathname));
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          className={cn("min-h-11 gap-2 px-3 text-sm font-medium text-muted-foreground", active && "bg-accent text-accent-foreground")}
+          aria-label={t("nav.more")}
+          data-testid="desktop-more-trigger"
+        >
+          <LayoutGrid className="size-4" aria-hidden="true" />
+          <span className="sr-only xl:not-sr-only">{t("nav.more")}</span>
+          <ChevronDown className="size-3.5" aria-hidden="true" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="min-w-52" data-testid="desktop-more-menu">
+        {more.map((item) => (
+          <DropdownMenuItem key={item.key} onSelect={() => navigate(item.path)} className="min-h-10 gap-3" data-testid={`more-${item.key}`}>
+            <item.icon className="size-4" aria-hidden="true" />
+            {t(`nav.${item.key}`)}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 export function AppShell({ children }: { children: ReactNode }) {
   const { t } = useTranslation();
   const { user } = useAuth();
   const { pathname } = useLocation();
   const online = useOnlineStatus();
-  const items = navigationFor(user?.role);
+  const items = mainNavigationFor(user?.role);
   const hasBottomNav = bottomBarFor(user?.role).length > 0;
 
   return (
@@ -171,6 +217,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <span className="sr-only xl:not-sr-only">{t(`nav.${item.key}`)}</span>
               </NavLink>
             ))}
+            <MoreMenu />
           </nav>
           <div className="ml-auto flex min-w-0 items-center gap-0.5 sm:gap-1" data-testid="header-actions">
             <GlobalSearch className="mr-1 hidden w-64 2xl:block" />

@@ -5,6 +5,7 @@ import { canAccessPath, homePathFor } from "@/app/navigation";
 import { AppShell } from "@/layout/app-shell";
 import { OfflineScreen, SplashScreen } from "@/layout/status-screens";
 import { LoginPage, redirectTarget } from "@/pages/login-page";
+import { CancellationsPage } from "@/pages/cancellations-page";
 import { CustomerDetailPage } from "@/pages/customer-detail-page";
 import { CustomersPage } from "@/pages/customers-page";
 import { DashboardPage } from "@/pages/dashboard-page";
@@ -46,6 +47,7 @@ export function App() {
       <Route path="/musteriler/:id" element={<Protected><CustomerDetailPage /></Protected>} />
       <Route path="/kargolar" element={<Protected><ShipmentsPage /></Protected>} />
       <Route path="/ayarlar" element={<Protected><SettingsPage /></Protected>} />
+      <Route path="/iptaller" element={<Protected><CancellationsPage /></Protected>} />
       <Route path="*" element={<Protected><Navigate to="/" replace /></Protected>} />
     </Routes>
   );

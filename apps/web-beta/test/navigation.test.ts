@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { panelRoleOf } from "@garanti-kulucka/shared";
-import { bottomBarFor, canAccessPath, homePathFor, navigationFor } from "../src/app/navigation";
+import { bottomBarFor, canAccessPath, homePathFor, mainNavigationFor, moreNavigationFor, navigationFor } from "../src/app/navigation";
 
-const keys = (role: string | null) => navigationFor(role).map((item) => item.key);
+const keys = (role: string | null) => mainNavigationFor(role).map((item) => item.key);
+const moreKeys = (role: string | null) => moreNavigationFor(role).map((item) => item.key);
 
 describe("role-based menu", () => {
   it("maps owner and admin to the manager group", () => {
@@ -18,6 +19,15 @@ describe("role-based menu", () => {
     expect(keys("owner")).toEqual(full);
     expect(keys("admin")).toEqual(full);
     expect(keys("calisan")).toEqual(full);
+  });
+
+  it("puts the extra pages in the More menu with their legacy roles", () => {
+    expect(moreKeys("admin")).toEqual(["cancellations"]);
+    expect(moreKeys("calisan")).toEqual(["cancellations"]);
+    expect(moreKeys("kargo_operatoru")).toEqual([]);
+    expect(canAccessPath("calisan", "/iptaller")).toBe(true);
+    expect(canAccessPath("kargo_operatoru", "/iptaller")).toBe(false);
+    expect(navigationFor("admin").map((item) => item.key)).toContain("cancellations");
   });
 
   it("limits cargo operators to orders, messages, shipments and settings", () => {

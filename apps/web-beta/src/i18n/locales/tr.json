@@ -20,7 +20,9 @@
     "messages": "Mesajlar",
     "customers": "Müşteriler",
     "shipments": "Kargolar",
-    "settings": "Ayarlar"
+    "settings": "Ayarlar",
+    "more": "Daha fazla",
+    "cancellations": "İptaller"
   },
   "header": {
     "search": "Ara",
@@ -227,5 +229,40 @@
     "noConversations": "Bu müşteriyle konuşma yok.",
     "unread": "{{count}} okunmamış",
     "openDetail": "{{name}} detayını aç"
+  },
+  "cancellations": {
+    "title": "İptaller",
+    "subtitle": "İptal ve iade edilen siparişler; geri alma, kalıcı silme ve notlar",
+    "searchPlaceholder": "Müşteri, sipariş no, telefon veya takip no",
+    "filterAll": "Tümü",
+    "filterCancelled": "İptal",
+    "filterReturned": "İade",
+    "order": "Sipariş",
+    "customer": "Müşteri",
+    "amount": "Tutar",
+    "status": "Durum",
+    "updated": "Güncelleme",
+    "note": "Not",
+    "notePlaceholder": "Not ekle",
+    "saveNote": "Notu kaydet",
+    "actions": "İşlem",
+    "restore": "Geri al",
+    "delete": "Kalıcı sil",
+    "details": "Detay",
+    "confirmRestore": "\"{{order}}\" siparişi geri alınacak ve \"Oluşturuldu\" durumuna çevrilecek.\n\nDevam etmek istiyor musunuz?",
+    "confirmDelete": "\"{{order}}\" siparişi kalıcı olarak silinecek!\n\nBu işlem geri alınamaz. Devam etmek istiyor musunuz?",
+    "confirmDeleteInvoiced": "\"{{order}}\" siparişi kalıcı olarak silinecek!\n\nKolayBi e-belgesi iptal kuyruğuna alınacak ve sipariş panelden kaldırılacak.\n\nBu işlem geri alınamaz. Devam etmek istiyor musunuz?",
+    "restored": "Sipariş geri alındı ve 'Oluşturuldu' durumuna döndürüldü",
+    "deleted": "Sipariş kalıcı olarak silindi",
+    "deletedWithInvoice": "Sipariş silindi; KolayBi e-belge iptali kuyruğa alındı",
+    "noteSaved": "Not kaydedildi",
+    "actionFailed": "İşlem yapılamadı: {{error}}",
+    "phone": "Telefon",
+    "confirmation": "Teyit",
+    "invoice": "KolayBi fatura",
+    "eDocument": "E-belge",
+    "created": "Oluşturma",
+    "detailTitle": "Sipariş {{order}}",
+    "empty": "İptal veya iade edilen sipariş yok"
   }
 }
