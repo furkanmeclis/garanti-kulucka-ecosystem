@@ -32,7 +32,8 @@ export function MessagesPage() {
     );
   }, [data, list.query]);
   const paged = paginate(filtered, list.page);
-  const [openId, setOpenId] = useState<string | null>(null);
+  // `?konusma=<public_id>` deep link (kargo pipeline, notifications) opens that conversation.
+  const [openId, setOpenId] = useState<string | null>(() => new URLSearchParams(window.location.search).get("konusma"));
   const [overrides, setOverrides] = useState<Record<string, ConversationSummary>>({});
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const opened = openId ? (overrides[openId] ?? (data?.data ?? []).find((row) => row.public_id === openId) ?? null) : null;

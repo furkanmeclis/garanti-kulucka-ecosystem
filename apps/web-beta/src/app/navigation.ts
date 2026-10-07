@@ -1,8 +1,8 @@
 import type { LucideIcon } from "lucide-react";
-import { BarChart3, BookUser, Bot, Contact, FileText, Instagram, LineChart, LayoutDashboard, MessageCircle, MessageSquare, MessageSquareText, Package, PhoneCall, ScrollText, Settings, ShieldX, ShoppingCart, Truck, UserCog, Users, Voicemail, Wallet, XCircle } from "lucide-react";
+import { BarChart3, BookUser, Bot, Contact, FileText, Instagram, LineChart, LayoutDashboard, MessageCircle, MessageSquare, MessageSquareText, Package, PhoneCall, ScrollText, Settings, ShieldX, ShoppingCart, Truck, UserCog, Users, Voicemail, Wallet, XCircle, Zap } from "lucide-react";
 import { panelRoleOf, type PanelRole } from "@garanti-kulucka/shared";
 
-export type NavKey = "dashboard" | "orders" | "messages" | "customers" | "shipments" | "settings" | "cancellations" | "invoices" | "accounts" | "inventory" | "balances" | "comments" | "sms" | "reports" | "instagramAnalytics" | "instagramPublish" | "calls" | "voiceMessages" | "phonebook" | "vapi" | "users" | "activityLogs" | "dataDeletionRequests";
+export type NavKey = "dashboard" | "orders" | "messages" | "customers" | "shipments" | "settings" | "cancellations" | "invoices" | "accounts" | "inventory" | "balances" | "comments" | "sms" | "reports" | "instagramAnalytics" | "instagramPublish" | "calls" | "voiceMessages" | "phonebook" | "vapi" | "users" | "activityLogs" | "dataDeletionRequests" | "cargoPipeline";
 
 export interface NavItem {
   key: NavKey;
@@ -26,6 +26,7 @@ export const navItems: readonly NavItem[] = [
   { key: "customers", path: "/musteriler", icon: Users, roles: office, bottomBar: false },
   { key: "shipments", path: "/kargolar", icon: Truck, roles: everyone, bottomBar: true },
   { key: "settings", path: "/ayarlar", icon: Settings, roles: everyone, bottomBar: false },
+  { key: "cargoPipeline", path: "/kargolar/pipeline", icon: Zap, roles: everyone, bottomBar: false, section: "more" },
   { key: "cancellations", path: "/iptaller", icon: XCircle, roles: office, bottomBar: false, section: "more" },
   { key: "inventory", path: "/stok", icon: Package, roles: office, bottomBar: false, section: "more" },
   { key: "balances", path: "/bakiye", icon: Wallet, roles: office, bottomBar: false, section: "more" },

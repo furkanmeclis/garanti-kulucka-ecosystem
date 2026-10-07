@@ -27,10 +27,10 @@ import {
   InstagramAnalitikPage,
   InstagramYayinlaPage,
   IntegrationsFlow,
+  KargoPipelinePage,
   KargoPrintView,
   OrdersFlow,
   RaporlarPage,
-  ShipmentPipelineFlow,
   ShipmentsFlow,
   SmsPage,
   StokPage,
@@ -191,7 +191,16 @@ export function App() {
             <KargoPrintView http={http} shipmentPublicIds={printShipmentId.split(",")} onClose={() => setPrintShipmentId(null)} />
           </Suspense>
         )}
-        {activeFlow === "shipmentPipeline" && <ShipmentPipelineFlow ctx={ctx} />}
+        {activeFlow === "shipmentPipeline" && (
+          <KargoPipelinePage
+            http={http}
+            role={user?.role}
+            onOpenConversation={(conversationPublicId) => {
+              navigate("/mesajlar");
+              void handleSelectConversation(conversationPublicId);
+            }}
+          />
+        )}
         {activeFlow === "suratDebug" && <SuratDebugPage http={http} />}
         {activeFlow === "cronDebug" && <CronDebugPage http={http} />}
         {activeFlow === "admin" && user && (

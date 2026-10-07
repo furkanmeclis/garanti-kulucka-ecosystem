@@ -622,8 +622,8 @@ test("TR/EN language switch translates page content and the status row, persiste
     expect(await page.evaluate(() => window.localStorage.getItem("garanti-lang"))).toBe("en");
     await expectHeadings("en");
     await page.goto(`${app.url}/kargo/pipeline`);
-    await expect(page.getByTestId("shipment-pipeline-filter-all")).toContainText("All");
-    await expect(page.getByTestId("shipment-pipeline-filter-teslim")).toContainText("Delivered");
+    await expect(page.getByTestId("cargo-pipeline-filter-tumu")).toContainText("All");
+    await expect(page.getByTestId("cargo-pipeline-filter-teslim")).toContainText("Delivered");
 
     // The choice survives a reload and also applies to the login screen.
     await page.reload();

@@ -833,6 +833,48 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
       return;
     }
 
+    if (url.pathname === "/api/cargo-pipeline") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          data: [
+            {
+              public_id: "cpl_playwright",
+              shipment_public_id: "shp_playwright",
+              order_public_id: null,
+              conversation_public_id: null,
+              vapi_call_public_id: null,
+              channel: "whatsapp",
+              phone: "05550000000",
+              customer_name: "Playwright Customer",
+              tracking_number: "TRK-PLAYWRIGHT",
+              cargo_provider: "ptt",
+              last_event_text: "Şubede bekliyor",
+              step: "vapi",
+              status: "isleniyor",
+              next_run_at: "2026-01-01T00:05:00.000Z",
+              force_run: false,
+              attempt_count: 0,
+              max_attempts: 3,
+              error_message: null,
+              created_at: "2026-01-01T00:00:00.000Z",
+              updated_at: "2026-01-01T00:00:00.000Z",
+            },
+          ],
+          total: 1,
+          page: 1,
+          page_size: 50,
+        }),
+      });
+      return;
+    }
+
+    if (url.pathname === "/api/cargo-pipeline/config") {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ config: { aktif: false, baslangic_saati: "09:00", bitis_saati: "20:00", mesaj_gecikme_dk: 0, sms_gecikme_dk: 30, vapi_gecikme_dk: 60, max_deneme: 3, mesaj_sablonu: "Sayın {musteri_adi}" } }) });
+      return;
+    }
+
     if (url.pathname === "/api/shipments/pipeline-summary") {
       const rows = [
         {
@@ -2509,40 +2551,10 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     );
     await page.getByRole("button", { name: /trk-surat-playwright detay/i }).click();
     await page.getByRole("link", { name: /pipeline/i }).click();
+    // Legacy KargoPipelinePage: real pipeline queue from /api/cargo-pipeline (detailed in cargo-pipeline-parity.spec.ts).
     await expect(page.getByTestId("shipment-pipeline-flow")).toContainText("Teslim Alınmayan Kargo Pipeline");
-    await expect(page.getByTestId("shipment-pipeline-tabs")).toContainText("Tümü 4");
-    await expect(page.getByTestId("shipment-pipeline-tabs")).toContainText("Mesaj 1");
-    await expect(page.getByTestId("shipment-pipeline-tabs")).toContainText("SMS 1");
-    await expect(page.getByTestId("shipment-pipeline-tabs")).toContainText("VAPI 1");
-    await expect(page.getByTestId("shipment-pipeline-tabs")).toContainText("Teslim 1");
-    await expect(page.getByTestId("shipment-pipeline-detail")).toContainText("Mesaj SMS VAPI Akışı");
-    await expect(page.getByTestId("shipment-pipeline-detail")).toContainText("legacy /kargo/pipeline");
-    await expect(page.getByTestId("shipment-pipeline-detail")).toContainText("Supabase channel yok");
-    await expect(page.getByTestId("shipment-pipeline-flow")).toContainText("Playwright Customer");
-    await expect(page.getByTestId("shipment-pipeline-flow")).toContainText("vapi / isleniyor");
-    await expect(page.getByTestId("shipment-pipeline-flow")).toContainText("teslim / teslim");
-    await page.getByTestId("shipment-pipeline-filter-mesaj").click();
-    await expect(page.getByTestId("shipment-pipeline-filter-mesaj")).toHaveAttribute("aria-pressed", "true");
-    await expect(page.getByTestId("shipment-pipeline-detail")).toContainText("mesaj");
-    await expect(page.getByTestId("shipment-pipeline-detail")).toContainText("1 kargo");
-    await expect(page.getByTestId("shipment-pipeline-flow")).toContainText("Message Step Customer");
-    await expect(page.getByTestId("shipment-pipeline-flow")).not.toContainText("Playwright Customer");
-    await page.getByTestId("shipment-pipeline-filter-sms").click();
-    await expect(page.getByTestId("shipment-pipeline-filter-sms")).toHaveAttribute("aria-pressed", "true");
-    await expect(page.getByTestId("shipment-pipeline-flow")).toContainText("SMS Step Customer");
-    await expect(page.getByTestId("shipment-pipeline-flow")).toContainText("sms / isleniyor");
-    await expect(page.getByTestId("shipment-pipeline-flow")).not.toContainText("Message Step Customer");
-    await page.getByTestId("shipment-pipeline-filter-vapi").click();
-    await expect(page.getByTestId("shipment-pipeline-flow")).toContainText("Playwright Customer");
-    await expect(page.getByTestId("shipment-pipeline-flow")).not.toContainText("SMS Step Customer");
-    await page.getByTestId("shipment-pipeline-filter-teslim").click();
-    await expect(page.getByTestId("shipment-pipeline-flow")).toContainText("Surat Playwright Customer");
-    await expect(page.getByTestId("shipment-pipeline-flow")).toContainText("teslim / teslim");
-    await expect(page.getByTestId("shipment-pipeline-flow")).not.toContainText("TRK-PLAYWRIGHT");
-    await page.getByTestId("shipment-pipeline-filter-all").click();
-    await expect(page.getByTestId("shipment-pipeline-filter-all")).toHaveAttribute("aria-pressed", "true");
-    await expect(page.getByTestId("shipment-pipeline-flow")).toContainText("Message Step Customer");
-    await expect(page.getByTestId("shipment-pipeline-flow")).toContainText("SMS Step Customer");
+    await expect(page.getByTestId("cargo-pipeline-table")).toContainText("Playwright Customer");
+    await expect(page.getByTestId("cargo-pipeline-total")).toContainText("1");
     await page.getByRole("link", { name: /sürat debug/i }).click();
     // Legacy SuratKargoDebugPage parity (P5 slice 12): stats, filters and expandable redacted log rows.
     await expect(page.getByTestId("surat-debug-flow")).toContainText("Sürat Kargo Debug");

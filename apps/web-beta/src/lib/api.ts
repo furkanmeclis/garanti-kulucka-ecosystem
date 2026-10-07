@@ -29,6 +29,7 @@ import type {
   ListMeta,
   SyncStatus,
 } from "./accounting";
+import type { CargoPipelineAction, CargoPipelineConfig, CargoPipelineItem, CargoPipelineStatus, CargoPipelineTestInput, CargoPipelineTestResult } from "./cargo-pipeline";
 import type {
   BalanceListQuery,
   BalanceMovement,
@@ -478,6 +479,14 @@ export function createApiClient(options: ApiClientOptions) {
       request<{ data: DataDeletionRequest[]; total_count: number; limit: number; offset: number }>("/admin/data-deletion-requests", { query: { ...query } }),
     updateDataDeletionRequest: (publicId: string, input: { status: DataDeletionStatus; note: string | null }) =>
       request<{ request: DataDeletionRequest }>(`/admin/data-deletion-requests/${encodeURIComponent(publicId)}`, { method: "PATCH", body: input }),
+    listCargoPipeline: (query: { status?: CargoPipelineStatus; page: number; page_size: number }) =>
+      request<{ data: CargoPipelineItem[]; total: number; page: number; page_size: number }>("/api/cargo-pipeline", { query: { ...query } }),
+    cargoPipelineConfig: () => request<{ config: CargoPipelineConfig }>("/api/cargo-pipeline/config"),
+    saveCargoPipelineConfig: (config: CargoPipelineConfig) => request<{ config: CargoPipelineConfig }>("/api/cargo-pipeline/config", { method: "PUT", body: config }),
+    cargoPipelineAction: (publicId: string, action: CargoPipelineAction) =>
+      request<{ item: CargoPipelineItem }>(`/api/cargo-pipeline/${encodeURIComponent(publicId)}/actions`, { method: "POST", body: { action } }),
+    deleteCargoPipelineItem: (publicId: string) => request<{ deleted: boolean }>(`/api/cargo-pipeline/${encodeURIComponent(publicId)}`, { method: "DELETE" }),
+    testCargoPipeline: (input: CargoPipelineTestInput) => request<CargoPipelineTestResult>("/api/cargo-pipeline/test", { method: "POST", body: input }),
     listUsers: () => request<{ data: ManagedUser[]; roles: ManagedRole[] }>("/admin/users"),
     createUser: (input: CreateManagedUserInput) => request<{ user: ManagedUser }>("/admin/users", { method: "POST", body: input }),
     updateUser: (publicId: string, input: UpdateManagedUserInput) => request<{ user: ManagedUser }>(`/admin/users/${encodeURIComponent(publicId)}`, { method: "PATCH", body: input }),

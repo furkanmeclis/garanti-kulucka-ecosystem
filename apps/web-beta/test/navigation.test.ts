@@ -22,11 +22,11 @@ describe("role-based menu", () => {
   });
 
   it("puts the extra pages in the More menu with their legacy roles", () => {
-    const managerMore = ["cancellations", "inventory", "balances", "comments", "sms", "instagramAnalytics", "instagramPublish", "reports", "invoices", "accounts", "calls", "voiceMessages", "vapi", "phonebook", "users", "activityLogs", "dataDeletionRequests"];
+    const managerMore = ["cargoPipeline", "cancellations", "inventory", "balances", "comments", "sms", "instagramAnalytics", "instagramPublish", "reports", "invoices", "accounts", "calls", "voiceMessages", "vapi", "phonebook", "users", "activityLogs", "dataDeletionRequests"];
     expect(moreKeys("admin")).toEqual(managerMore);
     expect(moreKeys("owner")).toEqual(managerMore);
-    expect(moreKeys("calisan")).toEqual(["cancellations", "inventory", "balances", "comments", "sms", "instagramAnalytics", "instagramPublish"]);
-    expect(moreKeys("kargo_operatoru")).toEqual(["sms"]);
+    expect(moreKeys("calisan")).toEqual(["cargoPipeline", "cancellations", "inventory", "balances", "comments", "sms", "instagramAnalytics", "instagramPublish"]);
+    expect(moreKeys("kargo_operatoru")).toEqual(["cargoPipeline", "sms"]);
     expect(canAccessPath("calisan", "/iptaller")).toBe(true);
     expect(canAccessPath("kargo_operatoru", "/iptaller")).toBe(false);
     expect(canAccessPath("calisan", "/faturalar")).toBe(false);

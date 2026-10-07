@@ -35,9 +35,7 @@ function lazyPage<T extends ComponentType<any>>(load: () => Promise<T>) {
 export const InboxFlow = lazyPage(() => import("./pages/flows/InboxFlow.js").then((m) => m.InboxFlow));
 export const OrdersFlow = lazyPage(() => import("./pages/flows/OrdersFlow.js").then((m) => m.OrdersFlow));
 export const ShipmentsFlow = lazyPage(() => import("./pages/flows/ShipmentsFlow.js").then((m) => m.ShipmentsFlow));
-export const ShipmentPipelineFlow = lazyPage(() =>
-  import("./pages/flows/ShipmentPipelineFlow.js").then((m) => m.ShipmentPipelineFlow),
-);
+export const KargoPipelinePage = lazyPage(() => import("./pages/KargoPipelinePage.js").then((m) => m.KargoPipelinePage));
 export const IntegrationsFlow = lazyPage(() => import("./pages/flows/IntegrationsFlow.js").then((m) => m.IntegrationsFlow));
 export const CustomersFlow = lazyPage(() => import("./pages/flows/CustomersFlow.js").then((m) => m.CustomersFlow));
 export const CancellationsFlow = lazyPage(() => import("./pages/flows/CancellationsFlow.js").then((m) => m.CancellationsFlow));

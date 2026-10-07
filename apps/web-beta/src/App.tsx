@@ -7,6 +7,7 @@ import { OfflineScreen, SplashScreen } from "@/layout/status-screens";
 import { LoginPage, redirectTarget } from "@/pages/login-page";
 import { AccountsPage } from "@/pages/accounts-page";
 import { CancellationsPage } from "@/pages/cancellations-page";
+import { CargoPipelinePage } from "@/pages/cargo-pipeline-page";
 import { CommentsPage } from "@/pages/comments-page";
 import { CustomerDetailPage } from "@/pages/customer-detail-page";
 import { CustomersPage } from "@/pages/customers-page";
@@ -62,6 +63,8 @@ export function App() {
       <Route path="/musteriler" element={<Protected><CustomersPage /></Protected>} />
       <Route path="/musteriler/:id" element={<Protected><CustomerDetailPage /></Protected>} />
       <Route path="/kargolar" element={<Protected><ShipmentsPage /></Protected>} />
+      <Route path="/kargolar/pipeline" element={<Protected><CargoPipelinePage /></Protected>} />
+      <Route path="/kargo/pipeline" element={<Navigate to="/kargolar/pipeline" replace />} />
       <Route path="/ayarlar" element={<Protected><SettingsPage /></Protected>} />
       <Route path="/iptaller" element={<Protected><CancellationsPage /></Protected>} />
       <Route path="/stok" element={<Protected><InventoryPage /></Protected>} />
