@@ -91,7 +91,7 @@ export interface InstagramAnalyticsSummary {
 
 export type ShipmentPipelineFilter = "all" | ShipmentPipelineStep;
 
-export type ShipmentFilter = "all" | "ptt" | "surat" | "other" | "in_transit" | "delivered" | "tracking_missing";
+export type ShipmentFilter = "all" | "ptt" | "surat" | "other" | "in_transit" | "delivered" | "tracking_missing" | "ptt_not_received" | "surat_not_received" | "new" | "shipped";
 
 export type OrderSortBy = "created_at" | "order_number" | "status" | "total_amount";
 
@@ -206,8 +206,13 @@ export function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
 
-export function shipmentFilterParams(filter: string): { provider?: string; status?: string; tracking_missing?: boolean } {
-  const params: { provider?: string; status?: string; tracking_missing?: boolean } = {};
+export function shipmentFilterParams(filter: string): { provider?: string; status?: string; tracking_missing?: boolean; not_received?: "ptt" | "surat"; stage?: "new" | "shipped" } {
+  const params: { provider?: string; status?: string; tracking_missing?: boolean; not_received?: "ptt" | "surat"; stage?: "new" | "shipped" } = {};
+  // Legacy KargolarPage ptt_almayan / surat_almayan / yeni / sevk_edildi.
+  if (filter === "ptt_not_received") params.not_received = "ptt";
+  if (filter === "surat_not_received") params.not_received = "surat";
+  if (filter === "new") params.stage = "new";
+  if (filter === "shipped") params.stage = "shipped";
   if (filter === "ptt") {
     params.provider = "ptt";
   }
@@ -258,6 +263,12 @@ export function shipmentMatchesFilter(shipment: ShipmentSummary, filter: Shipmen
   if (filter === "surat") return provider.includes("sürat") || provider.includes("surat");
   if (filter === "other") return !provider.includes("ptt") && !provider.includes("sürat") && !provider.includes("surat");
   if (filter === "tracking_missing") return !shipment.tracking_number && !shipment.barcode_number;
+  const closed = ["delivered", "teslim_edildi", "cancelled", "iptal", "returned", "iade"].includes(shipment.status);
+  const dispatched = ["in_transit", "shipped", "dispatched", "sevk_edildi"].includes(shipment.status);
+  if (filter === "ptt_not_received") return provider.includes("ptt") && !closed;
+  if (filter === "surat_not_received") return (provider.includes("sürat") || provider.includes("surat")) && !closed;
+  if (filter === "new") return !closed && !dispatched;
+  if (filter === "shipped") return dispatched;
   return shipment.status === filter;
 }
 

@@ -153,6 +153,24 @@ describe("shipments slice 6 routes", () => {
     vi.clearAllMocks();
   });
 
+  it("passes the legacy KargolarPage filters (almayan, yeni/sevk, personel, tarih) and rejects bad values", async () => {
+    const headers = { authorization: `Bearer ${await accessToken("calisan")}` };
+    const response = await app().request("/api/shipments?not_received=surat&stage=new&created_by_user_public_id=usr_7&created_from=2026-10-01&created_to=2026-10-07&limit=20", { headers });
+    expect(response.status).toBe(200);
+    expect(routeMocks.domainRepository.listShipmentsPage).toHaveBeenCalledWith({
+      notReceived: "surat",
+      stage: "new",
+      createdByUserPublicId: "usr_7",
+      createdFrom: "2026-10-01",
+      createdTo: "2026-10-07",
+      limit: 20,
+      offset: 0,
+    });
+    for (const query of ["not_received=yurtici", "stage=lost", "created_from=07.10.2026"]) {
+      expect((await app().request(`/api/shipments?${query}`, { headers })).status).toBe(400);
+    }
+  });
+
   it("applies server-side shipment filters, search, and pagination for calisan", async () => {
     const response = await app().request("/api/shipments?provider=ptt&status=in_transit&search=TRK&limit=20&offset=20", {
       headers: { authorization: `Bearer ${await accessToken("calisan")}` },

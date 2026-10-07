@@ -163,6 +163,7 @@ export interface ShipmentSummary {
   last_event_text?: string | null;
   order_number?: string | null;
   customer_full_name?: string | null;
+  tracking_events?: Array<{ public_id: string; status: string; description: string | null; location: string | null; occurred_at: string }>;
   updated_at?: string;
 }
 

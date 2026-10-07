@@ -1363,6 +1363,20 @@ export function createDomainRoutes() {
     if (search) {
       shipmentFilter.search = search;
     }
+    const notReceived = context.req.query("not_received");
+    const stage = context.req.query("stage");
+    const createdFrom = context.req.query("created_from");
+    const createdTo = context.req.query("created_to");
+    const isDate = (value: string | undefined) => value === undefined || /^\d{4}-\d{2}-\d{2}$/.test(value);
+    if ((notReceived !== undefined && notReceived !== "ptt" && notReceived !== "surat") || (stage !== undefined && stage !== "new" && stage !== "shipped") || !isDate(createdFrom) || !isDate(createdTo)) {
+      return context.json({ error: { code: "invalid_request", message: "Invalid shipment filter" } }, 400);
+    }
+    if (notReceived) shipmentFilter.notReceived = notReceived;
+    if (stage) shipmentFilter.stage = stage;
+    const createdBy = context.req.query("created_by_user_public_id");
+    if (createdBy) shipmentFilter.createdByUserPublicId = createdBy;
+    if (createdFrom) shipmentFilter.createdFrom = createdFrom;
+    if (createdTo) shipmentFilter.createdTo = createdTo;
     const shipments = await new DomainRepository(db).listShipmentsPage(shipmentFilter);
     return context.json({
       data: shipments.rows.map(serializeShipment),

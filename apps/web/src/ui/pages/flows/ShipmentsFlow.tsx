@@ -1,4 +1,5 @@
-import { CheckCircle, Eye, Printer, RefreshCw, Search, Truck } from "lucide-react";
+import { CheckCircle, Download, Eye, Printer, RefreshCw, Search, Truck } from "lucide-react";
+import type { ShipmentFilter } from "../../app/shared.js";
 import { cx, shipmentStatusLabel, cargoProviderLabel, FlowPanel, DetailPanel, Metric, DataRows } from "../../app/shared.js";
 import type { DashboardController } from "../../app/useDashboardController.js";
 import { localeFor, useLanguage, useT } from "../../i18n/index.js";
@@ -33,6 +34,19 @@ export function ShipmentsFlow({ ctx }: { ctx: DashboardController }) {
     suratShipmentCount,
     trackingMissingCount,
     trackingShipmentId,
+    shipmentCreatedFrom,
+    shipmentCreatedTo,
+    shipmentPersonnel,
+    selectedShipmentIds,
+    trackingRefreshing,
+    shipmentNotice,
+    canRefreshAllTracking,
+    handleShipmentContextFilter,
+    toggleShipmentSelection,
+    toggleAllVisibleShipments,
+    handleExportShipments,
+    handleRefreshAllTracking,
+    orderPersonnel,
   } = ctx;
   const t = useT(shipmentsMessages);
   const { language } = useLanguage();
@@ -121,7 +135,69 @@ export function ShipmentsFlow({ ctx }: { ctx: DashboardController }) {
               >
                 {t("filterTrackingMissing")} {shipmentFilter === "all" || shipmentFilter === "tracking_missing" ? trackingMissingCount : t("resultsWord")}
               </button>
+              {(
+                [
+                  ["ptt_not_received", "filterPttNotReceived", "shipment-filter-ptt-not-received"],
+                  ["surat_not_received", "filterSuratNotReceived", "shipment-filter-surat-not-received"],
+                  ["new", "filterNew", "shipment-filter-new"],
+                  ["shipped", "filterShipped", "shipment-filter-shipped"],
+                ] as Array<[ShipmentFilter, "filterPttNotReceived" | "filterSuratNotReceived" | "filterNew" | "filterShipped", string]>
+              ).map(([value, label, testId]) => (
+                <button key={value} className={cx("secondary-action", shipmentFilter === value && "selected")} data-testid={testId} type="button" onClick={() => void handleApplyShipmentFilter(value)}>
+                  {t(label)}
+                </button>
+              ))}
             </div>
+            <div className="detail-actions" data-testid="shipment-context-filters">
+              <label className="field-label">
+                {t("dateFrom")}
+                <input className="inline-input" data-testid="shipment-date-from" type="date" value={shipmentCreatedFrom} onChange={(event) => void handleShipmentContextFilter({ createdFrom: event.target.value })} />
+              </label>
+              <label className="field-label">
+                {t("dateTo")}
+                <input className="inline-input" data-testid="shipment-date-to" type="date" value={shipmentCreatedTo} onChange={(event) => void handleShipmentContextFilter({ createdTo: event.target.value })} />
+              </label>
+              <label className="field-label">
+                {t("personnel")}
+                <select className="inline-input" data-testid="shipment-personnel" value={shipmentPersonnel} onChange={(event) => void handleShipmentContextFilter({ personnel: event.target.value })}>
+                  <option value="">{t("personnelAll")}</option>
+                  {orderPersonnel.map(([publicId, email]) => (
+                    <option key={publicId} value={publicId}>
+                      {email}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <div className="detail-actions" data-testid="shipment-bulk-actions">
+              <button className="secondary-action" data-testid="shipment-select-all" type="button" onClick={toggleAllVisibleShipments}>
+                {t("selectAllVisible")}
+              </button>
+              {selectedShipmentIds.size > 0 && <span data-testid="shipment-selected-count">{t("selectedCount", { count: selectedShipmentIds.size })}</span>}
+              <button className="secondary-action" data-testid="shipment-export-list" type="button" onClick={() => void handleExportShipments("liste", selectedShipmentIds.size > 0 ? "selected" : "filtered")}>
+                <Download size={14} aria-hidden="true" /> {t("exportList")}
+              </button>
+              <button className="secondary-action" data-testid="shipment-export-phone" type="button" onClick={() => void handleExportShipments("telefon", selectedShipmentIds.size > 0 ? "selected" : "filtered")}>
+                <Download size={14} aria-hidden="true" /> {t("exportPhone")}
+              </button>
+              <button className="secondary-action" data-testid="shipment-bulk-print" disabled={selectedShipmentIds.size === 0} type="button" onClick={() => setPrintShipmentId([...selectedShipmentIds].join(","))}>
+                <Printer size={14} aria-hidden="true" /> {t("bulkPrint")}
+              </button>
+              {canRefreshAllTracking && (
+                <button className="secondary-action" data-testid="shipment-refresh-all-tracking" disabled={trackingRefreshing} type="button" onClick={() => void handleRefreshAllTracking()}>
+                  <RefreshCw className={trackingRefreshing ? "spin" : undefined} size={14} aria-hidden="true" /> {t("refreshAllTracking")}
+                </button>
+              )}
+            </div>
+            {shipmentNotice && (
+              <p className="status-copy" role="status" data-testid="shipment-notice">
+                {shipmentNotice.kind === "exported"
+                  ? t("noticeExported", { count: shipmentNotice.count })
+                  : shipmentNotice.kind === "trackingQueued"
+                    ? t("noticeTrackingQueued")
+                    : t("noticeTrackingFailed", { message: shipmentNotice.message })}
+              </p>
+            )}
             <DetailPanel title={t("filterSummaryTitle")} testId="shipment-filter-summary">
               <DataRows
                 rows={[
@@ -136,6 +212,7 @@ export function ShipmentsFlow({ ctx }: { ctx: DashboardController }) {
               <table className="data-table" data-testid="shipment-table">
                 <thead>
                   <tr>
+                    <th aria-label={t("selectAllVisible")} />
                     <th>{t("colProvider")}</th>
                     <th>{t("colTracking")}</th>
                     <th>{t("colCustomer")}</th>
@@ -148,10 +225,19 @@ export function ShipmentsFlow({ ctx }: { ctx: DashboardController }) {
                 <tbody>
                   {data.shipments.length === 0 ? (
                     <tr>
-                      <td colSpan={7}>{t("emptyTable")}</td>
+                      <td colSpan={8}>{t("emptyTable")}</td>
                     </tr>
                   ) : data.shipments.map((shipment) => (
                     <tr data-testid="shipment-row" key={shipment.public_id}>
+                      <td>
+                        <input
+                          aria-label={t("selectRow", { tracking: shipment.tracking_number ?? shipment.barcode_number ?? shipment.recipient_name })}
+                          checked={selectedShipmentIds.has(shipment.public_id)}
+                          data-testid="shipment-select"
+                          type="checkbox"
+                          onChange={() => toggleShipmentSelection(shipment.public_id)}
+                        />
+                      </td>
                       <td>
                         <span className="status-pill">{cargoProviderLabel(shipment.provider)} Kargo</span>
                       </td>

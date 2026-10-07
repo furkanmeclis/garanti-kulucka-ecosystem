@@ -4532,3 +4532,10 @@ nav {
   width: 18px;
   height: 18px;
 }
+
+/* Bulk barcoded invoice print: one A4 page per shipment. */
+.kargo-print-page + .kargo-print-page {
+  margin-top: 12px;
+  break-before: page;
+  page-break-before: always;
+}

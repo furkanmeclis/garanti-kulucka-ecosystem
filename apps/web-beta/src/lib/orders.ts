@@ -129,3 +129,17 @@ export function parseMoney(value: string) {
   const parsed = Number.parseFloat(decimal);
   return Number.isFinite(parsed) ? parsed : 0;
 }
+
+export interface ShipmentPrintData {
+  shipment_public_id: string;
+  provider: string;
+  provider_label: string;
+  status: string;
+  tracking_number: string | null;
+  barcode_number: string | null;
+  barcode_value: string | null;
+  label_printed_at: string | null;
+  invoice_title: string;
+  recipient: { name: string | null; phone: string | null; address: string | null; city: string | null; district: string | null };
+  items: Array<{ name: string; quantity: number; unit_price: string; total_amount: string }>;
+}

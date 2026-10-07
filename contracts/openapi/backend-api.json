@@ -1133,6 +1133,59 @@
             }
           },
           {
+            "name": "not_received",
+            "in": "query",
+            "required": false,
+            "description": "Legacy ptt_almayan / surat_almayan: open shipments whose last event is a branch/not-at-address event",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "ptt",
+                "surat"
+              ]
+            }
+          },
+          {
+            "name": "stage",
+            "in": "query",
+            "required": false,
+            "description": "Legacy yeni (not dispatched) or sevk_edildi",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "new",
+                "shipped"
+              ]
+            }
+          },
+          {
+            "name": "created_by_user_public_id",
+            "in": "query",
+            "required": false,
+            "description": "Order creator (personel filter)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "created_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "created_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
             "name": "offset",
             "in": "query",
             "schema": {
@@ -1155,6 +1208,9 @@
                 }
               }
             }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
           }
         }
       }

@@ -94,6 +94,7 @@ import type {
   ProductOption,
   ShipmentDraft,
   ShipmentPaymentStatus,
+  ShipmentPrintData,
 } from "./orders";
 import type { DataDeletionInput, DataDeletionRequest, DataDeletionStatus, DataDeletionStatusLookup } from "./privacy";
 import type { StoredTokens } from "./session-storage";
@@ -169,6 +170,11 @@ export interface ShipmentListQuery {
   search?: string;
   provider?: string;
   status?: string;
+  tracking_missing?: boolean;
+  not_received?: "ptt" | "surat";
+  stage?: "new" | "shipped";
+  created_from?: string;
+  created_to?: string;
   limit?: number;
   offset?: number;
 }
@@ -417,6 +423,16 @@ export function createApiClient(options: ApiClientOptions) {
     ) => request<CreateShipmentResponse>(`/api/orders/${encodeURIComponent(orderPublicId)}/shipments`, { method: "POST", body: input }),
     bulkCreateShipments: (input: { provider: CargoProviderKey; order_public_ids: string[]; idempotency_key: string }) =>
       request<BulkCreateShipmentsResponse>("/api/shipments/bulk-create", { method: "POST", body: input }),
+    getShipment: (publicId: string) => request<ShipmentSummary>(`/api/shipments/${encodeURIComponent(publicId)}`),
+    trackShipment: (publicId: string, idempotencyKey: string) =>
+      request<{ provider: string; operation: string; request_id: string; queued: boolean; live_gate: string }>(`/api/shipments/${encodeURIComponent(publicId)}/track`, { method: "POST", body: { idempotency_key: idempotencyKey } }),
+    updateShipmentStatus: (publicId: string, input: { status: string; last_event_text: string | null }) =>
+      request<ShipmentSummary>(`/api/shipments/${encodeURIComponent(publicId)}/status`, { method: "PATCH", body: { ...input, raw_payload: null } }),
+    getShipmentPrint: (publicId: string) => request<ShipmentPrintData>(`/api/shipments/${encodeURIComponent(publicId)}/print`),
+    markShipmentPrinted: (publicId: string, idempotencyKey: string) =>
+      request<{ shipment_public_id: string; label_printed_at: string }>(`/api/shipments/${encodeURIComponent(publicId)}/printed`, { method: "POST", body: { idempotency_key: idempotencyKey } }),
+    triggerTrackingCron: (provider: "ptt" | "surat", idempotencyKey: string) =>
+      request<unknown>(`/admin/integrations/provider-cron-triggers/${provider}`, { method: "POST", body: { idempotency_key: idempotencyKey } }),
     submitDataDeletion: (input: DataDeletionInput) =>
       request<{ success: boolean; message: string; reference: string }>("/api/veri-silme-talebi", { method: "POST", body: input, auth: false }),
     dataDeletionStatus: (reference: string) => request<DataDeletionStatusLookup>(`/api/veri-silme-talebi/${encodeURIComponent(reference)}`, { auth: false }),

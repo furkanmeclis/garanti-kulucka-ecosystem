@@ -97,3 +97,10 @@
     min-height: 100dvh;
   }
 }
+
+/* Barcoded invoice print overlay: only the overlay is printed. */
+@media print {
+  body.print-overlay-open > *:not([data-testid="print-overlay"]) {
+    display: none !important;
+  }
+}

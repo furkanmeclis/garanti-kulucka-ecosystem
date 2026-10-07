@@ -643,10 +643,31 @@ export function createDomainClient(http: BackendHttpClient) {
           body: input,
         },
       ),
-    listShipments: (params: { provider?: string; status?: string; tracking_missing?: boolean; search?: string; offset?: number; limit?: number } | number = {}) => {
+    listShipments: (
+      params:
+        | {
+            provider?: string;
+            status?: string;
+            tracking_missing?: boolean;
+            not_received?: "ptt" | "surat";
+            stage?: "new" | "shipped";
+            created_by_user_public_id?: string;
+            created_from?: string;
+            created_to?: string;
+            search?: string;
+            offset?: number;
+            limit?: number;
+          }
+        | number = {},
+    ) => {
       const normalized = typeof params === "number" ? { limit: params } : params;
       const search = new URLSearchParams();
       if (normalized.provider) search.set("provider", normalized.provider);
+      if (normalized.not_received) search.set("not_received", normalized.not_received);
+      if (normalized.stage) search.set("stage", normalized.stage);
+      if (normalized.created_by_user_public_id) search.set("created_by_user_public_id", normalized.created_by_user_public_id);
+      if (normalized.created_from) search.set("created_from", normalized.created_from);
+      if (normalized.created_to) search.set("created_to", normalized.created_to);
       if (normalized.status) search.set("status", normalized.status);
       if (normalized.tracking_missing !== undefined) search.set("tracking_missing", String(normalized.tracking_missing));
       if (normalized.search) search.set("search", normalized.search);

@@ -34,59 +34,26 @@ function errorMessage(error: unknown, language: UiLanguage) {
   return error instanceof Error ? error.message : translate(cargoPrintMessages, language, "unknownError");
 }
 
-export function KargoPrintView(props: {
-  http: BackendHttpClient;
-  shipmentPublicId: string;
-  onClose: () => void;
-  onPrinted?: (labelPrintedAt: string) => void;
-}) {
+/** One A4 page: fatura block + "{firma} - Kargo Takip" CODE128 barkod (JsBarcode, legacy options). */
+function KargoPrintPage({ data }: { data: ShipmentPrintData }) {
   const t = useT(cargoPrintMessages);
   const { language } = useLanguage();
-  // Refs keep async error messages in the current language without re-running the fetch effects.
   const tRef = useRef(t);
   tRef.current = t;
   const languageRef = useRef(language);
   languageRef.current = language;
-  const client = useMemo(() => createShipmentsClient(props.http), [props.http]);
-  const [data, setData] = useState<ShipmentPrintData | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [printedAt, setPrintedAt] = useState<string | null>(null);
-  const [barcodeError, setBarcodeError] = useState<string | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
-  const reported = useRef(false);
-  const onPrintedRef = useRef(props.onPrinted);
-  onPrintedRef.current = props.onPrinted;
+  const [barcodeError, setBarcodeError] = useState<string | null>(null);
 
   useEffect(() => {
-    let active = true;
-    reported.current = false;
-    setData(null);
-    setError(null);
-    client
-      .getShipmentPrint(props.shipmentPublicId)
-      .then((next) => {
-        if (!active) return;
-        setData(next);
-        setPrintedAt(next.label_printed_at);
-      })
-      .catch((reason: unknown) => {
-        if (active) setError(tRef.current("printError", { message: errorMessage(reason, languageRef.current) }));
-      });
-    return () => {
-      active = false;
-    };
-  }, [client, props.shipmentPublicId]);
-
-  useEffect(() => {
-    const barcode = data?.barcode_value;
+    const barcode = data.barcode_value;
     const svg = svgRef.current;
     if (!barcode || !svg) return;
     let active = true;
     import("jsbarcode")
       .then((module) => {
         if (!active) return;
-        const JsBarcode = module.default;
-        JsBarcode(svg, barcode, legacyBarcodeOptions);
+        module.default(svg, barcode, legacyBarcodeOptions);
         setBarcodeError(null);
       })
       .catch((reason: unknown) => {
@@ -95,7 +62,97 @@ export function KargoPrintView(props: {
     return () => {
       active = false;
     };
-  }, [data?.barcode_value]);
+  }, [data.barcode_value]);
+
+  return (
+    <div className="kargo-print-page" data-testid="kargo-print-page">
+      <div className="kargo-print-fatura">
+        <p className="kargo-print-fatura-title">{data.invoice_title}</p>
+        <p className="kargo-print-alici">
+          {data.recipient.name}
+          {data.recipient.phone ? ` · ${data.recipient.phone}` : ""}
+        </p>
+        <p className="kargo-print-alici">{[data.recipient.address, data.recipient.district, data.recipient.city].filter(Boolean).join(" ")}</p>
+        {data.items.length > 0 && (
+          <table className="kargo-print-items">
+            <tbody>
+              {data.items.map((item, index) => (
+                <tr key={`${item.name}-${index}`}>
+                  <td>{item.quantity}</td>
+                  <td>{item.name}</td>
+                  <td>{Number.parseFloat(item.total_amount).toLocaleString("tr-TR")} TRY</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+      {data.barcode_value ? (
+        <>
+          <hr className="kargo-print-separator" />
+          <div className="kargo-print-barkod-section" data-testid="kargo-print-barkod">
+            <div>
+              <div className="kargo-print-firma">{data.provider_label} - Kargo Takip</div>
+              <div className="kargo-print-takip-no" data-testid="kargo-print-takip-no">
+                {data.barcode_value}
+              </div>
+            </div>
+            <div>
+              <svg ref={svgRef} data-testid="kargo-print-barcode-svg" />
+            </div>
+          </div>
+          {barcodeError && <p className="kargo-print-error">{barcodeError}</p>}
+        </>
+      ) : (
+        <p className="kargo-print-error">{t("transferFirst")}</p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * One shipment (detail "Yazdır") or several (legacy "Toplu Barkodlu Fatura PDF"): one A4 page per shipment,
+ * printed together. Label downloads (PDF/ZPL/EPL) are offered when a single shipment is shown.
+ */
+export function KargoPrintView(props: {
+  http: BackendHttpClient;
+  shipmentPublicIds: string[];
+  onClose: () => void;
+  onPrinted?: (labelPrintedAt: string) => void;
+}) {
+  const t = useT(cargoPrintMessages);
+  const { language } = useLanguage();
+  const tRef = useRef(t);
+  tRef.current = t;
+  const languageRef = useRef(language);
+  languageRef.current = language;
+  const client = useMemo(() => createShipmentsClient(props.http), [props.http]);
+  const [pages, setPages] = useState<ShipmentPrintData[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [printedAt, setPrintedAt] = useState<string | null>(null);
+  const reported = useRef(false);
+  const onPrintedRef = useRef(props.onPrinted);
+  onPrintedRef.current = props.onPrinted;
+  const idsKey = props.shipmentPublicIds.join(",");
+
+  useEffect(() => {
+    let active = true;
+    reported.current = false;
+    setPages(null);
+    setError(null);
+    Promise.allSettled(idsKey.split(",").filter(Boolean).map((id) => client.getShipmentPrint(id)))
+      .then((results) => {
+        if (!active) return;
+        const loaded = results.flatMap((result) => (result.status === "fulfilled" ? [result.value] : []));
+        const failed = results.find((result): result is PromiseRejectedResult => result.status === "rejected");
+        if (failed) setError(tRef.current("printError", { message: errorMessage(failed.reason, languageRef.current) }));
+        setPages(loaded);
+        setPrintedAt(loaded.length === 1 ? (loaded[0]?.label_printed_at ?? null) : null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [client, idsKey]);
 
   useEffect(() => {
     document.body.classList.add("kargo-print-active");
@@ -103,15 +160,15 @@ export function KargoPrintView(props: {
   }, []);
 
   useEffect(() => {
-    if (!data) return;
+    if (!pages || pages.length === 0) return;
     const bildir = () => {
       if (reported.current) return;
       reported.current = true;
-      client
-        .markShipmentPrinted(data.shipment_public_id, `print_${data.shipment_public_id}`)
-        .then((result) => {
-          setPrintedAt(result.label_printed_at);
-          onPrintedRef.current?.(result.label_printed_at);
+      Promise.all(pages.map((page) => client.markShipmentPrinted(page.shipment_public_id, `print_${page.shipment_public_id}`)))
+        .then((results) => {
+          const last = results.at(-1)?.label_printed_at ?? null;
+          setPrintedAt(last);
+          if (last) onPrintedRef.current?.(last);
         })
         .catch(() => {
           reported.current = false;
@@ -119,98 +176,55 @@ export function KargoPrintView(props: {
     };
     window.addEventListener("beforeprint", bildir);
     return () => window.removeEventListener("beforeprint", bildir);
-  }, [client, data]);
+  }, [client, pages]);
 
+  const single = pages && pages.length === 1 ? pages[0] : null;
   const content = (
     <div className="kargo-print-root" data-testid="kargo-print-view">
       <div className="kargo-print-bar">
         <span>{t("barTitle")}</span>
+        {pages && pages.length > 1 && <span data-testid="kargo-print-count">· {pages.length}</span>}
         {printedAt && (
           <em className="kargo-print-done" data-testid="kargo-print-done">
             {t("printed")}
           </em>
         )}
-        <button className="kargo-print-button" data-testid="kargo-print-button" disabled={!data} type="button" onClick={() => window.print()}>
+        <button className="kargo-print-button" data-testid="kargo-print-button" disabled={!pages || pages.length === 0} type="button" onClick={() => window.print()}>
           <Printer size={14} aria-hidden="true" /> {t("print")}
         </button>
-        {(["pdf", "zpl", "epl"] as const).map((format) => (
-          <button
-            key={format}
-            className="kargo-print-button"
-            data-testid={`kargo-label-${format}`}
-            disabled={!data?.barcode_value}
-            type="button"
-            aria-label={t("download", { format: format.toUpperCase() })}
-            onClick={() => {
-              if (!data) return;
-              client
-                .downloadShipmentLabel(data.shipment_public_id, format)
-                .then((blob) => {
-                  const url = URL.createObjectURL(blob);
-                  const link = document.createElement("a");
-                  link.href = url;
-                  link.download = `etiket-${data.barcode_value ?? data.shipment_public_id}.${format}`;
-                  link.click();
-                  window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
-                })
-                .catch((reason: unknown) => setError(t("downloadError", { message: errorMessage(reason, language) })));
-            }}
-          >
-            <Download size={14} aria-hidden="true" /> {format.toUpperCase()}
-          </button>
-        ))}
+        {single &&
+          (["pdf", "zpl", "epl"] as const).map((format) => (
+            <button
+              key={format}
+              className="kargo-print-button"
+              data-testid={`kargo-label-${format}`}
+              disabled={!single.barcode_value}
+              type="button"
+              aria-label={t("download", { format: format.toUpperCase() })}
+              onClick={() => {
+                client
+                  .downloadShipmentLabel(single.shipment_public_id, format)
+                  .then((blob) => {
+                    const url = URL.createObjectURL(blob);
+                    const link = document.createElement("a");
+                    link.href = url;
+                    link.download = `etiket-${single.barcode_value ?? single.shipment_public_id}.${format}`;
+                    link.click();
+                    window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
+                  })
+                  .catch((reason: unknown) => setError(t("downloadError", { message: errorMessage(reason, language) })));
+              }}
+            >
+              <Download size={14} aria-hidden="true" /> {format.toUpperCase()}
+            </button>
+          ))}
         <button className="kargo-print-close" data-testid="kargo-print-close" type="button" aria-label={t("close")} onClick={props.onClose}>
           <X size={16} aria-hidden="true" />
         </button>
       </div>
       <div className="kargo-print-scroll">
         {error && <p className="kargo-print-error">{error}</p>}
-        {data && (
-          <div className="kargo-print-page" data-testid="kargo-print-page">
-            <div className="kargo-print-fatura">
-              <p className="kargo-print-fatura-title">{data.invoice_title}</p>
-              <p className="kargo-print-alici">
-                {data.recipient.name}
-                {data.recipient.phone ? ` · ${data.recipient.phone}` : ""}
-              </p>
-              <p className="kargo-print-alici">
-                {[data.recipient.address, data.recipient.district, data.recipient.city].filter(Boolean).join(" ")}
-              </p>
-              {data.items.length > 0 && (
-                <table className="kargo-print-items">
-                  <tbody>
-                    {data.items.map((item, index) => (
-                      <tr key={`${item.name}-${index}`}>
-                        <td>{item.quantity}</td>
-                        <td>{item.name}</td>
-                        <td>{Number.parseFloat(item.total_amount).toLocaleString("tr-TR")} TRY</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-            {data.barcode_value ? (
-              <>
-                <hr className="kargo-print-separator" />
-                <div className="kargo-print-barkod-section" data-testid="kargo-print-barkod">
-                  <div>
-                    <div className="kargo-print-firma">{data.provider_label} - Kargo Takip</div>
-                    <div className="kargo-print-takip-no" data-testid="kargo-print-takip-no">
-                      {data.barcode_value}
-                    </div>
-                  </div>
-                  <div>
-                    <svg ref={svgRef} data-testid="kargo-print-barcode-svg" />
-                  </div>
-                </div>
-                {barcodeError && <p className="kargo-print-error">{barcodeError}</p>}
-              </>
-            ) : (
-              <p className="kargo-print-error">{t("transferFirst")}</p>
-            )}
-          </div>
-        )}
+        {pages?.map((page) => <KargoPrintPage key={page.shipment_public_id} data={page} />)}
       </div>
     </div>
   );

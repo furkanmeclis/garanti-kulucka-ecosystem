@@ -17,6 +17,7 @@ import type {
   StockMovementsTable,
 } from "@garanti-kulucka/database";
 import { applyOrderBalanceRules } from "../balances/repository.js";
+import { pttBranchPatterns, suratBranchPatterns } from "../reports/repository.js";
 import { newPublicId } from "../auth/crypto.js";
 
 export type ConversationRecord = Selectable<ConversationsTable> & {
@@ -270,6 +271,9 @@ export interface ListOrdersResult {
   offset: number;
 }
 
+const closedShipmentStatuses = ["delivered", "teslim_edildi", "cancelled", "iptal", "returned", "iade"];
+const dispatchedShipmentStatuses = ["in_transit", "shipped", "dispatched", "sevk_edildi"];
+
 export interface ListShipmentsFilter {
   provider?: string;
   providers?: string[];
@@ -277,6 +281,13 @@ export interface ListShipmentsFilter {
   status?: string;
   search?: string;
   trackingMissing?: boolean;
+  /** Legacy KargolarPage `ptt_almayan` / `surat_almayan`: branch/not-at-address last events, not yet closed. */
+  notReceived?: "ptt" | "surat";
+  /** Legacy `yeni` (not dispatched yet) and `sevk_edildi` filters. */
+  stage?: "new" | "shipped";
+  createdByUserPublicId?: string;
+  createdFrom?: string;
+  createdTo?: string;
   offset?: number;
   limit: number;
 }
@@ -1920,6 +1931,19 @@ export class DomainRepository {
       )
       .$if(Boolean(filter.provider), (builder) => builder.where("shipments.provider", "=", filter.provider as string))
       .$if(Boolean(filter.status), (builder) => builder.where("shipments.status", "=", filter.status as string))
+      .$if(Boolean(filter.notReceived), (builder) =>
+        builder
+          .where("shipments.provider", "in", filter.notReceived === "ptt" ? ["ptt", "PTT"] : ["surat", "Sürat", "SURAT"])
+          .where("shipments.status", "not in", closedShipmentStatuses)
+          .where(sql<boolean>`shipments.last_event_text ILIKE ANY(${filter.notReceived === "ptt" ? [...pttBranchPatterns] : [...suratBranchPatterns]})`),
+      )
+      .$if(filter.stage === "new", (builder) => builder.where("shipments.status", "not in", [...dispatchedShipmentStatuses, ...closedShipmentStatuses]))
+      .$if(filter.stage === "shipped", (builder) => builder.where("shipments.status", "in", dispatchedShipmentStatuses))
+      .$if(Boolean(filter.createdByUserPublicId), (builder) =>
+        builder.where(sql<boolean>`orders.created_by_user_id = (SELECT id FROM users WHERE public_id = ${filter.createdByUserPublicId as string})`),
+      )
+      .$if(Boolean(filter.createdFrom), (builder) => builder.where("shipments.created_at", ">=", new Date(`${filter.createdFrom}T00:00:00`)))
+      .$if(Boolean(filter.createdTo), (builder) => builder.where("shipments.created_at", "<=", new Date(`${filter.createdTo}T23:59:59.999`)))
       .$if(filter.trackingMissing === true, (builder) =>
         builder
           .where("shipments.tracking_number", "is", null)

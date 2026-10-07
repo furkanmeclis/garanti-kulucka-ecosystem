@@ -326,3 +326,86 @@ function loginBody(user: PlaywrightUser) {
     user,
   };
 }
+
+test("Kargo legacy filters, selection, Excel exports and bulk barcoded print", async ({ page }) => {
+  const app = await startWebApp();
+  const shipmentQueries: string[] = [];
+  const printed: string[] = [];
+  const user = loginUser("calisan");
+  await installRealtimeShim(page);
+  await page.route(`${backendBaseUrl}/**`, async (route) => {
+    const url = new URL(route.request().url());
+    const json = (body: unknown) => route.fulfill({ contentType: "application/json", body: JSON.stringify(body) });
+    if (url.pathname === "/auth/login") return json(loginBody(user));
+    if (url.pathname === "/auth/me" || url.pathname === "/auth/presence") return json(user);
+    if (url.pathname === "/api/shipments") {
+      shipmentQueries.push(url.search);
+      const rows = [
+        shipmentRow(),
+        shipmentRow({ public_id: "shp_two", tracking_number: "TRK-TWO", barcode_number: "BAR-TWO", recipient_name: "İkinci Alıcı", recipient_phone: "05559998877", order_number: "ORD-TWO" }),
+      ];
+      return json({ data: rows, meta: { total_count: 2, limit: 20, offset: 0 } });
+    }
+    const printMatch = /^\/api\/shipments\/(shp_\w+)\/print$/.exec(url.pathname);
+    if (printMatch) {
+      const id = printMatch[1];
+      return json({
+        shipment_public_id: id, provider: "ptt", provider_label: "PTT Kargo", status: "in_transit", tracking_number: `TRK-${id}`, barcode_number: `BAR-${id}`, barcode_value: `BAR-${id}`,
+        barcode_format: "CODE128", payment_type: null, label_printed_at: null, invoice_title: "Garanti Kuluçka", recipient: { name: `Alıcı ${id}`, phone: null, address: "Adres", city: "İstanbul", district: "Kadıköy" },
+        order: null, items: [{ name: "Makine", quantity: 1, unit_price: "100.00", total_amount: "100.00" }], created_at: "2026-01-01T00:00:00.000Z",
+      });
+    }
+    const printedMatch = /^\/api\/shipments\/(shp_\w+)\/printed$/.exec(url.pathname);
+    if (printedMatch) {
+      printed.push(printedMatch[1] ?? "");
+      return json({ shipment_public_id: printedMatch[1], label_printed_at: "2026-01-01T00:05:00.000Z" });
+    }
+    if (url.pathname === "/api/shipments/summary") {
+      return json({ total_count: 2, active_count: 2, delivered_count: 0, recipient_phone_count: 2, provider_counts: { ptt: 2, surat: 0, other: 0 }, exception_counts: { ptt_not_delivered: 2, surat_not_delivered: 0, tracking_missing: 0 } });
+    }
+    if (url.pathname === "/api/shipments/pipeline-summary") return json({ counts: { all: 0, mesaj: 0, sms: 0, vapi: 0, teslim: 0, bekliyor: 0, isleniyor: 0, hata: 0 }, rows: [] });
+    if (url.pathname === "/api/orders") {
+      return json({ data: [{ public_id: "ord_a", order_number: "GK-1", status: "draft", source: "manual", cargo_provider: "ptt", total_amount: "1.00", currency: "TRY", customer_full_name: "A", created_by_user_public_id: "usr_staff7", created_by_user_email: "staff7@example.com", created_at: "2026-01-01T00:00:00.000Z", updated_at: "2026-01-01T00:00:00.000Z" }], meta: { total_count: 1, limit: 20, offset: 0 } });
+    }
+    const fallback = fallbackResponse(url.pathname);
+    if (fallback !== undefined) return json(fallback);
+    return route.fulfill({ status: 404, body: "not found" });
+  });
+
+  try {
+    await page.goto(`${app.url}/giris`);
+    await page.getByRole("button", { name: /giriş yap/i }).click();
+    await page.getByRole("link", { name: /^Kargo$/ }).click();
+    const flow = page.getByTestId("shipments-flow");
+    await expect(flow.getByTestId("shipment-table")).toContainText("TRK-TWO");
+    await expect(flow.getByTestId("shipment-refresh-all-tracking")).toHaveCount(0);
+
+    await flow.getByTestId("shipment-filter-ptt-not-received").click();
+    await expect.poll(() => shipmentQueries.at(-1)).toContain("not_received=ptt");
+    await flow.getByTestId("shipment-filter-new").click();
+    await expect.poll(() => shipmentQueries.at(-1)).toContain("stage=new");
+    await flow.getByTestId("shipment-date-from").fill("2026-10-01");
+    await expect.poll(() => shipmentQueries.at(-1)).toContain("created_from=2026-10-01");
+    await flow.getByTestId("shipment-personnel").selectOption("usr_staff7");
+    await expect.poll(() => shipmentQueries.at(-1)).toContain("created_by_user_public_id=usr_staff7");
+    expect(shipmentQueries.at(-1)).toContain("stage=new");
+
+    await flow.getByTestId("shipment-select-all").click();
+    await expect(flow.getByTestId("shipment-selected-count")).toHaveText("2 seçili");
+    const [download] = await Promise.all([page.waitForEvent("download"), flow.getByTestId("shipment-export-phone").click()]);
+    expect(download.suggestedFilename()).toMatch(/^kargolar-telefon-/);
+    const { readFile } = await import("node:fs/promises");
+    expect(await readFile((await download.path())!, "utf8")).toContain("<td>05559998877</td><td>İkinci Alıcı</td>");
+    await expect(flow.getByTestId("shipment-notice")).toHaveText("2 kargo Excel olarak indirildi");
+
+    await flow.getByTestId("shipment-bulk-print").click();
+    const view = page.getByTestId("kargo-print-view");
+    await expect(view.getByTestId("kargo-print-page")).toHaveCount(2);
+    await expect(view.getByTestId("kargo-print-count")).toHaveText("· 2");
+    await expect(view.getByTestId("kargo-label-pdf")).toHaveCount(0);
+    await page.evaluate(() => window.dispatchEvent(new Event("beforeprint")));
+    await expect.poll(() => [...printed].sort()).toEqual(["shp_slice6", "shp_two"]);
+  } finally {
+    await closeWebApp(app.server);
+  }
+});

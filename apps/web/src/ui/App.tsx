@@ -188,7 +188,7 @@ export function App() {
         {activeFlow === "shipments" && <ShipmentsFlow ctx={ctx} />}
         {printShipmentId && (
           <Suspense fallback={null}>
-            <KargoPrintView http={http} shipmentPublicId={printShipmentId} onClose={() => setPrintShipmentId(null)} />
+            <KargoPrintView http={http} shipmentPublicIds={printShipmentId.split(",")} onClose={() => setPrintShipmentId(null)} />
           </Suspense>
         )}
         {activeFlow === "shipmentPipeline" && <ShipmentPipelineFlow ctx={ctx} />}

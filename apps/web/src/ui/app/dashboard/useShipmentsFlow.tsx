@@ -4,9 +4,11 @@ import { type ShipmentPipelineFilter, type ShipmentFilter, shipmentPageSize, shi
 import { uiMessage, type UiMessage } from "../../i18n/messages/status.js";
 import type { DashboardCore } from "./types.js";
 
+export type ShipmentNotice = { kind: "exported"; count: number } | { kind: "trackingQueued" } | { kind: "trackingFailed"; message: string };
+
 /** Shipments flow: list filters/search/paging, detail, delivery update, tracking and the pipeline tab. */
 export function useShipmentsFlow(core: DashboardCore) {
-  const { domain, data, setData, setStatus } = core;
+  const { domain, admin, user, data, setData, setStatus } = core;
   const [selectedShipmentId, setSelectedShipmentId] = useState<string | null>(null);
   const [printShipmentId, setPrintShipmentId] = useState<string | null>(null);
   const [shipmentFilter, setShipmentFilter] = useState<ShipmentFilter>("all");
@@ -17,14 +19,34 @@ export function useShipmentsFlow(core: DashboardCore) {
   const [lastShipmentTrack, setLastShipmentTrack] = useState<string | null>(null);
   const [shipmentPipelineFilter, setShipmentPipelineFilter] = useState<ShipmentPipelineFilter>("all");
   const shipmentFilterRequestSeqRef = useRef(0);
+  // Legacy KargolarPage context filters (tarih, personel), selection, Excel and "Takipleri Güncelle".
+  const [shipmentCreatedFrom, setShipmentCreatedFrom] = useState("");
+  const [shipmentCreatedTo, setShipmentCreatedTo] = useState("");
+  const [shipmentPersonnel, setShipmentPersonnel] = useState("");
+  const [selectedShipmentIds, setSelectedShipmentIds] = useState<Set<string>>(() => new Set());
+  const [trackingRefreshing, setTrackingRefreshing] = useState(false);
+  const [shipmentNotice, setShipmentNotice] = useState<ShipmentNotice | null>(null);
 
-  const refreshShipments = useCallback(async (options: { page?: number; filter?: ShipmentFilter; search?: string } = {}) => {
+  function contextParams(overrides: { createdFrom?: string; createdTo?: string; personnel?: string } = {}) {
+    const from = overrides.createdFrom ?? shipmentCreatedFrom;
+    const to = overrides.createdTo ?? shipmentCreatedTo;
+    const personnel = overrides.personnel ?? shipmentPersonnel;
+    return {
+      ...(from ? { created_from: from } : {}),
+      ...(to ? { created_to: to } : {}),
+      ...(personnel ? { created_by_user_public_id: personnel } : {}),
+    };
+  }
+
+  const refreshShipments = useCallback(async (options: { page?: number; filter?: ShipmentFilter; search?: string; createdFrom?: string; createdTo?: string; personnel?: string } = {}) => {
     const nextPage = options.page ?? shipmentPage;
     const nextFilter = options.filter ?? shipmentFilter;
     const nextSearch = options.search ?? shipmentSearch;
     const trimmedSearch = nextSearch.trim();
+    setSelectedShipmentIds(new Set());
     const shipments = await domain.listShipments({
       ...shipmentFilterParams(nextFilter),
+      ...contextParams(options),
       ...(trimmedSearch ? { search: trimmedSearch } : {}),
       limit: shipmentPageSize,
       offset: nextPage * shipmentPageSize,
@@ -38,7 +60,7 @@ export function useShipmentsFlow(core: DashboardCore) {
       ? current
       : shipments.data[0]?.public_id ?? null);
     return shipments;
-  }, [domain, shipmentFilter, shipmentPage, shipmentSearch]);
+  }, [domain, shipmentFilter, shipmentPage, shipmentSearch, shipmentCreatedFrom, shipmentCreatedTo, shipmentPersonnel]);
 
   async function handleApplyShipmentFilter(nextFilter: ShipmentFilter) {
     const requestSeq = shipmentFilterRequestSeqRef.current + 1;
@@ -47,8 +69,10 @@ export function useShipmentsFlow(core: DashboardCore) {
     setShipmentPage(0);
     setStatus(uiMessage("shipmentFiltersApplying"));
     const trimmedSearch = shipmentSearch.trim();
+    setSelectedShipmentIds(new Set());
     const shipments = await domain.listShipments({
       ...shipmentFilterParams(nextFilter),
+      ...contextParams(),
       ...(trimmedSearch ? { search: trimmedSearch } : {}),
       limit: shipmentPageSize,
       offset: 0,
@@ -99,6 +123,69 @@ export function useShipmentsFlow(core: DashboardCore) {
       setStatus(uiMessage("shipmentDetailLoaded"));
     } catch {
       setStatus(uiMessage("shipmentDetailFromList"));
+    }
+  }
+
+  async function handleShipmentContextFilter(patch: { createdFrom?: string; createdTo?: string; personnel?: string }) {
+    if (patch.createdFrom !== undefined) setShipmentCreatedFrom(patch.createdFrom);
+    if (patch.createdTo !== undefined) setShipmentCreatedTo(patch.createdTo);
+    if (patch.personnel !== undefined) setShipmentPersonnel(patch.personnel);
+    setShipmentPage(0);
+    await refreshShipments({ page: 0, ...patch });
+  }
+
+  function toggleShipmentSelection(publicId: string) {
+    setSelectedShipmentIds((current) => {
+      const next = new Set(current);
+      if (next.has(publicId)) next.delete(publicId);
+      else next.add(publicId);
+      return next;
+    });
+  }
+
+  function toggleAllVisibleShipments() {
+    setSelectedShipmentIds((current) => {
+      const ids = data.shipments.map((shipment) => shipment.public_id);
+      return ids.length > 0 && ids.every((id) => current.has(id)) ? new Set() : new Set(ids);
+    });
+  }
+
+  /** Legacy Excel: "liste" (ad, telefon, il) or "telefon" (telefon, ad) for the selection or every filtered row. */
+  async function handleExportShipments(format: "liste" | "telefon", scope: "selected" | "filtered") {
+    let rows = data.shipments.filter((shipment) => selectedShipmentIds.has(shipment.public_id));
+    if (scope === "filtered") {
+      const trimmedSearch = shipmentSearch.trim();
+      rows = (await domain.listShipments({ ...shipmentFilterParams(shipmentFilter), ...contextParams(), ...(trimmedSearch ? { search: trimmedSearch } : {}), limit: 200, offset: 0 })).data;
+    }
+    const headers = format === "telefon" ? ["Telefon", "Ad Soyad"] : ["Ad Soyad", "Telefon", "İl", "İlçe", "Kargo", "Takip No", "Sipariş No", "Durum", "Son Hareket"];
+    const body = rows.map((shipment) =>
+      format === "telefon"
+        ? [shipment.recipient_phone ?? "", shipment.recipient_name]
+        : [shipment.recipient_name, shipment.recipient_phone ?? "", shipment.recipient_city ?? "", shipment.recipient_district ?? "", shipment.provider, shipment.tracking_number ?? shipment.barcode_number ?? "", shipment.order_number ?? "", shipment.status, shipment.last_event_text ?? ""],
+    );
+    const escape = (value: string) => value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+    const table = [headers, ...body].map((row) => `<tr>${row.map((cell) => `<td>${escape(String(cell))}</td>`).join("")}</tr>`).join("");
+    const url = URL.createObjectURL(new Blob([`<html><head><meta charset="utf-8" /></head><body><table>${table}</table></body></html>`], { type: "application/vnd.ms-excel;charset=utf-8" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `kargolar-${format}-${new Date().toISOString().slice(0, 10)}.xls`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+    setShipmentNotice({ kind: "exported", count: rows.length });
+  }
+
+  /** Legacy "Takipleri Güncelle": PTT + Sürat tracking cron (dry-run unless the live gates are open). */
+  async function handleRefreshAllTracking() {
+    if (trackingRefreshing) return;
+    setTrackingRefreshing(true);
+    try {
+      const key = `kargo_takip_${Date.now()}`;
+      await Promise.all([admin.triggerProviderCronDebug("ptt", { idempotency_key: `${key}_ptt` }), admin.triggerProviderCronDebug("surat", { idempotency_key: `${key}_surat` })]);
+      setShipmentNotice({ kind: "trackingQueued" });
+    } catch (error) {
+      setShipmentNotice({ kind: "trackingFailed", message: error instanceof Error ? error.message : "" });
+    } finally {
+      setTrackingRefreshing(false);
     }
   }
 
@@ -197,6 +284,11 @@ export function useShipmentsFlow(core: DashboardCore) {
 
   /** Shipments part of the logout reset. */
   function resetShipments() {
+    setSelectedShipmentIds(new Set());
+    setShipmentCreatedFrom("");
+    setShipmentCreatedTo("");
+    setShipmentPersonnel("");
+    setShipmentNotice(null);
     setSelectedShipmentId(null);
     setShipmentFilter("all");
     setShipmentSearch("");
@@ -256,5 +348,17 @@ export function useShipmentsFlow(core: DashboardCore) {
     pipelineDeliveredCount,
     shipmentPipelineFilters,
     resetShipments,
+    shipmentCreatedFrom,
+    shipmentCreatedTo,
+    shipmentPersonnel,
+    selectedShipmentIds,
+    trackingRefreshing,
+    shipmentNotice,
+    canRefreshAllTracking: user?.role === "admin" || user?.role === "owner",
+    handleShipmentContextFilter,
+    toggleShipmentSelection,
+    toggleAllVisibleShipments,
+    handleExportShipments,
+    handleRefreshAllTracking,
   };
 }
