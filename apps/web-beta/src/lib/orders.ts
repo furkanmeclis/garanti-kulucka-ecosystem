@@ -4,6 +4,7 @@ export type ShipmentPaymentStatus = "karsi_odemeli" | "odeme_alindi";
 
 export interface CreateOrderInput {
   customer_public_id?: string | null;
+  conversation_public_id?: string | null;
   customer: { full_name: string; phone: string };
   address: { address_line: string; city: string; district: string; country?: string };
   status?: string;

@@ -1,14 +1,18 @@
 import type { ConversationSummary } from "@garanti-kulucka/shared";
-import { useMemo } from "react";
+import { Zap } from "lucide-react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/app/auth";
 import { DataList, ErrorState, Pagination, StatusBadge, type Column } from "@/components/data-list";
 import { FilterSelect, ListToolbar } from "@/components/list-toolbar";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/layout/page-header";
 import { channelLabel, formatDateTime } from "@/lib/format";
 import { paginate, useListParams } from "@/lib/list-params";
 import { useQuery } from "@/lib/use-query";
+import { ConversationSheet } from "./conversation-sheet";
+import { ShortcutsSheet } from "./shortcuts-sheet";
 
 /** The conversations API filters by channel/status but has no search or offset: search and paging run on the latest 200. */
 export function MessagesPage() {
@@ -28,9 +32,22 @@ export function MessagesPage() {
     );
   }, [data, list.query]);
   const paged = paginate(filtered, list.page);
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [overrides, setOverrides] = useState<Record<string, ConversationSummary>>({});
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const opened = openId ? (overrides[openId] ?? (data?.data ?? []).find((row) => row.public_id === openId) ?? null) : null;
 
   const columns: Column<ConversationSummary>[] = [
-    { key: "customer", header: t("messages.customer"), mobile: "title", cell: (row) => <span className="font-medium">{row.customer?.full_name ?? row.customer?.username ?? row.customer?.phone ?? t("common.none")}</span> },
+    {
+      key: "customer",
+      header: t("messages.customer"),
+      mobile: "title",
+      cell: (row) => (
+        <button type="button" className="inline-flex min-h-11 min-w-11 items-center text-left font-medium text-primary underline-offset-4 hover:underline md:min-h-0" onClick={() => setOpenId(row.public_id)} data-testid="conversation-open">
+          {row.customer?.full_name ?? row.customer?.username ?? row.customer?.phone ?? t("common.none")}
+        </button>
+      ),
+    },
     {
       key: "unread",
       header: t("messages.unread"),
@@ -45,7 +62,16 @@ export function MessagesPage() {
 
   return (
     <section data-testid="page-messages">
-      <PageHeader title={t("messages.title")} description={t("messages.subtitle")} />
+      <PageHeader
+        title={t("messages.title")}
+        description={t("messages.subtitle")}
+        actions={
+          <Button variant="outline" className="min-h-11" onClick={() => setShortcutsOpen(true)} data-testid="shortcuts-manage">
+            <Zap className="size-4" aria-hidden="true" />
+            {t("inbox.shortcutsManage")}
+          </Button>
+        }
+      />
       <ListToolbar query={list.query} placeholder={t("messages.searchPlaceholder")} onQuery={(q) => list.update({ q })} hasFilters={list.hasFilters} onClear={list.clear}>
         <FilterSelect
           testId="filter-channel"
@@ -74,10 +100,19 @@ export function MessagesPage() {
         <ErrorState onRetry={reload} />
       ) : (
         <>
-          <DataList testId="messages" rows={paged.rows} columns={columns} rowKey={(row) => row.public_id} loading={loading} />
+          <DataList testId="messages" rows={paged.rows.map((row) => overrides[row.public_id] ?? row)} columns={columns} rowKey={(row) => row.public_id} loading={loading} />
           {paged.total > 0 && <Pagination page={paged.page} pages={paged.pages} total={paged.total} onPage={(page) => list.update({ page }, false)} />}
         </>
       )}
+      <ConversationSheet
+        conversation={opened}
+        onClose={() => setOpenId(null)}
+        onChanged={(next) => {
+          if (next) setOverrides((prev) => ({ ...prev, [next.public_id]: next }));
+          else reload();
+        }}
+      />
+      <ShortcutsSheet open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
     </section>
   );
 }

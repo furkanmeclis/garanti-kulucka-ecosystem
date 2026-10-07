@@ -96,6 +96,8 @@ import type {
   ShipmentPaymentStatus,
   ShipmentPrintData,
 } from "./orders";
+import type { ConversationStateInput, MessageShortcut, ThreadMessage, UploadedFile } from "./inbox";
+import { sha256Base64 } from "./inbox";
 import type { DataDeletionInput, DataDeletionRequest, DataDeletionStatus, DataDeletionStatusLookup } from "./privacy";
 import type { StoredTokens } from "./session-storage";
 import type { AdminLogEntry, CreateManagedUserInput, ManagedRole, ManagedUser, UpdateManagedUserInput } from "./users";
@@ -433,6 +435,42 @@ export function createApiClient(options: ApiClientOptions) {
       request<{ shipment_public_id: string; label_printed_at: string }>(`/api/shipments/${encodeURIComponent(publicId)}/printed`, { method: "POST", body: { idempotency_key: idempotencyKey } }),
     triggerTrackingCron: (provider: "ptt" | "surat", idempotencyKey: string) =>
       request<unknown>(`/admin/integrations/provider-cron-triggers/${provider}`, { method: "POST", body: { idempotency_key: idempotencyKey } }),
+    listMessages: (conversationPublicId: string, limit = 100) =>
+      request<{ data: ThreadMessage[] }>(`/api/conversations/${encodeURIComponent(conversationPublicId)}/messages`, { query: { limit } }),
+    sendMessage: (conversationPublicId: string, input: { body: string | null; sender_name: string; attachments: Array<{ file_public_id: string; attachment_type: string }> }) =>
+      request<ThreadMessage>(`/api/conversations/${encodeURIComponent(conversationPublicId)}/messages`, {
+        method: "POST",
+        body: { sender_type: "user", sender_name: input.sender_name, body: input.body, external_message_id: null, raw_payload: null, attachments: input.attachments },
+      }),
+    updateConversationState: (conversationPublicId: string, input: ConversationStateInput) =>
+      request<ConversationSummary>(`/api/conversations/${encodeURIComponent(conversationPublicId)}/state`, { method: "PATCH", body: input }),
+    updateConversationNotes: (conversationPublicId: string, notes: string | null) =>
+      request<ConversationSummary>(`/api/conversations/${encodeURIComponent(conversationPublicId)}/notes`, { method: "PATCH", body: { notes } }),
+    updateConversationCustomerNotes: (conversationPublicId: string, notes: string | null) =>
+      request<{ public_id: string; notes: string | null }>(`/api/conversations/${encodeURIComponent(conversationPublicId)}/customer-notes`, { method: "PATCH", body: { notes } }),
+    aiReplySuggestion: (conversationPublicId: string) =>
+      request<{ suggestion: string; dry_run: boolean }>("/api/ai/reply-suggestion", { method: "POST", body: { conversation_public_id: conversationPublicId } }),
+    listShortcuts: () => request<{ data: MessageShortcut[] }>("/api/message-shortcuts"),
+    createShortcut: (input: { code: string; message: string | null; attachments: Array<{ file_public_id: string; attachment_type: string }> }) =>
+      request<MessageShortcut>("/api/message-shortcuts", { method: "POST", body: { ...input, type: "custom" } }),
+    updateShortcut: (publicId: string, input: { code: string; message: string | null; attachments: Array<{ file_public_id: string; attachment_type: string }> }) =>
+      request<MessageShortcut>(`/api/message-shortcuts/${encodeURIComponent(publicId)}`, { method: "PATCH", body: input }),
+    deleteShortcut: (publicId: string) => request<MessageShortcut>(`/api/message-shortcuts/${encodeURIComponent(publicId)}`, { method: "DELETE" }),
+    fileDownload: (filePublicId: string) =>
+      request<{ download: { presigned_url: string | null } }>(`/api/files/${encodeURIComponent(filePublicId)}/download`),
+    /** Presigned single-part upload: register (with checksum), then PUT the bytes straight to object storage. */
+    uploadFile: async (file: File): Promise<UploadedFile> => {
+      const checksum = await sha256Base64(file);
+      const response = await request<{ file: UploadedFile; upload: { method: string; headers: Record<string, string>; presigned_url: string | null } }>("/api/files/uploads", {
+        method: "POST",
+        body: { original_name: file.name, mime_type: file.type || "application/octet-stream", byte_size: file.size, checksum },
+      });
+      if (response.upload.presigned_url) {
+        const put = await fetchImpl(response.upload.presigned_url, { method: response.upload.method, headers: response.upload.headers, body: file });
+        if (!put.ok) throw new ApiError(put.status, "upload_failed", `Upload failed (${put.status})`);
+      }
+      return response.file;
+    },
     submitDataDeletion: (input: DataDeletionInput) =>
       request<{ success: boolean; message: string; reference: string }>("/api/veri-silme-talebi", { method: "POST", body: input, auth: false }),
     dataDeletionStatus: (reference: string) => request<DataDeletionStatusLookup>(`/api/veri-silme-talebi/${encodeURIComponent(reference)}`, { auth: false }),

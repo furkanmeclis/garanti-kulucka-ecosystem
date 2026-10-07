@@ -36,7 +36,15 @@ const emptyForm = () => ({
 });
 
 /** Legacy SiparislerPage "Yeni Sipariş" modal: customer by phone, address, PTT/Sürat, product lines (KDV dahil), duplicate and Sürat AT warnings. */
-export function OrderFormSheet({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated: (order: OrderSummary) => void }) {
+/** `initial` prefills the legacy "Sohbetten sipariş" form from a conversation (source = conversation). */
+export interface OrderFormInitial {
+  name?: string;
+  phone?: string;
+  conversationPublicId?: string | undefined;
+  notes?: string;
+}
+
+export function OrderFormSheet({ open, onClose, onCreated, initial }: { open: boolean; onClose: () => void; onCreated: (order: OrderSummary) => void; initial?: OrderFormInitial }) {
   const { t, i18n } = useTranslation();
   const { api } = useAuth();
   const [form, setForm] = useState(emptyForm);
@@ -46,12 +54,13 @@ export function OrderFormSheet({ open, onClose, onCreated }: { open: boolean; on
 
   useEffect(() => {
     if (!open) return;
-    setForm(emptyForm());
+    setForm({ ...emptyForm(), name: initial?.name ?? "", phone: initial?.phone ?? "", notes: initial?.notes ?? "" });
     setFeedback(null);
     api
       .orderProductOptions()
       .then((response) => setProducts(response.data))
       .catch(() => setProducts([]));
+    // `initial` is read once per opening.
   }, [open, api]);
 
   const set = (field: "name" | "phone" | "city" | "district" | "address" | "notes") => (event: { target: { value: string } }) =>
@@ -113,7 +122,8 @@ export function OrderFormSheet({ open, onClose, onCreated }: { open: boolean; on
         customer: { full_name: form.name.trim(), phone: form.phone.trim() },
         address: { address_line: form.address.trim(), city: form.city.trim(), district: form.district.trim(), country: "Türkiye" },
         status: "draft",
-        source: "manual",
+        source: initial?.conversationPublicId ? "conversation" : "manual",
+        conversation_public_id: initial?.conversationPublicId ?? null,
         cargo_provider: form.cargo as CargoProviderKey,
         notes: form.notes.trim() || null,
         currency: "TRY",
