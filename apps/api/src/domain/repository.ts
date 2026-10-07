@@ -153,6 +153,9 @@ export interface ListConversationsFilter {
   status?: string;
   assignedUserId?: number | null;
   customerPublicId?: string;
+  /** Legacy Mesajlar arama: customer name / phone / username or the last message text. */
+  search?: string;
+  offset?: number;
   limit: number;
 }
 
@@ -641,7 +644,18 @@ export class DomainRepository {
       .$if(Boolean(filter.status), (builder) => builder.where("conversations.status", "=", filter.status as string))
       .$if(Boolean(filter.customerPublicId), (builder) =>
         builder.where("customers.public_id", "=", filter.customerPublicId as string),
-      );
+      )
+      .$if(Boolean(filter.search), (builder) => {
+        const pattern = `%${(filter.search as string).replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
+        return builder.where((eb) =>
+          eb.or([
+            eb("customers.full_name", "ilike", pattern),
+            eb("customers.phone", "ilike", pattern),
+            eb("customers.username", "ilike", pattern),
+            eb("conversations.last_message_text", "ilike", pattern),
+          ]),
+        );
+      });
 
     if (filter.assignedUserId !== undefined) {
       query =
@@ -654,7 +668,30 @@ export class DomainRepository {
       .orderBy("conversations.last_message_at", "desc")
       .orderBy("conversations.created_at", "desc")
       .limit(filter.limit)
+      .$if((filter.offset ?? 0) > 0, (builder) => builder.offset(filter.offset as number))
       .execute();
+  }
+
+  /** Legacy "Tümünü okundu yap": clears unread counters (optionally for some channels) and marks their messages read. */
+  async markAllConversationsRead(filter: { channels?: string[] }): Promise<number> {
+    return this.db.transaction().execute(async (transaction) => {
+      const updated = await transaction
+        .updateTable("conversations")
+        .set({ unread_count: 0, updated_at: new Date() })
+        .where("unread_count", ">", 0)
+        .$if(Boolean(filter.channels?.length), (builder) => builder.where("channel", "in", filter.channels as string[]))
+        .returning("id")
+        .execute();
+      if (updated.length > 0) {
+        await transaction
+          .updateTable("messages")
+          .set({ is_read: true, updated_at: new Date() })
+          .where("conversation_id", "in", updated.map((row) => row.id))
+          .where("is_read", "=", false)
+          .execute();
+      }
+      return updated.length;
+    });
   }
 
   async getConversationSummary(): Promise<ConversationSummaryRecord> {
@@ -687,6 +724,41 @@ export class DomainRepository {
         },
       },
     );
+  }
+
+  /**
+   * Latest messages first page (legacy Mesajlar "eski mesajları yükle"): the newest `limit` messages before the
+   * optional `before` message, returned oldest → newest, plus whether older messages exist.
+   */
+  async listMessagesPage(conversationPublicId: string, limit: number, before: string | null): Promise<{ messages: MessageWithAttachmentsRecord[]; hasMore: boolean }> {
+    const conversation = await this.db.selectFrom("conversations").select("id").where("public_id", "=", conversationPublicId).executeTakeFirst();
+    if (!conversation) return { messages: [], hasMore: false };
+    const cursor = before
+      ? await this.db.selectFrom("messages").select(["id", "sent_at"]).where("public_id", "=", before).where("conversation_id", "=", conversation.id).executeTakeFirst()
+      : undefined;
+    const rows = await this.db
+      .selectFrom("messages")
+      .selectAll()
+      .where("conversation_id", "=", conversation.id)
+      .$if(Boolean(cursor), (builder) =>
+        builder.where((eb) =>
+          eb.or([eb("sent_at", "<", cursor!.sent_at), eb.and([eb("sent_at", "=", cursor!.sent_at), eb("id", "<", cursor!.id)])]),
+        ),
+      )
+      .orderBy("sent_at", "desc")
+      .orderBy("id", "desc")
+      .limit(limit + 1)
+      .execute();
+    const hasMore = rows.length > limit;
+    const messages = rows.slice(0, limit).reverse();
+    const attachments = await this.listMessageAttachmentsByMessageIds(messages.map((message) => message.id));
+    const attachmentsByMessageId = new Map<number, MessageAttachmentRecord[]>();
+    for (const attachment of attachments) {
+      const list = attachmentsByMessageId.get(attachment.message_id) ?? [];
+      list.push(attachment);
+      attachmentsByMessageId.set(attachment.message_id, list);
+    }
+    return { messages: messages.map((message) => ({ ...message, attachments: attachmentsByMessageId.get(message.id) ?? [] })), hasMore };
   }
 
   async listMessages(conversationPublicId: string, limit: number): Promise<MessageWithAttachmentsRecord[]> {

@@ -392,14 +392,34 @@ export function createDomainRoutes() {
     const channels = channel?.includes(",")
       ? channel.split(",").map((item) => item.trim()).filter(Boolean)
       : undefined;
+    const search = context.req.query("search")?.trim();
+    const offset = Number.parseInt(context.req.query("offset") ?? "0", 10);
     const conversations = await new DomainRepository(db).listConversations({
       limit: limitSchema.parse(context.req.query("limit")),
+      ...(search ? { search: search.slice(0, 100) } : {}),
+      ...(Number.isFinite(offset) && offset > 0 ? { offset: Math.min(offset, 100_000) } : {}),
       ...(assigned === "unassigned" ? { assignedUserId: null } : {}),
       ...(channels ? { channels } : channel ? { channel } : {}),
       ...(status ? { status } : {}),
     });
 
     return context.json({ data: conversations.map(serializeConversation) });
+  });
+
+  routes.post("/conversations/mark-all-read", async (context) => {
+    if (!canReadConversations(context.get("auth")?.role)) {
+      return context.json({ error: { code: "forbidden", message: "Conversation access is not allowed" } }, 403);
+    }
+    const db = context.get("db");
+    if (!db) {
+      return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
+    }
+    const body = (await context.req.json().catch(() => ({}))) as { channel?: unknown };
+    const channel = typeof body.channel === "string" && body.channel !== "all" && body.channel !== "hepsi" ? body.channel : null;
+    // Legacy kanal filtresi: facebook covers both stored Messenger channel names.
+    const channels = channel ? (channel === "facebook" || channel === "messenger" ? ["facebook", "messenger"] : [channel]) : undefined;
+    const updated = await new DomainRepository(db).markAllConversationsRead(channels ? { channels } : {});
+    return context.json({ updated });
   });
 
   routes.get("/conversations/summary", async (context) => {
@@ -477,12 +497,13 @@ export function createDomainRoutes() {
       return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
     }
 
-    const messages = await new DomainRepository(db).listMessages(
+    const page = await new DomainRepository(db).listMessagesPage(
       context.req.param("conversation_public_id"),
       limitSchema.parse(context.req.query("limit")),
+      context.req.query("before")?.trim() || null,
     );
 
-    return context.json({ data: messages.map(serializeMessage) });
+    return context.json({ data: page.messages.map(serializeMessage), has_more: page.hasMore });
   });
 
   routes.get("/message-shortcuts", async (context) => {

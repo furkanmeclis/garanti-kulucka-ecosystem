@@ -89,6 +89,9 @@ const routeMocks = vi.hoisted(() => {
       })),
     },
     domainRepository: {
+      listMessagesPage: vi.fn(async () => ({ messages: [], hasMore: true })),
+      listConversations: vi.fn(async () => [conversation]),
+      markAllConversationsRead: vi.fn(async () => 4),
       getConversationDeliveryTarget: vi.fn(async (): Promise<{ public_id: string; channel: string; external_thread_id: string | null; customer_phone: string | null } | null> => ({
         public_id: "cnv_media",
         channel: "whatsapp",
@@ -397,5 +400,27 @@ describe("messages slice 2 routes", () => {
       live_call_permitted: false,
       provider: "openai",
     });
+  });
+
+  it("pages messages newest-first with a before cursor", async () => {
+    const response = await app().request("/api/conversations/cnv_media/messages?limit=30&before=msg_old", { headers: { authorization: `Bearer ${await accessToken()}` } });
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ data: [], has_more: true });
+    expect(routeMocks.domainRepository.listMessagesPage).toHaveBeenCalledWith("cnv_media", 30, "msg_old");
+  });
+
+  it("searches conversations server-side with an offset", async () => {
+    const response = await app().request("/api/conversations?search=%20ay%C5%9Fe%20&offset=50&limit=50", { headers: { authorization: `Bearer ${await accessToken()}` } });
+    expect(response.status).toBe(200);
+    expect(routeMocks.domainRepository.listConversations).toHaveBeenCalledWith({ limit: 50, search: "ayşe", offset: 50 });
+  });
+
+  it("marks every conversation read, optionally for one channel", async () => {
+    const token = await accessToken();
+    const all = await app().request("/api/conversations/mark-all-read", { method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: JSON.stringify({}) });
+    await expect(all.json()).resolves.toEqual({ updated: 4 });
+    expect(routeMocks.domainRepository.markAllConversationsRead).toHaveBeenLastCalledWith({});
+    await app().request("/api/conversations/mark-all-read", { method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: JSON.stringify({ channel: "facebook" }) });
+    expect(routeMocks.domainRepository.markAllConversationsRead).toHaveBeenLastCalledWith({ channels: ["facebook", "messenger"] });
   });
 });

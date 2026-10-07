@@ -188,6 +188,23 @@
                 "unassigned"
               ]
             }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            },
+            "description": "Customer name/phone/username or last message text (ILIKE)"
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
           }
         ],
         "responses": {
@@ -230,6 +247,14 @@
           },
           {
             "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "name": "before",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Message public id; returns the newest messages older than it"
           }
         ],
         "responses": {
@@ -8013,6 +8038,53 @@
           }
         }
       }
+    },
+    "/api/conversations/mark-all-read": {
+      "post": {
+        "operationId": "markAllConversationsRead",
+        "description": "Legacy POST /api/konusmalar/tumunu-okundu: clears unread counters (optionally one channel; facebook covers messenger) and marks their messages read. Platform read receipts are not sent.",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "channel": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated conversation count",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "updated"
+                  ],
+                  "properties": {
+                    "updated": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -8435,7 +8507,13 @@
           {
             "$ref": "#/components/schemas/DataEnvelope"
           }
-        ]
+        ],
+        "properties": {
+          "has_more": {
+            "type": "boolean",
+            "description": "Older messages exist (page with ?before=)"
+          }
+        }
       },
       "CustomerList": {
         "allOf": [
