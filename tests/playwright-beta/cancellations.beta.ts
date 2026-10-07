@@ -140,7 +140,9 @@ test("mobile cards, dismissed confirmation, English and the cargo operator is re
 
 test("cargo operator has no İptaller page", async ({ page }) => {
   await signIn(page, viewports.desktop, "kargo_operatoru");
-  await expect(page.getByTestId("desktop-more-trigger")).toHaveCount(0);
+  await page.getByTestId("desktop-more-trigger").click();
+  await expect(page.getByTestId("more-cancellations")).toHaveCount(0);
+  await page.keyboard.press("Escape");
   await page.goto("/iptaller");
   await expect.poll(() => pathOf(page)).toBe("/siparisler");
 });

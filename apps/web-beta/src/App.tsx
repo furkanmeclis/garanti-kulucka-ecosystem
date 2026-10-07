@@ -7,6 +7,7 @@ import { OfflineScreen, SplashScreen } from "@/layout/status-screens";
 import { LoginPage, redirectTarget } from "@/pages/login-page";
 import { AccountsPage } from "@/pages/accounts-page";
 import { CancellationsPage } from "@/pages/cancellations-page";
+import { CommentsPage } from "@/pages/comments-page";
 import { CustomerDetailPage } from "@/pages/customer-detail-page";
 import { CustomersPage } from "@/pages/customers-page";
 import { DashboardPage } from "@/pages/dashboard-page";
@@ -16,6 +17,7 @@ import { InvoicesPage } from "@/pages/invoices-page";
 import { MessagesPage } from "@/pages/messages-page";
 import { OrdersPage } from "@/pages/orders-page";
 import { SettingsPage } from "@/pages/settings-page";
+import { SmsPage } from "@/pages/sms-page";
 import { ShipmentsPage } from "@/pages/shipments-page";
 
 /** Legacy ProtectedRoute: anonymous → /giris (and back after login); pages outside the role → role home. */
@@ -54,6 +56,8 @@ export function App() {
       <Route path="/iptaller" element={<Protected><CancellationsPage /></Protected>} />
       <Route path="/stok" element={<Protected><InventoryPage /></Protected>} />
       <Route path="/bakiye" element={<Protected><BalancesPage /></Protected>} />
+      <Route path="/yorumlar" element={<Protected><CommentsPage /></Protected>} />
+      <Route path="/sms" element={<Protected><SmsPage /></Protected>} />
       <Route path="/faturalar" element={<Protected><InvoicesPage /></Protected>} />
       <Route path="/cari-hesaplar" element={<Protected><AccountsPage /></Protected>} />
       <Route path="*" element={<Protected><Navigate to="/" replace /></Protected>} />

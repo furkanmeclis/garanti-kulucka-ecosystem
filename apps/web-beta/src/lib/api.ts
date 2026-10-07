@@ -45,6 +45,22 @@ import type {
   StaffOrder,
   StockMovementSummary,
 } from "./inventory-balances";
+import type {
+  AutomaticSmsTriggerResponse,
+  CommentActionResponse,
+  CommentAiSuggestionResponse,
+  CommentControlReport,
+  CommentListResponse,
+  CommentModerationConfig,
+  CommentPlatform,
+  CommentReplyType,
+  CommentStatus,
+  ManualSmsSendRequest,
+  ManualSmsSendResponse,
+  SmsHistoryResponse,
+  SmsHistoryType,
+  SmsTemplate,
+} from "./sms-comments";
 import type { StoredTokens } from "./session-storage";
 
 /** VITE_BACKEND_BASE_URL (default "/backend"): same-origin proxy in Docker/nginx and the Vite dev server. */
@@ -278,6 +294,25 @@ export function createApiClient(options: ApiClientOptions) {
       request<BalancePaymentRequestResult>("/api/balances/payment-requests", { method: "POST", body: input }),
     processPaymentRequest: (publicId: string, decision: "approve" | "reject") =>
       request<ProcessBalancePaymentRequestResult>(`/api/balances/payment-requests/${encodeURIComponent(publicId)}/${decision}`, { method: "POST", body: {} }),
+    listSmsTemplates: () => request<{ data: SmsTemplate[] }>("/api/sms/templates"),
+    createSmsTemplate: (input: { title: string; body: string }) => request<{ template: SmsTemplate }>("/api/sms/templates", { method: "POST", body: input }),
+    updateSmsTemplate: (publicId: string, input: { title?: string; body?: string; is_active?: boolean }) =>
+      request<{ template: SmsTemplate }>(`/api/sms/templates/${encodeURIComponent(publicId)}`, { method: "PATCH", body: input }),
+    deleteSmsTemplate: (publicId: string) => request<{ deleted: boolean }>(`/api/sms/templates/${encodeURIComponent(publicId)}`, { method: "DELETE" }),
+    listSmsHistory: (query: { type: SmsHistoryType; q?: string; page: number; page_size: number }) => request<SmsHistoryResponse>("/api/sms/history", { query: { ...query } }),
+    sendManualSms: (input: ManualSmsSendRequest) => request<ManualSmsSendResponse>("/api/sms/manual-send", { method: "POST", body: input }),
+    triggerAutomaticSms: (provider: "ptt" | "surat", idempotencyKey: string) =>
+      request<AutomaticSmsTriggerResponse>("/api/sms/automatic/trigger", { method: "POST", body: { provider, idempotency_key: idempotencyKey } }),
+    listComments: (query: { status?: CommentStatus; platform?: CommentPlatform; q?: string; page: number; page_size: number }) => request<CommentListResponse>("/api/comments", { query: { ...query } }),
+    commentStats: () => request<{ counts: Record<CommentStatus, number> }>("/api/comments/stats"),
+    commentControl: () => request<CommentControlReport>("/api/comments/control"),
+    commentSettings: () => request<{ config: CommentModerationConfig }>("/api/comments/settings"),
+    saveCommentSettings: (config: CommentModerationConfig) => request<{ config: CommentModerationConfig }>("/api/comments/settings", { method: "PUT", body: config }),
+    replyComment: (publicId: string, input: { message: string; reply_type: CommentReplyType; idempotency_key: string }) =>
+      request<CommentActionResponse>(`/api/comments/${encodeURIComponent(publicId)}/reply`, { method: "POST", body: input }),
+    commentAction: (publicId: string, action: "hide" | "delete" | "manual", idempotencyKey: string) =>
+      request<CommentActionResponse>(`/api/comments/${encodeURIComponent(publicId)}/${action}`, { method: "POST", body: { idempotency_key: idempotencyKey } }),
+    suggestCommentReply: (publicId: string) => request<CommentAiSuggestionResponse>(`/api/comments/${encodeURIComponent(publicId)}/ai-suggestion`, { method: "POST", body: {} }),
     saveCustomerNotes: (publicId: string, notes: string | null) =>
       request<CustomerSummary>(`/api/customers/${encodeURIComponent(publicId)}/notes`, { method: "PATCH", body: { notes } }),
   };

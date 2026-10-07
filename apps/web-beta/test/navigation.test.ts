@@ -22,10 +22,10 @@ describe("role-based menu", () => {
   });
 
   it("puts the extra pages in the More menu with their legacy roles", () => {
-    expect(moreKeys("admin")).toEqual(["cancellations", "inventory", "balances", "invoices", "accounts"]);
-    expect(moreKeys("owner")).toEqual(["cancellations", "inventory", "balances", "invoices", "accounts"]);
-    expect(moreKeys("calisan")).toEqual(["cancellations", "inventory", "balances"]);
-    expect(moreKeys("kargo_operatoru")).toEqual([]);
+    expect(moreKeys("admin")).toEqual(["cancellations", "inventory", "balances", "comments", "sms", "invoices", "accounts"]);
+    expect(moreKeys("owner")).toEqual(["cancellations", "inventory", "balances", "comments", "sms", "invoices", "accounts"]);
+    expect(moreKeys("calisan")).toEqual(["cancellations", "inventory", "balances", "comments", "sms"]);
+    expect(moreKeys("kargo_operatoru")).toEqual(["sms"]);
     expect(canAccessPath("calisan", "/iptaller")).toBe(true);
     expect(canAccessPath("kargo_operatoru", "/iptaller")).toBe(false);
     expect(canAccessPath("calisan", "/faturalar")).toBe(false);
