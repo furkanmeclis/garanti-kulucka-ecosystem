@@ -264,11 +264,11 @@
         },
         "responses": {
           "201": {
-            "description": "Created message",
+            "description": "Created message with outbound provider-delivery result",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Message"
+                  "$ref": "#/components/schemas/CreatedMessage"
                 }
               }
             }
@@ -17045,6 +17045,88 @@
             "format": "date-time"
           }
         }
+      },
+      "MessageDelivery": {
+        "type": "object",
+        "description": "Provider-delivery queue result for panel replies (sender_type=user). WhatsApp sends media with the text as caption; Instagram/Messenger send text only with the HUMAN_AGENT tag.",
+        "required": [
+          "provider",
+          "queued",
+          "job_ids",
+          "skipped_reason",
+          "skipped_attachments",
+          "live_gate"
+        ],
+        "properties": {
+          "provider": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "whatsapp",
+              "instagram",
+              "messenger",
+              null
+            ]
+          },
+          "queued": {
+            "type": "boolean"
+          },
+          "job_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "skipped_reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "unsupported_channel",
+              "missing_recipient",
+              "empty_message",
+              null
+            ]
+          },
+          "skipped_attachments": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "live_gate": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "CreatedMessage": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Message"
+          },
+          {
+            "type": "object",
+            "required": [
+              "delivery"
+            ],
+            "properties": {
+              "delivery": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/MessageDelivery"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          }
+        ]
       }
     }
   }

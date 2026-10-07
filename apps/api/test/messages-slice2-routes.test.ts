@@ -1,5 +1,6 @@
 import type { AppDatabase } from "@garanti-kulucka/database";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { JobEnvelope } from "@garanti-kulucka/shared";
 import type { ApiConfig } from "../src/config.js";
 
 const routeMocks = vi.hoisted(() => {
@@ -88,6 +89,12 @@ const routeMocks = vi.hoisted(() => {
       })),
     },
     domainRepository: {
+      getConversationDeliveryTarget: vi.fn(async (): Promise<{ public_id: string; channel: string; external_thread_id: string | null; customer_phone: string | null } | null> => ({
+        public_id: "cnv_media",
+        channel: "whatsapp",
+        external_thread_id: null,
+        customer_phone: "0555 123 45 67",
+      })),
       createMessage: vi.fn(async (input) => ({
         id: 1,
         public_id: "msg_media",
@@ -180,13 +187,25 @@ async function accessToken() {
   );
 }
 
+const publishedJobs: JobEnvelope[] = [];
+
 function app() {
-  return createApp({ config, db: {} as AppDatabase });
+  return createApp({
+    config,
+    db: {} as AppDatabase,
+    providerDeliveryQueuePublisher: {
+      publish: async (job) => {
+        publishedJobs.push(job);
+        return job.job_id;
+      },
+    },
+  });
 }
 
 describe("messages slice 2 routes", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    publishedJobs.length = 0;
   });
 
   it("binds uploaded media references when creating a message", async () => {
@@ -214,6 +233,104 @@ describe("messages slice 2 routes", () => {
     await expect(response.json()).resolves.toMatchObject({
       attachments: [{ file_public_id: "fil_pdf", attachment_type: "document" }],
     });
+  });
+
+  it("queues a WhatsApp provider delivery for panel replies with media as caption", async () => {
+    const response = await app().request("/api/conversations/cnv_media/messages", {
+      method: "POST",
+      headers: { authorization: `Bearer ${await accessToken()}`, "content-type": "application/json" },
+      body: JSON.stringify({
+        sender_type: "user",
+        sender_name: "calisan@example.com",
+        body: "PDF ektedir",
+        attachments: [{ file_public_id: "fil_pdf", attachment_type: "document" }],
+      }),
+    });
+
+    expect(response.status).toBe(201);
+    await expect(response.json()).resolves.toMatchObject({
+      delivery: { provider: "whatsapp", queued: true, job_ids: ["job_panel_msg_media_0"], live_gate: "providers.whatsapp.live_mode" },
+    });
+    expect(publishedJobs).toHaveLength(1);
+    expect(publishedJobs[0]).toMatchObject({
+      queue: "provider-delivery",
+      name: "whatsapp.message.send",
+      payload: {
+        envelope: {
+          provider: "whatsapp",
+          operation: "message.send",
+          payload: {
+            to: "905551234567",
+            message: "PDF ektedir",
+            attachment: { file_public_id: "fil_pdf", caption: "PDF ektedir", filename: "kilavuz.pdf" },
+            conversation_public_id: "cnv_media",
+            idempotency_key: "panel_msg_media_0",
+          },
+        },
+      },
+    });
+  });
+
+  it("sends Instagram replies as HUMAN_AGENT text and reports skipped media", async () => {
+    routeMocks.domainRepository.getConversationDeliveryTarget.mockResolvedValueOnce({
+      public_id: "cnv_media",
+      channel: "instagram",
+      external_thread_id: "igsid_42",
+      customer_phone: null,
+    });
+    const response = await app().request("/api/conversations/cnv_media/messages", {
+      method: "POST",
+      headers: { authorization: `Bearer ${await accessToken()}`, "content-type": "application/json" },
+      body: JSON.stringify({
+        sender_type: "user",
+        body: "Merhaba",
+        attachments: [{ file_public_id: "fil_pdf", attachment_type: "document" }],
+      }),
+    });
+
+    await expect(response.json()).resolves.toMatchObject({
+      delivery: { provider: "instagram", queued: true, skipped_attachments: 1 },
+    });
+    expect(publishedJobs[0]).toMatchObject({
+      name: "instagram.message.send",
+      payload: { envelope: { payload: { to: "igsid_42", message: "Merhaba", human_agent: true } } },
+    });
+    expect(publishedJobs[0]?.payload).not.toHaveProperty("envelope.payload.attachment");
+  });
+
+  it("does not queue delivery for customer messages or recipientless conversations", async () => {
+    const token = await accessToken();
+    const customerResponse = await app().request("/api/conversations/cnv_media/messages", {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify({
+        sender_type: "customer",
+        body: "Soru",
+        attachments: [{ file_public_id: "fil_pdf", attachment_type: "document" }],
+      }),
+    });
+    await expect(customerResponse.json()).resolves.toMatchObject({ delivery: null });
+    expect(routeMocks.domainRepository.getConversationDeliveryTarget).not.toHaveBeenCalled();
+
+    routeMocks.domainRepository.getConversationDeliveryTarget.mockResolvedValueOnce({
+      public_id: "cnv_media",
+      channel: "messenger",
+      external_thread_id: null,
+      customer_phone: null,
+    });
+    const missingResponse = await app().request("/api/conversations/cnv_media/messages", {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify({
+        sender_type: "user",
+        body: "Merhaba",
+        attachments: [{ file_public_id: "fil_pdf", attachment_type: "document" }],
+      }),
+    });
+    await expect(missingResponse.json()).resolves.toMatchObject({
+      delivery: { provider: "messenger", queued: false, skipped_reason: "missing_recipient" },
+    });
+    expect(publishedJobs).toHaveLength(0);
   });
 
   it("autosaves conversation and customer notes through backend endpoints", async () => {

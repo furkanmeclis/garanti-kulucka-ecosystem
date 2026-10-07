@@ -2,6 +2,7 @@ import { BalanceRepository } from "../balances/repository.js";
 import { randomUUID } from "node:crypto";
 import { Hono, type Context } from "hono";
 import { z } from "zod";
+import type { AppDatabase } from "@garanti-kulucka/database";
 import { jobEnvelopeSchema, providerDeliveryJobPayloadSchema } from "@garanti-kulucka/shared";
 import type { AppBindings } from "./types.js";
 import { authenticate, requireDatabase } from "./middleware.js";
@@ -27,6 +28,7 @@ import {
   serializeStockMovement,
 } from "../domain/repository.js";
 import { calculateVatInclusiveOrder, moneyToCents } from "../domain/order-totals.js";
+import { planOutboundDelivery } from "../messaging/outbound-delivery.js";
 
 const limitSchema = z.coerce.number().int().min(1).max(200).default(50);
 const offsetSchema = z.coerce.number().int().min(0).default(0);
@@ -309,6 +311,39 @@ function canRequestPayment(role: string | undefined) {
 
 function canManageMessages(role: string | undefined) {
   return role === "admin" || role === "owner" || role === "calisan";
+}
+
+async function queueOutboundDelivery(
+  context: Context<AppBindings>,
+  db: AppDatabase,
+  message: { public_id: string; body: string | null; attachments: Array<{ file_public_id: string; original_name?: string | null }> },
+) {
+  const target = await new DomainRepository(db).getConversationDeliveryTarget(context.req.param("conversation_public_id") ?? "");
+  if (!target) return null;
+  const plan = planOutboundDelivery({
+    target,
+    messagePublicId: message.public_id,
+    body: message.body,
+    attachments: message.attachments.map((attachment) => ({ file_public_id: attachment.file_public_id, original_name: attachment.original_name })),
+    requestId: context.get("requestId"),
+  });
+  if ("reason" in plan) {
+    return { provider: plan.provider, queued: false, job_ids: [], skipped_reason: plan.reason, skipped_attachments: 0, live_gate: plan.provider ? `providers.${plan.provider}.live_mode` : null };
+  }
+  const publisher = context.get("providerDeliveryQueuePublisher");
+  const jobIds: string[] = [];
+  for (const job of plan.jobs) {
+    const jobId = await publisher.publish(job);
+    if (jobId) jobIds.push(jobId);
+  }
+  return {
+    provider: plan.provider,
+    queued: jobIds.length === plan.jobs.length && jobIds.length > 0,
+    job_ids: jobIds,
+    skipped_reason: null,
+    skipped_attachments: plan.skipped_attachments,
+    live_gate: `providers.${plan.provider}.live_mode`,
+  };
 }
 
 function jobIdFromIdempotencyKey(key: string) {
@@ -645,7 +680,8 @@ export function createDomainRoutes() {
     realtimePublisher.publishToConversation(context.req.param("conversation_public_id"), messageCreatedEnvelope);
     realtimePublisher.broadcast(messageCreatedEnvelope);
 
-    return context.json(serializeMessage(message), 201);
+    const delivery = message.sender_type === "user" ? await queueOutboundDelivery(context, db, message) : null;
+    return context.json({ ...serializeMessage(message), delivery }, 201);
   });
 
   routes.patch("/conversations/:conversation_public_id/notes", async (context) => {

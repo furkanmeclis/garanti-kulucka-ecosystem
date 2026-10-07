@@ -504,6 +504,13 @@ function pipelineStatusFromShipment(shipment: ShipmentRecord): ShipmentPipelineS
   return "bekliyor";
 }
 
+export interface ConversationDeliveryTarget {
+  public_id: string;
+  channel: string;
+  external_thread_id: string | null;
+  customer_phone: string | null;
+}
+
 export class DomainRepository {
   constructor(private readonly db: AppDatabase) {}
 
@@ -917,6 +924,28 @@ export class DomainRepository {
         }),
       };
     });
+  }
+
+  async getConversationDeliveryTarget(conversationPublicId: string): Promise<ConversationDeliveryTarget | null> {
+    const row = await this.db
+      .selectFrom("conversations")
+      .leftJoin("customers", "customers.id", "conversations.customer_id")
+      .select([
+        "conversations.public_id as public_id",
+        "conversations.channel as channel",
+        "conversations.external_thread_id as external_thread_id",
+        "customers.phone as customer_phone",
+      ])
+      .where("conversations.public_id", "=", conversationPublicId)
+      .executeTakeFirst();
+    return row
+      ? {
+          public_id: row.public_id,
+          channel: row.channel,
+          external_thread_id: row.external_thread_id,
+          customer_phone: row.customer_phone ?? null,
+        }
+      : null;
   }
 
   async updateConversationNotes(input: UpdateConversationNotesInput): Promise<ConversationRecord> {
