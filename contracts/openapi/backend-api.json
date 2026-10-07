@@ -8869,6 +8869,13 @@
               "null"
             ]
           },
+          "customer_phone": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Customer phone (legacy Excel phone export)"
+          },
           "created_by_user_public_id": {
             "type": [
               "string",

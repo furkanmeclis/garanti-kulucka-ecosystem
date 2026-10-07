@@ -49,6 +49,8 @@ export type MessageShortcutAttachmentRecord = Selectable<MessageShortcutAttachme
 type ShortcutTableRecord = Selectable<MessageShortcutsTable>;
 export type OrderRecord = Selectable<OrdersTable> & {
   customer_full_name: string | null;
+  /** Legacy Excel "telefon" export; optional so rows built elsewhere (e.g. duplicate checks) stay valid. */
+  customer_phone?: string | null;
   created_by_user_public_id: string | null;
   created_by_user_email: string | null;
   cargo_provider: string | null;
@@ -568,6 +570,7 @@ export class DomainRepository {
       .selectAll("orders")
       .select([
         "customers.full_name as customer_full_name",
+        "customers.phone as customer_phone",
         "users.public_id as created_by_user_public_id",
         "users.email as created_by_user_email",
       ])
@@ -1270,6 +1273,7 @@ export class DomainRepository {
       .selectAll("orders")
       .select([
         "customers.full_name as customer_full_name",
+        "customers.phone as customer_phone",
         "users.public_id as created_by_user_public_id",
         "users.email as created_by_user_email",
       ])
@@ -2231,6 +2235,7 @@ export function serializeOrder(order: OrderRecord) {
     confirmation_status: order.confirmation_status,
     notes: order.notes,
     customer_full_name: order.customer_full_name,
+    customer_phone: order.customer_phone ?? null,
     created_by_user_public_id: order.created_by_user_public_id,
     created_by_user_email: order.created_by_user_email,
     created_at: order.created_at,

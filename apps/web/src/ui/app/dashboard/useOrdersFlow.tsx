@@ -309,7 +309,7 @@ export function useOrdersFlow(core: DashboardCore, selectedConversation: Convers
       ? ["İsim", "Telefon"]
       : ["Sipariş No", "Müşteri", "Durum", "Kaynak", "Kargo", "Personel", "Tutar", "Tarih"];
     const bodyRows = rows.map((order) => format === "telefon"
-      ? [order.customer_full_name ?? order.order_number, ""]
+      ? [order.customer_full_name ?? order.order_number, order.customer_phone ?? ""]
       : [
           order.order_number,
           order.customer_full_name ?? "",

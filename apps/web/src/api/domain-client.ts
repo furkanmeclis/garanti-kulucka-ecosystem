@@ -115,6 +115,7 @@ export interface OrderSummary {
   confirmation_status: string | null;
   notes: string | null;
   customer_full_name: string | null;
+  customer_phone?: string | null;
   created_by_user_public_id: string | null;
   created_by_user_email: string | null;
   created_at: string;

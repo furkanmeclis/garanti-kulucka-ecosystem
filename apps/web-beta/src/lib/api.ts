@@ -81,6 +81,20 @@ import type {
   VoiceMessageMutation,
   VoiceMessageStatus,
 } from "./voice";
+import type {
+  BulkCreateShipmentsResponse,
+  CargoProviderKey,
+  CreateOrderInput,
+  CreateShipmentResponse,
+  CustomerLookup,
+  OrderActionDetail,
+  OrderBulkActionResponse,
+  OrderProviderStep,
+  OrderProviderStepResponse,
+  ProductOption,
+  ShipmentDraft,
+  ShipmentPaymentStatus,
+} from "./orders";
 import type { DataDeletionInput, DataDeletionRequest, DataDeletionStatus, DataDeletionStatusLookup } from "./privacy";
 import type { StoredTokens } from "./session-storage";
 import type { AdminLogEntry, CreateManagedUserInput, ManagedRole, ManagedUser, UpdateManagedUserInput } from "./users";
@@ -118,6 +132,11 @@ export interface ApiClientOptions {
 export interface OrderListQuery {
   search?: string;
   status?: string;
+  confirmation_status?: string;
+  source?: string;
+  created_by_user_public_id?: string;
+  created_from?: string;
+  created_to?: string;
   cargo_provider?: string;
   sort_by?: "created_at" | "updated_at" | "order_number" | "status" | "total_amount";
   sort_direction?: "asc" | "desc";
@@ -367,6 +386,37 @@ export function createApiClient(options: ApiClientOptions) {
     getVapiCall: (publicId: string) => request<{ call: VapiCall; backfill_queued: boolean }>(`/api/vapi/calls/${encodeURIComponent(publicId)}`),
     createVapiTestCall: (input: { customer_name: string; customer_phone: string; cargo_provider: string; tracking_number: string; last_event_text: string; idempotency_key: string }) =>
       request<{ operation: string; request_id: string }>("/api/webphone/test-call", { method: "POST", body: input }),
+    createOrder: (input: CreateOrderInput) => request<OrderSummary>("/api/orders", { method: "POST", body: input }),
+    orderProductOptions: () => request<{ data: ProductOption[] }>("/api/orders/product-options", { query: { limit: 100 } }),
+    lookupCustomerByPhone: (phone: string) => request<CustomerLookup>("/api/orders/customer-lookup", { query: { phone } }),
+    getOrderActionDetail: (publicId: string) => request<{ order: OrderActionDetail; steps: OrderProviderStep[] }>(`/api/orders/${encodeURIComponent(publicId)}/actions`),
+    syncOrderProviderSteps: (publicId: string) => request<{ advanced_count: number }>(`/api/orders/${encodeURIComponent(publicId)}/provider-sync`, { method: "POST" }),
+    updateOrderStatus: (publicId: string, status: string) => request<unknown>(`/api/orders/${encodeURIComponent(publicId)}/status`, { method: "PATCH", body: { status } }),
+    setOrderConfirmation: (publicId: string, confirmation_status: "teyit_edildi" | "ulasilamadi" | "bekliyor") =>
+      request<unknown>(`/api/orders/${encodeURIComponent(publicId)}/confirmation`, { method: "PATCH", body: { confirmation_status } }),
+    cancelOrder: (publicId: string, status: "cancelled" | "returned", idempotencyKey: string, reason?: string) =>
+      request<{ e_document_cancel: OrderProviderStep | null }>(`/api/orders/${encodeURIComponent(publicId)}/cancel`, { method: "POST", body: { status, idempotency_key: idempotencyKey, ...(reason ? { reason } : {}) } }),
+    orderKolaybiTransfer: (publicId: string, idempotencyKey: string) =>
+      request<OrderProviderStepResponse>(`/api/orders/${encodeURIComponent(publicId)}/kolaybi/transfer`, { method: "POST", body: { idempotency_key: idempotencyKey } }),
+    orderEDocument: (publicId: string, idempotencyKey: string) =>
+      request<OrderProviderStepResponse>(`/api/orders/${encodeURIComponent(publicId)}/kolaybi/e-document`, { method: "POST", body: { action: "create", idempotency_key: idempotencyKey } }),
+    orderInvoice: (publicId: string, idempotencyKey: string) =>
+      request<OrderProviderStepResponse>(`/api/orders/${encodeURIComponent(publicId)}/kolaybi/invoice`, { method: "POST", body: { idempotency_key: idempotencyKey } }),
+    orderConfirmationCall: (publicId: string, idempotencyKey: string) =>
+      request<OrderProviderStepResponse>(`/api/orders/${encodeURIComponent(publicId)}/confirmation-call`, { method: "POST", body: { idempotency_key: idempotencyKey } }),
+    orderConfirmationStatus: (publicId: string, idempotencyKey: string) =>
+      request<OrderProviderStepResponse>(`/api/orders/${encodeURIComponent(publicId)}/confirmation-call/status`, { method: "POST", body: { idempotency_key: idempotencyKey } }),
+    bulkConfirmationCalls: (publicIds: string[], idempotencyKey: string) =>
+      request<OrderBulkActionResponse>("/api/orders/bulk/confirmation-calls", { method: "POST", body: { order_public_ids: publicIds, idempotency_key: idempotencyKey } }),
+    bulkKolaybiTransfer: (publicIds: string[], idempotencyKey: string) =>
+      request<OrderBulkActionResponse>("/api/orders/bulk/kolaybi-transfer", { method: "POST", body: { order_public_ids: publicIds, idempotency_key: idempotencyKey } }),
+    getShipmentDraft: (orderPublicId: string) => request<ShipmentDraft>(`/api/orders/${encodeURIComponent(orderPublicId)}/shipment-draft`),
+    createShipment: (
+      orderPublicId: string,
+      input: { provider: CargoProviderKey; payment_status: ShipmentPaymentStatus; idempotency_key: string; recipient_address?: string; recipient_city?: string; recipient_district?: string },
+    ) => request<CreateShipmentResponse>(`/api/orders/${encodeURIComponent(orderPublicId)}/shipments`, { method: "POST", body: input }),
+    bulkCreateShipments: (input: { provider: CargoProviderKey; order_public_ids: string[]; idempotency_key: string }) =>
+      request<BulkCreateShipmentsResponse>("/api/shipments/bulk-create", { method: "POST", body: input }),
     submitDataDeletion: (input: DataDeletionInput) =>
       request<{ success: boolean; message: string; reference: string }>("/api/veri-silme-talebi", { method: "POST", body: input, auth: false }),
     dataDeletionStatus: (reference: string) => request<DataDeletionStatusLookup>(`/api/veri-silme-talebi/${encodeURIComponent(reference)}`, { auth: false }),

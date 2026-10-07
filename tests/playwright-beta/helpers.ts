@@ -48,6 +48,7 @@ const order = (index: number, overrides: Record<string, unknown> = {}) => ({
   total_amount: `${(index * 125.5).toFixed(2)}`,
   currency: "TRY",
   customer_full_name: `Müşteri Uzun Adı Soyadı ${index}`,
+  customer_phone: `0555${String(1000000 + index)}`,
   created_at: new Date(Date.UTC(2026, 9, 1 + (index % 28), 10, 30)).toISOString(),
   ...overrides,
 });
