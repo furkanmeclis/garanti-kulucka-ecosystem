@@ -1,4 +1,5 @@
-import { AlertTriangle, ArrowLeft, CheckCircle2, Loader2, Trash2 } from "lucide-react";
+import { AlertTriangle, ArrowLeft, CheckCircle2, FileText, Loader2, ShieldCheck, Trash2 } from "lucide-react";
+import { legalDocuments, type LegalDocumentKey } from "@garanti-kulucka/shared";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useSearchParams } from "react-router-dom";
@@ -196,6 +197,59 @@ export function DataDeletionPage() {
           </Card>
         </>
       )}
+    </PublicLayout>
+  );
+}
+
+/** /gizlilik-politikasi and /kullanim-kosullari — legacy PrivacyPolicyPage / TermsOfServicePage (shared TR/EN text). */
+export function LegalPage({ document: key }: { document: LegalDocumentKey }) {
+  const { i18n } = useTranslation();
+  const document = legalDocuments[i18n.language === "en" ? "en" : "tr"][key];
+  return (
+    <PublicLayout
+      title={document.title}
+      subtitle={document.subtitle}
+      icon={key === "privacy" ? <ShieldCheck className="size-5" aria-hidden="true" /> : <FileText className="size-5" aria-hidden="true" />}
+      testId={`page-legal-${key}`}
+    >
+      <Card className="flex flex-col gap-5 p-4 text-sm leading-relaxed sm:p-6">
+        <p className="text-xs text-muted-foreground">{document.updated}</p>
+        {document.sections.map((section) => (
+          <section key={section.heading} className="flex flex-col gap-2">
+            <h2 className="text-base font-semibold">{section.heading}</h2>
+            {section.paragraphs?.map((paragraph) => (
+              <p key={paragraph} className="text-muted-foreground">
+                {paragraph}
+              </p>
+            ))}
+            {section.items && (
+              <ul className="list-disc space-y-1 pl-5 text-muted-foreground">
+                {section.items.map((item) => (
+                  <li key={`${item.label ?? ""}${item.text}`}>
+                    {item.label && <strong className="text-foreground">{item.label}: </strong>}
+                    {item.text}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {section.after?.map((paragraph) => (
+              <p key={paragraph} className="text-muted-foreground">
+                {paragraph}
+              </p>
+            ))}
+            {section.link && (
+              <p className="text-muted-foreground">
+                {section.link.before}
+                <Link to={section.link.path} className="font-medium text-primary underline-offset-4 hover:underline">
+                  {section.link.label}
+                </Link>
+                {section.link.after}
+              </p>
+            )}
+          </section>
+        ))}
+        <p className="text-xs text-muted-foreground">{document.footer}</p>
+      </Card>
     </PublicLayout>
   );
 }

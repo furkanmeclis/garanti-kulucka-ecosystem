@@ -79,7 +79,11 @@
     "submitting": "Signing in…",
     "invalid": "Incorrect email or password.",
     "failed": "Could not sign in. Please try again.",
-    "offline": "You are offline; signing in needs an internet connection."
+    "offline": "You are offline; signing in needs an internet connection.",
+    "rememberMe": "Remember me",
+    "privacy": "Privacy Policy",
+    "terms": "Terms of Service",
+    "deletion": "Data Deletion Request"
   },
   "common": {
     "all": "All",

@@ -79,7 +79,11 @@
     "submitting": "Giriş yapılıyor…",
     "invalid": "E-posta veya şifre hatalı.",
     "failed": "Giriş yapılamadı. Lütfen tekrar deneyin.",
-    "offline": "Çevrimdışısınız; giriş için internet bağlantısı gerekir."
+    "offline": "Çevrimdışısınız; giriş için internet bağlantısı gerekir.",
+    "rememberMe": "Beni hatırla",
+    "privacy": "Gizlilik Politikası",
+    "terms": "Kullanım Koşulları",
+    "deletion": "Veri Silme Talebi"
   },
   "common": {
     "all": "Tümü",

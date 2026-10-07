@@ -34,6 +34,7 @@ export const authMessages = defineMessages({
     sendResetLink: "Sıfırlama bağlantısı gönder",
     password: "Şifre",
     login: "Giriş yap",
+    rememberMe: "Beni hatırla",
     forgotPassword: "Şifremi unuttum",
   },
   en: {
@@ -68,6 +69,7 @@ export const authMessages = defineMessages({
     sendResetLink: "Send reset link",
     password: "Password",
     login: "Sign in",
+    rememberMe: "Remember me",
     forgotPassword: "Forgot password",
   },
 });

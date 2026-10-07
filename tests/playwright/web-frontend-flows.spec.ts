@@ -2037,7 +2037,8 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
 
   try {
     await page.goto(`${app.url}/gizlilik-politikasi`);
-    await expect(page.getByTestId("privacy-public-page")).toContainText("Backend API");
+    await expect(page.getByTestId("privacy-public-page")).toContainText("8. Haklarınız");
+    await expect(page.getByTestId("privacy-public-page").getByRole("link", { name: "Veri Silme Talebi" })).toHaveAttribute("href", "/veri-silme");
     await page.goto(`${app.url}/kullanim-kosullari`);
     await expect(page.getByTestId("terms-public-page")).toContainText("PTT");
     await page.goto(`${app.url}/veri-silme`);

@@ -23,7 +23,7 @@ import { SmsPage } from "@/pages/sms-page";
 import { ShipmentsPage } from "@/pages/shipments-page";
 import { ActivityLogsPage, UsersPage } from "@/pages/users-page";
 import { VapiPage } from "@/pages/vapi-page";
-import { DataDeletionPage } from "@/pages/public-pages";
+import { DataDeletionPage, LegalPage } from "@/pages/public-pages";
 import { DataDeletionRequestsPage } from "@/pages/data-deletion-requests-page";
 import { CallsPage, PhonebookPage, VoiceMessagesPage } from "@/pages/voice-pages";
 
@@ -54,6 +54,8 @@ export function App() {
     <Routes>
       <Route path="/giris" element={<LoginRoute />} />
       <Route path="/veri-silme" element={<DataDeletionPage />} />
+      <Route path="/gizlilik-politikasi" element={<LegalPage document="privacy" />} />
+      <Route path="/kullanim-kosullari" element={<LegalPage document="terms" />} />
       <Route path="/" element={<Protected><DashboardPage /></Protected>} />
       <Route path="/siparisler" element={<Protected><OrdersPage /></Protected>} />
       <Route path="/mesajlar" element={<Protected><MessagesPage /></Protected>} />
@@ -78,6 +80,8 @@ export function App() {
       <Route path="/kullanicilar" element={<Protected><UsersPage /></Protected>} />
       <Route path="/islem-loglari" element={<Protected><ActivityLogsPage /></Protected>} />
       <Route path="/veri-silme-talepleri" element={<Protected><DataDeletionRequestsPage /></Protected>} />
+      {/* Legacy and web use /kargo; the beta list lives at /kargolar. */}
+      <Route path="/kargo" element={<Navigate to="/kargolar" replace />} />
       <Route path="*" element={<Protected><Navigate to="/" replace /></Protected>} />
     </Routes>
   );

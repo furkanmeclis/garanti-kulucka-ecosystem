@@ -4485,3 +4485,50 @@ nav {
   background: #b91c1c;
 }
 .ayarlar-pill.amber { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
+
+/* Legacy PrivacyPolicyPage / TermsOfServicePage full text. */
+.legal-section {
+  display: grid;
+  gap: 8px;
+}
+
+.legal-section h2 {
+  margin: 0;
+  font-size: 17px;
+  color: #f1f5f9;
+}
+
+.legal-section p,
+.legal-section li {
+  margin: 0;
+  line-height: 1.6;
+  color: #cbd5e1;
+}
+
+.legal-section ul {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 20px;
+}
+
+.legal-section a {
+  color: #86efac;
+}
+
+.legal-updated {
+  margin: 0;
+  font-size: 13px;
+}
+
+.login-card .remember-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.login-card .remember-line input {
+  min-height: auto;
+  width: 18px;
+  height: 18px;
+}

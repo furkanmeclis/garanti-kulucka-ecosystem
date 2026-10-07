@@ -1,7 +1,7 @@
 import { Loader2, LogIn, WifiOff } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/app/auth";
 import { canAccessPath, homePathFor } from "@/app/navigation";
 import { useOnlineStatus } from "@/app/pwa-hooks";
@@ -17,6 +17,16 @@ export function redirectTarget(state: unknown) {
   return typeof from === "string" && from.startsWith("/") && from !== "/giris" ? from : null;
 }
 
+const rememberEmailKey = "garanti-beta-remember-email";
+
+function readRememberedEmail() {
+  try {
+    return window.localStorage.getItem(rememberEmailKey);
+  } catch {
+    return null;
+  }
+}
+
 export function LoginPage() {
   const { t } = useTranslation();
   const { login } = useAuth();
@@ -25,10 +35,18 @@ export function LoginPage() {
   const online = useOnlineStatus();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [remembered] = useState(readRememberedEmail);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
+    // Legacy "Beni hatırla" also stored the password; only the email is remembered here.
+    try {
+      if (form.get("remember") === "on") window.localStorage.setItem(rememberEmailKey, String(form.get("email") ?? ""));
+      else window.localStorage.removeItem(rememberEmailKey);
+    } catch {
+      // Storage may be unavailable (private mode); remembering is best effort.
+    }
     setSubmitting(true);
     setError(null);
     try {
@@ -66,12 +84,16 @@ export function LoginPage() {
             )}
             <div className="flex flex-col gap-2">
               <Label htmlFor="email">{t("login.email")}</Label>
-              <Input id="email" name="email" type="email" autoComplete="username" inputMode="email" required />
+              <Input id="email" name="email" type="email" autoComplete="username" inputMode="email" required defaultValue={remembered ?? ""} />
             </div>
             <div className="flex flex-col gap-2">
               <Label htmlFor="password">{t("login.password")}</Label>
               <Input id="password" name="password" type="password" autoComplete="current-password" required />
             </div>
+            <label className="flex min-h-11 items-center gap-3 text-sm">
+              <input type="checkbox" name="remember" className="h-11 w-5 accent-primary md:size-5" defaultChecked={remembered !== null} data-testid="login-remember" />
+              {t("login.rememberMe")}
+            </label>
             {error && (
               <p className="text-sm text-destructive" role="alert" data-testid="login-error">
                 {error}
@@ -82,6 +104,19 @@ export function LoginPage() {
               {submitting ? t("login.submitting") : t("login.submit")}
             </Button>
           </form>
+          <nav className="mt-4 flex flex-wrap justify-center gap-x-1 text-sm" aria-label={t("login.title")} data-testid="login-links">
+            {(
+              [
+                ["/gizlilik-politikasi", "privacy"],
+                ["/kullanim-kosullari", "terms"],
+                ["/veri-silme", "deletion"],
+              ] as const
+            ).map(([to, key]) => (
+              <Link key={to} to={to} className="inline-flex min-h-11 items-center px-2 text-muted-foreground underline-offset-4 hover:text-foreground hover:underline">
+                {t(`login.${key}`)}
+              </Link>
+            ))}
+          </nav>
         </CardContent>
       </Card>
     </main>
