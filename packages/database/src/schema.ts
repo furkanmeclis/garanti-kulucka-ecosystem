@@ -40,6 +40,7 @@ export interface Database {
   invoice_items: InvoiceItemsTable;
   invoice_payments: InvoicePaymentsTable;
   voice_messages: VoiceMessagesTable;
+  data_deletion_requests: DataDeletionRequestsTable;
   vapi_call_queue: VapiCallQueueTable;
   vapi_calls: VapiCallsTable;
   products: ProductsTable;
@@ -370,6 +371,22 @@ export interface VoiceMessagesTable extends BaseTable {
   report_checked_at: Timestamp | null;
   idempotency_key: string;
   created_by_user_id: number | null;
+}
+
+export interface DataDeletionRequestsTable extends BaseTable {
+  reference: string;
+  source: ColumnType<string, string | undefined, string>;
+  full_name: string | null;
+  email: string | null;
+  phone: string | null;
+  instagram_username: string | null;
+  messenger_psid: string | null;
+  description: string | null;
+  status: ColumnType<string, string | undefined, string>;
+  resolution_note: string | null;
+  requested_at: ColumnType<Date, Date | string | undefined, Date | string>;
+  resolved_at: Timestamp | null;
+  resolved_by_user_id: number | null;
 }
 
 export interface VapiCallQueueTable extends BaseTable {

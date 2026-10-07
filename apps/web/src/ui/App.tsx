@@ -7,6 +7,7 @@ import { AppLayout, homePathForRole } from "./layout/AppLayout.js";
 import { useT } from "./i18n/index.js";
 import { layoutMessages } from "./i18n/messages/layout.js";
 import { LoginScreen, PublicPage, ResetPasswordScreen } from "./pages/AuthScreens.js";
+import { DataDeletionPage } from "./pages/DataDeletionPage.js";
 import { OrderCreateModal } from "./pages/flows/OrderCreateModal.js";
 import { SoftphoneProvider } from "./softphone/Softphone.js";
 import {
@@ -101,7 +102,7 @@ export function App() {
   }, [token]);
 
   if (publicPage) {
-    return <PublicPage page={publicPage} />;
+    return publicPage === "deletion" ? <DataDeletionPage http={http} /> : <PublicPage page={publicPage} />;
   }
 
   if (location.pathname === "/sifre-sifirla") {

@@ -1,8 +1,8 @@
 import type { LucideIcon } from "lucide-react";
-import { BarChart3, BookUser, Bot, Contact, FileText, Instagram, LineChart, LayoutDashboard, MessageCircle, MessageSquare, MessageSquareText, Package, PhoneCall, ScrollText, Settings, ShoppingCart, Truck, UserCog, Users, Voicemail, Wallet, XCircle } from "lucide-react";
+import { BarChart3, BookUser, Bot, Contact, FileText, Instagram, LineChart, LayoutDashboard, MessageCircle, MessageSquare, MessageSquareText, Package, PhoneCall, ScrollText, Settings, ShieldX, ShoppingCart, Truck, UserCog, Users, Voicemail, Wallet, XCircle } from "lucide-react";
 import { panelRoleOf, type PanelRole } from "@garanti-kulucka/shared";
 
-export type NavKey = "dashboard" | "orders" | "messages" | "customers" | "shipments" | "settings" | "cancellations" | "invoices" | "accounts" | "inventory" | "balances" | "comments" | "sms" | "reports" | "instagramAnalytics" | "instagramPublish" | "calls" | "voiceMessages" | "phonebook" | "vapi" | "users" | "activityLogs";
+export type NavKey = "dashboard" | "orders" | "messages" | "customers" | "shipments" | "settings" | "cancellations" | "invoices" | "accounts" | "inventory" | "balances" | "comments" | "sms" | "reports" | "instagramAnalytics" | "instagramPublish" | "calls" | "voiceMessages" | "phonebook" | "vapi" | "users" | "activityLogs" | "dataDeletionRequests";
 
 export interface NavItem {
   key: NavKey;
@@ -42,6 +42,7 @@ export const navItems: readonly NavItem[] = [
   { key: "phonebook", path: "/sesli-asistan/rehber", icon: Contact, roles: managers, bottomBar: false, section: "more" },
   { key: "users", path: "/kullanicilar", icon: UserCog, roles: managers, bottomBar: false, section: "more" },
   { key: "activityLogs", path: "/islem-loglari", icon: ScrollText, roles: managers, bottomBar: false, section: "more" },
+  { key: "dataDeletionRequests", path: "/veri-silme-talepleri", icon: ShieldX, roles: managers, bottomBar: false, section: "more" },
 ];
 
 /** Menu for a backend role (owner/admin → manager); unknown roles only get settings/profile. */

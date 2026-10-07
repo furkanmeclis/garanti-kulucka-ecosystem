@@ -81,6 +81,7 @@ import type {
   VoiceMessageMutation,
   VoiceMessageStatus,
 } from "./voice";
+import type { DataDeletionInput, DataDeletionRequest, DataDeletionStatus, DataDeletionStatusLookup } from "./privacy";
 import type { StoredTokens } from "./session-storage";
 import type { AdminLogEntry, CreateManagedUserInput, ManagedRole, ManagedUser, UpdateManagedUserInput } from "./users";
 
@@ -366,6 +367,13 @@ export function createApiClient(options: ApiClientOptions) {
     getVapiCall: (publicId: string) => request<{ call: VapiCall; backfill_queued: boolean }>(`/api/vapi/calls/${encodeURIComponent(publicId)}`),
     createVapiTestCall: (input: { customer_name: string; customer_phone: string; cargo_provider: string; tracking_number: string; last_event_text: string; idempotency_key: string }) =>
       request<{ operation: string; request_id: string }>("/api/webphone/test-call", { method: "POST", body: input }),
+    submitDataDeletion: (input: DataDeletionInput) =>
+      request<{ success: boolean; message: string; reference: string }>("/api/veri-silme-talebi", { method: "POST", body: input, auth: false }),
+    dataDeletionStatus: (reference: string) => request<DataDeletionStatusLookup>(`/api/veri-silme-talebi/${encodeURIComponent(reference)}`, { auth: false }),
+    listDataDeletionRequests: (query: { status?: DataDeletionStatus; limit: number; offset: number }) =>
+      request<{ data: DataDeletionRequest[]; total_count: number; limit: number; offset: number }>("/admin/data-deletion-requests", { query: { ...query } }),
+    updateDataDeletionRequest: (publicId: string, input: { status: DataDeletionStatus; note: string | null }) =>
+      request<{ request: DataDeletionRequest }>(`/admin/data-deletion-requests/${encodeURIComponent(publicId)}`, { method: "PATCH", body: input }),
     listUsers: () => request<{ data: ManagedUser[]; roles: ManagedRole[] }>("/admin/users"),
     createUser: (input: CreateManagedUserInput) => request<{ user: ManagedUser }>("/admin/users", { method: "POST", body: input }),
     updateUser: (publicId: string, input: UpdateManagedUserInput) => request<{ user: ManagedUser }>(`/admin/users/${encodeURIComponent(publicId)}`, { method: "PATCH", body: input }),

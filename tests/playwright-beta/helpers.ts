@@ -107,7 +107,7 @@ export interface BackendState {
 export type ExtraRoute = (request: { method: string; path: string; url: URL; body: unknown }, state: BackendState) => { status: number; body: unknown } | undefined;
 
 /** Mocks the beta panel's backend calls (cross-origin, so CORS and preflights are answered too). */
-export async function mockBackend(page: Page, user: MockUser, options: { orderCount?: number; extra?: ExtraRoute } = {}) {
+export async function mockBackend(page: Page, user: MockUser, options: { orderCount?: number; extra?: ExtraRoute; anonymous?: (path: string) => boolean } = {}) {
   const state: BackendState = {
     user,
     password: "dogru-sifre",
@@ -139,7 +139,8 @@ export async function mockBackend(page: Page, user: MockUser, options: { orderCo
       }
     })();
     if (method !== "GET") state.bodies.push({ method, path: url.pathname, body: parsedBody });
-    if (url.pathname !== "/auth/login" && authed && options.extra) {
+    // Public backend endpoints (e.g. the KVKK deletion form) reach the extra routes without a session.
+    if (url.pathname !== "/auth/login" && (authed || options.anonymous?.(url.pathname)) && options.extra) {
       const answer = options.extra({ method, path: url.pathname, url, body: parsedBody }, state);
       if (answer) return json(answer.status, answer.body);
     }

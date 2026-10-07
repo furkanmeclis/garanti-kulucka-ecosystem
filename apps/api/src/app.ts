@@ -21,6 +21,7 @@ import { createInstagramRoutes } from "./http/instagram-routes.js";
 import { createSettingsRoutes } from "./http/settings-routes.js";
 import { createShipmentCreateRoutes } from "./http/shipment-create-routes.js";
 import { createAccountRoutes, createAdminUserRoutes, createAppSettingsRoutes } from "./http/admin-user-routes.js";
+import { createDataDeletionAdminRoutes, createPrivacyPublicRoutes } from "./http/privacy-routes.js";
 import { createWebhookRoutes } from "./http/webhook-routes.js";
 import { createWebphoneRoutes } from "./http/webphone-routes.js";
 import { createVapiRoutes } from "./http/vapi-routes.js";
@@ -175,6 +176,8 @@ export function createApp(options: CreateAppOptions = {}) {
   app.route("/auth/account", createAccountRoutes());
   // Public NetGSM IVR callback: registered before every authenticated /api/* group so their auth never runs.
   app.route("/api/netgsm/webhook", createNetgsmWebhookRoutes());
+  // Public KVKK / Meta data deletion endpoints (legacy paths), also ahead of the authenticated /api/* groups.
+  app.route("/api", createPrivacyPublicRoutes());
   app.route("/api", createDomainRoutes());
   app.route("/api", createShipmentCreateRoutes());
   app.route("/api/orders", createOrderActionRoutes());
@@ -200,6 +203,7 @@ export function createApp(options: CreateAppOptions = {}) {
   );
   app.route("/admin/settings", createSettingsRoutes());
   app.route("/admin/integrations", createIntegrationRoutes());
+  app.route("/admin/data-deletion-requests", createDataDeletionAdminRoutes());
   app.route("/admin", createAdminUserRoutes());
 
   return app;

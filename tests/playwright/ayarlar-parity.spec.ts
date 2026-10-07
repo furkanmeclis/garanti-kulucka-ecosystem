@@ -116,7 +116,7 @@ function attempt(index: number, provider: "ptt" | "surat", overrides: Record<str
 }
 
 const tabsByRole = {
-  admin: ["Profil", "Genel", "Kullanıcılar", "İşlem Logları", "Entegrasyonlar", "Santral / Softphone", "VAPI AI Arama", "Teslim Alınmayan Kargo Pipeline"],
+  admin: ["Profil", "Genel", "Kullanıcılar", "İşlem Logları", "Veri Silme", "Entegrasyonlar", "Santral / Softphone", "VAPI AI Arama", "Teslim Alınmayan Kargo Pipeline"],
   calisan: ["Profil", "Genel"],
   kargo_operatoru: ["Profil", "Genel"],
 } as const;

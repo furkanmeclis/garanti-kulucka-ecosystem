@@ -30,7 +30,11 @@ describe("API RBAC permission matrix", () => {
           operation === "POST /auth/login" ||
           operation === "POST /auth/refresh" ||
           // Public NetGSM IVR callback (legacy path; optional shared ?token= instead of a session).
-          operation.endsWith(" /api/netgsm/webhook/sesli-mesaj")
+          operation.endsWith(" /api/netgsm/webhook/sesli-mesaj") ||
+          // Public KVKK / Meta data deletion endpoints (legacy paths, rate limited per IP).
+          operation === "POST /api/veri-silme-talebi" ||
+          operation === "GET /api/veri-silme-talebi/{reference}" ||
+          operation === "POST /api/facebook/data-deletion"
           ? "allow"
           : "deny",
       );
@@ -53,5 +57,6 @@ describe("API RBAC permission matrix", () => {
     // Legacy App.jsx: /sesli-asistan and /sesli-asistan/vapi are admin only.
     expect(matrix["POST /api/vapi/calls"]).toMatchObject({ kargo_operatoru: "deny", calisan: "deny", admin: "allow" });
     expect(matrix["GET /api/netgsm/cdr"]).toMatchObject({ kargo_operatoru: "deny", calisan: "deny", admin: "allow" });
+    expect(matrix["GET /admin/data-deletion-requests"]).toMatchObject({ anonymous: "deny", kargo_operatoru: "deny", calisan: "deny" });
   });
 });

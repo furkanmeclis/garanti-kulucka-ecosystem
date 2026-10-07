@@ -23,6 +23,8 @@ import { SmsPage } from "@/pages/sms-page";
 import { ShipmentsPage } from "@/pages/shipments-page";
 import { ActivityLogsPage, UsersPage } from "@/pages/users-page";
 import { VapiPage } from "@/pages/vapi-page";
+import { DataDeletionPage } from "@/pages/public-pages";
+import { DataDeletionRequestsPage } from "@/pages/data-deletion-requests-page";
 import { CallsPage, PhonebookPage, VoiceMessagesPage } from "@/pages/voice-pages";
 
 /** Legacy ProtectedRoute: anonymous → /giris (and back after login); pages outside the role → role home. */
@@ -51,6 +53,7 @@ export function App() {
   return (
     <Routes>
       <Route path="/giris" element={<LoginRoute />} />
+      <Route path="/veri-silme" element={<DataDeletionPage />} />
       <Route path="/" element={<Protected><DashboardPage /></Protected>} />
       <Route path="/siparisler" element={<Protected><OrdersPage /></Protected>} />
       <Route path="/mesajlar" element={<Protected><MessagesPage /></Protected>} />
@@ -74,6 +77,7 @@ export function App() {
       <Route path="/sesli-asistan/rehber" element={<Protected><PhonebookPage /></Protected>} />
       <Route path="/kullanicilar" element={<Protected><UsersPage /></Protected>} />
       <Route path="/islem-loglari" element={<Protected><ActivityLogsPage /></Protected>} />
+      <Route path="/veri-silme-talepleri" element={<Protected><DataDeletionRequestsPage /></Protected>} />
       <Route path="*" element={<Protected><Navigate to="/" replace /></Protected>} />
     </Routes>
   );

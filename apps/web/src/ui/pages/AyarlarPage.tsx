@@ -19,6 +19,7 @@ import {
   MessageSquare,
   Smartphone,
   type LucideIcon,
+  Trash2,
 } from "lucide-react";
 import type { BackendHttpClient } from "../../api/http-client.js";
 import { createAdminClient } from "../../api/admin-client.js";
@@ -31,6 +32,8 @@ import { EntegrasyonAyarlar, KullanicilarSekmesi } from "./AyarlarAdminTabs.js";
 import { KargoPipelineAyarlar, SantralAyarlar, VapiAyarlar } from "./AyarlarProviderTabs.js";
 import { NetgsmAyarlar, WhatsAppAyarlar } from "./AyarlarMessagingTabs.js";
 import { DebugLinks } from "./DebugPages.js";
+import { VeriSilmeTalepleriSekmesi } from "./VeriSilmeTalepleriSekmesi.js";
+import { dataDeletionMessages } from "../i18n/messages/dataDeletion.js";
 
 /**
  * Legacy parity: garanti-kulucka/frontend/src/pages/ayarlar/AyarlarPage.jsx.
@@ -46,7 +49,7 @@ export interface AyarlarUser {
   role: string;
 }
 
-type SekmeId = "profil" | "genel" | "kullanicilar" | "loglar" | "entegrasyonlar" | "santral" | "vapi" | "kargo-pipeline";
+type SekmeId = "profil" | "genel" | "kullanicilar" | "loglar" | "veri-silme" | "entegrasyonlar" | "santral" | "vapi" | "kargo-pipeline";
 
 const islemRenkleri: Record<string, string> = {
   olustur: "green",
@@ -76,6 +79,7 @@ export function AyarlarPage({
   const isAdmin = user.role === "admin" || user.role === "owner";
   const ts = useT(settingsMessagingMessages);
   const t = useT(settingsMessages);
+  const td = useT(dataDeletionMessages);
   const { language } = useLanguage();
 
   const [aktifSekme, setAktifSekme] = useState<SekmeId>("profil");
@@ -260,6 +264,7 @@ export function AyarlarPage({
       ? [
           { id: "kullanicilar" as const, baslik: t("tabUsers"), ikon: Users },
           { id: "loglar" as const, baslik: t("tabLogs"), ikon: FileText },
+          { id: "veri-silme" as const, baslik: td("adminTab"), ikon: Trash2 },
           { id: "entegrasyonlar" as const, baslik: t("tabIntegrations"), ikon: Plug },
           { id: "santral" as const, baslik: t("tabPbx"), ikon: Phone },
           { id: "vapi" as const, baslik: t("tabVapi"), ikon: Bot },
@@ -467,6 +472,8 @@ export function AyarlarPage({
         )}
 
         {aktifSekme === "kullanicilar" && isAdmin && <KullanicilarSekmesi http={http} currentUserPublicId={user.public_id} />}
+
+        {aktifSekme === "veri-silme" && isAdmin && <VeriSilmeTalepleriSekmesi http={http} />}
 
         {aktifSekme === "loglar" && isAdmin && (
           <div className="ayarlar-stack" data-testid="ayarlar-loglar">

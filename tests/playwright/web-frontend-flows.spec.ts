@@ -2041,7 +2041,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     await page.goto(`${app.url}/kullanim-kosullari`);
     await expect(page.getByTestId("terms-public-page")).toContainText("PTT");
     await page.goto(`${app.url}/veri-silme`);
-    await expect(page.getByTestId("deletion-public-page")).toContainText("Talep");
+    await expect(page.getByTestId("deletion-public-page")).toContainText("Veri Silme Talebi");
     await page.goto(`${app.url}/sifre-sifirla`);
     await expect(page.getByTestId("reset-password-flow")).toContainText("Şifre sıfırlama");
     await page.getByRole("button", { name: /sıfırlama bağlantısı gönder/i }).click();

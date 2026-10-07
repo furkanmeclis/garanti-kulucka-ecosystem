@@ -4387,3 +4387,101 @@ nav {
 .iptal-pager { display: flex; align-items: center; justify-content: center; gap: 12px; }
 .iptal-detail { overflow-y: auto; }
 .iptal-detail-fields { padding: 16px 20px; }
+
+/* Legacy DataDeletionPage: public KVKK / Meta deletion form. */
+.deletion-box {
+  display: grid;
+  gap: 8px;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 16px;
+  background: #0f172a;
+}
+
+.deletion-box h2,
+.deletion-form h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.deletion-notice {
+  grid-template-columns: auto 1fr;
+  border-color: rgba(245, 158, 11, 0.4);
+  background: rgba(120, 53, 15, 0.2);
+  color: #fde68a;
+}
+
+.deletion-notice ul,
+.deletion-scope {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  color: #cbd5e1;
+}
+
+.deletion-scope {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 6px 18px;
+}
+
+.deletion-success {
+  justify-items: center;
+  text-align: center;
+  color: #86efac;
+}
+
+.deletion-form {
+  display: grid;
+  gap: 14px;
+}
+
+.deletion-form label {
+  display: grid;
+  gap: 7px;
+  color: #cbd5e1;
+}
+
+.deletion-form input:not([type="checkbox"]),
+.deletion-form textarea {
+  min-height: 44px;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: #f8fafc;
+  background: #0f172a;
+  font: inherit;
+}
+
+.deletion-form .deletion-consent {
+  grid-template-columns: auto 1fr;
+  align-items: start;
+}
+
+.deletion-consent input {
+  width: 20px;
+  height: 20px;
+  margin-top: 2px;
+}
+
+.deletion-error {
+  margin: 0;
+  border: 1px solid #991b1b;
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: #fca5a5;
+  background: rgba(127, 29, 29, 0.3);
+}
+
+.deletion-hint {
+  font-size: 13px;
+  color: #94a3b8;
+}
+
+.primary-action.danger {
+  background: #dc2626;
+}
+
+.primary-action.danger:hover:not(:disabled) {
+  background: #b91c1c;
+}
+.ayarlar-pill.amber { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
