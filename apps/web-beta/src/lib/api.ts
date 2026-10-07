@@ -104,6 +104,7 @@ import { sha256Base64 } from "./inbox";
 import type { DataDeletionInput, DataDeletionRequest, DataDeletionStatus, DataDeletionStatusLookup } from "./privacy";
 import type { StoredTokens } from "./session-storage";
 import type { AdminLogEntry, CreateManagedUserInput, ManagedRole, ManagedUser, UpdateManagedUserInput } from "./users";
+import type { AdminSetting, IntegrationAccount, IntegrationAccountSnapshot, IntegrationSetting, NetgsmBalance, UpsertIntegrationAccountInput } from "./settings";
 
 /** VITE_BACKEND_BASE_URL (default "/backend"): same-origin proxy in Docker/nginx and the Vite dev server. */
 export const defaultBackendBaseUrl = "/backend";
@@ -496,6 +497,22 @@ export function createApiClient(options: ApiClientOptions) {
     updateUser: (publicId: string, input: UpdateManagedUserInput) => request<{ user: ManagedUser }>(`/admin/users/${encodeURIComponent(publicId)}`, { method: "PATCH", body: input }),
     deactivateUser: (publicId: string) => request<{ user: ManagedUser; deactivated: boolean }>(`/admin/users/${encodeURIComponent(publicId)}`, { method: "DELETE" }),
     listAdminLogs: (limit = 100) => request<{ data: AdminLogEntry[] }>("/admin/logs", { query: { limit } }),
+    aiStatus: () => request<{ ai_enabled: boolean }>("/api/app-settings/ai-status"),
+    listAdminSettings: (scope = "global") => request<{ data: AdminSetting[] }>("/admin/settings", { query: { scope } }),
+    upsertAdminSetting: (key: string, value: unknown, isSecret = false) =>
+      request<AdminSetting>(`/admin/settings/${encodeURIComponent(key)}`, { method: "PUT", body: { value, scope: "global", is_secret: isSecret } }),
+    listIntegrationAccounts: () => request<{ data: IntegrationAccount[] }>("/admin/integrations/accounts"),
+    getIntegrationAccount: (publicId: string) => request<IntegrationAccountSnapshot>(`/admin/integrations/accounts/${encodeURIComponent(publicId)}`),
+    upsertIntegrationAccount: (input: UpsertIntegrationAccountInput) =>
+      request<IntegrationAccount>("/admin/integrations/accounts", { method: "POST", body: { ...input, metadata: input.metadata ?? {} } }),
+    upsertIntegrationSetting: (accountPublicId: string, key: string, value: unknown, isSecret = false) =>
+      request<IntegrationSetting>(`/admin/integrations/accounts/${encodeURIComponent(accountPublicId)}/settings/${encodeURIComponent(key)}`, { method: "PUT", body: { value, is_secret: isSecret } }),
+    upsertIntegrationToken: (accountPublicId: string, tokenType: string, value: string) =>
+      request<{ public_id: string; token_type: string; value: null }>(`/admin/integrations/accounts/${encodeURIComponent(accountPublicId)}/tokens/${encodeURIComponent(tokenType)}`, {
+        method: "PUT",
+        body: { value, expires_at: null },
+      }),
+    netgsmBalance: () => request<NetgsmBalance>("/admin/integrations/netgsm/balance"),
     saveCustomerNotes: (publicId: string, notes: string | null) =>
       request<CustomerSummary>(`/api/customers/${encodeURIComponent(publicId)}/notes`, { method: "PATCH", body: { notes } }),
   };

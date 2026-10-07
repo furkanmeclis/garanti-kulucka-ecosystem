@@ -1,6 +1,8 @@
+import { panelRoleOf } from "@garanti-kulucka/shared";
 import { CheckCircle2, Download, Loader2 } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
+import { useSearchParams } from "react-router-dom";
 import { useAuth } from "@/app/auth";
 import { useInstallPrompt } from "@/app/pwa-hooks";
 import { useTheme, type ThemePreference } from "@/app/theme";
@@ -12,6 +14,9 @@ import { Label } from "@/components/ui/label";
 import { roleLabelKey } from "@/layout/header-menus";
 import { PageHeader } from "@/layout/page-header";
 import { isLanguage } from "@/i18n";
+import { cn } from "@/lib/utils";
+import { NativeSelect } from "./accounting-shared";
+import { AiSettingsTab, IntegrationsOverviewTab, MetaProviderTab, NetgsmTab, SantralTab, WhatsAppTab } from "./settings-tabs";
 
 type Feedback = { tone: "success" | "error"; text: string } | null;
 
@@ -202,18 +207,98 @@ function PreferencesCard() {
   );
 }
 
+type SettingsTab = "account" | "ai" | "integrations" | "whatsapp" | "instagram" | "messenger" | "netgsm" | "santral";
+
+const managerTabs: SettingsTab[] = ["account", "ai", "integrations", "whatsapp", "instagram", "messenger", "netgsm", "santral"];
+
+const tabLabel = {
+  account: "settingsTabs.tabAccount",
+  ai: "settingsTabs.tabAi",
+  integrations: "settingsTabs.tabIntegrations",
+  whatsapp: "settingsTabs.tabWhatsapp",
+  instagram: "settingsTabs.tabInstagram",
+  messenger: "settingsTabs.tabMessenger",
+  netgsm: "settingsTabs.tabNetgsm",
+  santral: "settingsTabs.tabSantral",
+} as const;
+
+function AccountTab() {
+  return (
+    <div className="grid gap-6 xl:grid-cols-2" data-testid="settings-tab-panel-account">
+      <ProfileCard />
+      <PasswordCard />
+      <div className="xl:col-span-2">
+        <PreferencesCard />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * /ayarlar — profile, password and preferences for every role; managers also get the web
+ * AyarlarPage provider tabs (AI, integrations overview, WhatsApp, Instagram, Messenger, NetGSM,
+ * Santral). Users, logs, data deletion, VAPI and the cargo pipeline keep their own pages and are
+ * linked from the integrations overview. The selected tab lives in `?tab=`.
+ */
 export function SettingsPage() {
   const { t } = useTranslation();
+  const { user } = useAuth();
+  const [params, setParams] = useSearchParams();
+  const manager = panelRoleOf(user?.role) === "manager";
+  const tabs: SettingsTab[] = manager ? managerTabs : ["account"];
+  const requested = params.get("tab") as SettingsTab | null;
+  const tab: SettingsTab = requested && tabs.includes(requested) ? requested : "account";
+
+  const select = (next: SettingsTab) => {
+    setParams(
+      (current) => {
+        const copy = new URLSearchParams(current);
+        if (next === "account") copy.delete("tab");
+        else copy.set("tab", next);
+        return copy;
+      },
+      { replace: true },
+    );
+  };
+
   return (
     <section data-testid="page-settings">
-      <PageHeader title={t("settings.title")} description={t("settings.subtitle")} />
-      <div className="grid gap-6 xl:grid-cols-2">
-        <ProfileCard />
-        <PasswordCard />
-        <div className="xl:col-span-2">
-          <PreferencesCard />
-        </div>
-      </div>
+      <PageHeader title={t("settings.title")} description={manager ? t("settingsTabs.managerSubtitle") : t("settings.subtitle")} />
+      {tabs.length > 1 && (
+        <>
+          <div className="mb-4 md:hidden">
+            <NativeSelect aria-label={t("settingsTabs.tabsLabel")} value={tab} onChange={(event) => select(event.target.value as SettingsTab)} data-testid="settings-tab-select">
+              {tabs.map((id) => (
+                <option key={id} value={id}>
+                  {t(tabLabel[id])}
+                </option>
+              ))}
+            </NativeSelect>
+          </div>
+          <div className="mb-6 hidden flex-wrap gap-1 border-b md:flex" role="tablist" aria-label={t("settingsTabs.tabsLabel")} data-testid="settings-tabs">
+            {tabs.map((id) => (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                aria-selected={tab === id}
+                className={cn("-mb-px min-h-11 shrink-0 border-b-2 px-3 text-sm font-medium transition-colors", tab === id ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}
+                onClick={() => select(id)}
+                data-testid={`settings-tab-${id}`}
+              >
+                {t(tabLabel[id])}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+      {tab === "account" && <AccountTab />}
+      {tab === "ai" && <AiSettingsTab />}
+      {tab === "integrations" && <IntegrationsOverviewTab onOpen={select} />}
+      {tab === "whatsapp" && <WhatsAppTab />}
+      {(tab === "instagram" || tab === "messenger") && <MetaProviderTab key={tab} provider={tab} />}
+      {tab === "netgsm" && <NetgsmTab />}
+      {tab === "santral" && <SantralTab />}
     </section>
   );
 }
