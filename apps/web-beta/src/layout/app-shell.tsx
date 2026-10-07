@@ -159,12 +159,14 @@ function MoreMenu() {
       <DropdownMenuTrigger asChild>
         <Button
           variant="ghost"
-          className={cn("min-h-11 gap-2 px-3 text-sm font-medium text-muted-foreground", active && "bg-accent text-accent-foreground")}
+          className={cn("min-h-11 gap-1 px-2.5 text-sm font-medium text-muted-foreground", active && "bg-accent text-accent-foreground")}
           aria-label={t("nav.more")}
+          title={t("nav.more")}
           data-testid="desktop-more-trigger"
         >
           <LayoutGrid className="size-4" aria-hidden="true" />
-          <span className="sr-only xl:not-sr-only">{t("nav.more")}</span>
+          {/* Icon-only on every desktop width: the labelled main items plus a labelled "More" left no slack at 1280/1536 px. */}
+          <span className="sr-only">{t("nav.more")}</span>
           <ChevronDown className="size-3.5" aria-hidden="true" />
         </Button>
       </DropdownMenuTrigger>
@@ -220,7 +222,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <MoreMenu />
           </nav>
           <div className="ml-auto flex min-w-0 items-center gap-0.5 sm:gap-1" data-testid="header-actions">
-            <GlobalSearch className="mr-1 hidden w-64 2xl:block" />
+            <GlobalSearch className="mr-1 hidden w-56 2xl:block" />
             <MobileSearch />
             <NotificationBell />
             <div className="hidden items-center gap-0.5 sm:flex">
