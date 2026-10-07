@@ -61,6 +61,7 @@ import type {
   SmsHistoryType,
   SmsTemplate,
 } from "./sms-comments";
+import type { InstagramAccountInsights, InstagramInsightsRefresh, InstagramPublication, InstagramPublishRequest, InstagramPublishResponse, ReportAnalysis, ReportCargoProvider } from "./reports-instagram";
 import type { StoredTokens } from "./session-storage";
 
 /** VITE_BACKEND_BASE_URL (default "/backend"): same-origin proxy in Docker/nginx and the Vite dev server. */
@@ -313,6 +314,12 @@ export function createApiClient(options: ApiClientOptions) {
     commentAction: (publicId: string, action: "hide" | "delete" | "manual", idempotencyKey: string) =>
       request<CommentActionResponse>(`/api/comments/${encodeURIComponent(publicId)}/${action}`, { method: "POST", body: { idempotency_key: idempotencyKey } }),
     suggestCommentReply: (publicId: string) => request<CommentAiSuggestionResponse>(`/api/comments/${encodeURIComponent(publicId)}/ai-suggestion`, { method: "POST", body: {} }),
+    reportAnalysis: (query: { start_date: string; end_date: string; cargo_provider: ReportCargoProvider; personnel_public_id?: string }) =>
+      request<ReportAnalysis>("/api/reports/analysis", { query: { ...query } }),
+    instagramInsights: (days: number) => request<InstagramAccountInsights>("/api/instagram/insights/account", { query: { days } }),
+    refreshInstagramInsights: () => request<InstagramInsightsRefresh>("/api/instagram/insights/account/refresh", { method: "POST", body: {} }),
+    publishInstagram: (input: InstagramPublishRequest) => request<InstagramPublishResponse>("/api/instagram/publications", { method: "POST", body: input }),
+    getInstagramPublication: (publicId: string) => request<InstagramPublication>(`/api/instagram/publications/${encodeURIComponent(publicId)}`),
     saveCustomerNotes: (publicId: string, notes: string | null) =>
       request<CustomerSummary>(`/api/customers/${encodeURIComponent(publicId)}/notes`, { method: "PATCH", body: { notes } }),
   };

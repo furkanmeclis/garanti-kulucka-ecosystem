@@ -12,10 +12,12 @@ import { CustomerDetailPage } from "@/pages/customer-detail-page";
 import { CustomersPage } from "@/pages/customers-page";
 import { DashboardPage } from "@/pages/dashboard-page";
 import { BalancesPage } from "@/pages/balances-page";
+import { InstagramAnalyticsPage, InstagramPublishPage } from "@/pages/instagram-pages";
 import { InventoryPage } from "@/pages/inventory-page";
 import { InvoicesPage } from "@/pages/invoices-page";
 import { MessagesPage } from "@/pages/messages-page";
 import { OrdersPage } from "@/pages/orders-page";
+import { ReportsPage } from "@/pages/reports-page";
 import { SettingsPage } from "@/pages/settings-page";
 import { SmsPage } from "@/pages/sms-page";
 import { ShipmentsPage } from "@/pages/shipments-page";
@@ -58,6 +60,9 @@ export function App() {
       <Route path="/bakiye" element={<Protected><BalancesPage /></Protected>} />
       <Route path="/yorumlar" element={<Protected><CommentsPage /></Protected>} />
       <Route path="/sms" element={<Protected><SmsPage /></Protected>} />
+      <Route path="/instagram/analitik" element={<Protected><InstagramAnalyticsPage /></Protected>} />
+      <Route path="/instagram/yayinla" element={<Protected><InstagramPublishPage /></Protected>} />
+      <Route path="/raporlar" element={<Protected><ReportsPage /></Protected>} />
       <Route path="/faturalar" element={<Protected><InvoicesPage /></Protected>} />
       <Route path="/cari-hesaplar" element={<Protected><AccountsPage /></Protected>} />
       <Route path="*" element={<Protected><Navigate to="/" replace /></Protected>} />
