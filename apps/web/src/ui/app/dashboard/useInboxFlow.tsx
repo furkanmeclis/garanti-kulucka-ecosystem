@@ -4,6 +4,18 @@ import { type PendingAttachment, type ShortcutDraft, attachmentTypeFromFile } fr
 import { uiMessage } from "../../i18n/messages/status.js";
 import type { DashboardCore } from "./types.js";
 
+export const conversationPageSize = 20;
+export const messagePageSize = 50;
+
+/** Conversation list query for the active channel/status filter and (server-side) search text. */
+function conversationQueryParams(channel: string, status: string, search: string) {
+  const params: { channel?: string; status?: string; limit: number; search?: string } = { limit: conversationPageSize };
+  if (channel !== "all") params.channel = channel === "facebook" ? "facebook,messenger" : channel;
+  if (status !== "all") params.status = status;
+  if (search) params.search = search;
+  return params;
+}
+
 /** Messages flow: conversations, messages, shortcuts, notes, AI suggestion and conversation filters. */
 export function useInboxFlow(core: DashboardCore) {
   const { user, domain, files, data, setData, setStatus } = core;
@@ -27,21 +39,42 @@ export function useInboxFlow(core: DashboardCore) {
   const conversationNoteSaveRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
   const customerNoteSaveRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
   const conversationFilterRequestSeqRef = useRef(0);
+  // Legacy Mesajlar extras: server-side search + offset paging, older-message paging, mark-all-read, AI send.
+  const [appliedConversationSearch, setAppliedConversationSearch] = useState("");
+  const appliedConversationSearchRef = useRef("");
+  const [conversationsHasMore, setConversationsHasMore] = useState(false);
+  const [conversationsLoadingMore, setConversationsLoadingMore] = useState(false);
+  const [messagesHasMore, setMessagesHasMore] = useState(false);
+  const [olderMessagesLoading, setOlderMessagesLoading] = useState(false);
+  const [markAllReadPending, setMarkAllReadPending] = useState(false);
+  const [aiSendPending, setAiSendPending] = useState(false);
+  /** Conversation whose older pages were loaded with "eski mesajları yükle" (kept across latest-page refreshes). */
+  const olderPagesConversationRef = useRef<string | null>(null);
 
   const refreshConversations = useCallback(async () => {
-    const conversations = await domain.listConversations({ limit: 20 });
+    const search = appliedConversationSearchRef.current;
+    const conversations = await domain.listConversations({ limit: conversationPageSize, ...(search ? { search } : {}) });
     setData((current) => ({
       ...current,
       conversations: conversations.data,
     }));
+    setConversationsHasMore(conversations.data.length >= conversationPageSize);
   }, [domain]);
 
   const refreshMessages = useCallback(async (conversationPublicId: string) => {
-    const messages = await domain.listMessages(conversationPublicId, 50);
-    setData((current) => ({
-      ...current,
-      messages: selectedConversationIdRef.current === conversationPublicId ? messages.data : current.messages,
-    }));
+    const messages = await domain.listMessages(conversationPublicId, messagePageSize);
+    if (selectedConversationIdRef.current !== conversationPublicId) return;
+    setData((current) => {
+      // Keep the older pages the user already loaded ("eski mesajları yükle") in front of the latest page.
+      const latestIds = new Set(messages.data.map((message) => message.public_id));
+      const firstLatest = messages.data[0];
+      const older = firstLatest && olderPagesConversationRef.current === conversationPublicId
+        ? current.messages.filter((message) => !latestIds.has(message.public_id) && message.sent_at < firstLatest.sent_at)
+        : [];
+      return { ...current, messages: [...older, ...messages.data] };
+    });
+    // Once older pages are loaded, has_more describes the oldest loaded page, not the latest one.
+    if (olderPagesConversationRef.current !== conversationPublicId) setMessagesHasMore(Boolean(messages.has_more));
   }, [domain]);
 
   useEffect(() => {
@@ -311,36 +344,186 @@ export function useInboxFlow(core: DashboardCore) {
     setConversationChannelFilter(nextChannel);
     setConversationStatusFilter(nextStatus);
     setStatus(uiMessage("conversationFiltersApplying"));
-    const filterParams: { channel?: string; status?: string; limit: number } = { limit: 20 };
-    if (nextChannel !== "all") {
-      filterParams.channel = nextChannel === "facebook" ? "facebook,messenger" : nextChannel;
-    }
-    if (nextStatus !== "all") {
-      filterParams.status = nextStatus;
-    }
-    const conversations = await domain.listConversations(filterParams);
+    const conversations = await domain.listConversations(conversationQueryParams(nextChannel, nextStatus, appliedConversationSearchRef.current));
     if (conversationFilterRequestSeqRef.current !== requestSeq) return;
     setData((current) => ({
       ...current,
       conversations: conversations.data,
     }));
+    setConversationsHasMore(conversations.data.length >= conversationPageSize);
     setSelectedConversationId(conversations.data[0]?.public_id ?? null);
     selectedConversationIdRef.current = conversations.data[0]?.public_id ?? null;
+    olderPagesConversationRef.current = null;
     if (conversations.data[0]) {
       await refreshMessages(conversations.data[0].public_id);
       if (conversationFilterRequestSeqRef.current !== requestSeq) return;
     } else {
       setData((current) => ({ ...current, messages: [] }));
+      setMessagesHasMore(false);
     }
     setStatus(uiMessage("conversationFiltersApplied"));
   }
 
+  /** Server-side conversation search (legacy Mesajlar arama), applied ~300ms after typing stops. */
+  async function applyConversationSearch(search: string) {
+    const requestSeq = conversationFilterRequestSeqRef.current + 1;
+    conversationFilterRequestSeqRef.current = requestSeq;
+    appliedConversationSearchRef.current = search;
+    try {
+      const conversations = await domain.listConversations(conversationQueryParams(conversationChannelFilter, conversationStatusFilter, search));
+      if (conversationFilterRequestSeqRef.current !== requestSeq) return;
+      setAppliedConversationSearch(search);
+      setData((current) => ({ ...current, conversations: conversations.data }));
+      setConversationsHasMore(conversations.data.length >= conversationPageSize);
+      const currentId = selectedConversationIdRef.current;
+      if (!conversations.data.some((conversation) => conversation.public_id === currentId)) {
+        const first = conversations.data[0]?.public_id ?? null;
+        setSelectedConversationId(first);
+        selectedConversationIdRef.current = first;
+        olderPagesConversationRef.current = null;
+        setData((current) => ({ ...current, messages: [] }));
+        setMessagesHasMore(false);
+        if (first) await refreshMessages(first);
+      }
+    } catch (error) {
+      console.warn("[Messages] Conversation search request failed", error);
+      setStatus(uiMessage("conversationsLoadFailed"));
+    }
+  }
+
+  useEffect(() => {
+    const search = conversationSearch.trim();
+    if (search === appliedConversationSearchRef.current) return;
+    const timer = window.setTimeout(() => void applyConversationSearch(search), 300);
+    return () => window.clearTimeout(timer);
+  }, [conversationSearch]);
+
   async function handleSelectConversation(conversationPublicId: string) {
+    const switching = selectedConversationIdRef.current !== conversationPublicId;
     selectedConversationIdRef.current = conversationPublicId;
     setSelectedConversationId(conversationPublicId);
     setStatus(uiMessage("conversationMessagesLoading"));
+    if (switching) {
+      // Older pages belong to the previous conversation; start the new one from its latest page.
+      olderPagesConversationRef.current = null;
+      setData((current) => ({ ...current, messages: [] }));
+      setMessagesHasMore(false);
+    }
     await refreshMessages(conversationPublicId);
     setStatus(uiMessage("conversationLoaded"));
+  }
+
+  /** Legacy "Eski mesajları yükle": prepends the page older than the oldest loaded message. */
+  async function handleLoadOlderMessages() {
+    const conversationId = selectedConversationIdRef.current ?? selectedConversation?.public_id;
+    const oldest = data.messages[0];
+    if (!conversationId || !oldest || olderMessagesLoading) return;
+    setOlderMessagesLoading(true);
+    try {
+      const page = await domain.listMessages(conversationId, messagePageSize, oldest.public_id);
+      if ((selectedConversationIdRef.current ?? conversationId) !== conversationId) return;
+      setData((current) => {
+        const loaded = new Set(current.messages.map((message) => message.public_id));
+        return { ...current, messages: [...page.data.filter((message) => !loaded.has(message.public_id)), ...current.messages] };
+      });
+      setMessagesHasMore(Boolean(page.has_more));
+      olderPagesConversationRef.current = conversationId;
+    } catch (error) {
+      console.warn("[Messages] Older messages request failed", error);
+      setStatus(uiMessage("olderMessagesFailed"));
+    } finally {
+      setOlderMessagesLoading(false);
+    }
+  }
+
+  /** Legacy "Daha fazla konuşma yükle": appends the next offset page with the active filters and search. */
+  async function handleLoadMoreConversations() {
+    if (conversationsLoadingMore) return;
+    const requestSeq = conversationFilterRequestSeqRef.current;
+    setConversationsLoadingMore(true);
+    try {
+      const page = await domain.listConversations({
+        ...conversationQueryParams(conversationChannelFilter, conversationStatusFilter, appliedConversationSearchRef.current),
+        offset: data.conversations.length,
+      });
+      if (conversationFilterRequestSeqRef.current !== requestSeq) return;
+      setData((current) => {
+        const loaded = new Set(current.conversations.map((conversation) => conversation.public_id));
+        return { ...current, conversations: [...current.conversations, ...page.data.filter((conversation) => !loaded.has(conversation.public_id))] };
+      });
+      setConversationsHasMore(page.data.length >= conversationPageSize);
+    } catch (error) {
+      console.warn("[Messages] Conversation page request failed", error);
+      setStatus(uiMessage("conversationsLoadFailed"));
+    } finally {
+      setConversationsLoadingMore(false);
+    }
+  }
+
+  /** Legacy "Tümünü okundu yap" for the active channel filter (the caller confirms first). */
+  async function handleMarkAllRead() {
+    if (markAllReadPending) return;
+    const channel = conversationChannelFilter;
+    setMarkAllReadPending(true);
+    try {
+      const result = await domain.markAllConversationsRead(channel === "all" ? undefined : channel);
+      setData((current) => ({
+        ...current,
+        conversations: current.conversations.map((conversation) =>
+          conversationMatchesChannelFilter(conversation, channel) ? { ...conversation, unread_count: 0 } : conversation
+        ),
+      }));
+      setStatus(uiMessage("markAllReadDone", { count: result.updated }));
+      const [summary, conversations] = await Promise.all([
+        domain.getConversationSummary(),
+        domain.listConversations(conversationQueryParams(channel, conversationStatusFilter, appliedConversationSearchRef.current)),
+      ]);
+      setData((current) => ({ ...current, conversationSummary: summary, conversations: conversations.data }));
+      setConversationsHasMore(conversations.data.length >= conversationPageSize);
+    } catch (error) {
+      console.warn("[Messages] Mark all read request failed", error);
+      setStatus(uiMessage("markAllReadFailed"));
+    } finally {
+      setMarkAllReadPending(false);
+    }
+  }
+
+  /** Legacy "AI yanıt üret & gönder": asks for the AI suggestion and sends it as the reply right away. */
+  async function handleAiGenerateAndSend() {
+    const conversationId = selectedConversation?.public_id;
+    if (!conversationId || aiSendPending) return;
+    setAiSendPending(true);
+    setStatus(uiMessage("aiSuggestionPreparing"));
+    try {
+      const response = await domain.createAiReplySuggestion(conversationId);
+      const body = response.suggestion?.trim() ?? "";
+      if (!body) {
+        setStatus(uiMessage("aiSendEmpty"));
+        return;
+      }
+      setStatus(uiMessage("messageSending"));
+      const message = await domain.createMessage(conversationId, {
+        sender_type: "user",
+        sender_name: user?.email ?? "Admin",
+        body,
+        external_message_id: null,
+        raw_payload: null,
+        attachments: [],
+      });
+      setAiSuggestion(null);
+      setData((current) => ({
+        ...current,
+        messages: [...current.messages.filter((item) => item.public_id !== message.public_id), message],
+      }));
+      await refreshConversations();
+      await refreshMessages(conversationId);
+      setStatus(uiMessage("aiSendDone"));
+    } catch (error) {
+      console.warn("[Messages] AI generate-and-send failed", error);
+      setStatus(uiMessage("aiSendFailed"));
+    } finally {
+      setAiSendPending(false);
+    }
   }
 
   const selectedCustomer = data.customers[0] ?? null;
@@ -363,7 +546,9 @@ export function useInboxFlow(core: DashboardCore) {
   const visibleConversations = data.conversations.filter((conversation) => {
     const channelMatches = conversationMatchesChannelFilter(conversation, conversationChannelFilter);
     const statusMatches = conversationStatusFilter === "all" || conversation.status === conversationStatusFilter;
-    const normalizedSearch = conversationSearch.trim().toLocaleLowerCase("tr-TR");
+    // Until the debounced server search lands, narrow the loaded rows locally; afterwards the server result is the list.
+    const pendingSearch = conversationSearch.trim();
+    const normalizedSearch = pendingSearch === appliedConversationSearch ? "" : pendingSearch.toLocaleLowerCase("tr-TR");
     const searchMatches =
       !normalizedSearch ||
       [
@@ -425,7 +610,17 @@ export function useInboxFlow(core: DashboardCore) {
     setShortcutDraft({ code: "", message: "", attachments: [] });
     setEditingShortcutId(null);
     setAiSuggestion(null);
+    setConversationSearch("");
+    setAppliedConversationSearch("");
+    appliedConversationSearchRef.current = "";
+    setConversationsHasMore(false);
+    setMessagesHasMore(false);
   }
+
+  const markAllReadCount =
+    conversationChannelFilter === "all"
+      ? data.conversationSummary.unread_count
+      : data.conversations.filter((conversation) => conversation.unread_count > 0 && conversationMatchesChannelFilter(conversation, conversationChannelFilter)).length;
 
   return {
     selectedConversationId,
@@ -477,6 +672,19 @@ export function useInboxFlow(core: DashboardCore) {
     handleUpdateConversationState,
     handleApplyConversationFilters,
     handleSelectConversation,
+    handleLoadOlderMessages,
+    handleLoadMoreConversations,
+    handleMarkAllRead,
+    handleAiGenerateAndSend,
+    conversationsHasMore,
+    setConversationsHasMore,
+    conversationsLoadingMore,
+    messagesHasMore,
+    setMessagesHasMore,
+    olderMessagesLoading,
+    markAllReadPending,
+    markAllReadCount,
+    aiSendPending,
     selectedCustomer,
     unreadConversationCount,
     poolConversationCount,

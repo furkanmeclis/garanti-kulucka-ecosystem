@@ -413,16 +413,24 @@ export interface KolaybiProductList {
 
 export function createDomainClient(http: BackendHttpClient) {
   return {
-    listConversations: (params: { channel?: string; status?: string; limit?: number } = {}) => {
+    listConversations: (params: { channel?: string; status?: string; limit?: number; search?: string; offset?: number } = {}) => {
       const search = new URLSearchParams();
       if (params.channel) search.set("channel", params.channel);
       if (params.status) search.set("status", params.status);
       if (params.limit) search.set("limit", String(params.limit));
+      if (params.search) search.set("search", params.search);
+      if (params.offset) search.set("offset", String(params.offset));
       const query = search.toString();
       return http.request<{ data: ConversationSummary[] }>(`/api/conversations${query ? `?${query}` : ""}`);
     },
     getConversationSummary: () =>
       http.request<ConversationSummaryStats>("/api/conversations/summary"),
+    /** Legacy "Tümünü okundu yap": omit channel (or "all") for every channel; "facebook" covers Messenger. */
+    markAllConversationsRead: (channel?: string) =>
+      http.request<{ updated: number }>("/api/conversations/mark-all-read", {
+        method: "POST",
+        body: channel && channel !== "all" ? { channel } : {},
+      }),
     listCustomers: (limit = 50) =>
       http.request<{ data: CustomerSummary[] }>(`/api/customers?limit=${limit}`),
     lookupCustomerByPhone: (phone: string) =>
@@ -447,9 +455,10 @@ export function createDomainClient(http: BackendHttpClient) {
       http.request<{ request_id: string; job_id: string | null; queued: boolean; live_call_permitted: boolean; live_gate: string }>("/api/products/kolaybi/refresh", { method: "POST" }),
     getCommentModerationSummary: () =>
       http.request<CommentModerationSummary>("/api/comments/moderation-summary"),
-    listMessages: (conversationPublicId: string, limit = 100) =>
-      http.request<{ data: MessageSummary[] }>(
-        `/api/conversations/${encodeURIComponent(conversationPublicId)}/messages?limit=${limit}`,
+    /** Newest `limit` messages (oldest → newest) older than `before`; `has_more` says whether older ones exist. */
+    listMessages: (conversationPublicId: string, limit = 100, before?: string) =>
+      http.request<{ data: MessageSummary[]; has_more?: boolean }>(
+        `/api/conversations/${encodeURIComponent(conversationPublicId)}/messages?limit=${limit}${before ? `&before=${encodeURIComponent(before)}` : ""}`,
       ),
     createMessage: (
       conversationPublicId: string,

@@ -190,6 +190,9 @@ export interface ConversationListQuery {
   channel?: string;
   status?: string;
   limit?: number;
+  /** Server-side search on customer name / phone / username or the last message text. */
+  search?: string;
+  offset?: number;
 }
 
 export function buildUrl(baseUrl: string, path: string, query?: Record<string, QueryValue>) {
@@ -454,8 +457,12 @@ export function createApiClient(options: ApiClientOptions) {
       request<{ shipment_public_id: string; label_printed_at: string }>(`/api/shipments/${encodeURIComponent(publicId)}/printed`, { method: "POST", body: { idempotency_key: idempotencyKey } }),
     triggerTrackingCron: (provider: "ptt" | "surat", idempotencyKey: string) =>
       request<unknown>(`/admin/integrations/provider-cron-triggers/${provider}`, { method: "POST", body: { idempotency_key: idempotencyKey } }),
-    listMessages: (conversationPublicId: string, limit = 100) =>
-      request<{ data: ThreadMessage[] }>(`/api/conversations/${encodeURIComponent(conversationPublicId)}/messages`, { query: { limit } }),
+    /** Newest `limit` messages (oldest → newest) older than `before`; `has_more` says whether older ones exist. */
+    listMessages: (conversationPublicId: string, limit = 100, before?: string) =>
+      request<{ data: ThreadMessage[]; has_more?: boolean }>(`/api/conversations/${encodeURIComponent(conversationPublicId)}/messages`, { query: { limit, ...(before ? { before } : {}) } }),
+    /** Legacy "Tümünü okundu yap": omit channel for every channel; "facebook" covers Messenger. */
+    markAllConversationsRead: (channel?: string) =>
+      request<{ updated: number }>("/api/conversations/mark-all-read", { method: "POST", body: channel && channel !== "all" ? { channel } : {} }),
     sendMessage: (conversationPublicId: string, input: { body: string | null; sender_name: string; attachments: Array<{ file_public_id: string; attachment_type: string }> }) =>
       request<ThreadMessage>(`/api/conversations/${encodeURIComponent(conversationPublicId)}/messages`, {
         method: "POST",

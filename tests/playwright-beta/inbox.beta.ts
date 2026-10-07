@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { expect, test, type Page } from "@playwright/test";
-import { backendBaseUrl, expectResponsiveLayout, login, mockBackend, mockUser, viewports, type ExtraRoute } from "./helpers";
+import { backendBaseUrl, expectResponsiveLayout, login, mockBackend, mockUser, viewports, type BackendState, type ExtraRoute } from "./helpers";
 
 test.use({ serviceWorkers: "block" });
 
@@ -150,5 +150,148 @@ test("inbox: the conversation pane fits a phone", async ({ page }) => {
   await openInbox(page, viewports.phone390);
   await page.getByTestId("messages-cards").getByTestId("conversation-open").filter({ hasText: /^Konuşma Müşterisi 1$/ }).click();
   await expect(page.getByTestId("conversation-sheet").getByTestId("thread-message")).toHaveCount(2);
+  await expectResponsiveLayout(page, { checkTouchTargets: true });
+});
+
+/** Legacy Mesajlar extras: older-message paging, server search + load more, mark all read, AI generate & send. */
+async function openInboxExtras(page: Page, viewport: { width: number; height: number } = viewports.desktop) {
+  await page.setViewportSize(viewport);
+  const latest = [
+    { public_id: "msg_l1", sender_type: "customer", sender_name: "Konuşma Müşterisi 1", body: "Son sayfa ilk mesaj", is_read: true, sent_at: "2026-10-07T09:00:00.000Z", attachments: [] },
+    { public_id: "msg_l2", sender_type: "user", sender_name: "admin@example.com", body: "Son sayfa cevap", is_read: true, sent_at: "2026-10-07T09:01:00.000Z", attachments: [] },
+  ];
+  const older = [{ public_id: "msg_o1", sender_type: "customer", sender_name: "Konuşma Müşterisi 1", body: "En eski mesaj", is_read: true, sent_at: "2026-10-06T09:00:00.000Z", attachments: [] }];
+  const extras = { suggestion: "Kargonuz bugün yola çıkıyor.", sent: [] as Array<Record<string, unknown>> };
+  const route: ExtraRoute = ({ method, path, url, body }, backend) => {
+    if (path === "/api/conversations/summary") {
+      const unread = backend.conversations.filter((row) => row.unread_count > 0).length;
+      return { status: 200, body: { total_count: backend.conversations.length, unread_count: unread, pool_count: 0, human_agent_count: 0, channel_counts: { instagram: 0, facebook: 0 }, status_counts: { open: 0, closed: 0 } } };
+    }
+    if (path === "/api/conversations/mark-all-read" && method === "POST") {
+      const channel = (body as { channel?: string }).channel;
+      const channels = channel ? (channel === "facebook" ? ["facebook", "messenger"] : [channel]) : null;
+      let updated = 0;
+      for (const row of backend.conversations) {
+        if (row.unread_count > 0 && (!channels || channels.includes(row.channel))) {
+          row.unread_count = 0;
+          updated += 1;
+        }
+      }
+      return { status: 200, body: { updated } };
+    }
+    if (path === "/api/conversations/cnv_1/messages" && method === "GET") {
+      if (url.searchParams.get("before") === "msg_l1") return { status: 200, body: { data: older, has_more: false } };
+      return { status: 200, body: { data: [...latest, ...extras.sent], has_more: true } };
+    }
+    if (path === "/api/conversations/cnv_1/messages" && method === "POST") {
+      const input = body as { body: string | null };
+      const message = { public_id: `msg_s${extras.sent.length + 1}`, sender_type: "user", sender_name: "admin@example.com", body: input.body, is_read: true, sent_at: "2026-10-07T09:05:00.000Z", attachments: [] };
+      extras.sent.push(message);
+      return { status: 201, body: message };
+    }
+    if (path === "/api/ai/reply-suggestion") return { status: 200, body: { suggestion: extras.suggestion, dry_run: true } };
+    if (path === "/api/message-shortcuts" && method === "GET") return { status: 200, body: { data: [] } };
+    return undefined;
+  };
+  const state = await mockBackend(page, mockUser("admin"), { extra: route });
+  // 127 conversations: the first batch (100) is full, "load more" fetches the remaining 27 by offset.
+  const base = state.conversations[0]!;
+  for (let index = 28; index <= 127; index += 1) {
+    state.conversations.push({ ...base, public_id: `cnv_${index}`, channel: index % 2 === 0 ? "instagram" : "facebook", unread_count: index % 3, customer: { full_name: `Konuşma Müşterisi ${index}`, phone: `0555000${String(index).padStart(4, "0")}` } });
+  }
+  await page.goto("/giris");
+  await login(page, state);
+  await expect(page.getByTestId("topbar")).toBeVisible();
+  await page.goto("/mesajlar");
+  await expect(page.getByTestId("page-messages")).toBeVisible();
+  return { state, extras };
+}
+
+const conversationRequests = (state: BackendState) => state.requests.filter((request) => request.path === "/api/conversations").map((request) => request.search);
+
+test("inbox: server search, load more conversations and mark all read", async ({ page }) => {
+  const { state } = await openInboxExtras(page);
+  await expect(page.getByTestId("pagination-summary")).toHaveText("1–20 / 100");
+  expect(conversationRequests(state)).toContain("?limit=100");
+
+  await page.getByTestId("messages-load-more").click();
+  await expect(page.getByTestId("pagination-summary")).toHaveText("1–20 / 127");
+  expect(conversationRequests(state)).toContain("?limit=100&offset=100");
+  await expect(page.getByTestId("messages-load-more")).toHaveCount(0);
+
+  await page.getByTestId("list-search").fill("Müşterisi 105");
+  await expect.poll(() => conversationRequests(state)).toContain("?limit=100&search=M%C3%BC%C5%9Fterisi+105");
+  await expect(page.getByTestId("messages-row")).toHaveCount(1);
+  await expect(page.getByTestId("messages-row")).toContainText("Konuşma Müşterisi 105");
+  expect(new URL(page.url()).searchParams.get("q")).toBe("Müşterisi 105");
+  await expect(page.getByTestId("messages-load-more")).toHaveCount(0);
+  await page.getByTestId("list-clear").click();
+  await expect(page.getByTestId("pagination-summary")).toHaveText("1–20 / 100");
+
+  const dialogs: string[] = [];
+  page.on("dialog", (dialog) => {
+    dialogs.push(dialog.message());
+    void dialog.accept();
+  });
+  await page.getByTestId("filter-channel").click();
+  await page.getByTestId("filter-channel-instagram").click();
+  await expect.poll(() => conversationRequests(state).at(-1)).toContain("channel=instagram");
+  const instagramUnread = state.conversations.filter((row) => row.channel === "instagram" && row.unread_count > 0).length;
+  await page.getByTestId("messages-mark-all-read").click();
+  await expect(page.getByTestId("messages-feedback")).toHaveText(`${instagramUnread} konuşma okundu olarak işaretlendi`);
+  expect(dialogs[0]).toBe(`${instagramUnread} okunmamış konuşma okundu olarak işaretlensin mi?`);
+  expect(state.bodies.filter((entry) => entry.path === "/api/conversations/mark-all-read").map((entry) => entry.body)).toEqual([{ channel: "instagram" }]);
+
+  await page.getByTestId("list-clear").click();
+  const allUnread = state.conversations.filter((row) => row.unread_count > 0).length;
+  await expect(page.getByTestId("messages-mark-all-read")).toBeEnabled();
+  await page.getByTestId("messages-mark-all-read").click();
+  await expect(page.getByTestId("messages-feedback")).toHaveText(`${allUnread} konuşma okundu olarak işaretlendi`);
+  expect(dialogs[1]).toContain(`${allUnread} okunmamış konuşma`);
+  expect(state.bodies.filter((entry) => entry.path === "/api/conversations/mark-all-read").map((entry) => entry.body)).toEqual([{ channel: "instagram" }, {}]);
+  await expect(page.getByTestId("messages-mark-all-read")).toBeDisabled();
+});
+
+test("inbox: load older messages and AI generate-and-send", async ({ page }) => {
+  const { state, extras } = await openInboxExtras(page);
+  await page.getByTestId("messages-table").getByTestId("conversation-open").filter({ hasText: /^Konuşma Müşterisi 1$/ }).click();
+  const sheet = page.getByTestId("conversation-sheet");
+  await expect(sheet.getByTestId("thread-message")).toHaveCount(2);
+  const threadRequests = () => state.requests.filter((request) => request.path === "/api/conversations/cnv_1/messages" && request.method === "GET").map((request) => request.search);
+  expect(threadRequests()).toEqual(["?limit=50"]);
+  await sheet.getByTestId("conversation-load-older").click();
+  await expect(sheet.getByTestId("thread-message")).toHaveCount(3);
+  await expect(sheet.getByTestId("thread-message").first()).toContainText("En eski mesaj");
+  expect(threadRequests()).toEqual(["?limit=50", "?limit=50&before=msg_l1"]);
+  await expect(sheet.getByTestId("conversation-load-older")).toHaveCount(0);
+
+  await sheet.getByTestId("composer-ai-send").click();
+  await expect(sheet.getByTestId("conversation-feedback")).toHaveText("AI yanıtı üretildi ve gönderildi");
+  await expect(sheet.getByTestId("thread-message")).toHaveCount(4);
+  await expect(sheet.getByTestId("thread-message").last()).toContainText("Kargonuz bugün yola çıkıyor.");
+  const posts = () => state.bodies.filter((entry) => entry.method === "POST" && entry.path === "/api/conversations/cnv_1/messages").map((entry) => entry.body);
+  expect(posts()).toEqual([expect.objectContaining({ sender_type: "user", body: "Kargonuz bugün yola çıkıyor.", attachments: [] })]);
+  expect(state.bodies.filter((entry) => entry.path === "/api/ai/reply-suggestion").map((entry) => entry.body)).toEqual([{ conversation_public_id: "cnv_1" }]);
+
+  extras.suggestion = "  ";
+  await sheet.getByTestId("composer-ai-send").click();
+  await expect(sheet.getByTestId("conversation-feedback")).toHaveText("AI yanıt üretemedi; mesaj gönderilmedi");
+  expect(posts()).toHaveLength(1);
+
+  // The draft suggestion flow stays available.
+  extras.suggestion = "Taslak öneri";
+  await sheet.getByTestId("composer-ai").click();
+  await expect(sheet.getByTestId("conversation-ai-suggestion")).toContainText("Taslak öneri");
+  expect(posts()).toHaveLength(1);
+});
+
+test("inbox: the extras fit a phone", async ({ page }) => {
+  await openInboxExtras(page, viewports.phone360);
+  await expect(page.getByTestId("messages-load-more")).toBeVisible();
+  await expect(page.getByTestId("messages-mark-all-read")).toBeVisible();
+  await expectResponsiveLayout(page, { checkTouchTargets: true });
+  await page.getByTestId("messages-cards").getByTestId("conversation-open").filter({ hasText: /^Konuşma Müşterisi 1$/ }).click();
+  await expect(page.getByTestId("conversation-load-older")).toBeVisible();
+  await expect(page.getByTestId("composer-ai-send")).toBeVisible();
   await expectResponsiveLayout(page, { checkTouchTargets: true });
 });

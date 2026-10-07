@@ -2165,7 +2165,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
     );
     await Promise.all([
       page.waitForResponse(`${backendBaseUrl}/api/conversations/cnv_playwright/state`),
-      page.getByRole("button", { name: /okundu yap/i }).click(),
+      page.getByRole("button", { name: /^okundu yap$/i }).click(),
     ]);
     await expect(page.getByTestId("conversation-detail")).toContainText(/Okunmamış\s*0/);
     await Promise.all([

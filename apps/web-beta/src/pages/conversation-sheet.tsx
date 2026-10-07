@@ -21,6 +21,9 @@ interface Pending {
   file_public_id?: string;
 }
 
+/** Legacy Mesajlar loads the newest page first and pages backwards with "eski mesajları yükle". */
+const messagePageSize = 50;
+
 const area =
   "w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 md:text-sm dark:bg-input/30";
 
@@ -58,6 +61,9 @@ export function ConversationSheet({ conversation, onClose, onChanged }: { conver
   const [conversationNote, setConversationNote] = useState("");
   const [customerNote, setCustomerNote] = useState("");
   const [orderOpen, setOrderOpen] = useState(false);
+  const [hasOlder, setHasOlder] = useState(false);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const skipScroll = useRef(false);
   const fileInput = useRef<HTMLInputElement | null>(null);
   const bottom = useRef<HTMLDivElement | null>(null);
   const noteTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
@@ -66,10 +72,13 @@ export function ConversationSheet({ conversation, onClose, onChanged }: { conver
   const loadMessages = useCallback(
     async (publicId: string) => {
       try {
-        setMessages((await api.listMessages(publicId, 100)).data);
+        const page = await api.listMessages(publicId, messagePageSize);
+        setMessages(page.data);
+        setHasOlder(Boolean(page.has_more));
       } catch (error) {
         setFeedback({ tone: "error", text: t("inbox.loadFailed", { error: errorText(error) }) });
         setMessages([]);
+        setHasOlder(false);
       }
     },
     [api, t],
@@ -78,6 +87,7 @@ export function ConversationSheet({ conversation, onClose, onChanged }: { conver
   useEffect(() => {
     setCurrent(conversation);
     setMessages(null);
+    setHasOlder(false);
     setDraft("");
     setPending([]);
     setFeedback(null);
@@ -94,8 +104,34 @@ export function ConversationSheet({ conversation, onClose, onChanged }: { conver
   }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
+    // Prepending an older page keeps the reader where they were instead of jumping to the newest message.
+    if (skipScroll.current) {
+      skipScroll.current = false;
+      return;
+    }
     bottom.current?.scrollIntoView({ block: "end" });
   }, [messages]);
+
+  async function loadOlder() {
+    const oldest = messages?.[0];
+    if (!current || !oldest || loadingOlder) return;
+    const publicId = current.public_id;
+    setLoadingOlder(true);
+    try {
+      const page = await api.listMessages(publicId, messagePageSize, oldest.public_id);
+      if (publicId !== id) return;
+      skipScroll.current = true;
+      setMessages((prev) => {
+        const loaded = new Set((prev ?? []).map((item) => item.public_id));
+        return [...page.data.filter((item) => !loaded.has(item.public_id)), ...(prev ?? [])];
+      });
+      setHasOlder(Boolean(page.has_more));
+    } catch (error) {
+      setFeedback({ tone: "error", text: t("inbox.loadFailed", { error: errorText(error) }) });
+    } finally {
+      setLoadingOlder(false);
+    }
+  }
 
   useEffect(() => () => Object.values(noteTimers.current).forEach(clearTimeout), []);
 
@@ -140,6 +176,30 @@ export function ConversationSheet({ conversation, onClose, onChanged }: { conver
     try {
       const response = await api.aiReplySuggestion(current.public_id);
       setSuggestion({ text: response.suggestion, dryRun: response.dry_run });
+    } catch (error) {
+      setFeedback({ tone: "error", text: t("inbox.actionFailed", { error: errorText(error) }) });
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  /** Legacy "AI yanıt üret & gönder": requests the AI suggestion and sends it as the reply right away. */
+  async function suggestAndSend() {
+    if (!current) return;
+    setBusy("ai-send");
+    setFeedback(null);
+    try {
+      const response = await api.aiReplySuggestion(current.public_id);
+      const text = response.suggestion?.trim() ?? "";
+      if (!text) {
+        setFeedback({ tone: "error", text: t("inbox.aiSendEmpty") });
+        return;
+      }
+      const message = await api.sendMessage(current.public_id, { body: text, sender_name: user?.email ?? "panel", attachments: [] });
+      setMessages((prev) => [...(prev ?? []).filter((item) => item.public_id !== message.public_id), message]);
+      setSuggestion(null);
+      setFeedback({ tone: "success", text: t("inbox.aiSent") });
+      onChanged();
     } catch (error) {
       setFeedback({ tone: "error", text: t("inbox.actionFailed", { error: errorText(error) }) });
     } finally {
@@ -232,6 +292,14 @@ export function ConversationSheet({ conversation, onClose, onChanged }: { conver
             </div>
           )}
           <div className="min-h-0 flex-1 overflow-y-auto bg-muted/30 p-3" data-testid="conversation-thread">
+            {hasOlder && messages !== null && messages.length > 0 && (
+              <div className="mb-2 flex justify-center">
+                <Button variant="outline" className="min-h-11 md:min-h-8" disabled={loadingOlder} onClick={() => void loadOlder()} data-testid="conversation-load-older">
+                  {loadingOlder && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}
+                  {loadingOlder ? t("inbox.loadingOlder") : t("inbox.loadOlder")}
+                </Button>
+              </div>
+            )}
             {messages === null ? (
               <Loader2 className="mx-auto size-5 animate-spin text-muted-foreground" aria-hidden="true" />
             ) : messages.length === 0 ? (
@@ -335,6 +403,10 @@ export function ConversationSheet({ conversation, onClose, onChanged }: { conver
               <Button variant="outline" className="min-h-11 md:min-h-9" disabled={busy !== null} onClick={() => void suggest()} data-testid="composer-ai">
                 {busy === "ai" ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Sparkles className="size-4" aria-hidden="true" />}
                 {busy === "ai" ? t("inbox.aiPreparing") : t("inbox.ai")}
+              </Button>
+              <Button variant="outline" className="min-h-11 md:min-h-9" disabled={busy !== null || sending} onClick={() => void suggestAndSend()} data-testid="composer-ai-send">
+                {busy === "ai-send" ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Bot className="size-4" aria-hidden="true" />}
+                {busy === "ai-send" ? t("inbox.aiSending") : t("inbox.aiSend")}
               </Button>
               <Button className="ml-auto min-h-11 md:min-h-9" disabled={sending || (!draft.trim() && pending.length === 0)} onClick={() => void send()} data-testid="composer-send">
                 {sending ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Send className="size-4" aria-hidden="true" />}

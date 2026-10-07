@@ -12,7 +12,7 @@ import { useNotifications } from "./notifications.js";
 import { uiMessage, type UiMessage } from "../i18n/messages/status.js";
 import { emptyDashboardData, type DashboardCore } from "./dashboard/types.js";
 import { useSession } from "./dashboard/useSession.js";
-import { useInboxFlow } from "./dashboard/useInboxFlow.js";
+import { conversationPageSize, messagePageSize, useInboxFlow } from "./dashboard/useInboxFlow.js";
 import { useOrdersFlow } from "./dashboard/useOrdersFlow.js";
 import { useShipmentsFlow } from "./dashboard/useShipmentsFlow.js";
 import { useAdminFlow } from "./dashboard/useAdminFlow.js";
@@ -65,7 +65,7 @@ export function useDashboardController() {
     selectedConversationId: inbox.selectedConversationId,
     selectedConversationIdRef: inbox.selectedConversationIdRef,
   });
-  const { setMessageShortcuts, setSelectedConversationId } = inbox;
+  const { setMessageShortcuts, setSelectedConversationId, setMessagesHasMore, setConversationsHasMore } = inbox;
   const { setSelectedOrderId, setOrderTotalCount } = orders;
   const { setSelectedShipmentId, setShipmentTotalCount } = shipments;
 
@@ -93,7 +93,7 @@ export function useDashboardController() {
       }
     };
     const [conversations, conversationSummary, customers, customerSummary, commentModeration, balanceSummary, orderSummary, productSummary, shipmentSummary, shipmentPipeline, reportSummary, orders, products, shipments, shortcuts, settings, webphoneConfig] = await Promise.all([
-      domain.listConversations({ limit: 20 }),
+      domain.listConversations({ limit: conversationPageSize }),
       domain.getConversationSummary(),
       canReadCustomers ? domain.listCustomers(50) : Promise.resolve({ data: [] }),
       canReadCustomers ? domain.getCustomerSummary() : Promise.resolve(defaultCustomerSummary),
@@ -132,8 +132,8 @@ export function useDashboardController() {
         ];
     const firstConversation = conversations.data[0]?.public_id;
     const messages = firstConversation
-      ? await domain.listMessages(firstConversation, 50)
-      : { data: [] };
+      ? await domain.listMessages(firstConversation, messagePageSize)
+      : { data: [], has_more: false };
     const firstIntegrationAccountPublicId = integrationAccounts.data[0]?.public_id;
     const instagramAnalytics = user?.role === "admin" && firstIntegrationAccountPublicId
       ? await admin.getInstagramAnalyticsSummary(firstIntegrationAccountPublicId)
@@ -170,6 +170,8 @@ export function useDashboardController() {
       webphone: webphoneConfig,
     });
     setMessageShortcuts(shortcuts.data);
+    setMessagesHasMore(Boolean(messages.has_more));
+    setConversationsHasMore(conversations.data.length >= conversationPageSize);
     setSelectedConversationId((current) => current ?? firstConversation ?? null);
     setSelectedOrderId((current) => current ?? orders.data[0]?.public_id ?? null);
     setSelectedShipmentId((current) => current ?? shipments.data[0]?.public_id ?? null);

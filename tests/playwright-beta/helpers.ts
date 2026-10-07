@@ -195,7 +195,15 @@ export async function mockBackend(page: Page, user: MockUser, options: { orderCo
     if (url.pathname === "/api/conversations") {
       const channel = url.searchParams.get("channel");
       const status = url.searchParams.get("status");
-      return page_(state.conversations.filter((row) => (!channel || row.channel === channel) && (!status || row.status === status)));
+      const channels = channel?.split(",").filter(Boolean);
+      return page_(
+        state.conversations.filter(
+          (row) =>
+            (!channels?.length || channels.includes(row.channel)) &&
+            (!status || row.status === status) &&
+            (!search || [row.customer?.full_name, row.customer?.phone, row.last_message_text].some((value) => value?.toLocaleLowerCase("tr-TR").includes(search))),
+        ),
+      );
     }
     if (url.pathname === "/api/customers") {
       if (state.user.role === "kargo_operatoru") return json(403, { error: { code: "forbidden", message: "Forbidden" } });

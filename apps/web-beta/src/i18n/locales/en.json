@@ -217,7 +217,14 @@
     "assigned": "Assignee",
     "updated": "Updated",
     "pool": "Pool",
-    "noMessage": "No messages"
+    "noMessage": "No messages",
+    "markAllRead": "Mark all as read",
+    "markAllReadConfirm": "Mark {{count}} unread conversations as read?",
+    "markAllReadDone": "{{count}} conversations marked as read",
+    "markAllReadFailed": "Could not mark conversations as read: {{error}}",
+    "loadMore": "Load more conversations",
+    "loadingMore": "Loading conversations…",
+    "loadMoreFailed": "Could not load conversations: {{error}}"
   },
   "customers": {
     "title": "Customers",
@@ -1536,7 +1543,13 @@
     "download": "Download",
     "loadFailed": "Could not load messages: {{error}}",
     "actionFailed": "Action failed: {{error}}",
-    "sent": "Message sent"
+    "sent": "Message sent",
+    "loadOlder": "Load older messages",
+    "loadingOlder": "Loading older messages…",
+    "aiSend": "Generate with AI and send",
+    "aiSending": "Sending the AI reply…",
+    "aiSendEmpty": "AI returned no reply; nothing was sent",
+    "aiSent": "AI reply generated and sent"
   },
   "cargoPipeline": {
     "title": "Undelivered Shipment Pipeline",

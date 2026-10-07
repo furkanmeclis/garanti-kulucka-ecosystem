@@ -1,4 +1,4 @@
-import { Bot, CheckCheck, Download, FileText, Image, MessageCircle, Pencil, Search, Send, Trash2, X, Zap } from "lucide-react";
+import { Bot, CheckCheck, Download, FileText, Image, MessageCircle, Pencil, Search, Send, Sparkles, Trash2, X, Zap } from "lucide-react";
 import { cx, formatDate, attachmentLabel, FlowPanel, DetailPanel, List, DataRows } from "../../app/shared.js";
 import type { DashboardController } from "../../app/useDashboardController.js";
 import { useUiMessageText } from "../../i18n/messages/status.js";
@@ -8,7 +8,18 @@ import { inboxMessages } from "../../i18n/messages/inbox.js";
 export function InboxFlow({ ctx }: { ctx: DashboardController }) {
   const labelText = useUiMessageText();
   const {
+    aiSendPending,
     aiSuggestion,
+    conversationsHasMore,
+    conversationsLoadingMore,
+    handleAiGenerateAndSend,
+    handleLoadMoreConversations,
+    handleLoadOlderMessages,
+    handleMarkAllRead,
+    markAllReadCount,
+    markAllReadPending,
+    messagesHasMore,
+    olderMessagesLoading,
     conversationChannelFilter,
     conversationChannelFilters,
     conversationNoteDraft,
@@ -127,6 +138,21 @@ export function InboxFlow({ ctx }: { ctx: DashboardController }) {
                     type="search"
                   />
                 </label>
+                <div className="detail-actions compact">
+                  <button
+                    className="secondary-action icon-action"
+                    data-testid="mark-all-read-button"
+                    disabled={markAllReadPending || markAllReadCount === 0}
+                    type="button"
+                    onClick={() => {
+                      if (!window.confirm(t("markAllReadConfirm", { count: markAllReadCount }))) return;
+                      void handleMarkAllRead();
+                    }}
+                  >
+                    <CheckCheck size={16} aria-hidden="true" />
+                    <span>{t("markAllRead")}</span>
+                  </button>
+                </div>
                 <div className="messages-counts">
                   <span>{t("unreadCount", { count: unreadConversationCount })}</span>
                   <span>{t("poolCount", { count: poolConversationCount })}</span>
@@ -160,6 +186,17 @@ export function InboxFlow({ ctx }: { ctx: DashboardController }) {
                     </li>
                   ))}
                 </List>
+                {conversationsHasMore && (
+                  <button
+                    className="secondary-action"
+                    data-testid="load-more-conversations"
+                    disabled={conversationsLoadingMore}
+                    type="button"
+                    onClick={() => void handleLoadMoreConversations()}
+                  >
+                    {conversationsLoadingMore ? t("loadingMoreConversations") : t("loadMoreConversations")}
+                  </button>
+                )}
               </aside>
 
               <section className="message-thread">
@@ -181,6 +218,17 @@ export function InboxFlow({ ctx }: { ctx: DashboardController }) {
                   )}
                 </header>
                 <div className="message-scroll-area" data-testid="message-scroll-area">
+                  {messagesHasMore && data.messages.length > 0 && (
+                    <button
+                      className="secondary-action"
+                      data-testid="load-older-messages"
+                      disabled={olderMessagesLoading}
+                      type="button"
+                      onClick={() => void handleLoadOlderMessages()}
+                    >
+                      {olderMessagesLoading ? t("loadingOlderMessages") : t("loadOlderMessages")}
+                    </button>
+                  )}
                   {messageAttachments.length > 0 && (
                     <div className="message-attachments" data-testid="message-attachments">
                       {messageAttachments.map((attachment) => (
@@ -271,6 +319,17 @@ export function InboxFlow({ ctx }: { ctx: DashboardController }) {
                       onClick={() => void handleAiSuggestion()}
                     >
                       <Bot size={16} aria-hidden="true" />
+                    </button>
+                    <button
+                      className="secondary-action icon-only"
+                      data-testid="ai-send-button"
+                      disabled={!selectedConversation || aiSendPending}
+                      title={t("aiGenerateAndSend")}
+                      aria-label={t("aiGenerateAndSend")}
+                      type="button"
+                      onClick={() => void handleAiGenerateAndSend()}
+                    >
+                      <Sparkles size={16} aria-hidden="true" />
                     </button>
                   </div>
                   <div className="message-composer-main">

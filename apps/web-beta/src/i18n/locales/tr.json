@@ -217,7 +217,14 @@
     "assigned": "Atanan",
     "updated": "Güncellendi",
     "pool": "Havuz",
-    "noMessage": "Mesaj yok"
+    "noMessage": "Mesaj yok",
+    "markAllRead": "Tümünü okundu yap",
+    "markAllReadConfirm": "{{count}} okunmamış konuşma okundu olarak işaretlensin mi?",
+    "markAllReadDone": "{{count}} konuşma okundu olarak işaretlendi",
+    "markAllReadFailed": "Konuşmalar okundu yapılamadı: {{error}}",
+    "loadMore": "Daha fazla konuşma yükle",
+    "loadingMore": "Konuşmalar yükleniyor…",
+    "loadMoreFailed": "Konuşmalar yüklenemedi: {{error}}"
   },
   "customers": {
     "title": "Müşteriler",
@@ -1536,7 +1543,13 @@
     "download": "İndir",
     "loadFailed": "Mesajlar yüklenemedi: {{error}}",
     "actionFailed": "İşlem başarısız: {{error}}",
-    "sent": "Mesaj gönderildi"
+    "sent": "Mesaj gönderildi",
+    "loadOlder": "Eski mesajları yükle",
+    "loadingOlder": "Eski mesajlar yükleniyor…",
+    "aiSend": "AI ile üret ve gönder",
+    "aiSending": "AI yanıtı gönderiliyor…",
+    "aiSendEmpty": "AI yanıt üretemedi; mesaj gönderilmedi",
+    "aiSent": "AI yanıtı üretildi ve gönderildi"
   },
   "cargoPipeline": {
     "title": "Teslim Alınmayan Kargo Pipeline",

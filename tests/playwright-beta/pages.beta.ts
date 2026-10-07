@@ -77,7 +77,7 @@ test("global search lands on a filtered order list", async ({ page }) => {
   await expect(page.getByTestId("orders-row")).toHaveCount(1);
 });
 
-test("messages: channel filter goes to the API, search and paging run locally", async ({ page }) => {
+test("messages: channel filter and search go to the API, paging runs locally", async ({ page }) => {
   const state = await signIn(page);
   await page.goto("/mesajlar");
   await expect(page.getByTestId("messages-row")).toHaveCount(20);
@@ -90,6 +90,7 @@ test("messages: channel filter goes to the API, search and paging run locally", 
   await expect(page.getByTestId("pagination-summary")).toHaveText("1–13 / 13");
 
   await page.getByTestId("list-search").fill("Müşterisi 4");
+  await expect.poll(() => lastRequest(state, "/api/conversations")?.search).toContain("search=M%C3%BC%C5%9Fterisi+4");
   await expect(page.getByTestId("messages-row")).toHaveCount(1);
   await expect(page.getByTestId("messages-row")).toContainText("Konuşma Müşterisi 4");
 });
