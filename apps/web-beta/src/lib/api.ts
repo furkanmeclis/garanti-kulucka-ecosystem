@@ -337,6 +337,9 @@ export function createApiClient(options: ApiClientOptions) {
     kolaybiStatus: () => request<KolaybiSyncStatus>("/api/accounting/kolaybi/status"),
     syncKolaybi: (idempotencyKey: string) => request<KolaybiSyncResult>("/api/accounting/kolaybi/sync", { method: "POST", body: { idempotency_key: idempotencyKey } }),
     productSummary: () => request<ProductSummaryStats>("/api/products/summary"),
+    listKolaybiProducts: () =>
+      request<{ products: Array<{ id: string; name: string | null }>; total: number; synced_at: string | null; account_configured: boolean; live_call_permitted: boolean; live_gate: string }>("/api/products/kolaybi"),
+    refreshKolaybiProducts: () => request<{ queued: boolean; live_gate: string }>("/api/products/kolaybi/refresh", { method: "POST" }),
     listProducts: (query: { category?: ProductCategory; search?: string; active?: "true" | "false" | "all"; limit?: number } = {}) =>
       request<{ data: ProductSummary[] }>("/api/products", { query: { limit: 200, ...query } }),
     createProduct: (input: ProductInput) => request<ProductSummary>("/api/products", { method: "POST", body: input }),

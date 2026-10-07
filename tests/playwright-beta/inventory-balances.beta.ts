@@ -12,6 +12,10 @@ function stockRoutes() {
     { public_id: "prd_3", sku: "YP-1", name: "Nem sensörü", category: "spare_part", unit_price: "350.00", stock_quantity: 0, is_active: true, external_product_id: null, unit: "Adet", description: null, updated_at: now },
   ];
   const route: ExtraRoute = ({ method, path, url, body }) => {
+    if (path === "/api/products/kolaybi") {
+      return { status: 200, body: { products: [{ id: "7633402", name: "Termostat KolayBi" }], total: 1, synced_at: "2026-10-07T08:00:00.000Z", account_configured: true, live_call_permitted: false, live_gate: "providers.kolaybi.live_mode" } };
+    }
+    if (path === "/api/products/kolaybi/refresh") return { status: 202, body: { queued: true, live_gate: "providers.kolaybi.live_mode" } };
     if (path === "/api/products/summary") {
       return { status: 200, body: { total_count: 3, active_count: 3, critical_count: 2, critical_threshold: 3, category_counts: { incubator: 2, spare_part: 1, other: 0 } } };
     }
@@ -150,12 +154,17 @@ test("stock: create a card in the open category", async ({ page }) => {
   await expect(sheet.getByTestId("inventory-sheet-feedback")).toHaveText("Ürün adı gerekli");
   await sheet.getByTestId("product-name").fill("Termostat");
   await sheet.getByTestId("product-sku").fill("YP-2");
+  await expect(sheet.getByTestId("product-kolaybi-info")).toContainText("1 KolayBi ürünü");
+  await expect(page.locator("#beta-kolaybi-products option")).toHaveAttribute("value", "7633402");
+  await sheet.getByTestId("product-kolaybi-refresh").click();
+  await expect(sheet.getByTestId("product-kolaybi-info")).toContainText("Liste isteği kuyruğa alındı");
+  await sheet.getByTestId("product-external").fill("7633402");
   await sheet.getByTestId("product-quantity").fill("12");
   await sheet.getByTestId("product-price").fill("275,50");
   await sheet.getByTestId("inventory-submit").click();
   await expect(page.getByTestId("inventory-feedback")).toHaveText("Yeni stok kartı oluşturuldu");
   expect(state.bodies.find((entry) => entry.method === "POST" && entry.path === "/api/products")?.body).toEqual({
-    name: "Termostat", sku: "YP-2", external_product_id: null, unit: "Adet", unit_price: "275.50", stock_quantity: 12, description: null, category: "spare_part",
+    name: "Termostat", sku: "YP-2", external_product_id: "7633402", unit: "Adet", unit_price: "275.50", stock_quantity: 12, description: null, category: "spare_part",
   });
 });
 

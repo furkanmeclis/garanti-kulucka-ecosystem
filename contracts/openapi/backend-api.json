@@ -8085,6 +8085,155 @@
           }
         }
       }
+    },
+    "/api/products/kolaybi": {
+      "get": {
+        "operationId": "listKolaybiProducts",
+        "description": "Legacy GET /api/kolaybi/urunler: the last stored KolayBi product list (integration_accounts.metadata.kolaybi_products, written by the worker from a live product.list result).",
+        "responses": {
+          "200": {
+            "description": "Stored snapshot",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "products",
+                    "total",
+                    "synced_at",
+                    "account_configured",
+                    "live_call_permitted",
+                    "live_gate"
+                  ],
+                  "properties": {
+                    "products": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "sale_price": {
+                            "type": [
+                              "string",
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "stock_quantity": {
+                            "type": [
+                              "string",
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "unit": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "category": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        }
+                      }
+                    },
+                    "total": {
+                      "type": "integer"
+                    },
+                    "synced_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "account_configured": {
+                      "type": "boolean"
+                    },
+                    "live_call_permitted": {
+                      "type": "boolean"
+                    },
+                    "live_gate": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/products/kolaybi/refresh": {
+      "post": {
+        "operationId": "refreshKolaybiProducts",
+        "description": "Queues kolaybi product.list (per_page 200, up to 20 pages); live only behind providers.kolaybi.live_mode.",
+        "responses": {
+          "202": {
+            "description": "Queued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "request_id",
+                    "job_id",
+                    "queued",
+                    "live_call_permitted",
+                    "live_gate"
+                  ],
+                  "properties": {
+                    "request_id": {
+                      "type": "string"
+                    },
+                    "job_id": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "queued": {
+                      "type": "boolean"
+                    },
+                    "live_call_permitted": {
+                      "type": "boolean"
+                    },
+                    "live_gate": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
     }
   },
   "components": {

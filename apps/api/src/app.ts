@@ -26,6 +26,7 @@ import { createWebhookRoutes } from "./http/webhook-routes.js";
 import { createWebphoneRoutes } from "./http/webphone-routes.js";
 import { createVapiRoutes } from "./http/vapi-routes.js";
 import { createCargoPipelineRoutes } from "./http/cargo-pipeline-routes.js";
+import { createKolaybiProductRoutes } from "./http/kolaybi-product-routes.js";
 import { createNetgsmVoiceRoutes } from "./http/netgsm-voice-routes.js";
 import { createNetgsmWebhookRoutes } from "./http/netgsm-webhook-routes.js";
 import { createRateLimitStore, type RateLimitStore } from "./http/rate-limit.js";
@@ -194,6 +195,7 @@ export function createApp(options: CreateAppOptions = {}) {
   app.route("/api/app-settings", createAppSettingsRoutes());
   app.route("/api/vapi", createVapiRoutes());
   app.route("/api/cargo-pipeline", createCargoPipelineRoutes());
+  app.route("/api/products/kolaybi", createKolaybiProductRoutes());
   app.route("/api/netgsm", createNetgsmVoiceRoutes());
   app.route(
     "/webhooks",

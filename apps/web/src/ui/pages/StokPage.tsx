@@ -18,6 +18,7 @@ import {
   X,
 } from "lucide-react";
 import type {
+  KolaybiProductList,
   ProductCategory,
   ProductSummary,
   ProductUnit,
@@ -143,6 +144,8 @@ export function StokPage(props: { domain: DomainClient }) {
   const [modalMode, setModalMode] = useState<ModalMode | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<ProductSummary | null>(null);
   const [form, setForm] = useState<StockForm>(emptyForm);
+  const [kolaybiList, setKolaybiList] = useState<KolaybiProductList | null>(null);
+  const [kolaybiNote, setKolaybiNote] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const [historyProduct, setHistoryProduct] = useState<ProductSummary | null>(null);
@@ -349,6 +352,25 @@ export function StokPage(props: { domain: DomainClient }) {
   const selectedCategoryCard = CATEGORY_CARDS.find((card) => card.key === selectedCategory) ?? null;
   const isStockMovement = modalMode === "giris" || modalMode === "cikis";
   const isCardEdit = modalMode === "create" || modalMode === "edit";
+
+  useEffect(() => {
+    if (!isCardEdit) return;
+    setKolaybiNote(null);
+    void domain
+      .listKolaybiProducts()
+      .then(setKolaybiList)
+      .catch(() => setKolaybiList(null));
+  }, [domain, isCardEdit]);
+
+  async function refreshKolaybiList() {
+    try {
+      await domain.refreshKolaybiProducts();
+      setKolaybiNote(t("kolaybiListQueued"));
+      window.setTimeout(() => void domain.listKolaybiProducts().then(setKolaybiList).catch(() => undefined), 3000);
+    } catch {
+      setKolaybiNote(null);
+    }
+  }
 
   return (
     <section className="flow-panel stok-page" data-testid="inventory-flow">
@@ -603,13 +625,33 @@ export function StokPage(props: { domain: DomainClient }) {
                   <label>
                     {t("fieldKolaybiMatch")}
                     <input
+                      list="stok-kolaybi-products"
                       onChange={(event) => setForm((current) => ({ ...current, kolaybi_product_id: event.target.value }))}
                       placeholder={t("fieldKolaybiPlaceholder")}
                       type="text"
                       value={form.kolaybi_product_id}
+                      data-testid="stok-kolaybi-id"
                     />
+                    <datalist id="stok-kolaybi-products">
+                      {(kolaybiList?.products ?? []).map((product) => (
+                        <option key={product.id} value={product.id}>
+                          {product.name ?? product.id}
+                        </option>
+                      ))}
+                    </datalist>
                     <small>{t("fieldKolaybiHint")}</small>
                   </label>
+                  <div className="stok-kolaybi-list">
+                    <small data-testid="stok-kolaybi-info">
+                      {kolaybiList?.synced_at
+                        ? t("kolaybiListInfo", { count: kolaybiList.total, date: new Date(kolaybiList.synced_at).toLocaleString(localeFor(language)) })
+                        : t("kolaybiListEmpty")}
+                      {kolaybiNote ? ` · ${kolaybiNote}` : ""}
+                    </small>
+                    <button type="button" className="secondary-action" onClick={() => void refreshKolaybiList()} data-testid="stok-kolaybi-refresh">
+                      {t("kolaybiListRefresh")}
+                    </button>
+                  </div>
                 </>
               )}
               <div className="stok-modal-row">

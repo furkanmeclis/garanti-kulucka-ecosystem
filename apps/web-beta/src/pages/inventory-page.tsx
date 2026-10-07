@@ -207,6 +207,27 @@ function ProductSheet({ mode, category, onClose, onDone }: { mode: Mode | null; 
   const [movements, setMovements] = useState<StockMovementSummary[] | null>(null);
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<Feedback>(null);
+  const [kolaybi, setKolaybi] = useState<{ products: Array<{ id: string; name: string | null }>; total: number; synced_at: string | null } | null>(null);
+  const [kolaybiNote, setKolaybiNote] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (mode?.kind !== "create" && mode?.kind !== "edit") return;
+    setKolaybiNote(null);
+    api
+      .listKolaybiProducts()
+      .then(setKolaybi)
+      .catch(() => setKolaybi(null));
+  }, [mode, api]);
+
+  async function refreshKolaybi() {
+    try {
+      await api.refreshKolaybiProducts();
+      setKolaybiNote(t("inventory.kolaybiListQueued"));
+      window.setTimeout(() => void api.listKolaybiProducts().then(setKolaybi).catch(() => undefined), 3000);
+    } catch (error) {
+      setKolaybiNote(errorText(error));
+    }
+  }
 
   useEffect(() => {
     setFeedback(null);
@@ -330,7 +351,25 @@ function ProductSheet({ mode, category, onClose, onDone }: { mode: Mode | null; 
               <>
                 {input("name", t("inventory.fieldName"), { className: "sm:col-span-2" })}
                 {input("sku", t("inventory.fieldCode"))}
-                {input("external", t("inventory.fieldKolaybiMatch"))}
+                <Field label={t("inventory.fieldKolaybiMatch")}>
+                  <Input list="beta-kolaybi-products" value={form.external} onChange={(event) => setForm((current) => ({ ...current, external: event.target.value }))} className="h-11 md:h-9" data-testid="product-external" />
+                  <datalist id="beta-kolaybi-products">
+                    {(kolaybi?.products ?? []).map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.name ?? item.id}
+                      </option>
+                    ))}
+                  </datalist>
+                </Field>
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground sm:col-span-2">
+                  <span data-testid="product-kolaybi-info">
+                    {kolaybi?.synced_at ? t("inventory.kolaybiListInfo", { count: kolaybi.total, date: formatDateTime(kolaybi.synced_at, i18n.language) }) : t("inventory.kolaybiListEmpty")}
+                    {kolaybiNote ? ` · ${kolaybiNote}` : ""}
+                  </span>
+                  <Button type="button" variant="outline" className="min-h-11 md:min-h-9" onClick={() => void refreshKolaybi()} data-testid="product-kolaybi-refresh">
+                    {t("inventory.kolaybiListRefresh")}
+                  </Button>
+                </div>
                 {input("quantity", t("inventory.fieldQuantity"), { inputMode: "decimal" })}
                 <Field label={t("inventory.fieldUnit")}>
                   <NativeSelect value={form.unit} onChange={(event) => setForm((current) => ({ ...current, unit: event.target.value as ProductUnit }))} data-testid="product-unit">

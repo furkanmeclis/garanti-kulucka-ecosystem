@@ -595,7 +595,11 @@
     "columnQuantity": "Miktar",
     "columnPreviousNew": "Önceki → Yeni",
     "columnDescription": "Açıklama",
-    "columnUser": "Kullanıcı"
+    "columnUser": "Kullanıcı",
+    "kolaybiListRefresh": "KolayBi listesini yenile",
+    "kolaybiListInfo": "{{count}} KolayBi ürünü · son güncelleme {{date}}",
+    "kolaybiListEmpty": "KolayBi ürün listesi henüz alınmadı",
+    "kolaybiListQueued": "Liste isteği kuyruğa alındı; canlı kilit açıksa birkaç saniye içinde gelir"
   },
   "balances": {
     "movementCommission": "Komisyon",

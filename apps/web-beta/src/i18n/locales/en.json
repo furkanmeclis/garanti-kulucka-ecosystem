@@ -595,7 +595,11 @@
     "columnQuantity": "Quantity",
     "columnPreviousNew": "Previous → New",
     "columnDescription": "Description",
-    "columnUser": "User"
+    "columnUser": "User",
+    "kolaybiListRefresh": "Refresh KolayBi list",
+    "kolaybiListInfo": "{{count}} KolayBi products · last updated {{date}}",
+    "kolaybiListEmpty": "The KolayBi product list has not been fetched yet",
+    "kolaybiListQueued": "List request queued; it arrives in a few seconds when the live gate is open"
   },
   "balances": {
     "movementCommission": "Commission",

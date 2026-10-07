@@ -402,6 +402,15 @@ export interface ReportSummary {
   active_shipment_rate: number;
 }
 
+export interface KolaybiProductList {
+  products: Array<{ id: string; name: string | null; sale_price: string | number | null; stock_quantity: string | number | null; unit: string | null; category: string | null }>;
+  total: number;
+  synced_at: string | null;
+  account_configured: boolean;
+  live_call_permitted: boolean;
+  live_gate: string;
+}
+
 export function createDomainClient(http: BackendHttpClient) {
   return {
     listConversations: (params: { channel?: string; status?: string; limit?: number } = {}) => {
@@ -432,6 +441,10 @@ export function createDomainClient(http: BackendHttpClient) {
         method: "PATCH",
         body: { notes },
       }),
+    /** Legacy /api/kolaybi/urunler snapshot + refresh (worker `kolaybi.product.list`). */
+    listKolaybiProducts: () => http.request<KolaybiProductList>("/api/products/kolaybi"),
+    refreshKolaybiProducts: () =>
+      http.request<{ request_id: string; job_id: string | null; queued: boolean; live_call_permitted: boolean; live_gate: string }>("/api/products/kolaybi/refresh", { method: "POST" }),
     getCommentModerationSummary: () =>
       http.request<CommentModerationSummary>("/api/comments/moderation-summary"),
     listMessages: (conversationPublicId: string, limit = 100) =>

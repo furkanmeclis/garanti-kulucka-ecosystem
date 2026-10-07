@@ -28,6 +28,8 @@
   "GET /api/products": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "allow", "admin": "allow" },
   "GET /api/products/summary": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "allow", "admin": "allow" },
   "POST /api/products": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "allow", "admin": "allow" },
+  "GET /api/products/kolaybi": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "allow", "admin": "allow" },
+  "POST /api/products/kolaybi/refresh": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "allow", "admin": "allow" },
   "PATCH /api/products/{product_public_id}": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "allow", "admin": "allow" },
   "DELETE /api/products/{product_public_id}": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "allow", "admin": "allow" },
   "GET /api/products/{product_public_id}/stock-movements": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "allow", "admin": "allow" },

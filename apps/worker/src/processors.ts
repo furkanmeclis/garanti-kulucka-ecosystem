@@ -31,6 +31,7 @@ import type { VapiFetchTransport } from "./providers/vapi.js";
 import type { StorageOrphanReconciler } from "./storage-orphans.js";
 import { shipmentWritebackFrom, type ShipmentWritebackRepository } from "./shipment-writeback.js";
 import { instagramAnalyticsFrom, type InstagramAnalyticsRepository } from "./instagram-insights.js";
+import { kolaybiProductsFrom, type KolaybiProductRepository } from "./kolaybi-products.js";
 import { dataRetentionPolicyFromEnv, runDataRetention, type DataRetentionStore } from "./data-retention.js";
 import type { StorageOrphanReconciliationResult } from "./storage-orphans.js";
 
@@ -127,6 +128,7 @@ export interface WorkerProcessorRegistryOptions {
   storageOrphanReconciler?: StorageOrphanReconciler;
   shipmentWritebackRepository?: ShipmentWritebackRepository;
   instagramAnalyticsRepository?: InstagramAnalyticsRepository;
+  kolaybiProductRepository?: KolaybiProductRepository;
   dataRetentionStore?: DataRetentionStore;
 }
 
@@ -274,6 +276,7 @@ function createProviderDeliveryProcessor(
     mediaFileResolver?: ProviderMediaFileResolver;
     shipmentWritebackRepository?: ShipmentWritebackRepository;
     instagramAnalyticsRepository?: InstagramAnalyticsRepository;
+    kolaybiProductRepository?: KolaybiProductRepository;
   } = {},
 ): QueueProcessor {
   return async (job) => {
@@ -338,6 +341,17 @@ function createProviderDeliveryProcessor(
           return { ...result, instagram_analytics: stored ? "stored" : "skipped" };
         } catch {
           return { ...result, instagram_analytics: "failed" };
+        }
+      }
+    }
+    if (result.live_call_performed && extras.kolaybiProductRepository) {
+      const products = kolaybiProductsFrom(requestEnvelope, result.response_payload);
+      if (products) {
+        try {
+          const stored = await extras.kolaybiProductRepository.store(products.accountPublicId, products.snapshot);
+          return { ...result, kolaybi_products: stored ? "stored" : "skipped" };
+        } catch {
+          return { ...result, kolaybi_products: "failed" };
         }
       }
     }
@@ -597,6 +611,7 @@ export function createWorkerProcessorRegistry(
     typeof options === "function" ? undefined : options.shipmentWritebackRepository;
   const instagramAnalyticsRepository =
     typeof options === "function" ? undefined : options.instagramAnalyticsRepository;
+  const kolaybiProductRepository = typeof options === "function" ? undefined : options.kolaybiProductRepository;
   const dataRetentionStore =
     typeof options === "function" ? undefined : options.dataRetentionStore;
   const processors = new Map<QueueName, QueueProcessor>([
@@ -619,6 +634,7 @@ export function createWorkerProcessorRegistry(
           ...(mediaFileResolver ? { mediaFileResolver } : {}),
           ...(shipmentWritebackRepository ? { shipmentWritebackRepository } : {}),
           ...(instagramAnalyticsRepository ? { instagramAnalyticsRepository } : {}),
+          ...(kolaybiProductRepository ? { kolaybiProductRepository } : {}),
         },
       ),
     ],

@@ -19,6 +19,7 @@ import { DatabaseShipmentWritebackRepository } from "./shipment-writeback.js";
 import { DatabaseDataRetentionStore } from "./data-retention.js";
 import { DatabaseInstagramAnalyticsRepository, enqueueInstagramInsights, instagramInsightsIntervalMs } from "./instagram-insights.js";
 import { StorageOrphanReconciler } from "./storage-orphans.js";
+import { DatabaseKolaybiProductRepository } from "./kolaybi-products.js";
 import { cargoPipelineIntervalMs, DatabaseCargoPipelineStore, runCargoPipelineTick } from "./cargo-pipeline.js";
 import { S3ProviderMediaFileResolver, type ProviderMediaFileResolver } from "./providers/media-files.js";
 import { DatabaseProviderAttemptRepository, type ProviderAttemptRepository } from "./providers/attempts.js";
@@ -110,6 +111,7 @@ export function createWorkerRuntime(options: WorkerRuntimeOptions): WorkerRuntim
   const storageOrphanReconciler = db ? new StorageOrphanReconciler(db) : undefined;
   const shipmentWritebackRepository = db ? new DatabaseShipmentWritebackRepository(db) : undefined;
   const instagramAnalyticsRepository = db ? new DatabaseInstagramAnalyticsRepository(db) : undefined;
+  const kolaybiProductRepository = db ? new DatabaseKolaybiProductRepository(db) : undefined;
   const dataRetentionStore = db ? new DatabaseDataRetentionStore(db) : undefined;
   const mediaFileResolver =
     options.mediaFileResolver ?? (db ? new S3ProviderMediaFileResolver(db) : undefined);
@@ -139,6 +141,7 @@ export function createWorkerRuntime(options: WorkerRuntimeOptions): WorkerRuntim
     ...(mediaFileResolver ? { mediaFileResolver } : {}),
     ...(shipmentWritebackRepository ? { shipmentWritebackRepository } : {}),
     ...(instagramAnalyticsRepository ? { instagramAnalyticsRepository } : {}),
+    ...(kolaybiProductRepository ? { kolaybiProductRepository } : {}),
     ...(dataRetentionStore ? { dataRetentionStore } : {}),
   });
 

@@ -100,6 +100,7 @@ test("calisan Stok CRUD, stok giriş/çıkış ve hareket geçmişi backend API 
   const movementPayloads: unknown[] = [];
   const deletedIds: string[] = [];
   let sequence = 0;
+  let kolaybiRefreshes = 0;
   let products: MockProduct[] = [
     product({
       public_id: "prd_incubator",
@@ -128,6 +129,13 @@ test("calisan Stok CRUD, stok giriş/çıkış ve hareket geçmişi backend API 
     if (url.pathname === "/auth/login") return json(loginBody(user));
     if (url.pathname === "/auth/me") return json(user);
 
+    if (url.pathname === "/api/products/kolaybi") {
+      return json({ products: [{ id: "7633402", name: "Kuluçka 96 KolayBi", sale_price: "8500", stock_quantity: 2, unit: "Adet", category: null }], total: 1, synced_at: "2026-10-07T08:00:00.000Z", account_configured: true, live_call_permitted: false, live_gate: "providers.kolaybi.live_mode" });
+    }
+    if (url.pathname === "/api/products/kolaybi/refresh") {
+      kolaybiRefreshes += 1;
+      return json({ request_id: "req_1", job_id: "job_1", queued: true, live_call_permitted: false, live_gate: "providers.kolaybi.live_mode" }, 202);
+    }
     if (url.pathname === "/api/products" && request.method() === "GET") {
       productQueries.push(url.search);
       const active = url.searchParams.get("active");
@@ -253,6 +261,11 @@ test("calisan Stok CRUD, stok giriş/çıkış ve hareket geçmişi backend API 
     expect(createPayloads).toHaveLength(0);
     await modal.getByLabel("Stok Fiş Kodu / Kod").fill("KLC-024");
     await modal.getByLabel("Ürün Adı *").fill("Mini Kuluçka 24");
+    await expect(modal.getByTestId("stok-kolaybi-info")).toContainText("1 KolayBi ürünü");
+    await expect(page.locator("#stok-kolaybi-products option")).toHaveAttribute("value", "7633402");
+    await modal.getByTestId("stok-kolaybi-refresh").click();
+    await expect(modal.getByTestId("stok-kolaybi-info")).toContainText("Liste isteği kuyruğa alındı");
+    expect(kolaybiRefreshes).toBe(1);
     await modal.getByLabel("KolayBi Ürün Eşleştirme").fill("7633402");
     await modal.getByLabel("Miktar *").fill("3");
     await modal.getByLabel("Birim Tutar").fill("900");
