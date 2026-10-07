@@ -21,6 +21,7 @@ import { ReportsPage } from "@/pages/reports-page";
 import { SettingsPage } from "@/pages/settings-page";
 import { SmsPage } from "@/pages/sms-page";
 import { ShipmentsPage } from "@/pages/shipments-page";
+import { ActivityLogsPage, UsersPage } from "@/pages/users-page";
 import { VapiPage } from "@/pages/vapi-page";
 import { CallsPage, PhonebookPage, VoiceMessagesPage } from "@/pages/voice-pages";
 
@@ -71,6 +72,8 @@ export function App() {
       <Route path="/sesli-asistan/sesli-mesajlar" element={<Protected><VoiceMessagesPage /></Protected>} />
       <Route path="/sesli-asistan/vapi" element={<Protected><VapiPage /></Protected>} />
       <Route path="/sesli-asistan/rehber" element={<Protected><PhonebookPage /></Protected>} />
+      <Route path="/kullanicilar" element={<Protected><UsersPage /></Protected>} />
+      <Route path="/islem-loglari" element={<Protected><ActivityLogsPage /></Protected>} />
       <Route path="*" element={<Protected><Navigate to="/" replace /></Protected>} />
     </Routes>
   );

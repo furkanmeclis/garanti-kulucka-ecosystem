@@ -82,6 +82,7 @@ import type {
   VoiceMessageStatus,
 } from "./voice";
 import type { StoredTokens } from "./session-storage";
+import type { AdminLogEntry, CreateManagedUserInput, ManagedRole, ManagedUser, UpdateManagedUserInput } from "./users";
 
 /** VITE_BACKEND_BASE_URL (default "/backend"): same-origin proxy in Docker/nginx and the Vite dev server. */
 export const defaultBackendBaseUrl = "/backend";
@@ -365,6 +366,11 @@ export function createApiClient(options: ApiClientOptions) {
     getVapiCall: (publicId: string) => request<{ call: VapiCall; backfill_queued: boolean }>(`/api/vapi/calls/${encodeURIComponent(publicId)}`),
     createVapiTestCall: (input: { customer_name: string; customer_phone: string; cargo_provider: string; tracking_number: string; last_event_text: string; idempotency_key: string }) =>
       request<{ operation: string; request_id: string }>("/api/webphone/test-call", { method: "POST", body: input }),
+    listUsers: () => request<{ data: ManagedUser[]; roles: ManagedRole[] }>("/admin/users"),
+    createUser: (input: CreateManagedUserInput) => request<{ user: ManagedUser }>("/admin/users", { method: "POST", body: input }),
+    updateUser: (publicId: string, input: UpdateManagedUserInput) => request<{ user: ManagedUser }>(`/admin/users/${encodeURIComponent(publicId)}`, { method: "PATCH", body: input }),
+    deactivateUser: (publicId: string) => request<{ user: ManagedUser; deactivated: boolean }>(`/admin/users/${encodeURIComponent(publicId)}`, { method: "DELETE" }),
+    listAdminLogs: (limit = 100) => request<{ data: AdminLogEntry[] }>("/admin/logs", { query: { limit } }),
     saveCustomerNotes: (publicId: string, notes: string | null) =>
       request<CustomerSummary>(`/api/customers/${encodeURIComponent(publicId)}/notes`, { method: "PATCH", body: { notes } }),
   };
