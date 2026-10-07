@@ -107,6 +107,7 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
   let savedSipConfig = false;
   let savedOperationalPolicy = false;
   let realtimeMessageDelivered = false;
+  let playwrightReply: Record<string, unknown> | null = null;
   let facebookRealtimeDelivered = false;
   let conversationUnreadCount = 2;
   let conversationInPool = true;
@@ -478,17 +479,18 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
         };
         expect(payload.sender_type).toBe("user");
         expect(payload.body).toBe("Backend UI yaniti");
+        playwrightReply = {
+          public_id: "msg_playwright_reply",
+          sender_type: "user",
+          sender_name: "admin@example.com",
+          body: payload.body,
+          external_message_id: null,
+          is_read: true,
+          sent_at: "2026-01-01T00:02:00.000Z",
+        };
         await route.fulfill({
           contentType: "application/json",
-          body: JSON.stringify({
-            public_id: "msg_playwright_reply",
-            sender_type: "user",
-            sender_name: "admin@example.com",
-            body: payload.body,
-            external_message_id: null,
-            is_read: true,
-            sent_at: "2026-01-01T00:01:00.000Z",
-          }),
+          body: JSON.stringify(playwrightReply),
         });
         return;
       }
@@ -519,6 +521,8 @@ test("real frontend shell uses backend auth, domain, file, and webphone APIs", a
                   },
                 ]
               : []),
+            // A real backend returns the stored reply on the refetch that follows the POST.
+            ...(playwrightReply ? [playwrightReply] : []),
           ],
         }),
       });
