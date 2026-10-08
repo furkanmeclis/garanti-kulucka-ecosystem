@@ -160,7 +160,7 @@ test("English content on list pages, including status badges and money", async (
   await expect(page.getByTestId("stat-revenue-value")).toHaveText("₺154,230.50");
   await page.goto("/siparisler");
   await expect(page.getByRole("heading", { name: "Orders", level: 1 })).toBeVisible();
-  await expect(page.getByTestId("orders-table").locator("th")).toHaveText(["", "Order no.", "Customer", "Status", "Carrier", "Amount", "Date"]);
+  await expect(page.getByTestId("orders-table").locator("th")).toHaveText(["", "Order no.", "Customer", "Status", "Badges", "Carrier", "Amount", "Date", ""]);
   await expect(page.getByTestId("orders-row").first()).toContainText("Awaiting confirmation");
   await expect(page.getByTestId("pagination-summary")).toHaveText("1–20 of 45");
 });

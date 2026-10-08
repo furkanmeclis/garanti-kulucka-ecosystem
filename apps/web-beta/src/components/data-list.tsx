@@ -44,8 +44,8 @@ export function DataList<T>({ rows, columns, rowKey, loading, testId }: { rows: 
   const meta = columns.filter((column) => column.mobile === "meta" || column.mobile === undefined);
 
   return (
-    <div className={cn("transition-opacity", loading && "opacity-60")} aria-busy={loading}>
-      <Card className="hidden overflow-x-auto md:block">
+    <div className={cn("min-w-0 max-w-full transition-opacity", loading && "opacity-60")} aria-busy={loading}>
+      <Card className="hidden max-w-full overflow-x-auto md:block">
         <table className="w-full text-sm" data-testid={`${testId}-table`}>
           <thead className="border-b bg-muted/40 text-left text-xs text-muted-foreground uppercase">
             <tr>

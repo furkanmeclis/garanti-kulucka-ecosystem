@@ -15,10 +15,12 @@ for (const [name, viewport] of Object.entries(viewports)) {
     await expect(page.getByTestId("topbar")).toBeVisible();
     const mobile = viewport.width < 768;
     for (const route of routes) {
-      await page.goto(route);
-      await expect(page.getByTestId("main")).toBeVisible();
-      await page.waitForLoadState("networkidle");
-      await expectResponsiveLayout(page, { checkTouchTargets: mobile });
+      await test.step(route, async () => {
+        await page.goto(route);
+        await expect(page.getByTestId("main")).toBeVisible();
+        await page.waitForLoadState("networkidle");
+        await expectResponsiveLayout(page, { checkTouchTargets: mobile });
+      });
     }
     if (mobile) {
       await expect(page.getByTestId("bottom-nav")).toBeVisible();

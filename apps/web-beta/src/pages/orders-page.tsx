@@ -511,7 +511,7 @@ export function OrdersPage() {
       cell: (row) => (
         <Button
           variant="ghost"
-          className="min-h-11 md:min-h-9"
+          className="relative min-h-11 md:min-h-9"
           disabled={!(row.conversation_public_id || row.customer_phone)}
           title={t("orders.quickMessage")}
           aria-label={t("orders.quickMessage")}
