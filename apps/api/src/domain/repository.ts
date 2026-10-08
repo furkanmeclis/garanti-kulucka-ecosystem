@@ -56,6 +56,12 @@ export type OrderRecord = Selectable<OrdersTable> & {
   created_by_user_public_id: string | null;
   created_by_user_email: string | null;
   cargo_provider: string | null;
+  /** Legacy row badges / quick message / tracking modal: linked conversation and the latest shipment. */
+  conversation_public_id?: string | null;
+  shipment_public_id?: string | null;
+  shipment_provider?: string | null;
+  shipment_status?: string | null;
+  shipment_tracking_number?: string | null;
 };
 export type ProductRecord = Selectable<ProductsTable>;
 export type OrderItemRecord = Selectable<OrderItemsTable>;
@@ -372,6 +378,12 @@ export interface PaymentRequestRecord {
   replayed: boolean;
 }
 
+export interface OrderDailyStatRecord {
+  date: string;
+  order_count: number;
+  revenue: number;
+}
+
 export interface OrderSummaryRecord {
   total_count: number;
   active_count: number;
@@ -379,6 +391,8 @@ export interface OrderSummaryRecord {
   pending_confirmation_count: number;
   total_revenue: number;
   currency: string;
+  /** Legacy dashboard "haftalık satış" chart: the last 7 days (Europe/Istanbul), oldest first, zero-filled. */
+  daily: OrderDailyStatRecord[];
 }
 
 export interface ProductSummaryRecord {
@@ -468,6 +482,24 @@ function normalizedPhone(value: string | null | undefined) {
 function orderNumberFromDate(date: Date) {
   const stamp = date.toISOString().replace(/\D/g, "").slice(0, 14);
   return `ORD-${stamp}-${Math.floor(Math.random() * 900 + 100)}`;
+}
+
+/** Linked conversation + latest shipment columns for the legacy order row badges and actions. */
+function orderRowExtrasExpressions() {
+  const latest = (column: string) => sql<string | null>`(
+    select ${sql.raw(`latest_shipments.${column}`)}
+    from shipments latest_shipments
+    where latest_shipments.order_id = orders.id
+    order by latest_shipments.created_at desc, latest_shipments.id desc
+    limit 1
+  )`;
+  return [
+    sql<string | null>`(select c.public_id from conversations c where c.id = orders.conversation_id)`.as("conversation_public_id"),
+    latest("public_id").as("shipment_public_id"),
+    latest("provider").as("shipment_provider"),
+    latest("status").as("shipment_status"),
+    latest("tracking_number").as("shipment_tracking_number"),
+  ];
 }
 
 function orderCargoProviderExpression() {
@@ -592,6 +624,7 @@ export class DomainRepository {
         "users.email as created_by_user_email",
       ])
       .select(orderCargoProviderExpression().as("cargo_provider"))
+      .select(orderRowExtrasExpressions())
       .where("orders.public_id", "=", orderPublicId)
       .executeTakeFirst();
 
@@ -1385,7 +1418,8 @@ export class DomainRepository {
         "users.public_id as created_by_user_public_id",
         "users.email as created_by_user_email",
       ])
-      .select(orderCargoProviderExpression().as("cargo_provider"));
+      .select(orderCargoProviderExpression().as("cargo_provider"))
+      .select(orderRowExtrasExpressions());
 
     return this.applyOrderFilters(baseQuery, filter)
       .orderBy(`orders.${sortBy}`, sortDirection)
@@ -1396,8 +1430,31 @@ export class DomainRepository {
   }
 
   async getOrderSummary(): Promise<OrderSummaryRecord> {
-    const orders = await this.listOrders({ limit: 200 });
+    const [orders, dailyRows] = await Promise.all([
+      this.listOrders({ limit: 200 }),
+      this.db
+        .selectFrom("orders")
+        .select([
+          sql<string>`to_char((orders.created_at at time zone 'Europe/Istanbul')::date, 'YYYY-MM-DD')`.as("date"),
+          sql<number>`count(*)`.as("order_count"),
+          sql<string>`coalesce(sum(case when orders.status in ('cancelled', 'returned') then 0 else orders.total_amount end), 0)`.as("revenue"),
+        ])
+        .where("orders.deleted_at", "is", null)
+        .where(sql<boolean>`orders.created_at >= (date_trunc('day', now() at time zone 'Europe/Istanbul') - interval '6 days') at time zone 'Europe/Istanbul'`)
+        .groupBy(sql`1`)
+        .execute(),
+    ]);
+    const byDate = new Map(dailyRows.map((row) => [row.date, row]));
+    const todayIstanbul = new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Istanbul" }));
+    const daily: OrderDailyStatRecord[] = Array.from({ length: 7 }, (_, index) => {
+      const day = new Date(todayIstanbul);
+      day.setDate(day.getDate() - (6 - index));
+      const date = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, "0")}-${String(day.getDate()).padStart(2, "0")}`;
+      const row = byDate.get(date);
+      return { date, order_count: Number(row?.order_count ?? 0), revenue: centsToMoney(moneyCents(row?.revenue ?? "0")) };
+    });
     return {
+      daily,
       total_count: orders.length,
       active_count: orders.filter((order) => !["cancelled", "returned", "delivered"].includes(order.status)).length,
       delivered_count: orders.filter((order) => order.status === "delivered").length,
@@ -2359,6 +2416,21 @@ export function serializeOrder(order: OrderRecord) {
     customer_phone: order.customer_phone ?? null,
     created_by_user_public_id: order.created_by_user_public_id,
     created_by_user_email: order.created_by_user_email,
+    conversation_public_id: order.conversation_public_id ?? null,
+    shipment: order.shipment_public_id
+      ? {
+          public_id: order.shipment_public_id,
+          provider: order.shipment_provider ?? null,
+          status: order.shipment_status ?? null,
+          tracking_number: order.shipment_tracking_number ?? null,
+        }
+      : null,
+    kolaybi_status: order.kolaybi_status,
+    kolaybi_invoice_id: order.kolaybi_invoice_id,
+    e_document_status: order.e_document_status,
+    confirmation_call_status: order.confirmation_call_status,
+    confirmation_pressed_key: order.confirmation_pressed_key,
+    confirmation_call_count: order.confirmation_call_count,
     created_at: order.created_at,
     updated_at: order.updated_at,
   };

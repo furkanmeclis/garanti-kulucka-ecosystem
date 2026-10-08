@@ -94,6 +94,29 @@ describe("domain serialization", () => {
       total_amount: "100.00",
       created_by_user_email: "personel@example.com",
       cargo_provider: "ptt",
+      conversation_public_id: null,
+      shipment: null,
+    });
+
+    // Legacy row badges / quick message / tracking modal fields ride along when the row carries them.
+    expect(
+      serializeOrder({
+        ...order,
+        conversation_public_id: "cnv_1",
+        shipment_public_id: "shp_1",
+        shipment_provider: "surat",
+        shipment_status: "in_transit",
+        shipment_tracking_number: "188800",
+        kolaybi_status: "invoice_created",
+        confirmation_call_status: "answered",
+        confirmation_pressed_key: "1",
+      }),
+    ).toMatchObject({
+      conversation_public_id: "cnv_1",
+      shipment: { public_id: "shp_1", provider: "surat", status: "in_transit", tracking_number: "188800" },
+      kolaybi_status: "invoice_created",
+      confirmation_call_status: "answered",
+      confirmation_pressed_key: "1",
     });
   });
 

@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => {
     },
     snapshot: { account, settings: [], tokens: [{ public_id: "itk_1", token_type: "access_token" }] } as Record<string, unknown> | null,
     disconnectCalls: [] as string[],
+    deleteCalls: [] as string[],
     authRepository: {
       findUserByPublicId: vi.fn(async () => ({ id: 10, public_id: "usr_test", role_id: 1, email: "x@example.com", password_hash: "hash", first_name: "A", last_name: "B", phone: null, is_active: true, is_online: false, last_seen_at: null, sip_username: null, sip_password_encrypted: null, created_at: now, updated_at: now, role_name: role })),
       findSessionByPublicId: vi.fn(async () => ({ id: 100, public_id: "ses_test", user_id: 10, user_agent: null, ip_address: null, expires_at: new Date("2099-02-01T00:00:00.000Z"), revoked_at: null, created_at: now, updated_at: now })),
@@ -44,6 +45,10 @@ vi.mock("../src/integrations/repository.js", async (importOriginal) => ({
   IntegrationsRepository: vi.fn(function IntegrationsRepository() {
     return {
       getAccountSnapshot: async () => mocks.snapshot,
+      deleteProviderAttempts: async (input: { providerKey: string; operation: string | null }) => {
+        mocks.deleteCalls.push(`${input.providerKey}:${input.operation ?? "*"}`);
+        return 3;
+      },
       disconnectAccount: async (input: { accountPublicId: string }) => {
         mocks.disconnectCalls.push(input.accountPublicId);
         const snapshot = mocks.snapshot as { account: Record<string, unknown> } | null;
@@ -172,6 +177,18 @@ describe("Instagram / Messenger account actions (legacy subscribe-webhook, lab t
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({ unsubscribe_job_id: null });
     expect(jobs).toHaveLength(0);
+  });
+
+  it("clears persisted provider attempts server side (legacy cron-debug temizle)", async () => {
+    const response = await request("DELETE", "/admin/integrations/provider-attempts?provider_key=ptt&operation=shipment.track");
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ provider_key: "ptt", operation: "shipment.track", deleted: 3 });
+    expect(mocks.deleteCalls).toEqual(["ptt:shipment.track"]);
+
+    const invalid = await request("DELETE", "/admin/integrations/provider-attempts");
+    expect(invalid.status).toBe(400);
+    const staff = await request("DELETE", "/admin/integrations/provider-attempts?provider_key=surat", undefined, "calisan");
+    expect(staff.status).toBe(403);
   });
 
   it("returns 404 for unknown accounts and 403 for staff", async () => {

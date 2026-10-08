@@ -111,6 +111,14 @@ export interface ListProviderAttemptsInput {
   limit: number;
 }
 
+export interface DeleteProviderAttemptsInput {
+  providerKey: string;
+  operation: string | null;
+  actorUserId: number | null;
+  ipAddress: string | null;
+  userAgent: string | null;
+}
+
 export interface CreateProviderCronTriggerInput {
   providerKey: "ptt" | "surat";
   idempotencyKey: string;
@@ -225,6 +233,35 @@ export class IntegrationsRepository {
     }
 
     return query.execute();
+  }
+
+  /** Legacy cron-debug "Temizle" (/api/ptt|surat/cron-debug/temizle) now clears the persisted attempts server side. */
+  async deleteProviderAttempts(input: DeleteProviderAttemptsInput): Promise<number> {
+    return this.db.transaction().execute(async (transaction) => {
+      const provider = await transaction
+        .selectFrom("integration_providers")
+        .select("id")
+        .where("key", "=", input.providerKey)
+        .executeTakeFirst();
+      if (!provider) return 0;
+      let query = transaction.deleteFrom("provider_attempts").where("provider_id", "=", provider.id);
+      if (input.operation) query = query.where("operation", "=", input.operation);
+      const deleted = await query.returning("id").execute();
+      await transaction
+        .insertInto("audit_logs")
+        .values({
+          actor_user_id: input.actorUserId,
+          action: "settings_change",
+          entity_type: "provider_attempts",
+          entity_id: input.providerKey,
+          old_value: { deleted_count: deleted.length, operation: input.operation },
+          new_value: null,
+          ip_address: input.ipAddress,
+          user_agent: input.userAgent,
+        })
+        .execute();
+      return deleted.length;
+    });
   }
 
   async getProviderDebugSummary(): Promise<ProviderDebugSummary> {

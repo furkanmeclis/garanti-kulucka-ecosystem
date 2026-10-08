@@ -190,6 +190,26 @@ export function createIntegrationRoutes() {
     return context.json({ data: attempts.map(serializeProviderAttempt) });
   });
 
+  routes.delete("/provider-attempts", async (context) => {
+    const providerKey = context.req.query("provider_key")?.trim() ?? "";
+    const operation = context.req.query("operation")?.trim() || null;
+    if (!/^[a-z0-9_]+$/.test(providerKey) || (operation !== null && !/^[a-z0-9_.]+$/.test(operation))) {
+      return context.json({ error: { code: "invalid_request", message: "provider_key is required" } }, 400);
+    }
+    const db = context.get("db");
+    if (!db) {
+      return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
+    }
+    const deleted = await new IntegrationsRepository(db, context.get("encryptor")).deleteProviderAttempts({
+      providerKey,
+      operation,
+      actorUserId: context.get("actorUserId"),
+      ipAddress: context.req.header("x-forwarded-for") ?? null,
+      userAgent: context.req.header("user-agent") ?? null,
+    });
+    return context.json({ provider_key: providerKey, operation, deleted });
+  });
+
   routes.get("/provider-debug-summary", async (context) => {
     const db = context.get("db");
     if (!db) {

@@ -2112,6 +2112,63 @@
             }
           }
         }
+      },
+      "delete": {
+        "operationId": "deleteProviderAttempts",
+        "summary": "Clear persisted provider attempts for a provider (legacy cron-debug temizle)",
+        "parameters": [
+          {
+            "name": "provider_key",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "operation",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deleted attempt count",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "provider_key",
+                    "operation",
+                    "deleted"
+                  ],
+                  "properties": {
+                    "provider_key": {
+                      "type": "string"
+                    },
+                    "operation": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "deleted": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
       }
     },
     "/admin/integrations/provider-catalog": {
@@ -10226,6 +10283,80 @@
           },
           "updated_at": {
             "type": "string"
+          },
+          "conversation_public_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Linked conversation for the legacy quick message"
+          },
+          "shipment": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "Latest shipment of the order (legacy tracking modal / row badge)",
+            "required": [
+              "public_id"
+            ],
+            "properties": {
+              "public_id": {
+                "type": "string"
+              },
+              "provider": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "status": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "tracking_number": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          },
+          "kolaybi_status": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "kolaybi_invoice_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "e_document_status": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "confirmation_call_status": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "confirmation_pressed_key": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "confirmation_call_count": {
+            "type": "integer",
+            "minimum": 0
           }
         }
       },
@@ -10237,7 +10368,8 @@
           "delivered_count",
           "pending_confirmation_count",
           "total_revenue",
-          "currency"
+          "currency",
+          "daily"
         ],
         "properties": {
           "total_count": {
@@ -10262,6 +10394,13 @@
           },
           "currency": {
             "type": "string"
+          },
+          "daily": {
+            "type": "array",
+            "description": "Last 7 days in Europe/Istanbul, oldest first, zero-filled (legacy dashboard weekly chart)",
+            "items": {
+              "$ref": "#/components/schemas/OrderDailyStat"
+            }
           }
         }
       },
@@ -18898,6 +19037,28 @@
           "unsubscribe_job_id": {
             "type": "string",
             "nullable": true
+          }
+        }
+      },
+      "OrderDailyStat": {
+        "type": "object",
+        "required": [
+          "date",
+          "order_count",
+          "revenue"
+        ],
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date"
+          },
+          "order_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "revenue": {
+            "type": "number",
+            "minimum": 0
           }
         }
       }

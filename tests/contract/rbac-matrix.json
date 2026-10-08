@@ -69,6 +69,7 @@
   "PUT /admin/integrations/accounts/{account_public_id}/settings/{key}": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "deny", "admin": "allow" },
   "PUT /admin/integrations/accounts/{account_public_id}/tokens/{token_type}": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "deny", "admin": "allow" },
   "GET /admin/integrations/provider-attempts": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "deny", "admin": "allow" },
+  "DELETE /admin/integrations/provider-attempts": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "deny", "admin": "allow" },
   "GET /admin/integrations/provider-debug-summary": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "deny", "admin": "allow" },
   "POST /admin/integrations/provider-cron-triggers/{provider_key}": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "deny", "admin": "allow" },
   "POST /admin/integrations/instagram-publish-previews": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "deny", "admin": "allow" },
