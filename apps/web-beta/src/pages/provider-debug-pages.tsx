@@ -31,7 +31,7 @@ function timeOf(value: string | null | undefined, language: string) {
   return Number.isNaN(date.getTime()) ? "-" : date.toLocaleTimeString(localeFor(language));
 }
 
-function LogActions({ live, onLive, loading, onRefresh, onClear, children }: { live: boolean; onLive: () => void; loading: boolean; onRefresh: () => void; onClear: () => void; children?: ReactNode }) {
+function LogActions({ live, onLive, loading, onRefresh, onClear, onClearServer, clearing, children }: { live: boolean; onLive: () => void; loading: boolean; onRefresh: () => void; onClear: () => void; onClearServer: () => void; clearing: boolean; children?: ReactNode }) {
   const { t } = useTranslation();
   return (
     <>
@@ -47,6 +47,10 @@ function LogActions({ live, onLive, loading, onRefresh, onClear, children }: { l
       <Button variant="outline" className="min-h-11 text-destructive" onClick={onClear} data-testid="debug-clear">
         <Trash2 className="size-4" aria-hidden="true" />
         {t("debugPages.logs.clear")}
+      </Button>
+      <Button variant="destructive" className="min-h-11" onClick={onClearServer} disabled={clearing} data-testid="debug-clear-server">
+        {clearing ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Trash2 className="size-4" aria-hidden="true" />}
+        {t("debugPages.logs.clearServer")}
       </Button>
     </>
   );
@@ -144,6 +148,8 @@ export function SuratDebugPage() {
     live ? { refreshMs: liveRefreshMs } : {},
   );
   const [clearedAt, setClearedAt] = useState<string | null>(null);
+  const [clearing, setClearing] = useState(false);
+  const [clearResult, setClearResult] = useState<Feedback>(null);
   const [search, setSearch] = useState("");
   const [endpoint, setEndpoint] = useState("all");
   const [outcome, setOutcome] = useState<OutcomeFilter>("all");
@@ -177,14 +183,32 @@ export function SuratDebugPage() {
   }, [visible, search, endpoint, outcome]);
   const catalog = query.data?.catalog ?? null;
 
+  /** Legacy "Temizle": deletes every Sürat attempt on the server (all operations), then hides the rest client side. */
+  async function clearOnServer() {
+    if (!window.confirm(t("debugPages.logs.clearServerConfirmSurat"))) return;
+    setClearing(true);
+    setClearResult(null);
+    try {
+      const result = await api.deleteProviderAttempts("surat");
+      setClearedAt(new Date().toISOString());
+      setClearResult({ tone: "success", text: t("debugPages.logs.clearServerDone", { count: result.deleted }) });
+      query.reload();
+    } catch (error) {
+      setClearResult({ tone: "error", text: t("debugPages.logs.apiError", { message: errorText(error) }) });
+    } finally {
+      setClearing(false);
+    }
+  }
+
   return (
     <section data-testid="page-surat-debug">
       <PageHeader
         title={t("debugPages.surat.title")}
         description={t("debugPages.surat.lastRefresh", { time: timeOf(query.data?.fetchedAt, i18n.language), visible: visible.length, limit: logLimit })}
-        actions={<LogActions live={live} onLive={() => setLive((value) => !value)} loading={query.loading} onRefresh={query.reload} onClear={() => setClearedAt(new Date().toISOString())} />}
+        actions={<LogActions live={live} onLive={() => setLive((value) => !value)} loading={query.loading} onRefresh={query.reload} onClear={() => setClearedAt(new Date().toISOString())} onClearServer={() => void clearOnServer()} clearing={clearing} />}
       />
       <ApiError error={query.error} />
+      <FeedbackLine feedback={clearResult} testId="debug-clear-result" />
       <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7" data-testid="surat-debug-stats">
         <StatTile label={t("debugPages.surat.statTotal")} value={String(stats.total)} testId="surat-stat-total" />
         <StatTile label={t("debugPages.surat.statSuccess")} value={String(stats.success)} tone="success" testId="surat-stat-success" />
@@ -295,6 +319,8 @@ export function CronDebugPage() {
   const [running, setRunning] = useState<CronProvider | "all" | null>(null);
   const [feedback, setFeedback] = useState<Feedback>(null);
   const [clearedAt, setClearedAt] = useState<string | null>(null);
+  const [clearing, setClearing] = useState(false);
+  const [clearResult, setClearResult] = useState<Feedback>(null);
   const [search, setSearch] = useState("");
   const [provider, setProvider] = useState<"all" | CronProvider>("all");
   const [openId, setOpenId] = useState<string | null>(null);
@@ -338,6 +364,24 @@ export function CronDebugPage() {
     }
   }
 
+  /** Legacy cron-debug "Temizle": deletes the PTT + Sürat shipment.track attempts on the server, then hides the rest client side. */
+  async function clearOnServer() {
+    if (!window.confirm(t("debugPages.logs.clearServerConfirmCron"))) return;
+    setClearing(true);
+    setClearResult(null);
+    try {
+      const results = await Promise.all((["ptt", "surat"] as const).map((carrier) => api.deleteProviderAttempts(carrier, "shipment.track")));
+      setClearedAt(new Date().toISOString());
+      setTriggered([]);
+      setClearResult({ tone: "success", text: t("debugPages.logs.clearServerDone", { count: results.reduce((sum, result) => sum + result.deleted, 0) }) });
+      query.reload();
+    } catch (error) {
+      setClearResult({ tone: "error", text: t("debugPages.logs.apiError", { message: errorText(error) }) });
+    } finally {
+      setClearing(false);
+    }
+  }
+
   const triggerButton = (target: CronProvider | "all", label: string, icon: ReactNode, testId: string) => (
     <Button variant={target === "all" ? "default" : "outline"} className="min-h-11" onClick={() => void trigger(target)} disabled={running !== null} data-testid={testId}>
       {running === target ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : icon}
@@ -351,7 +395,7 @@ export function CronDebugPage() {
         title={t("debugPages.cron.title")}
         description={t("debugPages.cron.lastRefresh", { time: query.data ? formatDateTime(query.data.fetchedAt, i18n.language) : "-" })}
         actions={
-          <LogActions live={live} onLive={() => setLive((value) => !value)} loading={query.loading} onRefresh={query.reload} onClear={() => setClearedAt(new Date().toISOString())}>
+          <LogActions live={live} onLive={() => setLive((value) => !value)} loading={query.loading} onRefresh={query.reload} onClear={() => setClearedAt(new Date().toISOString())} onClearServer={() => void clearOnServer()} clearing={clearing}>
             {triggerButton("all", t("debugPages.cron.runAll"), <Play className="size-4" aria-hidden="true" />, "cron-run-all")}
             {triggerButton("ptt", t("debugPages.cron.pttCron"), <Truck className="size-4" aria-hidden="true" />, "cron-run-ptt")}
             {triggerButton("surat", t("debugPages.cron.suratCron"), <Truck className="size-4" aria-hidden="true" />, "cron-run-surat")}
@@ -360,6 +404,7 @@ export function CronDebugPage() {
       />
       <ApiError error={query.error} />
       <FeedbackLine feedback={feedback} testId="cron-feedback" />
+      <FeedbackLine feedback={clearResult} testId="debug-clear-result" />
       <div className="my-4 grid grid-cols-1 gap-2 md:grid-cols-2" data-testid="cron-debug-cards">
         {(["ptt", "surat"] as const).map((carrier) => {
           const data = summary(carrier);

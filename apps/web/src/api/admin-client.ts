@@ -194,6 +194,15 @@ function auditQuery(options: AuditListOptions = {}) {
   return query ? `?${query}` : "";
 }
 
+function providerAttemptDeleteQuery(providerKey: string, operation?: string) {
+  const params = new URLSearchParams();
+  params.set("provider_key", providerKey);
+  if (operation) {
+    params.set("operation", operation);
+  }
+  return `?${params.toString()}`;
+}
+
 function providerAttemptQuery(options: ProviderAttemptListOptions = {}) {
   const params = new URLSearchParams();
   if (options.provider_key) {
@@ -208,6 +217,12 @@ function providerAttemptQuery(options: ProviderAttemptListOptions = {}) {
 
   const query = params.toString();
   return query ? `?${query}` : "";
+}
+
+export interface ProviderAttemptsDeleted {
+  provider_key: string;
+  operation: string | null;
+  deleted: number;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -298,6 +313,12 @@ export function createAdminClient(http: BackendHttpClient) {
       ),
     getProviderDebugSummary: () =>
       http.request<ProviderDebugSummary>("/admin/integrations/provider-debug-summary"),
+    /** Legacy cron-debug "Temizle": clears persisted attempts for a provider (optionally one operation) server side. */
+    deleteProviderAttempts: (providerKey: string, operation?: string) =>
+      http.request<ProviderAttemptsDeleted>(
+        `/admin/integrations/provider-attempts${providerAttemptDeleteQuery(providerKey, operation)}`,
+        { method: "DELETE" },
+      ),
     triggerProviderCronDebug: (providerKey: "ptt" | "surat", input: { idempotency_key: string }) =>
       http.request<ProviderAttempt>(
         `/admin/integrations/provider-cron-triggers/${encodeURIComponent(providerKey)}`,

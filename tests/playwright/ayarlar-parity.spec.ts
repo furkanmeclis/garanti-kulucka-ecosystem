@@ -129,6 +129,8 @@ for (const role of ["admin", "calisan", "kargo_operatoru"] as const) {
     const settingWrites: Array<{ key: string; body: Record<string, unknown> }> = [];
     const userWrites: Array<{ method: string; path: string; body: Record<string, unknown> | null }> = [];
     const accountWrites: Array<{ path: string; body: Record<string, unknown> }> = [];
+    const attemptDeletes: string[] = [];
+    const confirms: string[] = [];
     const settings: SettingRow[] = [
       { key: "ai.system_prompt", scope: "global", value: "Sen yardımcı bir asistansın, kibar ol.", is_secret: false, updated_at: now },
       { key: "vapi.api_key", scope: "global", value: null, is_secret: true, updated_at: now },
@@ -209,6 +211,10 @@ for (const role of ["admin", "calisan", "kargo_operatoru"] as const) {
         }
         if (url.pathname === "/admin/integrations/provider-attempts") {
           const provider = url.searchParams.get("provider_key");
+          if (method === "DELETE") {
+            attemptDeletes.push(`${url.pathname}${url.search}`);
+            return json(200, { provider_key: provider, operation: url.searchParams.get("operation"), deleted: provider === "ptt" ? 4 : 9 });
+          }
           if (provider === "surat") {
             return json(200, {
               data: [
@@ -377,7 +383,15 @@ for (const role of ["admin", "calisan", "kargo_operatoru"] as const) {
       await surat.getByRole("button", { name: /failed \/ retry/ }).click();
       await expect(surat).toContainText("[redacted]");
       await expect(surat).toContainText("Sürat zaman aşımı");
+      // Legacy "Temizle" clears server side after a confirm; the request happens only once accepted.
+      page.on("dialog", (dialog) => {
+        confirms.push(dialog.message());
+        void dialog.accept();
+      });
       await surat.getByRole("button", { name: "Temizle" }).click();
+      await expect(page.getByTestId("debug-clear-result")).toHaveText("Sunucudan 9 kayıt silindi.");
+      expect(confirms).toEqual(["Sunucudaki tüm Sürat denemeleri silinecek. Devam?"]);
+      expect(attemptDeletes).toEqual(["/admin/integrations/provider-attempts?provider_key=surat"]);
       await expect(surat).toContainText("Henüz debug logu yok");
 
       // Cron debug
@@ -391,6 +405,14 @@ for (const role of ["admin", "calisan", "kargo_operatoru"] as const) {
       await expect(cron).toContainText("cron_ptt_manual");
       await page.getByLabel("Firma").selectOption("surat");
       await expect(cron).not.toContainText("req_ptt_3");
+      await cron.getByRole("button", { name: "Temizle" }).click();
+      await expect(page.getByTestId("debug-clear-result")).toHaveText("Sunucudan 13 kayıt silindi.");
+      expect(confirms.at(-1)).toBe("Sunucudaki PTT ve Sürat cron denemeleri silinecek. Devam?");
+      expect(attemptDeletes.slice(1)).toEqual([
+        "/admin/integrations/provider-attempts?provider_key=ptt&operation=shipment.track",
+        "/admin/integrations/provider-attempts?provider_key=surat&operation=shipment.track",
+      ]);
+      await expect(cron).toContainText("Henüz cron logu yok");
     } finally {
       await closeWebApp(app.server);
     }

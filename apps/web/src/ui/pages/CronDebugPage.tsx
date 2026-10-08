@@ -53,6 +53,8 @@ export function CronDebugPage({ http }: { http: BackendHttpClient }) {
   const [otomatikYenile, setOtomatikYenile] = useState(false);
   const [tetikleniyor, setTetikleniyor] = useState<Firma | "hepsi" | null>(null);
   const [temizlemeZamani, setTemizlemeZamani] = useState<string | null>(null);
+  const [temizleniyor, setTemizleniyor] = useState(false);
+  const [mesaj, setMesaj] = useState<string | null>(null);
   const [arama, setArama] = useState("");
   const [firmaFiltre, setFirmaFiltre] = useState<"hepsi" | Firma>("hepsi");
   const [acikLog, setAcikLog] = useState<string | null>(null);
@@ -97,6 +99,26 @@ export function CronDebugPage({ http }: { http: BackendHttpClient }) {
       setHata(hataMetni(error));
     } finally {
       setTetikleniyor(null);
+    }
+  }
+
+  /** Legacy "Temizle": deletes the PTT + Sürat shipment.track attempts server side, then hides the rest client side. */
+  async function loglariTemizle() {
+    if (!window.confirm(t("clearConfirm"))) return;
+    setTemizleniyor(true);
+    setMesaj(null);
+    try {
+      const sonuclar = await Promise.all(
+        (["ptt", "surat"] as const).map((firma) => adminClient.deleteProviderAttempts(firma, "shipment.track")),
+      );
+      setTemizlemeZamani(new Date().toISOString());
+      setMesaj(t("clearDone", { count: sonuclar.reduce((toplam, sonuc) => toplam + sonuc.deleted, 0) }));
+      setHata(null);
+      await loglariGetir();
+    } catch (error) {
+      setHata(hataMetni(error));
+    } finally {
+      setTemizleniyor(false);
     }
   }
 
@@ -162,12 +184,18 @@ export function CronDebugPage({ http }: { http: BackendHttpClient }) {
             <RefreshCw size={14} />
             {t("refresh")}
           </button>
-          <button type="button" className="debug-btn red" onClick={() => setTemizlemeZamani(new Date().toISOString())}>
+          <button type="button" className="debug-btn red" onClick={() => void loglariTemizle()} disabled={temizleniyor} data-testid="debug-clear-server">
             <Trash2 size={14} />
             {t("clear")}
           </button>
         </div>
       </div>
+
+      {mesaj && (
+        <p className="debug-notice success" role="status" data-testid="debug-clear-result">
+          {mesaj}
+        </p>
+      )}
 
       {hata && (
         <div className="debug-error">

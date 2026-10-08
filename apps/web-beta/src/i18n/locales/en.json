@@ -68,7 +68,9 @@
     "profileMenu": "Profile menu",
     "profile": "Profile",
     "install": "Install app",
-    "logout": "Sign out"
+    "logout": "Sign out",
+    "presenceOnline": "Online (go offline)",
+    "presenceOffline": "Offline (go online)"
   },
   "roles": {
     "owner": "Owner",
@@ -130,7 +132,11 @@
     "trackingMissing": "Missing tracking no.",
     "quickLinks": "Quick access",
     "channels": "Conversations by channel",
-    "providers": "Shipments by carrier"
+    "providers": "Shipments by carrier",
+    "weekly": "Last 7 days",
+    "weeklySummary": "{{count}} orders · {{revenue}}",
+    "weeklyBar": "{{date}}: {{count}} orders, {{revenue}}",
+    "weekdays": "Mon,Tue,Wed,Thu,Fri,Sat,Sun"
   },
   "orders": {
     "title": "Orders",
@@ -1980,7 +1986,11 @@
       "headers": "Header:",
       "body": "Body:",
       "response": "Response:",
-      "noLiveCall": "no live call"
+      "noLiveCall": "no live call",
+      "clearServer": "Clear on server",
+      "clearServerConfirmCron": "PTT and Sürat cron attempts on the server will be deleted. Continue?",
+      "clearServerConfirmSurat": "All Sürat attempts on the server will be deleted. Continue?",
+      "clearServerDone": "{{count}} records deleted on the server."
     }
   },
   "passwordReset": {

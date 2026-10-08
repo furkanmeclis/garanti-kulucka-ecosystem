@@ -10,6 +10,7 @@ export interface MockUser {
   last_name: string;
   role: string;
   permissions: string[];
+  is_online?: boolean;
 }
 
 export function mockUser(role: string, overrides: Partial<MockUser> = {}): MockUser {
@@ -105,6 +106,9 @@ export interface BackendState {
 }
 
 /** Extra per-spec routes: return `{ status, body }` to answer, or undefined to fall through to the built-in mocks. */
+/** Last 7 days (oldest first, 2026-10-01 Thu .. 2026-10-07 Wed) for the dashboard weekly chart. */
+export const weeklyOrders = [1, 2, 3, 4, 5, 6, 7].map((day) => ({ date: `2026-10-0${day}`, order_count: day === 4 ? 0 : day, revenue: day === 4 ? 0 : day * 1000 }));
+
 export type ExtraRoute = (request: { method: string; path: string; url: URL; body: unknown }, state: BackendState) => { status: number; body: unknown } | undefined;
 
 /** Mocks the beta panel's backend calls (cross-origin, so CORS and preflights are answered too). */
@@ -153,6 +157,10 @@ export async function mockBackend(page: Page, user: MockUser, options: { orderCo
     }
     if (!authed) return json(401, { error: { code: "unauthorized", message: "Unauthorized" } });
     if (url.pathname === "/auth/me") return json(200, state.user);
+    if (url.pathname === "/auth/presence") {
+      state.user = { ...state.user, is_online: Boolean((parsedBody as { online?: boolean } | undefined)?.online) };
+      return json(200, state.user);
+    }
     if (url.pathname === "/auth/logout") return json(200, { ok: true });
     if (url.pathname === "/auth/account/profile") {
       const body = JSON.parse(request.postData() ?? "{}") as { first_name: string; last_name?: string };
@@ -167,7 +175,7 @@ export async function mockBackend(page: Page, user: MockUser, options: { orderCo
     const page_ = <T,>(rows: T[]) => json(200, { data: rows.slice(offset, offset + limit), meta: { total_count: rows.length, limit, offset } });
 
     if (url.pathname === "/api/orders/summary") {
-      return json(200, { total_count: state.orders.length, active_count: 12, delivered_count: 15, pending_confirmation_count: 7, total_revenue: 154230.5, currency: "TRY" });
+      return json(200, { total_count: state.orders.length, active_count: 12, delivered_count: 15, pending_confirmation_count: 7, total_revenue: 154230.5, currency: "TRY", daily: weeklyOrders });
     }
     if (url.pathname === "/api/conversations/summary") {
       return json(200, { total_count: 27, unread_count: 5, pool_count: 9, human_agent_count: 13, channel_counts: { instagram: 14, facebook: 13 }, status_counts: { open: 20, closed: 7 } });

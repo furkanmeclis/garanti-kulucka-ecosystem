@@ -62,6 +62,35 @@ test("mobile: hamburger sheet and bottom bar navigate; header keeps search, bell
   await expect.poll(() => `${pathOf(page)}${new URL(page.url()).search}`).toBe("/siparisler?q=GK-1003");
 });
 
+test("profile menu: staff toggle their presence (PATCH /auth/presence), admins have no toggle", async ({ page }) => {
+  await page.setViewportSize(viewports.desktop);
+  const state = await mockBackend(page, mockUser("calisan"));
+  await page.goto("/giris");
+  await login(page, state);
+  await expect(page.getByTestId("profile-presence-dot")).toHaveAttribute("data-online", "false");
+  await page.getByTestId("profile-menu-trigger").click();
+  const toggle = page.getByTestId("profile-presence-toggle");
+  await expect(toggle).toHaveText("Çevrimdışı (çevrimiçi ol)");
+  await toggle.click();
+  await expect(toggle).toHaveText("Çevrimiçi (çevrimdışı ol)");
+  await expect(page.getByTestId("profile-presence-dot")).toHaveAttribute("data-online", "true");
+  expect(state.bodies.filter((entry) => entry.path === "/auth/presence")).toEqual([{ method: "PATCH", path: "/auth/presence", body: { online: true } }]);
+  await toggle.click();
+  await expect(toggle).toHaveText("Çevrimdışı (çevrimiçi ol)");
+  expect(state.bodies.filter((entry) => entry.path === "/auth/presence").at(-1)?.body).toEqual({ online: false });
+
+  // Admins are ghost observers: no dot, no toggle.
+  await page.getByTestId("profile-menu-logout").click();
+  await expect.poll(() => pathOf(page)).toBe("/giris");
+  const admin = await mockBackend(page, mockUser("admin"));
+  await login(page, admin);
+  await expect(page.getByTestId("profile-menu-trigger")).toBeVisible();
+  await expect(page.getByTestId("profile-presence-dot")).toHaveCount(0);
+  await page.getByTestId("profile-menu-trigger").click();
+  await expect(page.getByTestId("profile-menu-logout")).toBeVisible();
+  await expect(page.getByTestId("profile-presence-toggle")).toHaveCount(0);
+});
+
 test("desktop: header has nav, search, bell with backend counts, language, theme and profile", async ({ page }) => {
   await page.setViewportSize(viewports.desktop);
   const state = await mockBackend(page, mockUser("admin"));

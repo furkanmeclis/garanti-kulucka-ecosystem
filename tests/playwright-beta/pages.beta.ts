@@ -29,6 +29,14 @@ test("dashboard shows backend summary cards with links", async ({ page }) => {
   await expect(page.getByTestId("stat-shipments-value")).toHaveText("33");
   await expect(page.getByTestId("stat-tracking-missing-value")).toHaveText("6");
   await expect(page.getByTestId("dashboard-providers")).toContainText("Sürat");
+  // Last-7-days chart: one bar per day (zero days keep a 2px bar), weekday labels and the totals line.
+  const weekly = page.getByTestId("dashboard-weekly");
+  await expect(weekly).toContainText("Son 7 gün");
+  const bars = weekly.getByTestId("dashboard-weekly-bar");
+  await expect(bars).toHaveCount(7);
+  expect(await bars.evaluateAll((nodes) => nodes.map((node) => node.getAttribute("data-count")))).toEqual(["1", "2", "3", "0", "5", "6", "7"]);
+  await expect(weekly.locator("text")).toHaveText(["Per", "Cum", "Cmt", "Paz", "Pzt", "Sal", "Çar"]);
+  await expect(page.getByTestId("dashboard-weekly-summary")).toHaveText("24 sipariş · ₺24.000,00");
   await page.getByTestId("stat-pending").click();
   await expect.poll(() => `${pathOf(page)}${new URL(page.url()).search}`).toBe("/siparisler?status=pending_confirmation");
 });

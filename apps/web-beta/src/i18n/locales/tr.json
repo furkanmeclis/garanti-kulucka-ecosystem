@@ -68,7 +68,9 @@
     "profileMenu": "Profil menüsü",
     "profile": "Profil",
     "install": "Ana ekrana ekle",
-    "logout": "Çıkış yap"
+    "logout": "Çıkış yap",
+    "presenceOnline": "Çevrimiçi (çevrimdışı ol)",
+    "presenceOffline": "Çevrimdışı (çevrimiçi ol)"
   },
   "roles": {
     "owner": "Sahip",
@@ -130,7 +132,11 @@
     "trackingMissing": "Takip no eksik",
     "quickLinks": "Hızlı erişim",
     "channels": "Kanallara göre konuşmalar",
-    "providers": "Firmalara göre kargolar"
+    "providers": "Firmalara göre kargolar",
+    "weekly": "Son 7 gün",
+    "weeklySummary": "{{count}} sipariş · {{revenue}}",
+    "weeklyBar": "{{date}}: {{count}} sipariş, {{revenue}}",
+    "weekdays": "Pzt,Sal,Çar,Per,Cum,Cmt,Paz"
   },
   "orders": {
     "title": "Siparişler",
@@ -1980,7 +1986,11 @@
       "headers": "Header:",
       "body": "Body:",
       "response": "Yanıt:",
-      "noLiveCall": "canlı çağrı yok"
+      "noLiveCall": "canlı çağrı yok",
+      "clearServer": "Sunucuda temizle",
+      "clearServerConfirmCron": "Sunucudaki PTT ve Sürat cron denemeleri silinecek. Devam?",
+      "clearServerConfirmSurat": "Sunucudaki tüm Sürat denemeleri silinecek. Devam?",
+      "clearServerDone": "Sunucudan {{count}} kayıt silindi."
     }
   },
   "passwordReset": {

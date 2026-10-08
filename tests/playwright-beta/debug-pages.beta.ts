@@ -75,6 +75,7 @@ function routes(): ExtraRoute {
     if (path === "/admin/integrations/provider-catalog") return { status: 200, body: { data: catalog } };
     if (path === "/admin/integrations/provider-attempts") {
       const provider = url.searchParams.get("provider_key");
+      if (method === "DELETE") return { status: 200, body: { provider_key: provider, operation: url.searchParams.get("operation"), deleted: provider === "ptt" ? 4 : 9 } };
       return { status: 200, body: { data: provider === "ptt" ? pttAttempts : provider === "surat" ? suratAttempts : [] } };
     }
     const cron = /^\/admin\/integrations\/provider-cron-triggers\/(ptt|surat)$/.exec(path);
@@ -225,6 +226,23 @@ test("sürat debug: stats, gate, filters, redacted detail and clear", async ({ p
   await expect(page.getByTestId("surat-stat-total")).toContainText("0");
 });
 
+test("sürat debug: server-side clear confirms, deletes every Sürat attempt and reports the count", async ({ page }) => {
+  const state = await open(page);
+  await page.goto("/kargolar/surat-debug");
+  await expect(page.getByTestId("surat-stat-total")).toContainText("3");
+  const dialogs: string[] = [];
+  page.on("dialog", (dialog) => {
+    dialogs.push(dialog.message());
+    void dialog.accept();
+  });
+  await page.getByTestId("debug-clear-server").click();
+  await expect(page.getByTestId("debug-clear-result")).toHaveText("Sunucudan 9 kayıt silindi.");
+  expect(dialogs).toEqual(["Sunucudaki tüm Sürat denemeleri silinecek. Devam?"]);
+  const deletes = state.requests.filter((request) => request.method === "DELETE");
+  expect(deletes.map((request) => `${request.path}${request.search}`)).toEqual(["/admin/integrations/provider-attempts?provider_key=surat"]);
+  await expect(page.getByTestId("surat-stat-total")).toContainText("0");
+});
+
 test("cron debug: carrier cards, dry-run triggers with idempotency keys and filters", async ({ page }) => {
   const state = await open(page);
   await page.getByTestId("desktop-more-trigger").click();
@@ -254,6 +272,22 @@ test("cron debug: carrier cards, dry-run triggers with idempotency keys and filt
   const failed = page.getByTestId("debug-log-pa_s2");
   await failed.getByTestId("debug-log-toggle").click();
   await expect(failed.getByTestId("debug-log-detail")).toContainText("GET /kargo-takip");
+
+  // Server-side clear (legacy cron-debug temizle): a dismissed confirm sends nothing, an accepted one deletes
+  // the shipment.track attempts of both carriers and reports the summed count.
+  let accept = false;
+  page.on("dialog", (dialog) => void (accept ? dialog.accept() : dialog.dismiss()));
+  await page.getByTestId("debug-clear-server").click();
+  expect(state.requests.filter((request) => request.method === "DELETE")).toEqual([]);
+  accept = true;
+  await page.getByTestId("debug-clear-server").click();
+  await expect(page.getByTestId("debug-clear-result")).toHaveText("Sunucudan 13 kayıt silindi.");
+  expect(state.requests.filter((request) => request.method === "DELETE").map((request) => `${request.path}${request.search}`)).toEqual([
+    "/admin/integrations/provider-attempts?provider_key=ptt&operation=shipment.track",
+    "/admin/integrations/provider-attempts?provider_key=surat&operation=shipment.track",
+  ]);
+  await page.getByTestId("cron-provider-filter").selectOption("all");
+  await expect(page.getByTestId("cron-showing")).toHaveText("0 / 0 cron çalışması gösteriliyor");
 });
 
 test("debug pages are manager-only", async ({ page }) => {

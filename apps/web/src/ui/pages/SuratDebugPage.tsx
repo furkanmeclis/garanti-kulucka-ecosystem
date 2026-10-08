@@ -72,6 +72,8 @@ export function SuratDebugPage({ http }: { http: BackendHttpClient }) {
   const [sonYenileme, setSonYenileme] = useState<string | null>(null);
   const [otomatikYenile, setOtomatikYenile] = useState(false);
   const [temizlemeZamani, setTemizlemeZamani] = useState<string | null>(null);
+  const [temizleniyor, setTemizleniyor] = useState(false);
+  const [mesaj, setMesaj] = useState<string | null>(null);
   const [arama, setArama] = useState("");
   const [endpointFiltre, setEndpointFiltre] = useState("hepsi");
   const [durumFiltre, setDurumFiltre] = useState<DurumFiltre>("hepsi");
@@ -98,6 +100,24 @@ export function SuratDebugPage({ http }: { http: BackendHttpClient }) {
 
   const autoRefresh = useCallback(() => void loglariGetir(), [loglariGetir]);
   useAutoRefresh(otomatikYenile, autoRefresh);
+
+  /** Legacy "Temizle": deletes every Sürat attempt server side (all operations), then hides the rest client side. */
+  async function loglariTemizle() {
+    if (!window.confirm(t("clearConfirm"))) return;
+    setTemizleniyor(true);
+    setMesaj(null);
+    try {
+      const sonuc = await adminClient.deleteProviderAttempts("surat");
+      setTemizlemeZamani(new Date().toISOString());
+      setMesaj(t("clearDone", { count: sonuc.deleted }));
+      setHata(null);
+      await loglariGetir();
+    } catch (error) {
+      setHata(hataMetni(error));
+    } finally {
+      setTemizleniyor(false);
+    }
+  }
 
   const gorunurLoglar = useMemo(
     () => loglar.filter((log) => !temizlemeZamani || log.started_at > temizlemeZamani),
@@ -165,12 +185,18 @@ export function SuratDebugPage({ http }: { http: BackendHttpClient }) {
             <RefreshCw size={14} />
             {t("refresh")}
           </button>
-          <button type="button" className="debug-btn red" onClick={() => setTemizlemeZamani(new Date().toISOString())}>
+          <button type="button" className="debug-btn red" onClick={() => void loglariTemizle()} disabled={temizleniyor} data-testid="debug-clear-server">
             <Trash2 size={14} />
             {t("clear")}
           </button>
         </div>
       </div>
+
+      {mesaj && (
+        <p className="debug-notice success" role="status" data-testid="debug-clear-result">
+          {mesaj}
+        </p>
+      )}
 
       {hata && (
         <div className="debug-error">

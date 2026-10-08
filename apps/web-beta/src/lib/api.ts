@@ -195,6 +195,15 @@ export interface ConversationListQuery {
   offset?: number;
 }
 
+/** One day of `GET /api/orders/summary` `daily` (last 7 days in Europe/Istanbul, oldest first, zero-filled). */
+export interface OrderDailyStat {
+  date: string;
+  order_count: number;
+  revenue: number;
+}
+
+export type OrderSummaryWithDaily = OrderSummaryStats & { daily: OrderDailyStat[] };
+
 export function buildUrl(baseUrl: string, path: string, query?: Record<string, QueryValue>) {
   const base = baseUrl.replace(/\/+$/, "");
   const params = new URLSearchParams();
@@ -287,6 +296,7 @@ export function createApiClient(options: ApiClientOptions) {
       return session;
     },
     me: () => request<AuthUser>("/auth/me"),
+    setPresence: (online: boolean) => request<AuthUser>("/auth/presence", { method: "PATCH", body: { online } }),
     async logout() {
       try {
         if (options.getTokens()) await request<unknown>("/auth/logout", { method: "POST" });
@@ -298,7 +308,7 @@ export function createApiClient(options: ApiClientOptions) {
       request<{ first_name: string; last_name: string }>("/auth/account/profile", { method: "PATCH", body: input }),
     changePassword: (input: { password: string; password_confirmation: string }) =>
       request<{ updated: boolean }>("/auth/account/password", { method: "POST", body: input }),
-    orderSummary: () => request<OrderSummaryStats>("/api/orders/summary"),
+    orderSummary: () => request<OrderSummaryWithDaily>("/api/orders/summary"),
     conversationSummary: () => request<ConversationSummaryStats>("/api/conversations/summary"),
     customerSummary: () => request<CustomerSummaryStats>("/api/customers/summary"),
     shipmentSummary: () => request<ShipmentSummaryStats>("/api/shipments/summary"),
@@ -550,6 +560,8 @@ export function createApiClient(options: ApiClientOptions) {
       requestBlob("/api/debug/ai-training/export", { format: query.format, answered_only: query.answeredOnly, offset: query.offset, limit: query.limit, channel: query.channel }),
     listProviderCatalog: () => request<{ data: ProviderCatalogItem[] }>("/admin/integrations/provider-catalog"),
     listProviderAttempts: (query: { provider_key?: string; limit?: number }) => request<{ data: ProviderAttempt[] }>("/admin/integrations/provider-attempts", { query: { ...query } }),
+    deleteProviderAttempts: (provider: string, operation?: string) =>
+      request<{ provider_key: string; operation: string | null; deleted: number }>("/admin/integrations/provider-attempts", { method: "DELETE", query: { provider_key: provider, ...(operation ? { operation } : {}) } }),
     triggerProviderCronDebug: (provider: CronProvider, idempotencyKey: string) =>
       request<ProviderAttempt>(`/admin/integrations/provider-cron-triggers/${encodeURIComponent(provider)}`, { method: "POST", body: { idempotency_key: idempotencyKey } }),
     queueWebhookSubscription: (accountPublicId: string, input: { action: "subscribe" | "unsubscribe"; idempotency_key: string }) =>
