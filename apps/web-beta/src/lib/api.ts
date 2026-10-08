@@ -105,7 +105,7 @@ import type { AiDebug, AiTrainingExportQuery, AiTrainingStats, CronProvider, Ins
 import type { DataDeletionInput, DataDeletionRequest, DataDeletionStatus, DataDeletionStatusLookup } from "./privacy";
 import type { StoredTokens } from "./session-storage";
 import type { AdminLogEntry, CreateManagedUserInput, ManagedRole, ManagedUser, UpdateManagedUserInput } from "./users";
-import type { AdminSetting, IntegrationAccount, IntegrationAccountSnapshot, IntegrationSetting, NetgsmBalance, UpsertIntegrationAccountInput } from "./settings";
+import type { AdminSetting, IntegrationAccount, IntegrationAccountDisconnected, IntegrationAccountSnapshot, IntegrationSetting, MetaPageJobQueued, NetgsmBalance, UpsertIntegrationAccountInput } from "./settings";
 
 /** VITE_BACKEND_BASE_URL (default "/backend"): same-origin proxy in Docker/nginx and the Vite dev server. */
 export const defaultBackendBaseUrl = "/backend";
@@ -552,6 +552,12 @@ export function createApiClient(options: ApiClientOptions) {
     listProviderAttempts: (query: { provider_key?: string; limit?: number }) => request<{ data: ProviderAttempt[] }>("/admin/integrations/provider-attempts", { query: { ...query } }),
     triggerProviderCronDebug: (provider: CronProvider, idempotencyKey: string) =>
       request<ProviderAttempt>(`/admin/integrations/provider-cron-triggers/${encodeURIComponent(provider)}`, { method: "POST", body: { idempotency_key: idempotencyKey } }),
+    queueWebhookSubscription: (accountPublicId: string, input: { action: "subscribe" | "unsubscribe"; idempotency_key: string }) =>
+      request<MetaPageJobQueued>(`/admin/integrations/accounts/${encodeURIComponent(accountPublicId)}/webhook-subscription`, { method: "POST", body: input }),
+    queueThreadControl: (accountPublicId: string, input: { action: "owner" | "take" | "release"; recipient_id: string; metadata?: string; idempotency_key: string }) =>
+      request<MetaPageJobQueued>(`/admin/integrations/accounts/${encodeURIComponent(accountPublicId)}/thread-control`, { method: "POST", body: input }),
+    disconnectIntegrationAccount: (accountPublicId: string, input: { idempotency_key: string }) =>
+      request<IntegrationAccountDisconnected>(`/admin/integrations/accounts/${encodeURIComponent(accountPublicId)}/disconnect`, { method: "POST", body: input }),
     saveCustomerNotes: (publicId: string, notes: string | null) =>
       request<CustomerSummary>(`/api/customers/${encodeURIComponent(publicId)}/notes`, { method: "PATCH", body: { notes } }),
   };

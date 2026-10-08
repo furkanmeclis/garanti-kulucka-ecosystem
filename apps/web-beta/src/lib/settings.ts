@@ -46,6 +46,22 @@ export interface IntegrationAccountSnapshot {
   tokens: IntegrationToken[];
 }
 
+export interface MetaPageJobQueued {
+  queued: boolean;
+  job_id: string | null;
+  request_id: string;
+  account_public_id: string;
+  provider_key: string;
+  operation: string;
+  live_gate: string;
+}
+
+export interface IntegrationAccountDisconnected {
+  account: IntegrationAccount;
+  removed_tokens: number;
+  unsubscribe_job_id: string | null;
+}
+
 export interface UpsertIntegrationAccountInput {
   provider_key: string;
   display_name: string;

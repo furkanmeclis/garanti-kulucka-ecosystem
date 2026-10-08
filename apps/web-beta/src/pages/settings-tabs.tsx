@@ -1,4 +1,4 @@
-import { Bot, CheckCircle2, Copy, ExternalLink, Instagram, KeyRound, Loader2, MessageCircle, MessageSquare, Phone, PhoneCall, RefreshCw, RotateCcw, Save, ScrollText, Server, ShieldX, Smartphone, UserCog, Wallet, XCircle, Zap, type LucideIcon } from "lucide-react";
+import { Bot, CheckCircle2, Copy, ExternalLink, Instagram, KeyRound, Loader2, MessageCircle, MessageSquare, Phone, PhoneCall, RefreshCw, RotateCcw, Save, ScrollText, Server, ShieldX, Smartphone, Unplug, UserCog, Wallet, Webhook, XCircle, Zap, type LucideIcon } from "lucide-react";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
@@ -26,7 +26,7 @@ import {
 } from "@/lib/settings";
 import { useQuery } from "@/lib/use-query";
 import { cn } from "@/lib/utils";
-import { errorText, FeedbackLine, Field, type Feedback } from "./accounting-shared";
+import { errorText, FeedbackLine, Field, idempotencyKey, type Feedback } from "./accounting-shared";
 
 /**
  * Manager-only "Ayarlar" tabs (web AyarlarPage parity): AI auto reply + system prompt, the
@@ -593,9 +593,13 @@ export function MetaProviderTab({ provider }: { provider: "instagram" | "messeng
   const [form, setForm] = useState({ pageAccessToken: "", pageId: "", verifyToken: "" });
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<Feedback>(null);
+  const [busy, setBusy] = useState(false);
+  const [recipientId, setRecipientId] = useState("");
+  const [actionFeedback, setActionFeedback] = useState<Feedback>(null);
   const snapshot = state.data?.snapshot ?? null;
   const account = state.data?.account ?? null;
   const label = provider === "instagram" ? "Instagram" : "Messenger";
+  const liveGate = `providers.${provider}.live_mode`;
 
   useEffect(() => {
     if (state.data) setForm((current) => ({ ...current, pageId: state.data?.account?.external_account_id ?? "" }));
@@ -623,6 +627,50 @@ export function MetaProviderTab({ provider }: { provider: "instagram" | "messeng
       setSaving(false);
     }
   }
+
+  // Legacy parity: "Webhook'a Abone Ol" / "Bağlantıyı Kes" and the Lab thread owner/take/release;
+  // the backend queues the Graph call and only runs it live behind the provider gate.
+  async function queued(run: (accountPublicId: string) => Promise<{ job_id: string | null }>) {
+    if (!account) return;
+    setBusy(true);
+    setActionFeedback(null);
+    try {
+      const result = await run(account.public_id);
+      setActionFeedback({ tone: "success", text: t("settingsTabs.jobQueued", { jobId: result.job_id ?? "-", gate: liveGate }) });
+    } catch (error) {
+      setActionFeedback({ tone: "error", text: t("settingsTabs.actionFailed", { error: errorText(error) }) });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function webhookSubscription(action: "subscribe" | "unsubscribe") {
+    return queued((id) => api.queueWebhookSubscription(id, { action, idempotency_key: idempotencyKey(`${provider}_webhook`) }));
+  }
+
+  function threadControl(action: "owner" | "take" | "release") {
+    const recipient = recipientId.trim();
+    if (!recipient) return setActionFeedback({ tone: "error", text: t("settingsTabs.threadRecipientRequired") });
+    return queued((id) => api.queueThreadControl(id, { action, recipient_id: recipient, idempotency_key: idempotencyKey(`${provider}_thread`) }));
+  }
+
+  async function disconnect() {
+    if (!account) return;
+    if (!window.confirm(t("settingsTabs.disconnectConfirm", { provider: account.display_name }))) return;
+    setBusy(true);
+    setActionFeedback(null);
+    try {
+      const result = await api.disconnectIntegrationAccount(account.public_id, { idempotency_key: idempotencyKey(`${provider}_disconnect`) });
+      setActionFeedback({ tone: "success", text: t("settingsTabs.disconnected", { count: result.removed_tokens }) });
+      state.reload();
+    } catch (error) {
+      setActionFeedback({ tone: "error", text: t("settingsTabs.actionFailed", { error: errorText(error) }) });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const actionsDisabled = !account || busy || state.loading;
 
   return (
     <div className="flex flex-col gap-6" data-testid={`settings-tab-panel-${provider}`}>
@@ -660,6 +708,37 @@ export function MetaProviderTab({ provider }: { provider: "instagram" | "messeng
             </div>
           </form>
         </CardContent>
+      </Card>
+
+      <Card className="flex flex-col gap-4 p-4 sm:p-6" data-testid={`${provider}-webhook-card`}>
+        <SectionHeading icon={Webhook} title={t("settingsTabs.webhookConnection")} description={t("settingsTabs.webhookConnectionHint", { gate: liveGate })} />
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="outline" className="h-11 md:h-9" disabled={actionsDisabled} onClick={() => void webhookSubscription("subscribe")} data-testid={`${provider}-webhook-subscribe`}>
+            {t("settingsTabs.webhookSubscribe")}
+          </Button>
+          <Button type="button" variant="outline" className="h-11 md:h-9" disabled={actionsDisabled} onClick={() => void webhookSubscription("unsubscribe")} data-testid={`${provider}-webhook-unsubscribe`}>
+            {t("settingsTabs.webhookUnsubscribe")}
+          </Button>
+          <Button type="button" variant="destructive" className="h-11 md:h-9" disabled={actionsDisabled} onClick={() => void disconnect()} data-testid={`${provider}-disconnect`}>
+            <Unplug aria-hidden="true" />
+            {t("settingsTabs.disconnect")}
+          </Button>
+        </div>
+        <Field label={t("settingsTabs.handover")}>
+          <Input name="thread_recipient" className="h-11 md:h-9" placeholder={t("settingsTabs.threadRecipient")} value={recipientId} onChange={(event) => setRecipientId(event.target.value)} data-testid={`${provider}-thread-recipient`} />
+        </Field>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button type="button" variant="outline" className="h-11 md:h-9" disabled={actionsDisabled} onClick={() => void threadControl("owner")} data-testid={`${provider}-thread-owner`}>
+            {t("settingsTabs.threadOwner")}
+          </Button>
+          <Button type="button" variant="outline" className="h-11 md:h-9" disabled={actionsDisabled} onClick={() => void threadControl("take")} data-testid={`${provider}-thread-take`}>
+            {t("settingsTabs.threadTake")}
+          </Button>
+          <Button type="button" variant="outline" className="h-11 md:h-9" disabled={actionsDisabled} onClick={() => void threadControl("release")} data-testid={`${provider}-thread-release`}>
+            {t("settingsTabs.threadRelease")}
+          </Button>
+        </div>
+        <FeedbackLine feedback={actionFeedback} testId={`${provider}-action-feedback`} />
       </Card>
     </div>
   );

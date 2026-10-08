@@ -86,6 +86,22 @@ export interface IntegrationAccountSnapshot {
   tokens: IntegrationToken[];
 }
 
+export interface MetaPageJobQueued {
+  queued: boolean;
+  job_id: string | null;
+  request_id: string;
+  account_public_id: string;
+  provider_key: string;
+  operation: string;
+  live_gate: string;
+}
+
+export interface IntegrationAccountDisconnected {
+  account: IntegrationAccount;
+  removed_tokens: number;
+  unsubscribe_job_id: string | null;
+}
+
 export interface InstagramAnalyticsSummary {
   followers: number;
   reach: number;
@@ -304,6 +320,24 @@ export function createAdminClient(http: BackendHttpClient) {
           caption: input.caption,
           idempotency_key: input.idempotency_key,
         },
+      }),
+    queueWebhookSubscription: (accountPublicId: string, input: { action: "subscribe" | "unsubscribe"; idempotency_key: string }) =>
+      http.request<MetaPageJobQueued>(`/admin/integrations/accounts/${encodeURIComponent(accountPublicId)}/webhook-subscription`, {
+        method: "POST",
+        body: input,
+      }),
+    queueThreadControl: (
+      accountPublicId: string,
+      input: { action: "owner" | "take" | "release"; recipient_id: string; metadata?: string; idempotency_key: string },
+    ) =>
+      http.request<MetaPageJobQueued>(`/admin/integrations/accounts/${encodeURIComponent(accountPublicId)}/thread-control`, {
+        method: "POST",
+        body: input,
+      }),
+    disconnectIntegrationAccount: (accountPublicId: string, input: { idempotency_key: string }) =>
+      http.request<IntegrationAccountDisconnected>(`/admin/integrations/accounts/${encodeURIComponent(accountPublicId)}/disconnect`, {
+        method: "POST",
+        body: input,
       }),
     getIntegrationAccount: (accountPublicId: string) =>
       http.request<IntegrationAccountSnapshot>(

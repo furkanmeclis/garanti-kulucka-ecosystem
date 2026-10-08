@@ -18,11 +18,11 @@ function token(type: string) {
 }
 
 /** Backend mock for the manager settings endpoints; secrets only ever come back as `value: null`. */
-function routes(options: { aiEnabled?: boolean } = {}) {
+function routes(options: { aiEnabled?: boolean; instagramActive?: boolean } = {}) {
   const accounts = [
     account("whatsapp", { external_account_id: "1098765432" }),
     account("netgsm", { external_account_id: "8503000000" }),
-    account("instagram", { external_account_id: "pg_123", status: "inactive" }),
+    account("instagram", { external_account_id: "pg_123", status: options.instagramActive ? "active" : "inactive" }),
   ];
   const snapshots: Record<string, { settings: unknown[]; tokens: unknown[] }> = {
     acc_whatsapp: {
@@ -52,6 +52,20 @@ function routes(options: { aiEnabled?: boolean } = {}) {
       const input = body as { provider_key: string; external_account_id: string | null; display_name: string };
       return { status: 201, body: account(input.provider_key, { external_account_id: input.external_account_id, display_name: input.display_name }) };
     }
+    const metaAction = /^\/admin\/integrations\/accounts\/([^/]+)\/(webhook-subscription|thread-control|disconnect)$/.exec(path);
+    if (metaAction && method === "POST") {
+      const id = metaAction[1]!;
+      const found = accounts.find((item) => item.public_id === id);
+      if (!found) return { status: 404, body: { error: { code: "not_found", message: "yok" } } };
+      if (metaAction[2] === "disconnect") {
+        found.status = "inactive";
+        const removed = snapshots[id]?.tokens.length ?? 0;
+        snapshots[id] = { settings: snapshots[id]?.settings ?? [], tokens: [] };
+        return { status: 200, body: { account: found, removed_tokens: removed, unsubscribe_job_id: `job_${id}_unsubscribe` } };
+      }
+      const input = body as { action: string };
+      return { status: 202, body: { queued: true, job_id: `job_${id}_${input.action}`, request_id: `req_${id}`, account_public_id: id, provider_key: found.provider_key, operation: input.action, live_gate: `providers.${found.provider_key}.live_mode` } };
+    }
     const accountMatch = /^\/admin\/integrations\/accounts\/([^/]+)$/.exec(path);
     if (accountMatch && method === "GET") {
       const id = accountMatch[1]!;
@@ -76,7 +90,7 @@ function routes(options: { aiEnabled?: boolean } = {}) {
   return route;
 }
 
-async function signIn(page: Page, role: string, viewport: { width: number; height: number } = viewports.desktop, options: { aiEnabled?: boolean } = {}) {
+async function signIn(page: Page, role: string, viewport: { width: number; height: number } = viewports.desktop, options: { aiEnabled?: boolean; instagramActive?: boolean } = {}) {
   await page.setViewportSize(viewport);
   const state = await mockBackend(page, mockUser(role), { extra: routes(options) });
   await page.goto("/giris");
@@ -222,6 +236,42 @@ test("settings: Instagram and Messenger tabs save the page id and typed tokens",
   await expect(page.getByTestId("messenger-feedback")).toHaveText("Ayarlar kaydedildi.");
   const messengerWrites = writes(state, "/admin/integrations/accounts").slice(2);
   expect(messengerWrites).toEqual([{ method: "POST", path: "/admin/integrations/accounts", body: { provider_key: "messenger", display_name: "Messenger", external_account_id: "pg_999", metadata: {} } }]);
+});
+
+test("settings: Instagram queues the webhook subscription and thread control, then disconnects after confirming", async ({ page }) => {
+  const state = await signIn(page, "admin", viewports.desktop, { instagramActive: true });
+  await page.goto("/ayarlar?tab=instagram");
+  const card = page.getByTestId("instagram-webhook-card");
+  await expect(page.getByTestId("instagram-status")).toContainText("Instagram bağlı");
+  await expect(card.getByTestId("instagram-webhook-subscribe")).toBeEnabled();
+
+  await card.getByTestId("instagram-webhook-subscribe").click();
+  await expect(card.getByTestId("instagram-action-feedback")).toHaveText("İş kuyruğa alındı: job_acc_instagram_subscribe (canlı çağrı için providers.instagram.live_mode gerekir)");
+  const subscribe = writes(state, "/admin/integrations/accounts/acc_instagram/webhook-subscription");
+  expect(subscribe).toHaveLength(1);
+  expect(subscribe[0]).toMatchObject({ method: "POST", body: { action: "subscribe", idempotency_key: expect.stringMatching(/^instagram_webhook_/) } });
+
+  await card.getByTestId("instagram-thread-take").click();
+  await expect(card.getByTestId("instagram-action-feedback")).toHaveText("Alıcı PSID / IGSID zorunlu.");
+  await card.getByTestId("instagram-thread-recipient").fill("1234567890");
+  await card.getByTestId("instagram-thread-take").click();
+  await expect(card.getByTestId("instagram-action-feedback")).toHaveText("İş kuyruğa alındı: job_acc_instagram_take (canlı çağrı için providers.instagram.live_mode gerekir)");
+  const threadControl = writes(state, "/admin/integrations/accounts/acc_instagram/thread-control");
+  expect(threadControl).toHaveLength(1);
+  expect(threadControl[0]).toMatchObject({ method: "POST", body: { action: "take", recipient_id: "1234567890" } });
+
+  page.once("dialog", (dialog) => {
+    expect(dialog.message()).toContain("instagram bağlantısı kesilecek");
+    void dialog.accept();
+  });
+  await card.getByTestId("instagram-disconnect").click();
+  await expect(card.getByTestId("instagram-action-feedback")).toHaveText("Bağlantı kesildi; 0 token silindi.");
+  await expect(page.getByTestId("instagram-status")).toContainText("Instagram bağlı değil");
+  expect(writes(state, "/admin/integrations/accounts/acc_instagram/disconnect")).toHaveLength(1);
+
+  await page.setViewportSize(viewports.phone360);
+  await page.waitForLoadState("networkidle");
+  await expectResponsiveLayout(page, { checkTouchTargets: true });
 });
 
 test("settings: NetGSM saves the config without the untouched password and shows the dry-run balance", async ({ page }) => {

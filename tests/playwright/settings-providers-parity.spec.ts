@@ -76,6 +76,19 @@ async function mockBackend(page: Page) {
       account.external_account_id = (body?.external_account_id as string | null) ?? null;
       return json(200, account);
     }
+    const metaAction = /^\/admin\/integrations\/accounts\/([^/]+)\/(webhook-subscription|thread-control|disconnect)$/.exec(url.pathname);
+    if (metaAction && method === "POST") {
+      const [, id, action] = metaAction;
+      const account = state.accounts.find((item) => item.public_id === id)!;
+      if (action === "disconnect") {
+        account.status = "inactive";
+        const removed = (state.tokens.get(id!) ?? []).length;
+        state.tokens.set(id!, []);
+        return json(200, { account, removed_tokens: removed, unsubscribe_job_id: `job_${id}_unsubscribe` });
+      }
+      const operation = action === "webhook-subscription" ? `webhook.${String(body?.action)}` : `thread.${String(body?.action)}`;
+      return json(202, { queued: true, job_id: `job_${id}_${String(body?.action)}`, request_id: `req_${id}`, account_public_id: id, provider_key: account.provider_key, operation, live_gate: `providers.${account.provider_key}.live_mode` });
+    }
     const accountMatch = /^\/admin\/integrations\/accounts\/([^/]+)(?:\/(settings|tokens)\/([^/]+))?$/.exec(url.pathname);
     if (accountMatch) {
       const [, id, kind, key] = accountMatch;
@@ -133,7 +146,7 @@ async function loginAt(page: Page, url: string) {
 }
 
 
-async function openIntegrations(page: Page, provider: "WhatsApp" | "NetGSM") {
+async function openIntegrations(page: Page, provider: "WhatsApp" | "Instagram" | "NetGSM") {
   await page.getByTestId("ayarlar-tabs").getByRole("tab", { name: /Entegrasyonlar|Integrations/ }).click();
   await page.getByTestId("ayarlar-provider-tabs").getByRole("button", { name: provider }).click();
 }
@@ -191,6 +204,44 @@ test.describe("Ayarlar provider tabs", () => {
     await tab.getByRole("button", { name: "Kopyala" }).click();
     await expect(tab.getByTestId("ayarlar-mesaj")).toContainText("Webhook adresi kopyalandı.");
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(`${app.url}/webhooks/whatsapp`);
+  });
+
+  test("Instagram: queues the webhook subscription and thread control, then disconnects after confirming", async ({ page }) => {
+    const state = await mockBackend(page);
+    const now = "2026-10-06T09:00:00.000Z";
+    state.accounts.push({ public_id: "iac_instagram", provider_key: "instagram", provider_name: "Instagram", display_name: "Instagram", external_account_id: "pg_123", status: "active", metadata: {}, updated_at: now });
+    state.tokens.set("iac_instagram", [{ public_id: "itk_access_token", token_type: "access_token", expires_at: null, last_refreshed_at: null, updated_at: now }]);
+    await loginAt(page, `${app.url}/ayarlar`);
+    await openIntegrations(page, "Instagram");
+    const tab = page.getByTestId("ayarlar-instagram");
+    await expect(tab).toContainText("Instagram Aktif");
+    await expect(tab.getByTestId("instagram-webhook-subscribe")).toBeEnabled();
+
+    await tab.getByTestId("instagram-webhook-subscribe").click();
+    await expect(tab.getByTestId("ayarlar-mesaj")).toContainText("İş kuyruğa alındı: job_iac_instagram_subscribe (canlı çağrı için providers.instagram.live_mode gerekir)");
+    expect(state.writes[0]).toMatchObject({ method: "POST", path: "/admin/integrations/accounts/iac_instagram/webhook-subscription", body: { action: "subscribe" } });
+    expect(state.writes[0]?.body?.idempotency_key).toEqual(expect.any(String));
+
+    await tab.getByTestId("instagram-thread-owner").click();
+    await expect(tab.getByTestId("ayarlar-mesaj")).toContainText("Alıcı PSID / IGSID gerekli");
+    await tab.getByTestId("instagram-thread-recipient").fill("1234567890");
+    await tab.getByTestId("instagram-thread-take").click();
+    await expect(tab.getByTestId("ayarlar-mesaj")).toContainText("İş kuyruğa alındı: job_iac_instagram_take");
+    expect(state.writes[1]).toMatchObject({ method: "POST", path: "/admin/integrations/accounts/iac_instagram/thread-control", body: { action: "take", recipient_id: "1234567890" } });
+
+    page.once("dialog", (dialog) => {
+      expect(dialog.message()).toContain("Instagram bağlantısı kesilecek");
+      void dialog.accept();
+    });
+    await tab.getByTestId("instagram-disconnect").click();
+    await expect(tab.getByTestId("ayarlar-mesaj")).toContainText("Bağlantı kesildi; 1 token silindi.");
+    await expect(tab).toContainText("Instagram Pasif");
+    await expect(tab).toContainText("Page Access Token Eksik");
+    expect(state.writes.map((write) => `${write.method} ${write.path}`)).toEqual([
+      "POST /admin/integrations/accounts/iac_instagram/webhook-subscription",
+      "POST /admin/integrations/accounts/iac_instagram/thread-control",
+      "POST /admin/integrations/accounts/iac_instagram/disconnect",
+    ]);
   });
 
   test("NetGSM: saves credentials with a masked password and checks the balance in dry-run", async ({ page }) => {

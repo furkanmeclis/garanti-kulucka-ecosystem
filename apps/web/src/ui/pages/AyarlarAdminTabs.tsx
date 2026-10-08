@@ -457,7 +457,10 @@ export function EntegrasyonAyarlar({ http, provider }: { http: BackendHttpClient
   const [kaydediliyor, setKaydediliyor] = useState(false);
   const [form, setForm] = useState({ pageAccessToken: "", pageId: "", verifyToken: "" });
   const { mesaj, mesajGoster } = useMesaj();
+  const [islemde, setIslemde] = useState(false);
+  const [aliciId, setAliciId] = useState("");
   const callbackUrl = `${window.location.origin}/webhooks/${provider}`;
+  const liveGate = `providers.${provider}.live_mode`;
 
   const yukle = useCallback(async () => {
     setYukleniyor(true);
@@ -523,6 +526,50 @@ export function EntegrasyonAyarlar({ http, provider }: { http: BackendHttpClient
       mesajGoster("hata", t("copyFailed"));
     }
   }
+
+  /** Legacy parity: "Webhook'a Abone Ol" / "Bağlantıyı Kes" / Lab thread owner-take-release (queued, live gated). */
+  async function kuyrukIslemi(run: (accountPublicId: string) => Promise<{ job_id: string | null }>) {
+    if (!hesap) return;
+    setIslemde(true);
+    try {
+      const sonuc = await run(hesap.public_id);
+      mesajGoster("basari", t("jobQueued", { jobId: sonuc.job_id ?? "-", gate: liveGate }));
+    } catch (error) {
+      mesajGoster("hata", t("actionFailed", { error: hataMetni(error) }));
+    } finally {
+      setIslemde(false);
+    }
+  }
+
+  function webhookAboneligi(action: "subscribe" | "unsubscribe") {
+    return kuyrukIslemi((id) => adminClient.queueWebhookSubscription(id, { action, idempotency_key: crypto.randomUUID() }));
+  }
+
+  function konusmaKontrolu(action: "owner" | "take" | "release") {
+    const recipient = aliciId.trim();
+    if (!recipient) {
+      mesajGoster("hata", t("threadRecipientRequired"));
+      return Promise.resolve();
+    }
+    return kuyrukIslemi((id) => adminClient.queueThreadControl(id, { action, recipient_id: recipient, idempotency_key: crypto.randomUUID() }));
+  }
+
+  async function baglantiyiKes() {
+    if (!hesap) return;
+    if (!window.confirm(t("disconnectConfirm", { provider: hesap.display_name }))) return;
+    setIslemde(true);
+    try {
+      const sonuc = await adminClient.disconnectIntegrationAccount(hesap.public_id, { idempotency_key: crypto.randomUUID() });
+      mesajGoster("basari", t("disconnected", { count: String(sonuc.removed_tokens) }));
+      await yukle();
+    } catch (error) {
+      mesajGoster("hata", t("actionFailed", { error: hataMetni(error) }));
+    } finally {
+      setIslemde(false);
+    }
+  }
+
+  const islemKapali = !hesap || islemde || yukleniyor;
 
   return (
     <div className="ayarlar-stack" data-testid={`ayarlar-${provider}`}>
@@ -609,6 +656,45 @@ export function EntegrasyonAyarlar({ http, provider }: { http: BackendHttpClient
           {t("save")}
         </button>
       </form>
+
+      <section className="ayarlar-card ayarlar-form" data-testid={`${provider}-webhook-card`}>
+        <h4 className="ayarlar-h4">
+          <Shield size={16} /> {t("webhookConnection")}
+        </h4>
+        <p className="ayarlar-small">{t("webhookConnectionHint", { gate: liveGate })}</p>
+        <div className="ayarlar-copy-row" style={{ flexWrap: "wrap" }}>
+          <button type="button" className="ayarlar-outline-btn" disabled={islemKapali} onClick={() => void webhookAboneligi("subscribe")} data-testid={`${provider}-webhook-subscribe`}>
+            {t("webhookSubscribe")}
+          </button>
+          <button type="button" className="ayarlar-outline-btn" disabled={islemKapali} onClick={() => void webhookAboneligi("unsubscribe")} data-testid={`${provider}-webhook-unsubscribe`}>
+            {t("webhookUnsubscribe")}
+          </button>
+          <button type="button" className="ayarlar-danger-outline-btn" disabled={islemKapali} onClick={() => void baglantiyiKes()} data-testid={`${provider}-disconnect`}>
+            <Trash2 size={14} /> {t("disconnect")}
+          </button>
+        </div>
+        <label className="ayarlar-field">
+          <span>{t("handover")}</span>
+          <input
+            value={aliciId}
+            placeholder={t("threadRecipient")}
+            aria-label={t("threadRecipient")}
+            onChange={(e) => setAliciId(e.target.value)}
+            data-testid={`${provider}-thread-recipient`}
+          />
+        </label>
+        <div className="ayarlar-copy-row" style={{ flexWrap: "wrap" }}>
+          <button type="button" className="ayarlar-outline-btn small" disabled={islemKapali} onClick={() => void konusmaKontrolu("owner")} data-testid={`${provider}-thread-owner`}>
+            {t("threadOwner")}
+          </button>
+          <button type="button" className="ayarlar-outline-btn small" disabled={islemKapali} onClick={() => void konusmaKontrolu("take")} data-testid={`${provider}-thread-take`}>
+            {t("threadTake")}
+          </button>
+          <button type="button" className="ayarlar-outline-btn small" disabled={islemKapali} onClick={() => void konusmaKontrolu("release")} data-testid={`${provider}-thread-release`}>
+            {t("threadRelease")}
+          </button>
+        </div>
+      </section>
     </div>
   );
 }
