@@ -417,6 +417,10 @@ class FixtureQuery {
     return this;
   }
 
+  groupBy() {
+    return this;
+  }
+
   limit() {
     return this;
   }
