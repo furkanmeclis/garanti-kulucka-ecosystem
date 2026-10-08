@@ -47,6 +47,11 @@ export const providerOperationSchema = z.enum([
   "comment.hide",
   "comment.delete",
   "insights.account",
+  "webhook.subscribe",
+  "webhook.unsubscribe",
+  "thread.owner",
+  "thread.take",
+  "thread.release",
   "email.send",
 ]);
 

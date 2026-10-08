@@ -1,6 +1,12 @@
-import { Hono } from "hono";
+import { randomUUID } from "node:crypto";
+import { Hono, type Context } from "hono";
 import { z } from "zod";
-import { validateIntegrationSetting } from "@garanti-kulucka/shared";
+import {
+  jobEnvelopeSchema,
+  providerDeliveryJobPayloadSchema,
+  validateIntegrationSetting,
+  type ProviderOperation,
+} from "@garanti-kulucka/shared";
 import type { AppBindings } from "./types.js";
 import { AuditRepository, parseAuditLimit, serializeAuditLog } from "../audit/repository.js";
 import { authenticate, requireAdmin, requireDatabase } from "./middleware.js";
@@ -48,6 +54,72 @@ const instagramPublishPreviewSchema = z.object({
   caption: z.string().min(1).max(2200),
   idempotency_key: z.string().min(1),
 });
+
+const webhookSubscriptionSchema = z.object({
+  action: z.enum(["subscribe", "unsubscribe"]),
+  subscribed_fields: z.array(z.string().regex(/^[a-z_]+$/)).max(20).optional(),
+  idempotency_key: z.string().min(1),
+});
+
+const threadControlSchema = z.object({
+  action: z.enum(["owner", "take", "release"]),
+  recipient_id: z.string().min(1).max(64),
+  metadata: z.string().max(200).optional(),
+  idempotency_key: z.string().min(1),
+});
+
+const disconnectSchema = z.object({
+  idempotency_key: z.string().min(1),
+});
+
+/** Legacy Instagram/Messenger webhook + Handover Protocol actions run as `provider-delivery` jobs. */
+const metaPageProviders = new Set(["instagram", "messenger"]);
+
+function metaJobId(prefix: string, key: string) {
+  return `job_${prefix}_${key.toLowerCase().replace(/[^a-z0-9_]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 80)}`;
+}
+
+async function queueMetaPageJob(
+  context: Context<AppBindings>,
+  account: { public_id: string; provider_key: string },
+  operation: ProviderOperation,
+  payload: Record<string, unknown>,
+  idempotencyKey: string,
+  legacyEvent: string,
+) {
+  const occurredAt = new Date().toISOString();
+  const providerPayload = providerDeliveryJobPayloadSchema.parse({
+    envelope: {
+      request_id: `req_${randomUUID().replaceAll("-", "")}`,
+      provider: account.provider_key,
+      operation,
+      direction: "outbound",
+      channel: account.provider_key,
+      account_public_id: account.public_id,
+      occurred_at: occurredAt,
+      payload: { ...payload, idempotency_key: idempotencyKey },
+      legacy_contract: { source: "legacy server.js", legacy_event: legacyEvent },
+    },
+  });
+  const job = jobEnvelopeSchema.parse({
+    job_id: metaJobId(`${account.provider_key}_${operation.replace(/\./g, "_")}`, idempotencyKey),
+    queue: "provider-delivery",
+    name: `${account.provider_key}.${operation}`,
+    payload: providerPayload,
+    requested_at: occurredAt,
+    request_id: context.get("requestId"),
+  });
+  const jobId = await context.get("providerDeliveryQueuePublisher").publish(job);
+  return {
+    queued: true,
+    job_id: jobId,
+    request_id: providerPayload.envelope.request_id,
+    account_public_id: account.public_id,
+    provider_key: account.provider_key,
+    operation,
+    live_gate: `providers.${account.provider_key}.live_mode`,
+  };
+}
 
 function cronTriggerRequestId(providerKey: string, idempotencyKey: string) {
   return `cron_${providerKey}_${idempotencyKey.replace(/[^a-zA-Z0-9_-]+/g, "_").toLowerCase()}`;
@@ -266,6 +338,98 @@ export function createIntegrationRoutes() {
     });
 
     return context.json(serializeAccount(account));
+  });
+
+  routes.post("/accounts/:account_public_id/webhook-subscription", async (context) => {
+    const payload = webhookSubscriptionSchema.safeParse(await context.req.json().catch(() => null));
+    if (!payload.success) {
+      return context.json({ error: { code: "invalid_request", message: "Invalid webhook subscription payload" } }, 400);
+    }
+    const db = context.get("db");
+    if (!db) {
+      return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
+    }
+    const snapshot = await new IntegrationsRepository(db, context.get("encryptor")).getAccountSnapshot(context.req.param("account_public_id"));
+    if (!snapshot) return context.json({ error: { code: "not_found", message: "Integration account not found" } }, 404);
+    if (!metaPageProviders.has(snapshot.account.provider_key)) {
+      return context.json({ error: { code: "unsupported_provider", message: "Webhook subscription applies to Instagram and Messenger accounts" } }, 400);
+    }
+    const result = await queueMetaPageJob(
+      context,
+      snapshot.account,
+      payload.data.action === "subscribe" ? "webhook.subscribe" : "webhook.unsubscribe",
+      payload.data.subscribed_fields ? { subscribed_fields: payload.data.subscribed_fields } : {},
+      payload.data.idempotency_key,
+      `${snapshot.account.provider_key}_${payload.data.action}_webhook`,
+    );
+    return context.json(result, 202);
+  });
+
+  routes.post("/accounts/:account_public_id/thread-control", async (context) => {
+    const payload = threadControlSchema.safeParse(await context.req.json().catch(() => null));
+    if (!payload.success) {
+      return context.json({ error: { code: "invalid_request", message: "Invalid thread control payload" } }, 400);
+    }
+    const db = context.get("db");
+    if (!db) {
+      return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
+    }
+    const snapshot = await new IntegrationsRepository(db, context.get("encryptor")).getAccountSnapshot(context.req.param("account_public_id"));
+    if (!snapshot) return context.json({ error: { code: "not_found", message: "Integration account not found" } }, 404);
+    if (!metaPageProviders.has(snapshot.account.provider_key)) {
+      return context.json({ error: { code: "unsupported_provider", message: "Thread control applies to Instagram and Messenger accounts" } }, 400);
+    }
+    const operation: ProviderOperation = payload.data.action === "owner" ? "thread.owner" : payload.data.action === "take" ? "thread.take" : "thread.release";
+    const result = await queueMetaPageJob(
+      context,
+      snapshot.account,
+      operation,
+      { recipient_id: payload.data.recipient_id, ...(payload.data.metadata ? { metadata: payload.data.metadata } : {}) },
+      payload.data.idempotency_key,
+      `${snapshot.account.provider_key}_thread_${payload.data.action}`,
+    );
+    return context.json(result, 202);
+  });
+
+  routes.post("/accounts/:account_public_id/disconnect", async (context) => {
+    const payload = disconnectSchema.safeParse(await context.req.json().catch(() => null));
+    if (!payload.success) {
+      return context.json({ error: { code: "invalid_request", message: "Invalid disconnect payload" } }, 400);
+    }
+    const db = context.get("db");
+    if (!db) {
+      return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
+    }
+    const repository = new IntegrationsRepository(db, context.get("encryptor"));
+    const snapshot = await repository.getAccountSnapshot(context.req.param("account_public_id"));
+    if (!snapshot) return context.json({ error: { code: "not_found", message: "Integration account not found" } }, 404);
+
+    // Legacy removed the webhook subscription first (best effort); the job still reads the token because
+    // it is queued before the tokens are deleted and the worker loads the account config at run time, so
+    // only the subscription removal with a still-present token is attempted.
+    let unsubscribe: Awaited<ReturnType<typeof queueMetaPageJob>> | null = null;
+    if (metaPageProviders.has(snapshot.account.provider_key) && snapshot.tokens.length > 0) {
+      unsubscribe = await queueMetaPageJob(
+        context,
+        snapshot.account,
+        "webhook.unsubscribe",
+        { reason: "disconnect" },
+        payload.data.idempotency_key,
+        `${snapshot.account.provider_key}_disconnect`,
+      );
+    }
+    const result = await repository.disconnectAccount({
+      accountPublicId: snapshot.account.public_id,
+      actorUserId: context.get("actorUserId"),
+      ipAddress: context.req.header("x-forwarded-for") ?? null,
+      userAgent: context.req.header("user-agent") ?? null,
+    });
+    if (!result) return context.json({ error: { code: "not_found", message: "Integration account not found" } }, 404);
+    return context.json({
+      account: serializeAccount(result.account),
+      removed_tokens: result.removed_tokens,
+      unsubscribe_job_id: unsubscribe?.job_id ?? null,
+    });
   });
 
   routes.put("/accounts/:account_public_id/settings/:key", async (context) => {

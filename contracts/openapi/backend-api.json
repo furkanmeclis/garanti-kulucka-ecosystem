@@ -8348,6 +8348,129 @@
           }
         }
       }
+    },
+    "/admin/integrations/accounts/{account_public_id}/webhook-subscription": {
+      "post": {
+        "operationId": "queueIntegrationWebhookSubscription",
+        "summary": "Queue the legacy Instagram/Messenger webhook subscribe or unsubscribe Graph call",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountPublicId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WebhookSubscriptionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "provider-delivery job queued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetaPageJobQueued"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/admin/integrations/accounts/{account_public_id}/thread-control": {
+      "post": {
+        "operationId": "queueIntegrationThreadControl",
+        "summary": "Queue a Handover Protocol thread_owner / take_thread_control / release_thread_control call",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountPublicId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ThreadControlRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "provider-delivery job queued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetaPageJobQueued"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/admin/integrations/accounts/{account_public_id}/disconnect": {
+      "post": {
+        "operationId": "disconnectIntegrationAccount",
+        "summary": "Mark the account inactive and delete its stored tokens (legacy /api/instagram|messenger/disconnect)",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountPublicId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "idempotency_key"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Account disconnected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationAccountDisconnected"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -18663,6 +18786,120 @@
             "type": "null"
           }
         ]
+      },
+      "WebhookSubscriptionRequest": {
+        "type": "object",
+        "required": [
+          "action",
+          "idempotency_key"
+        ],
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "subscribe",
+              "unsubscribe"
+            ]
+          },
+          "subscribed_fields": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20
+          },
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "ThreadControlRequest": {
+        "type": "object",
+        "required": [
+          "action",
+          "recipient_id",
+          "idempotency_key"
+        ],
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "owner",
+              "take",
+              "release"
+            ]
+          },
+          "recipient_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "metadata": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "MetaPageJobQueued": {
+        "type": "object",
+        "required": [
+          "queued",
+          "job_id",
+          "request_id",
+          "account_public_id",
+          "provider_key",
+          "operation",
+          "live_gate"
+        ],
+        "properties": {
+          "queued": {
+            "type": "boolean"
+          },
+          "job_id": {
+            "type": "string",
+            "nullable": true
+          },
+          "request_id": {
+            "type": "string"
+          },
+          "account_public_id": {
+            "type": "string"
+          },
+          "provider_key": {
+            "type": "string"
+          },
+          "operation": {
+            "type": "string"
+          },
+          "live_gate": {
+            "type": "string"
+          }
+        }
+      },
+      "IntegrationAccountDisconnected": {
+        "type": "object",
+        "required": [
+          "account",
+          "removed_tokens",
+          "unsubscribe_job_id"
+        ],
+        "properties": {
+          "account": {
+            "$ref": "#/components/schemas/IntegrationAccount"
+          },
+          "removed_tokens": {
+            "type": "integer"
+          },
+          "unsubscribe_job_id": {
+            "type": "string",
+            "nullable": true
+          }
+        }
       }
     }
   }

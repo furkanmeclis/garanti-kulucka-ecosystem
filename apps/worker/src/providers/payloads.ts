@@ -135,6 +135,14 @@ function buildBody(envelope: ProviderRequestEnvelope): Record<string, unknown> {
       return pick(payload, ["comment_id"]);
     case "insights.account":
       return pick(payload, ["days", "reason"]);
+    case "webhook.subscribe":
+      return pick(payload, ["subscribed_fields", "reason"]);
+    case "webhook.unsubscribe":
+      return pick(payload, ["reason"]);
+    case "thread.owner":
+    case "thread.take":
+    case "thread.release":
+      return pick(payload, ["recipient_id", "metadata"]);
   }
 }
 

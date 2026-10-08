@@ -370,7 +370,7 @@ export async function handleProviderDeliveryJobWithTransport(
               ...(options.mediaFileResolver ? { mediaFileResolver: options.mediaFileResolver } : {}),
               ...(options.now ? { now: options.now } : {}),
             })
-          : payload.envelope.provider === "instagram" && isInstagramGraphOperation(payload.envelope.operation)
+          : (payload.envelope.provider === "instagram" || payload.envelope.provider === "messenger") && isInstagramGraphOperation(payload.envelope.operation)
             ? await sendInstagramGraphLiveRequest({
                 envelope: payload.envelope,
                 job,
@@ -484,6 +484,11 @@ const resultPersistingOperations = new Set<string>([
   "voice.message.send",
   "voice.message.report",
   "insights.account",
+  "webhook.subscribe",
+  "webhook.unsubscribe",
+  "thread.owner",
+  "thread.take",
+  "thread.release",
 ]);
 
 export function isProviderLiveTransportError(

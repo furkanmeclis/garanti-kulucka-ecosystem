@@ -3,6 +3,7 @@ import { providerAttemptSchema } from "@garanti-kulucka/shared";
 import type { ProviderAccountConfig } from "./account-config.js";
 import { providerAttemptCorrelationMetadata } from "./correlation.js";
 import { InstagramLiveTransportError } from "./instagram.js";
+import { MessengerLiveTransportError } from "./messenger.js";
 import { failureCode, failureMessage, fetchLiveHttpTransport } from "./live-http.js";
 import {
   hasMetaGraphError,
@@ -28,13 +29,29 @@ import type { LiveProviderTransportPolicy } from "./transport-policy.js";
  *   Instagram Graph host first, falling back to the Facebook Graph host on an error response.
  * - server.js /api/instagram/insights/account: GET /{ig_user_id}?fields=followers_count,media_count and
  *   GET /{ig_user_id}/insights?metric=impressions,reach,profile_views&period=day&since&until.
+ * - server.js /api/instagram/subscribe-webhook + disconnect and the Messenger ensure-ready /
+ *   disconnect flows: POST / DELETE /{id}/subscribed_apps (`webhook.subscribe|unsubscribe`).
+ * - server.js Instagram lab + Messenger thread control: GET /{id}/thread_owner?recipient=,
+ *   POST /{id}/take_thread_control and /{id}/release_thread_control (`thread.owner|take|release`).
+ * The same adapter serves the `messenger` provider for the webhook/thread operations, reading the
+ * Page token / Page ID and always calling the Facebook Graph host (legacy GRAPH_API_URL).
  * Legacy sends the token as `access_token` in the JSON body (query string for DELETE/GET); attempt
  * metadata only ever stores redacted copies.
  */
 
 export type InstagramGraphOperation = Extract<
   ProviderOperation,
-  "media.publish" | "comment.reply" | "comment.private_reply" | "comment.hide" | "comment.delete" | "insights.account"
+  | "media.publish"
+  | "comment.reply"
+  | "comment.private_reply"
+  | "comment.hide"
+  | "comment.delete"
+  | "insights.account"
+  | "webhook.subscribe"
+  | "webhook.unsubscribe"
+  | "thread.owner"
+  | "thread.take"
+  | "thread.release"
 >;
 
 export const instagramGraphOperations: readonly InstagramGraphOperation[] = [
@@ -44,7 +61,25 @@ export const instagramGraphOperations: readonly InstagramGraphOperation[] = [
   "comment.hide",
   "comment.delete",
   "insights.account",
+  "webhook.subscribe",
+  "webhook.unsubscribe",
+  "thread.owner",
+  "thread.take",
+  "thread.release",
 ];
+
+/** Operations the adapter also runs for the `messenger` provider (Page token + Facebook Graph host). */
+export const metaPageGraphOperations: readonly InstagramGraphOperation[] = [
+  "webhook.subscribe",
+  "webhook.unsubscribe",
+  "thread.owner",
+  "thread.take",
+  "thread.release",
+];
+
+export function isMetaPageGraphOperation(operation: ProviderOperation): operation is InstagramGraphOperation {
+  return (metaPageGraphOperations as readonly string[]).includes(operation);
+}
 
 export type InstagramGraphEndpoint =
   | "media"
@@ -55,7 +90,11 @@ export type InstagramGraphEndpoint =
   | "comment_hide"
   | "comment_delete"
   | "account_fields"
-  | "account_insights";
+  | "account_insights"
+  | "subscribed_apps"
+  | "thread_owner"
+  | "take_thread_control"
+  | "release_thread_control";
 
 export interface InstagramGraphTransportRequest {
   method: "GET" | "POST" | "DELETE";
@@ -112,8 +151,24 @@ interface InstagramGraphCredentials {
   accessToken: string;
 }
 
-function credentials(accountConfig: ProviderAccountConfig): InstagramGraphCredentials {
+function credentials(accountConfig: ProviderAccountConfig, provider: string): InstagramGraphCredentials {
   const { settings, tokens } = accountConfig;
+  if (provider === "messenger") {
+    const pageToken = stringToken(
+      tokens,
+      ["page_access_token", "MESSENGER_PAGE_ACCESS_TOKEN", "access_token", "token"],
+      stringSetting(settings, ["page_access_token", "MESSENGER_PAGE_ACCESS_TOKEN", "access_token", "token"]),
+    );
+    const pageId = stringSetting(
+      settings,
+      ["page_id", "messenger.page_id", "MESSENGER_PAGE_ID"],
+      stringToken(tokens, ["page_id", "messenger.page_id", "MESSENGER_PAGE_ID"]),
+    );
+    const pageGraphUrl = graphUrl(
+      stringSetting(settings, ["graph_url", "messenger.graph_url", "api_url", "messenger.api_url", "GRAPH_API_URL"]) || defaultFacebookGraphUrl,
+    );
+    return { igGraphUrl: pageGraphUrl, fbGraphUrl: pageGraphUrl, igUserId: pageId, accessToken: pageToken };
+  }
   const accessToken = stringToken(
     tokens,
     ["access_token", "INSTAGRAM_ACCESS_TOKEN", "token"],
@@ -188,7 +243,7 @@ function redactRequest(request: InstagramGraphTransportRequest): Record<string, 
   );
   return {
     method: request.method,
-    meta_provider: "instagram",
+    meta_provider: request.url.includes("/thread_") || request.url.includes("/subscribed_apps") ? "meta-page" : "instagram",
     instagram_endpoint: request.instagram_endpoint,
     origin: url.origin,
     path: url.pathname,
@@ -474,6 +529,85 @@ async function commentAction(
   }
 }
 
+const defaultSubscribedFields = ["messages", "messaging_postbacks", "message_reactions", "comments", "live_comments"];
+const defaultMessengerSubscribedFields = [
+  "messages",
+  "messaging_postbacks",
+  "messaging_optins",
+  "messaging_referrals",
+  "message_deliveries",
+  "message_reads",
+  "messaging_handovers",
+  "feed",
+];
+
+/** Legacy subscribe-webhook / disconnect: POST or DELETE /{id}/subscribed_apps, then list the subscriptions. */
+async function webhookSubscription(
+  input: InstagramGraphLiveAdapterInput,
+  session: GraphSession,
+  creds: InstagramGraphCredentials,
+): Promise<Record<string, unknown>> {
+  const policy = input.policy;
+  const id = requirePayload(creds.igUserId, input.envelope.provider === "messenger" ? "page_id" : "ig_user_id");
+  requirePayload(creds.accessToken, "access_token");
+  if (input.envelope.operation === "webhook.unsubscribe") {
+    const data = await session.callWithHostFallback(creds, (base) =>
+      queryTokenRequest("DELETE", base, `/${id}/subscribed_apps`, "", creds.accessToken, "subscribed_apps", policy),
+    );
+    return { success: true, subscribed: false, data };
+  }
+  const requested = Array.isArray(input.envelope.payload.subscribed_fields)
+    ? input.envelope.payload.subscribed_fields.map(stringValue).filter((field) => /^[a-z_]+$/.test(field))
+    : [];
+  const fields = requested.length > 0
+    ? requested
+    : input.envelope.provider === "messenger" ? defaultMessengerSubscribedFields : defaultSubscribedFields;
+  const data = await session.call(
+    jsonRequest(creds.igGraphUrl, `/${id}/subscribed_apps`, { subscribed_fields: fields, access_token: creds.accessToken }, "subscribed_apps", policy),
+  );
+  if (data?.success !== true) throw new GraphCallFailure("Subscription basarisiz", "malformed_response", 200);
+  const listed = await session.call(
+    queryTokenRequest("GET", creds.igGraphUrl, `/${id}/subscribed_apps`, "", creds.accessToken, "subscribed_apps", policy),
+  );
+  return { success: true, subscribed: true, subscribed_fields: fields, subscriptions: Array.isArray(listed?.data) ? listed.data : [] };
+}
+
+function threadOwnerFrom(data: Record<string, unknown> | null): { app_id: string | null; expiration: string | null } {
+  const first = Array.isArray(data?.data) && isRecord(data.data[0]) ? data.data[0] : data;
+  const owner = isRecord(first?.thread_owner) ? first.thread_owner : null;
+  return { app_id: stringValue(owner?.app_id) || null, expiration: stringValue(owner?.expiration) || null };
+}
+
+/** Legacy Handover Protocol helpers: thread_owner lookup, take_thread_control, release_thread_control. */
+async function threadControl(
+  input: InstagramGraphLiveAdapterInput,
+  session: GraphSession,
+  creds: InstagramGraphCredentials,
+): Promise<Record<string, unknown>> {
+  const policy = input.policy;
+  const id = requirePayload(creds.igUserId, input.envelope.provider === "messenger" ? "page_id" : "ig_user_id");
+  requirePayload(creds.accessToken, "access_token");
+  const recipient = requirePayload(payloadString(input.envelope.payload, ["recipient_id", "psid"]), "recipient_id");
+  if (input.envelope.operation === "thread.owner") {
+    const data = await session.call(
+      queryTokenRequest("GET", creds.igGraphUrl, `/${id}/thread_owner`, `recipient=${encodeURIComponent(recipient)}`, creds.accessToken, "thread_owner", policy),
+    );
+    return { success: true, recipient_id: recipient, thread_owner: threadOwnerFrom(data), data };
+  }
+  const take = input.envelope.operation === "thread.take";
+  const metadata = payloadString(input.envelope.payload, ["metadata"], take ? "garanti_kulucka_panel" : "garanti_kulucka_lab_release");
+  const data = await session.call(
+    jsonRequest(
+      creds.igGraphUrl,
+      `/${id}/${take ? "take_thread_control" : "release_thread_control"}`,
+      { recipient: { id: recipient }, metadata, access_token: creds.accessToken },
+      take ? "take_thread_control" : "release_thread_control",
+      policy,
+    ),
+  );
+  return { success: true, recipient_id: recipient, action: take ? "take" : "release", data };
+}
+
 const defaultInsightMetrics = "impressions,reach,profile_views";
 
 /**
@@ -532,15 +666,24 @@ export async function sendInstagramGraphLiveRequest(
     throw new Error(`Unsupported Instagram Graph operation: ${input.envelope.operation}`);
   }
 
-  const creds = credentials(input.accountConfig);
+  if (input.envelope.provider === "messenger" && !isMetaPageGraphOperation(input.envelope.operation)) {
+    throw new Error(`Unsupported Messenger Graph operation: ${input.envelope.operation}`);
+  }
+
+  const creds = credentials(input.accountConfig, input.envelope.provider);
   const session = new GraphSession(input.transport ?? defaultInstagramGraphFetchTransport);
+  const TransportError = input.envelope.provider === "messenger" ? MessengerLiveTransportError : InstagramLiveTransportError;
   let payload: Record<string, unknown>;
   try {
     payload = input.envelope.operation === "media.publish"
       ? await publishMedia(input, session, creds)
       : input.envelope.operation === "insights.account"
         ? await accountInsights(input, session, creds, startedAt)
-        : await commentAction(input, session, creds);
+        : input.envelope.operation === "webhook.subscribe" || input.envelope.operation === "webhook.unsubscribe"
+          ? await webhookSubscription(input, session, creds)
+          : input.envelope.operation.startsWith("thread.")
+            ? await threadControl(input, session, creds)
+            : await commentAction(input, session, creds);
   } catch (error) {
     if (!(error instanceof GraphCallFailure)) throw error;
     const endedAt = input.now ? new Date(input.now) : new Date();
@@ -553,7 +696,7 @@ export async function sendInstagramGraphLiveRequest(
         : undefined,
     );
     const lastResponse = session.calls.at(-1)?.response ?? null;
-    throw new InstagramLiveTransportError(
+    throw new TransportError(
       error.message,
       createAttempt({
         adapter: input,

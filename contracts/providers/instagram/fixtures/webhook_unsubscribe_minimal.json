@@ -1,0 +1,16 @@
+{
+  "request_id": "req_instagram_webhook_unsubscribe_minimal",
+  "provider": "instagram",
+  "operation": "webhook.unsubscribe",
+  "direction": "outbound",
+  "channel": "instagram",
+  "account_public_id": "iac_instagram_demo",
+  "occurred_at": "2026-01-01T00:00:00.000Z",
+  "payload": {
+    "reason": "disconnect"
+  },
+  "legacy_contract": {
+    "source": "legacy server.js /api/instagram/disconnect",
+    "fixture_name": "webhook_unsubscribe_minimal"
+  }
+}

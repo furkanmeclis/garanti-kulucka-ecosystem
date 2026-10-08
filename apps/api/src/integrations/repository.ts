@@ -63,6 +63,18 @@ export interface InstagramAnalyticsSummary {
   engagement_rate: number;
 }
 
+export interface DisconnectAccountInput {
+  accountPublicId: string;
+  actorUserId: number | null;
+  ipAddress: string | null;
+  userAgent: string | null;
+}
+
+export interface DisconnectAccountResult {
+  account: IntegrationAccountRecord;
+  removed_tokens: number;
+}
+
 export interface UpsertAccountInput {
   providerKey: string;
   displayName: string;
@@ -552,6 +564,54 @@ export class IntegrationsRepository {
         ...account,
         provider_key: provider.key,
         provider_name: provider.name,
+      };
+    });
+  }
+
+  /**
+   * Legacy /api/instagram/disconnect + /api/messenger/disconnect: the account is kept (settings such as
+   * the webhook verify token survive) but marked inactive and every stored token is deleted.
+   */
+  async disconnectAccount(input: DisconnectAccountInput): Promise<DisconnectAccountResult | null> {
+    return this.db.transaction().execute(async (transaction) => {
+      const existing = await transaction
+        .selectFrom("integration_accounts")
+        .innerJoin("integration_providers", "integration_providers.id", "integration_accounts.provider_id")
+        .selectAll("integration_accounts")
+        .select(["integration_providers.key as provider_key", "integration_providers.name as provider_name"])
+        .where("integration_accounts.public_id", "=", input.accountPublicId)
+        .executeTakeFirst();
+      if (!existing) return null;
+
+      const removed = await transaction
+        .deleteFrom("integration_tokens")
+        .where("account_id", "=", existing.id)
+        .returning("public_id")
+        .execute();
+      const account = await transaction
+        .updateTable("integration_accounts")
+        .set({ status: "inactive", updated_at: new Date() })
+        .where("id", "=", existing.id)
+        .returningAll()
+        .executeTakeFirstOrThrow();
+
+      await transaction
+        .insertInto("audit_logs")
+        .values({
+          actor_user_id: input.actorUserId,
+          action: "settings_change",
+          entity_type: "integration_accounts",
+          entity_id: account.public_id,
+          old_value: auditIntegrationAccountValue(existing, existing.provider_key),
+          new_value: { ...auditIntegrationAccountValue(account, existing.provider_key), disconnected: true, removed_tokens: removed.length },
+          ip_address: input.ipAddress,
+          user_agent: input.userAgent,
+        })
+        .execute();
+
+      return {
+        account: { ...account, provider_key: existing.provider_key, provider_name: existing.provider_name },
+        removed_tokens: removed.length,
       };
     });
   }

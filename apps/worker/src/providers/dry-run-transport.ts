@@ -78,6 +78,20 @@ function providerPath(envelope: ProviderRequestEnvelope): string {
       return "/meta/instagram/comments/delete";
     case "instagram:insights.account":
       return "/meta/instagram/insights";
+    case "instagram:webhook.subscribe":
+    case "instagram:webhook.unsubscribe":
+      return "/meta/instagram/subscribed_apps";
+    case "messenger:webhook.subscribe":
+    case "messenger:webhook.unsubscribe":
+      return "/meta/messenger/subscribed_apps";
+    case "instagram:thread.owner":
+    case "instagram:thread.take":
+    case "instagram:thread.release":
+      return "/meta/instagram/thread_control";
+    case "messenger:thread.owner":
+    case "messenger:thread.take":
+    case "messenger:thread.release":
+      return "/meta/messenger/thread_control";
     case "netgsm:sms.send":
       return "/netgsm/sms";
     case "vapi:call.create":

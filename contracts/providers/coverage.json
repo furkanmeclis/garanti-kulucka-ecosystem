@@ -279,6 +279,76 @@
       "direction": "outbound",
       "status": "covered",
       "fixture_file": "smtp/fixtures/email_send_minimal.json"
+    },
+    {
+      "provider": "instagram",
+      "operation": "webhook.subscribe",
+      "direction": "outbound",
+      "status": "covered",
+      "fixture_file": "instagram/fixtures/webhook_subscribe_minimal.json"
+    },
+    {
+      "provider": "instagram",
+      "operation": "webhook.unsubscribe",
+      "direction": "outbound",
+      "status": "covered",
+      "fixture_file": "instagram/fixtures/webhook_unsubscribe_minimal.json"
+    },
+    {
+      "provider": "instagram",
+      "operation": "thread.owner",
+      "direction": "outbound",
+      "status": "covered",
+      "fixture_file": "instagram/fixtures/thread_owner_minimal.json"
+    },
+    {
+      "provider": "instagram",
+      "operation": "thread.take",
+      "direction": "outbound",
+      "status": "covered",
+      "fixture_file": "instagram/fixtures/thread_take_minimal.json"
+    },
+    {
+      "provider": "instagram",
+      "operation": "thread.release",
+      "direction": "outbound",
+      "status": "covered",
+      "fixture_file": "instagram/fixtures/thread_release_minimal.json"
+    },
+    {
+      "provider": "messenger",
+      "operation": "webhook.subscribe",
+      "direction": "outbound",
+      "status": "covered",
+      "fixture_file": "messenger/fixtures/webhook_subscribe_minimal.json"
+    },
+    {
+      "provider": "messenger",
+      "operation": "webhook.unsubscribe",
+      "direction": "outbound",
+      "status": "covered",
+      "fixture_file": "messenger/fixtures/webhook_unsubscribe_minimal.json"
+    },
+    {
+      "provider": "messenger",
+      "operation": "thread.owner",
+      "direction": "outbound",
+      "status": "covered",
+      "fixture_file": "messenger/fixtures/thread_owner_minimal.json"
+    },
+    {
+      "provider": "messenger",
+      "operation": "thread.take",
+      "direction": "outbound",
+      "status": "covered",
+      "fixture_file": "messenger/fixtures/thread_take_minimal.json"
+    },
+    {
+      "provider": "messenger",
+      "operation": "thread.release",
+      "direction": "outbound",
+      "status": "covered",
+      "fixture_file": "messenger/fixtures/thread_release_minimal.json"
     }
   ]
 }

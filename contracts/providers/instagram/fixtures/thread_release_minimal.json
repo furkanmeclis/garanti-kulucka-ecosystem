@@ -1,0 +1,17 @@
+{
+  "request_id": "req_instagram_thread_release_minimal",
+  "provider": "instagram",
+  "operation": "thread.release",
+  "direction": "outbound",
+  "channel": "instagram",
+  "account_public_id": "iac_instagram_demo",
+  "occurred_at": "2026-01-01T00:00:00.000Z",
+  "payload": {
+    "recipient_id": "24680000000000001",
+    "metadata": "garanti_kulucka_lab_release"
+  },
+  "legacy_contract": {
+    "source": "legacy server.js /api/instagram/lab/release-thread-control",
+    "fixture_name": "thread_release_minimal"
+  }
+}
