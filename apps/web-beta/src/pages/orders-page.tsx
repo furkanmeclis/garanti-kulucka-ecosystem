@@ -1,5 +1,5 @@
 import type { OrderSummary } from "@garanti-kulucka/shared";
-import { Download, Loader2, Phone, Plus, Truck, X } from "lucide-react";
+import { Download, Loader2, MessageSquare, Phone, Plus, Truck, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/app/auth";
@@ -18,12 +18,24 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { PageHeader } from "@/layout/page-header";
 import type { OrderListQuery } from "@/lib/api";
 import { carrierLabel, formatDateTime, formatMoney } from "@/lib/format";
 import { pageCount, pageSize, useListParams } from "@/lib/list-params";
-import type { CargoProviderKey } from "@/lib/orders";
+import {
+  rowConfirmationBadge,
+  type CargoProviderKey,
+  type OrderRow,
+} from "@/lib/orders";
 import { useQuery } from "@/lib/use-query";
 import {
   errorText,
@@ -120,6 +132,176 @@ function downloadExcel(
   URL.revokeObjectURL(url);
 }
 
+/** Legacy SiparislerPage row badges: Teyit (+ call count), KolayBi / e-Fatura and the latest shipment. */
+function OrderRowBadges({ row }: { row: OrderRow }) {
+  const { t } = useTranslation();
+  const confirmation = rowConfirmationBadge(row);
+  const callCount = row.confirmation_call_count ?? 0;
+  const kbCancelled = Boolean(row.kolaybi_invoice_id) && row.status === "cancelled";
+  const hasKolaybi = Boolean(
+    row.kolaybi_invoice_id || row.kolaybi_status || row.e_document_status,
+  );
+  if (!confirmation && callCount === 0 && !hasKolaybi && !row.shipment)
+    return <span className="text-muted-foreground">-</span>;
+  return (
+    <span className="flex flex-wrap items-center gap-1">
+      {(confirmation || callCount > 0) && (
+        <Badge
+          tone={confirmation?.tone ?? "neutral"}
+          data-testid={`order-badge-confirmation-${row.public_id}`}
+        >
+          {confirmation ? t(`orders.${confirmation.key}`) : null}
+          {callCount > 0 ? `${confirmation ? " " : ""}(${callCount})` : null}
+        </Badge>
+      )}
+      {hasKolaybi && (
+        <Badge
+          tone={
+            kbCancelled
+              ? "danger"
+              : row.kolaybi_invoice_id
+                ? "success"
+                : "neutral"
+          }
+          data-testid={`order-badge-kolaybi-${row.public_id}`}
+        >
+          {kbCancelled
+            ? t("orders.badgeKbCancelled")
+            : row.kolaybi_invoice_id
+              ? t("orders.badgeKbTransferred")
+              : row.kolaybi_status}
+          {row.e_document_status
+            ? ` · ${t("orders.badgeEDocument", { status: row.e_document_status })}`
+            : null}
+        </Badge>
+      )}
+      {row.shipment && (
+        <Badge
+          tone="info"
+          data-testid={`order-badge-shipment-${row.public_id}`}
+        >
+          {[
+            carrierLabel(row.shipment.provider, t("shipments.otherProvider")),
+            row.shipment.status,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
+          {row.shipment.tracking_number
+            ? ` · ${row.shipment.tracking_number}`
+            : null}
+        </Badge>
+      )}
+    </span>
+  );
+}
+
+/** Legacy "Hızlı Mesaj" popover: sends to the linked conversation, or the one found by the customer phone. */
+function QuickMessageSheet({
+  order,
+  onClose,
+}: {
+  order: OrderRow | null;
+  onClose: () => void;
+}) {
+  const { t } = useTranslation();
+  const { api, user } = useAuth();
+  const [text, setText] = useState("");
+  const [sending, setSending] = useState(false);
+  const [feedback, setFeedback] = useState<Feedback>(null);
+
+  useEffect(() => {
+    setText("");
+    setFeedback(null);
+  }, [order?.public_id]);
+
+  async function send() {
+    if (!order || !text.trim()) return;
+    setSending(true);
+    setFeedback(null);
+    try {
+      let conversationId = order.conversation_public_id ?? null;
+      if (!conversationId && order.customer_phone) {
+        const found = await api.listConversations({
+          search: order.customer_phone,
+          limit: 1,
+        });
+        conversationId = found.data[0]?.public_id ?? null;
+      }
+      if (!conversationId) {
+        setFeedback({
+          tone: "error",
+          text: t("orders.quickMessageNoConversation"),
+        });
+        return;
+      }
+      await api.sendMessage(conversationId, {
+        body: text.trim(),
+        sender_name: user?.email ?? "panel",
+        attachments: [],
+      });
+      setText("");
+      setFeedback({ tone: "success", text: t("orders.quickMessageQueued") });
+    } catch (reason) {
+      setFeedback({
+        tone: "error",
+        text: errorText(reason) || t("orders.quickMessageFailed"),
+      });
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return (
+    <Sheet open={order !== null} onOpenChange={(next) => !next && onClose()}>
+      <SheetContent
+        side="bottom"
+        closeLabel={t("orders.close")}
+        className="p-4 pr-14"
+        data-testid="order-quick-message"
+      >
+        <SheetHeader>
+          <SheetTitle>
+            {t("orders.quickMessageTitle", { order: order?.order_number ?? "" })}
+          </SheetTitle>
+          <SheetDescription>
+            {order?.customer_full_name ?? "-"} · {order?.customer_phone ?? "-"}
+          </SheetDescription>
+        </SheetHeader>
+        <textarea
+          className="min-h-24 w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 md:text-sm dark:bg-input/30"
+          rows={3}
+          aria-label={t("orders.quickMessage")}
+          placeholder={t("orders.quickMessagePlaceholder")}
+          value={text}
+          onChange={(event) => setText(event.target.value)}
+          data-testid="order-quick-message-text"
+        />
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            className="min-h-11 md:min-h-9"
+            disabled={sending || !text.trim()}
+            onClick={() => void send()}
+            data-testid="order-quick-message-send"
+          >
+            {sending ? (
+              <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+            ) : (
+              <MessageSquare className="size-4" aria-hidden="true" />
+            )}
+            {sending
+              ? t("orders.quickMessageSending")
+              : t("orders.quickMessageSend")}
+          </Button>
+          <FeedbackLine
+            feedback={feedback}
+            testId="order-quick-message-feedback"
+          />
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
 export function OrdersPage() {
   const { t, i18n } = useTranslation();
   const { api } = useAuth();
@@ -145,10 +327,11 @@ export function OrdersPage() {
   const { data, error, loading, reload } = useQuery(`orders:${key}`, () =>
     api.listOrders({ ...query, limit: pageSize, offset: list.offset }),
   );
-  const rows = data?.data ?? [];
+  const rows: OrderRow[] = data?.data ?? [];
   const total = data?.meta?.total_count ?? rows.length;
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [detail, setDetail] = useState<string | null>(null);
+  const [quickMessage, setQuickMessage] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [feedback, setFeedback] = useState<Feedback>(null);
   const [bulkBusy, setBulkBusy] = useState<string | null>(null);
@@ -245,7 +428,7 @@ export function OrdersPage() {
     }
   }
 
-  const columns: Column<OrderSummary>[] = [
+  const columns: Column<OrderRow>[] = [
     {
       key: "select",
       header: "",
@@ -299,6 +482,11 @@ export function OrdersPage() {
       cell: (row) => <StatusBadge value={row.status} />,
     },
     {
+      key: "badges",
+      header: t("orders.rowBadges"),
+      cell: (row) => <OrderRowBadges row={row} />,
+    },
+    {
       key: "cargo",
       header: t("orders.cargo"),
       cell: (row) =>
@@ -315,6 +503,25 @@ export function OrdersPage() {
       key: "date",
       header: t("orders.date"),
       cell: (row) => formatDateTime(row.created_at, i18n.language),
+    },
+    {
+      key: "actions",
+      header: "",
+      className: "w-12 text-right",
+      cell: (row) => (
+        <Button
+          variant="ghost"
+          className="min-h-11 md:min-h-9"
+          disabled={!(row.conversation_public_id || row.customer_phone)}
+          title={t("orders.quickMessage")}
+          aria-label={t("orders.quickMessage")}
+          onClick={() => setQuickMessage(row.public_id)}
+          data-testid={`order-quick-message-${row.public_id}`}
+        >
+          <MessageSquare className="size-4" aria-hidden="true" />
+          <span className="md:sr-only">{t("orders.quickMessage")}</span>
+        </Button>
+      ),
     },
   ];
 
@@ -574,8 +781,13 @@ export function OrdersPage() {
           reload();
         }}
       />
+      <QuickMessageSheet
+        order={rows.find((row) => row.public_id === quickMessage) ?? null}
+        onClose={() => setQuickMessage(null)}
+      />
       <OrderDetailSheet
         publicId={detail}
+        row={rows.find((row) => row.public_id === detail) ?? null}
         onClose={() => setDetail(null)}
         onChanged={reload}
       />

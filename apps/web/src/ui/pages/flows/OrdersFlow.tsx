@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { Calendar, CheckSquare, Download, Pencil, Search, ShoppingCart, Square, Trash2, XCircle } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Calendar, CheckSquare, Download, MessageSquare, Pencil, RefreshCw, Search, ShoppingCart, Square, Trash2, Truck, XCircle } from "lucide-react";
+import type { OrderSummary, ShipmentSummary } from "../../../api/domain-client.js";
 import { SiparisAksiyonlari, SiparisTopluAksiyonlar } from "../SiparisAksiyonlari.js";
 import { KargoSiparisAksiyonlari, KargoTopluAktar } from "../KargoOlusturModal.js";
 import { SiparisDuzenleModal } from "../SiparisDuzenleModal.js";
@@ -7,8 +8,66 @@ import { orderEditMessages } from "../../i18n/messages/orderEdit.js";
 import { cx, orderStatusLabel, cargoProviderLabel, formatMoney, parseMoneyInput, FlowPanel, DetailPanel, Metric, DataRows } from "../../app/shared.js";
 import type { DashboardController } from "../../app/useDashboardController.js";
 import { useUiMessageText } from "../../i18n/messages/status.js";
-import { localeFor, useLanguage, useT } from "../../i18n/index.js";
+import { localeFor, useLanguage, useT, type Translator } from "../../i18n/index.js";
 import { ordersMessages } from "../../i18n/messages/orders.js";
+
+type OrdersKey = keyof (typeof ordersMessages)["tr"];
+type OrdersT = Translator<OrdersKey>;
+
+/** Legacy row "Teyit" badge from the order-row extras: Teyitli / 9'a bastı / Ulaşılamadı / Geçersiz numara (or nothing). */
+export function orderRowConfirmationBadge(
+  order: Pick<OrderSummary, "confirmation_status" | "confirmation_call_status" | "confirmation_pressed_key">,
+): { key: OrdersKey; className: string } | null {
+  const callStatus = order.confirmation_call_status ?? null;
+  if (order.confirmation_pressed_key === "9" || order.confirmation_status === "cancel_request" || order.confirmation_status === "iptal_istegi") {
+    return { key: "badgePressed9", className: "teyit-iptal" };
+  }
+  if (order.confirmation_pressed_key === "1" || order.confirmation_status === "confirmed" || order.confirmation_status === "teyit_edildi") {
+    return { key: "badgeConfirmed", className: "teyit-teyitli" };
+  }
+  if (callStatus === "invalid_number" || callStatus === "gecersiz_numara" || order.confirmation_status === "gecersiz_numara") {
+    return { key: "badgeInvalidNumber", className: "teyit-gecersiz" };
+  }
+  if (["no_answer", "unreachable", "busy", "cevaplanmadi", "ulasilamadi", "mesgul"].includes(callStatus ?? "") || order.confirmation_status === "ulasilamadi") {
+    return { key: "badgeUnreachable", className: "teyit-ulasilamadi" };
+  }
+  return null;
+}
+
+function OrderRowBadges({ order, t }: { order: OrderSummary; t: OrdersT }) {
+  const confirmation = orderRowConfirmationBadge(order);
+  const callCount = order.confirmation_call_count ?? 0;
+  const kolaybiCancelled = Boolean(order.kolaybi_invoice_id) && order.status === "cancelled";
+  const hasKolaybi = Boolean(order.kolaybi_invoice_id || order.kolaybi_status || order.e_document_status);
+  if (!confirmation && callCount === 0 && !hasKolaybi) return null;
+  return (
+    <span className="order-row-badges">
+      {(confirmation || callCount > 0) && (
+        <span className={cx("siparis-rozet", confirmation?.className)} data-testid={`order-badge-confirmation-${order.public_id}`}>
+          {confirmation ? t(confirmation.key) : null}
+          {callCount > 0 ? `${confirmation ? " " : ""}(${callCount})` : null}
+        </span>
+      )}
+      {hasKolaybi && (
+        <span className={cx("siparis-rozet", kolaybiCancelled ? "kb-iptal" : order.kolaybi_invoice_id ? "kb-aktarildi" : undefined)} data-testid={`order-badge-kolaybi-${order.public_id}`}>
+          {kolaybiCancelled ? t("badgeKbCancelled") : order.kolaybi_invoice_id ? t("badgeKbTransferred") : order.kolaybi_status}
+          {order.e_document_status ? ` · ${t("badgeEDocument", { status: order.e_document_status })}` : null}
+        </span>
+      )}
+    </span>
+  );
+}
+
+function OrderShipmentBadge({ order }: { order: OrderSummary }) {
+  const shipment = order.shipment;
+  if (!shipment) return null;
+  return (
+    <span className="order-row-badges" data-testid={`order-badge-shipment-${order.public_id}`}>
+      <span className="siparis-rozet">{[cargoProviderLabel(shipment.provider), shipment.status].filter(Boolean).join(" · ")}</span>
+      {shipment.tracking_number && <small>{shipment.tracking_number}</small>}
+    </span>
+  );
+}
 
 export function OrdersFlow({ ctx }: { ctx: DashboardController }) {
   const orderFormText = useUiMessageText();
@@ -16,7 +75,18 @@ export function OrdersFlow({ ctx }: { ctx: DashboardController }) {
   const editText = useT(orderEditMessages);
   const { language } = useLanguage();
   const [editingOrderId, setEditingOrderId] = useState<string | null>(null);
+  const [quickMessageOpen, setQuickMessageOpen] = useState(false);
+  const [quickMessageText, setQuickMessageText] = useState("");
+  const [quickMessageSending, setQuickMessageSending] = useState(false);
+  const [quickMessageFeedback, setQuickMessageFeedback] = useState<{ tone: "success" | "error"; text: string } | null>(null);
+  const [trackingShipmentId, setTrackingShipmentId] = useState<string | null>(null);
+  const [trackingShipment, setTrackingShipment] = useState<ShipmentSummary | null>(null);
+  const [trackingError, setTrackingError] = useState<string | null>(null);
+  const [trackingBusy, setTrackingBusy] = useState(false);
+  const [trackingNotice, setTrackingNotice] = useState<string | null>(null);
   const {
+    domain,
+    user,
     addOrderFormItem,
     allVisibleOrdersSelected,
     currentOrderFormTotals,
@@ -66,6 +136,78 @@ export function OrdersFlow({ ctx }: { ctx: DashboardController }) {
     toggleOrderSelection,
     updateOrderFormItem,
   } = ctx;
+
+  const selectedOrderId = selectedOrder?.public_id ?? null;
+  useEffect(() => {
+    setQuickMessageOpen(false);
+    setQuickMessageText("");
+    setQuickMessageFeedback(null);
+  }, [selectedOrderId]);
+
+  useEffect(() => {
+    if (!trackingShipmentId) return;
+    let active = true;
+    setTrackingShipment(null);
+    setTrackingError(null);
+    setTrackingNotice(null);
+    domain
+      .getShipment(trackingShipmentId)
+      .then((shipment) => active && setTrackingShipment(shipment))
+      .catch(() => active && setTrackingError(t("trackingFailed")));
+    return () => {
+      active = false;
+    };
+  }, [domain, trackingShipmentId, t]);
+
+  const quickMessageAvailable = Boolean(selectedOrder?.conversation_public_id || selectedOrder?.customer_phone);
+
+  async function sendQuickMessage() {
+    if (!selectedOrder) return;
+    const text = quickMessageText.trim();
+    if (!text) return;
+    setQuickMessageSending(true);
+    setQuickMessageFeedback(null);
+    try {
+      let conversationId = selectedOrder.conversation_public_id ?? null;
+      if (!conversationId && selectedOrder.customer_phone) {
+        const found = await domain.listConversations({ search: selectedOrder.customer_phone, limit: 1 });
+        conversationId = found.data[0]?.public_id ?? null;
+      }
+      if (!conversationId) {
+        setQuickMessageFeedback({ tone: "error", text: t("quickMessageNoConversation") });
+        return;
+      }
+      await domain.createMessage(conversationId, {
+        sender_type: "user",
+        sender_name: user?.email ?? "Admin",
+        body: text,
+        external_message_id: null,
+        raw_payload: null,
+        attachments: [],
+      });
+      setQuickMessageText("");
+      setQuickMessageFeedback({ tone: "success", text: t("quickMessageQueued") });
+    } catch {
+      setQuickMessageFeedback({ tone: "error", text: t("quickMessageFailed") });
+    } finally {
+      setQuickMessageSending(false);
+    }
+  }
+
+  async function refreshTracking() {
+    if (!trackingShipmentId) return;
+    setTrackingBusy(true);
+    setTrackingNotice(null);
+    try {
+      await domain.trackShipment(trackingShipmentId, { idempotency_key: `takip_${trackingShipmentId}_${Date.now()}` });
+      setTrackingNotice(t("trackingRefreshQueued"));
+      setTrackingShipment(await domain.getShipment(trackingShipmentId));
+    } catch {
+      setTrackingError(t("trackingFailed"));
+    } finally {
+      setTrackingBusy(false);
+    }
+  }
 
   return (
     <FlowPanel title={t("title")} icon={<ShoppingCart size={18} />} testId="orders-flow">
@@ -410,9 +552,15 @@ export function OrdersFlow({ ctx }: { ctx: DashboardController }) {
                   </span>
                   <strong>{order.order_number}</strong>
                   <span>{order.customer_full_name ?? t("customerUnmatched")}</span>
-                  <span>{orderStatusLabel(order.status, language)}</span>
+                  <span>
+                    {orderStatusLabel(order.status, language)}
+                    <OrderRowBadges order={order} t={t} />
+                  </span>
                   <span>{order.source}</span>
-                  <span>{cargoProviderLabel(order.cargo_provider)}</span>
+                  <span>
+                    {cargoProviderLabel(order.cargo_provider)}
+                    <OrderShipmentBadge order={order} />
+                  </span>
                   <span>{order.created_by_user_email ?? "-"}</span>
                   <span>{order.total_amount} {order.currency}</span>
                   <span><Calendar size={14} aria-hidden="true" /> {new Date(order.created_at).toLocaleDateString(localeFor(language))}</span>
@@ -444,7 +592,46 @@ export function OrdersFlow({ ctx }: { ctx: DashboardController }) {
                     <Pencil size={14} />
                     {editText("open")}
                   </button>
+                  <button
+                    type="button"
+                    className={cx("secondary-action icon-action", quickMessageOpen && "selected")}
+                    disabled={!quickMessageAvailable}
+                    title={quickMessageAvailable ? t("quickMessage") : t("quickMessageNoConversation")}
+                    onClick={() => setQuickMessageOpen((open) => !open)}
+                    data-testid={`order-quick-message-${selectedOrder.public_id}`}
+                  >
+                    <MessageSquare size={14} aria-hidden="true" />
+                    <span>{t("quickMessage")}</span>
+                  </button>
+                  {selectedOrder.shipment && (
+                    <button type="button" className="secondary-action icon-action" onClick={() => setTrackingShipmentId(selectedOrder.shipment?.public_id ?? null)} data-testid="order-tracking-open">
+                      <Truck size={14} aria-hidden="true" />
+                      <span>{t("tracking")}</span>
+                    </button>
+                  )}
                 </div>
+                {quickMessageOpen && (
+                  <div className="order-quick-message" data-testid="order-quick-message">
+                    <textarea
+                      className="inline-input"
+                      data-testid="order-quick-message-text"
+                      placeholder={t("quickMessagePlaceholder")}
+                      rows={3}
+                      value={quickMessageText}
+                      onChange={(event) => setQuickMessageText(event.target.value)}
+                    />
+                    <div className="order-quick-message-actions">
+                      <button className="primary-action" data-testid="order-quick-message-send" disabled={quickMessageSending || !quickMessageText.trim()} type="button" onClick={() => void sendQuickMessage()}>
+                        {quickMessageSending ? t("quickMessageSending") : t("quickMessageSend")}
+                      </button>
+                      {quickMessageFeedback && (
+                        <span className={cx("siparis-aksiyon-bildirim", quickMessageFeedback.tone === "success" ? "basari" : "hata")} data-testid="order-quick-message-feedback">
+                          {quickMessageFeedback.text}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
                 <KargoSiparisAksiyonlari
                   http={http}
                   orderPublicId={selectedOrder.public_id}
@@ -452,6 +639,51 @@ export function OrdersFlow({ ctx }: { ctx: DashboardController }) {
                 />
                 <SiparisAksiyonlari http={http} orderPublicId={selectedOrder.public_id} onChanged={() => refreshOrders({ page: orderPage })} />
               </DetailPanel>
+            )}
+            {trackingShipmentId && (
+              <div className="order-form-backdrop" data-testid="order-tracking-modal" onClick={() => setTrackingShipmentId(null)}>
+                <div className="order-form-modal order-tracking-modal" role="dialog" aria-label={t("trackingTitle")} onClick={(event) => event.stopPropagation()}>
+                  <div className="order-form-header">
+                    <h2>{t("trackingTitle")}</h2>
+                    <button className="secondary-action icon-only" type="button" onClick={() => setTrackingShipmentId(null)} aria-label={t("close")}>
+                      <XCircle size={16} aria-hidden="true" />
+                    </button>
+                  </div>
+                  {trackingShipment && (
+                    <DataRows
+                      rows={[
+                        [t("trackingNumber"), trackingShipment.tracking_number ?? "-", cargoProviderLabel(trackingShipment.provider)],
+                        [t("status"), trackingShipment.status, trackingShipment.last_event_text ?? "-"],
+                      ]}
+                    />
+                  )}
+                  <div className="detail-actions">
+                    <button className="secondary-action icon-action" data-testid="order-tracking-refresh" disabled={trackingBusy} type="button" onClick={() => void refreshTracking()}>
+                      <RefreshCw size={14} aria-hidden="true" />
+                      <span>{t("trackingRefresh")}</span>
+                    </button>
+                    {trackingNotice && <span className="siparis-aksiyon-bildirim bilgi" data-testid="order-tracking-notice">{trackingNotice}</span>}
+                  </div>
+                  {trackingError ? (
+                    <p className="siparis-aksiyon-hata">{trackingError}</p>
+                  ) : !trackingShipment ? (
+                    <p className="siparis-aksiyon-bilgi">{t("trackingLoading")}</p>
+                  ) : trackingShipment.tracking_events.length === 0 ? (
+                    <p className="siparis-aksiyon-bilgi" data-testid="order-tracking-empty">{t("trackingNoEvents")}</p>
+                  ) : (
+                    <ul className="order-tracking-events">
+                      {trackingShipment.tracking_events.map((event) => (
+                        <li className="order-tracking-event" data-testid="order-tracking-event" key={event.public_id}>
+                          <time dateTime={event.occurred_at}>{new Date(event.occurred_at).toLocaleString(localeFor(language))}</time>
+                          <strong>{event.status}</strong>
+                          {event.description && <span>{event.description}</span>}
+                          {event.location && <small>{event.location}</small>}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </div>
             )}
             {editingOrderId && (
               <SiparisDuzenleModal

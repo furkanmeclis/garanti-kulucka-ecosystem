@@ -120,6 +120,23 @@ export interface OrderSummary {
   created_by_user_email: string | null;
   created_at: string;
   updated_at: string;
+  /** Legacy order-row extras (`GET /api/orders`): linked conversation, latest shipment, KolayBi and teyit call state. */
+  conversation_public_id?: string | null;
+  shipment?: OrderRowShipment | null;
+  kolaybi_status?: string | null;
+  kolaybi_invoice_id?: string | null;
+  e_document_status?: string | null;
+  confirmation_call_status?: string | null;
+  confirmation_pressed_key?: string | null;
+  confirmation_call_count?: number;
+}
+
+/** Latest shipment of an order as returned on the order row (tracking modal / row badge). */
+export interface OrderRowShipment {
+  public_id: string;
+  provider: string | null;
+  status: string | null;
+  tracking_number: string | null;
 }
 
 export interface ListMeta {

@@ -1131,6 +1131,74 @@ nav {
   align-items: center;
 }
 
+.order-row-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+  font-size: 11px;
+}
+
+.order-row-badges .siparis-rozet {
+  padding: 1px 6px;
+  font-size: 11px;
+}
+
+.order-row-badges small {
+  color: #94a3b8;
+  font-size: 11px;
+}
+
+.order-quick-message {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  background: #0f172a;
+}
+
+.order-quick-message textarea {
+  width: 100%;
+  min-height: 72px;
+  resize: vertical;
+}
+
+.order-quick-message-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.order-tracking-modal {
+  width: min(560px, 100%);
+}
+
+.order-tracking-events {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.order-tracking-event {
+  display: grid;
+  gap: 2px;
+  padding: 8px 10px;
+  border-left: 3px solid #22c55e;
+  background: #0f172a;
+  border-radius: 6px;
+}
+
+.order-tracking-event time,
+.order-tracking-event small {
+  color: #94a3b8;
+  font-size: 12px;
+}
+
 .orders-sort-button {
   border: 0;
   padding: 0;

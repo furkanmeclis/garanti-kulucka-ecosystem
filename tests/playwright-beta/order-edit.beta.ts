@@ -44,6 +44,29 @@ function routes() {
   return route;
 }
 
+const trackedShipment = {
+  public_id: "shp_1", provider: "ptt", tracking_number: "TRK123", barcode_number: null, status: "in_transit", recipient_name: "Ayşe Yılmaz", recipient_phone: "05551234567", recipient_city: "İstanbul", recipient_district: "Kadıköy",
+  last_event_text: "Dağıtımda", order_number: "GK-1001", customer_full_name: "Ayşe Yılmaz", updated_at: now,
+  tracking_events: [
+    { public_id: "evt_2", status: "Dağıtımda", description: "Kurye dağıtıma çıktı", location: "Kadıköy", occurred_at: "2026-10-07T08:00:00.000Z" },
+    { public_id: "evt_1", status: "Kabul edildi", description: null, location: "İstanbul", occurred_at: "2026-10-06T08:00:00.000Z" },
+  ],
+};
+
+/** Row-extra routes (Hızlı Mesaj send, KargoTakipModal) on top of the edit/actions routes. */
+function rowRoutes(): ExtraRoute {
+  const base = routes();
+  return (request, state) => {
+    const { method, path, body } = request;
+    if (path === "/api/shipments/shp_1" && method === "GET") return { status: 200, body: trackedShipment };
+    if (path === "/api/shipments/shp_1/track" && method === "POST") return { status: 202, body: { provider: "ptt", operation: "shipments.track", request_id: "req_1", queued: true, live_gate: "queued" } };
+    if (/^\/api\/conversations\/cnv_\d+\/messages$/.test(path) && method === "POST") {
+      return { status: 201, body: { public_id: "msg_1", sender_type: "user", sender_name: "calisan@example.com", body: (body as { body: string }).body, is_read: true, sent_at: now, attachments: [] } };
+    }
+    return base(request, state);
+  };
+}
+
 async function openDetail(page: Page, number: string, role = "calisan", viewport: { width: number; height: number } = viewports.desktop) {
   await page.setViewportSize(viewport);
   const state = await mockBackend(page, mockUser(role), { extra: routes() });
@@ -122,4 +145,64 @@ test("order edit: required phone and English labels", async ({ page }) => {
   await detail.getByTestId("order-edit-save").click();
   await expect(detail.getByTestId("order-edit-feedback")).toHaveText("Customer phone is required");
   await expect(detail.getByText("Enter total manually")).toBeVisible();
+});
+
+test("order rows: legacy badges, quick message and the tracking sheet", async ({ page }) => {
+  await page.setViewportSize(viewports.desktop);
+  const state = await mockBackend(page, mockUser("calisan"), { extra: rowRoutes() });
+  Object.assign(state.orders[0]!, {
+    conversation_public_id: "cnv_1", confirmation_status: "confirmed", confirmation_call_status: "answered", confirmation_pressed_key: "1", confirmation_call_count: 2,
+    kolaybi_status: "done", kolaybi_invoice_id: "inv_9", e_document_status: "sent",
+    shipment: { public_id: "shp_1", provider: "ptt", status: "in_transit", tracking_number: "TRK123" },
+  });
+  // ord_2: no linked conversation, resolved through the customer phone (matches the mocked conversation cnv_3).
+  Object.assign(state.orders[1]!, {
+    status: "cancelled", conversation_public_id: null, customer_phone: "05550000003", confirmation_call_status: "no_answer", confirmation_pressed_key: "9", confirmation_call_count: 1,
+    kolaybi_status: "cancelled", kolaybi_invoice_id: "inv_2", shipment: null,
+  });
+  await page.goto("/giris");
+  await login(page, state);
+  await expect(page.getByTestId("topbar")).toBeVisible();
+  await page.goto("/siparisler");
+  const table = page.getByTestId("orders-table");
+  await expect(table.getByTestId("order-badge-confirmation-ord_1")).toHaveText("Teyitli (2)");
+  await expect(table.getByTestId("order-badge-kolaybi-ord_1")).toHaveText("Aktarıldı · e-Fatura: sent");
+  await expect(table.getByTestId("order-badge-shipment-ord_1")).toHaveText("PTT · in_transit · TRK123");
+  await expect(table.getByTestId("order-badge-confirmation-ord_2")).toHaveText("9'a bastı (1)");
+  await expect(table.getByTestId("order-badge-kolaybi-ord_2")).toHaveText("KB iptal");
+  await expect(table.getByTestId("order-badge-shipment-ord_2")).toHaveCount(0);
+
+  // Hızlı mesaj on the linked conversation.
+  await table.getByTestId("order-quick-message-ord_1").click();
+  const sheet = page.getByTestId("order-quick-message");
+  await sheet.getByTestId("order-quick-message-text").fill("Kargonuz yola çıktı");
+  await sheet.getByTestId("order-quick-message-send").click();
+  await expect(sheet.getByTestId("order-quick-message-feedback")).toHaveText("Mesaj kuyruğa alındı");
+  const sent = state.bodies.find((entry) => entry.method === "POST" && entry.path === "/api/conversations/cnv_1/messages")?.body;
+  expect(sent).toEqual({ sender_type: "user", sender_name: "calisan@example.com", body: "Kargonuz yola çıktı", external_message_id: null, raw_payload: null, attachments: [] });
+  await page.keyboard.press("Escape");
+  await expect(sheet).toBeHidden();
+
+  // No linked conversation: GET /api/conversations?search=<phone>&limit=1 first.
+  await table.getByTestId("order-quick-message-ord_2").click();
+  await sheet.getByTestId("order-quick-message-text").fill("Merhaba");
+  await sheet.getByTestId("order-quick-message-send").click();
+  await expect(sheet.getByTestId("order-quick-message-feedback")).toHaveText("Mesaj kuyruğa alındı");
+  expect(state.requests.some((entry) => entry.method === "GET" && entry.path === "/api/conversations" && entry.search.includes("search=05550000003") && entry.search.includes("limit=1"))).toBe(true);
+  expect((state.bodies.find((entry) => entry.method === "POST" && entry.path === "/api/conversations/cnv_3/messages")?.body as { body: string }).body).toBe("Merhaba");
+  await page.keyboard.press("Escape");
+  await expect(sheet).toBeHidden();
+
+  // Kargo takip sheet from the order detail.
+  await table.getByTestId("order-open").filter({ hasText: "GK-1001" }).click();
+  await expect(page.getByTestId("order-detail")).toBeVisible();
+  await page.getByTestId("order-tracking-open").click();
+  const modal = page.getByTestId("order-tracking-modal");
+  await expect(modal.getByTestId("order-tracking-event")).toHaveCount(2);
+  await expect(modal.getByTestId("order-tracking-event").first()).toContainText("Dağıtımda");
+  await expect(modal.getByTestId("order-tracking-event").first()).toContainText("Kurye dağıtıma çıktı");
+  await modal.getByTestId("order-tracking-refresh").click();
+  await expect(modal.getByTestId("order-tracking-notice")).toHaveText("Takip sorgusu kuyruğa alındı");
+  expect(state.bodies.filter((entry) => entry.method === "POST" && entry.path === "/api/shipments/shp_1/track")).toHaveLength(1);
+  expect(state.requests.filter((entry) => entry.method === "GET" && entry.path === "/api/shipments/shp_1").length).toBeGreaterThanOrEqual(2);
 });

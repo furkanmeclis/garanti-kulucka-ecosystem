@@ -1,5 +1,47 @@
 /** Order create, actions and cargo-transfer shapes used by the beta Siparişler page (legacy SiparislerPage). */
+import type { OrderSummary } from "@garanti-kulucka/shared";
+
 export type CargoProviderKey = "ptt" | "surat";
+
+/** Latest shipment of an order as returned on the order row (`GET /api/orders`). */
+export interface OrderRowShipment {
+  public_id: string;
+  provider: string | null;
+  status: string | null;
+  tracking_number: string | null;
+}
+
+/** Legacy order-row extras: linked conversation, latest shipment, KolayBi and teyit call state. */
+export interface OrderRowExtras {
+  conversation_public_id?: string | null;
+  shipment?: OrderRowShipment | null;
+  kolaybi_status?: string | null;
+  kolaybi_invoice_id?: string | null;
+  e_document_status?: string | null;
+  confirmation_call_status?: string | null;
+  confirmation_pressed_key?: string | null;
+  confirmation_call_count?: number;
+}
+
+export type OrderRow = OrderSummary & OrderRowExtras;
+
+/** Legacy row "Teyit" badge: Teyitli / 9'a bastı / Ulaşılamadı / Geçersiz numara, or null when nothing applies. */
+export function rowConfirmationBadge(order: Pick<OrderRow, "confirmation_status" | "confirmation_call_status" | "confirmation_pressed_key">) {
+  const callStatus = order.confirmation_call_status ?? null;
+  if (order.confirmation_pressed_key === "9" || order.confirmation_status === "cancel_request" || order.confirmation_status === "iptal_istegi") {
+    return { key: "badgePressed9", tone: "danger" } as const;
+  }
+  if (order.confirmation_pressed_key === "1" || order.confirmation_status === "confirmed" || order.confirmation_status === "teyit_edildi") {
+    return { key: "badgeConfirmed", tone: "success" } as const;
+  }
+  if (callStatus === "invalid_number" || callStatus === "gecersiz_numara" || order.confirmation_status === "gecersiz_numara") {
+    return { key: "badgeInvalidNumber", tone: "warning" } as const;
+  }
+  if (["no_answer", "unreachable", "busy", "cevaplanmadi", "ulasilamadi", "mesgul"].includes(callStatus ?? "") || order.confirmation_status === "ulasilamadi") {
+    return { key: "badgeUnreachable", tone: "warning" } as const;
+  }
+  return null;
+}
 export type ShipmentPaymentStatus = "karsi_odemeli" | "odeme_alindi";
 
 export interface CreateOrderInput {

@@ -1,4 +1,5 @@
-import { Loader2, Pencil, Phone, RefreshCw, RotateCcw, Trash2, Truck, XCircle } from "lucide-react";
+import type { ShipmentSummary } from "@garanti-kulucka/shared";
+import { Loader2, MapPin, Pencil, Phone, RefreshCw, RotateCcw, Trash2, Truck, XCircle } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/app/auth";
@@ -6,8 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { formatMoney } from "@/lib/format";
-import { confirmationBadge, kolaybiBadge, type CargoProviderKey, type OrderActionDetail, type OrderProviderStep, type ShipmentDraft, type ShipmentPaymentStatus } from "@/lib/orders";
+import { carrierLabel, formatDateTime, formatMoney } from "@/lib/format";
+import { confirmationBadge, kolaybiBadge, type CargoProviderKey, type OrderActionDetail, type OrderProviderStep, type OrderRow, type ShipmentDraft, type ShipmentPaymentStatus } from "@/lib/orders";
 import { errorText, FeedbackLine, Field, idempotencyKey, NativeSelect, type Feedback } from "./accounting-shared";
 import { OrderEditForm } from "./order-edit-form";
 
@@ -38,7 +39,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
  * Legacy SiparislerPage order detail: Durumu Değiştir, iptal/iade, geri al, kalıcı sil, KolayBi KB1 + e-Fatura,
  * teyit arama, notlar and the KargolarPage "Sürat'e Aktar / PTT'ye Aktar" barkod modal. Every provider call is queued.
  */
-export function OrderDetailSheet({ publicId, onClose, onChanged }: { publicId: string | null; onClose: () => void; onChanged: () => void }) {
+export function OrderDetailSheet({ publicId, row, onClose, onChanged }: { publicId: string | null; row?: OrderRow | null; onClose: () => void; onChanged: () => void }) {
   const { t, i18n } = useTranslation();
   const { api } = useAuth();
   const statusLabel = (status: string) => {
@@ -53,6 +54,7 @@ export function OrderDetailSheet({ publicId, onClose, onChanged }: { publicId: s
   const [deleted, setDeleted] = useState(false);
   const [cargo, setCargo] = useState<CargoProviderKey | null>(null);
   const [editing, setEditing] = useState(false);
+  const [tracking, setTracking] = useState(false);
   const tRef = useRef(t);
   tRef.current = t;
 
@@ -74,6 +76,7 @@ export function OrderDetailSheet({ publicId, onClose, onChanged }: { publicId: s
     setDeleted(false);
     setCargo(null);
     setEditing(false);
+    setTracking(false);
     if (publicId) void load(publicId);
   }, [publicId, load]);
 
@@ -235,6 +238,19 @@ export function OrderDetailSheet({ publicId, onClose, onChanged }: { publicId: s
               </Section>
 
               <Section title={t("orders.cargoActions")}>
+                {row?.shipment && (
+                  <div className="flex flex-wrap items-center gap-2" data-testid="order-shipment-summary">
+                    <Badge tone="info">
+                      {[carrierLabel(row.shipment.provider, t("shipments.otherProvider")), row.shipment.status].filter(Boolean).join(" · ")}
+                    </Badge>
+                    {row.shipment.tracking_number && <span className="text-muted-foreground">{t("orders.trackingNumber", { number: row.shipment.tracking_number })}</span>}
+                    <Button variant="outline" className="min-h-11 md:min-h-9" onClick={() => setTracking(true)} data-testid="order-tracking-open">
+                      <Truck className="size-4" aria-hidden="true" />
+                      {t("orders.tracking")}
+                    </Button>
+                    <TrackingSheet shipmentId={row.shipment.public_id} open={tracking} onClose={() => setTracking(false)} />
+                  </div>
+                )}
                 <div className="grid grid-cols-2 gap-2">
                   {(["surat", "ptt"] as const).map((provider) => (
                     <Button
@@ -424,6 +440,91 @@ export function OrderDetailSheet({ publicId, onClose, onChanged }: { publicId: s
                 </>
               )}
             </>
+          )}
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+/** Legacy KargoTakipModal: tracking events of the order's latest shipment with a "Yenile" (POST /track) button. */
+function TrackingSheet({ shipmentId, open, onClose }: { shipmentId: string; open: boolean; onClose: () => void }) {
+  const { t, i18n } = useTranslation();
+  const { api } = useAuth();
+  const [shipment, setShipment] = useState<ShipmentSummary | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    let active = true;
+    setShipment(null);
+    setError(null);
+    setNotice(null);
+    api
+      .getShipment(shipmentId)
+      .then((next) => active && setShipment(next))
+      .catch((reason: unknown) => active && setError(errorText(reason)));
+    return () => {
+      active = false;
+    };
+  }, [api, shipmentId, open]);
+
+  async function refresh() {
+    setBusy(true);
+    setNotice(null);
+    try {
+      await api.trackShipment(shipmentId, idempotencyKey(`takip_${shipmentId}`));
+      setNotice(t("orders.trackingRefreshQueued"));
+      setShipment(await api.getShipment(shipmentId));
+    } catch (reason) {
+      setError(errorText(reason));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const events = shipment?.tracking_events ?? [];
+  return (
+    <Sheet open={open} onOpenChange={(next) => !next && onClose()}>
+      <SheetContent side="right" closeLabel={t("orders.close")} className="w-[min(30rem,100vw)] overflow-y-auto p-0" data-testid="order-tracking-modal">
+        <SheetHeader className="border-b p-4 pr-14">
+          <SheetTitle>{t("orders.trackingTitle")}</SheetTitle>
+          <SheetDescription>
+            {shipment ? `${carrierLabel(shipment.provider, t("shipments.otherProvider"))} · ${shipment.tracking_number ?? "-"} · ${shipment.status}` : t("orderActions.loading")}
+          </SheetDescription>
+        </SheetHeader>
+        <div className="flex flex-col gap-3 p-4 text-sm">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="outline" className="min-h-11 md:min-h-9" disabled={busy} onClick={() => void refresh()} data-testid="order-tracking-refresh">
+              {busy ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <RefreshCw className="size-4" aria-hidden="true" />}
+              {t("orders.trackingRefresh")}
+            </Button>
+            {notice && <span className="text-muted-foreground" data-testid="order-tracking-notice">{notice}</span>}
+          </div>
+          {error ? (
+            <p className="text-destructive">{error || t("orders.trackingFailed")}</p>
+          ) : !shipment ? (
+            <Loader2 className="size-5 animate-spin text-muted-foreground" aria-label={t("orderActions.loading")} />
+          ) : events.length === 0 ? (
+            <p className="text-muted-foreground" data-testid="order-tracking-empty">{t("orders.trackingNoEvents")}</p>
+          ) : (
+            <ol className="flex flex-col gap-2">
+              {events.map((event) => (
+                <li key={event.public_id} className="flex flex-col gap-0.5 rounded-md border-l-2 border-primary bg-muted/40 px-3 py-2" data-testid="order-tracking-event">
+                  <time className="text-xs text-muted-foreground" dateTime={event.occurred_at}>{formatDateTime(event.occurred_at, i18n.language)}</time>
+                  <span className="font-medium">{event.status}</span>
+                  {event.description && <span>{event.description}</span>}
+                  {event.location && (
+                    <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                      <MapPin className="size-3" aria-hidden="true" />
+                      {event.location}
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ol>
           )}
         </div>
       </SheetContent>

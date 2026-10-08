@@ -57,24 +57,66 @@ function editable(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function listOrder(publicId: string, number: string) {
-  return { public_id: publicId, order_number: number, status: "draft", source: "manual", cargo_provider: "ptt", total_amount: "300.00", currency: "TRY", confirmation_status: null, notes: null, customer_full_name: "Ayşe Yılmaz", customer_phone: "05551234567", created_by_user_public_id: "usr_staff", created_by_user_email: "staff@example.com", created_at: now, updated_at: now };
+function listOrder(publicId: string, number: string, overrides: Record<string, unknown> = {}) {
+  return { public_id: publicId, order_number: number, status: "draft", source: "manual", cargo_provider: "ptt", total_amount: "300.00", currency: "TRY", confirmation_status: null, notes: null, customer_full_name: "Ayşe Yılmaz", customer_phone: "05551234567", created_by_user_public_id: "usr_staff", created_by_user_email: "staff@example.com", created_at: now, updated_at: now, ...overrides };
 }
 
-async function mockBackend(page: Page, role = "calisan") {
-  const state = { requests: [] as Array<{ method: string; path: string; body: unknown }> };
+// Legacy row extras (teyit / KolayBi badges, Hızlı Mesaj, KargoTakipModal) for the third test.
+function rowExtrasOrders() {
+  return [
+    listOrder("ord_1", "GK-1001", {
+      conversation_public_id: "cnv_1",
+      confirmation_status: "confirmed",
+      confirmation_call_status: "answered",
+      confirmation_pressed_key: "1",
+      confirmation_call_count: 2,
+      kolaybi_status: "done",
+      kolaybi_invoice_id: "inv_9",
+      e_document_status: "sent",
+      shipment: { public_id: "shp_1", provider: "ptt", status: "in_transit", tracking_number: "TRK123" },
+    }),
+    listOrder("ord_2", "GK-1002", {
+      status: "cancelled",
+      conversation_public_id: null,
+      confirmation_call_status: "no_answer",
+      confirmation_pressed_key: "9",
+      confirmation_call_count: 1,
+      kolaybi_status: "cancelled",
+      kolaybi_invoice_id: "inv_2",
+      shipment: null,
+    }),
+  ];
+}
+
+const trackedShipment = {
+  public_id: "shp_1", provider: "ptt", tracking_number: "TRK123", barcode_number: null, status: "in_transit", recipient_name: "Ayşe Yılmaz", recipient_phone: "05551234567", recipient_city: "İstanbul", recipient_district: "Kadıköy",
+  last_event_text: "Dağıtımda", order_number: "GK-1001", customer_full_name: "Ayşe Yılmaz", updated_at: now,
+  tracking_events: [
+    { public_id: "evt_2", status: "Dağıtımda", description: "Kurye dağıtıma çıktı", location: "Kadıköy", occurred_at: "2026-10-07T08:00:00.000Z" },
+    { public_id: "evt_1", status: "Kabul edildi", description: null, location: "İstanbul", occurred_at: "2026-10-06T08:00:00.000Z" },
+  ],
+};
+
+async function mockBackend(page: Page, role = "calisan", orders: unknown[] = [listOrder("ord_1", "GK-1001"), listOrder("ord_2", "GK-1002")]) {
+  const state = { requests: [] as Array<{ method: string; path: string; search: string; body: unknown }> };
   await page.addInitScript(`window.__GARANTI_REALTIME_SOCKET_FACTORY__ = () => ({ connect() {}, disconnect() {}, emit() {}, on() {}, off() {} });`);
   await page.route(`${backendBaseUrl}/**`, async (route) => {
     const req = route.request();
     const url = new URL(req.url());
     const method = req.method();
     const body = req.postData() ? (JSON.parse(req.postData() ?? "{}") as unknown) : undefined;
-    state.requests.push({ method, path: url.pathname, body });
+    state.requests.push({ method, path: url.pathname, search: url.search, body });
     const json = (status: number, payload: unknown) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(payload) });
     if (url.pathname === "/auth/login") return json(200, { access_token: "oe-token", refresh_token: "oe-refresh", token_type: "Bearer", expires_in: 900, user: user(role) });
     if (url.pathname === "/auth/me" || url.pathname === "/auth/presence") return json(200, user(role));
     if (url.pathname === "/api/app-settings/ai-status") return json(200, { ai_enabled: false });
-    if (url.pathname === "/api/orders" && method === "GET") return json(200, { data: [listOrder("ord_1", "GK-1001"), listOrder("ord_2", "GK-1002")], meta: { total_count: 2, limit: 20, offset: 0 } });
+    if (url.pathname === "/api/orders" && method === "GET") return json(200, { data: orders, meta: { total_count: orders.length, limit: 20, offset: 0 } });
+    if (url.pathname === "/api/conversations" && url.searchParams.get("search") === "05551234567") return json(200, { data: [{ public_id: "cnv_2", channel: "instagram", status: "open", is_in_pool: false, human_agent_enabled: true, unread_count: 0, customer: { full_name: "Ayşe Yılmaz", phone: "05551234567" }, updated_at: now }] });
+    if (/^\/api\/conversations\/cnv_\d\/messages$/.test(url.pathname) && method === "POST") {
+      return json(201, { public_id: "msg_1", sender_type: "user", sender_name: `${role}@example.com`, body: (body as { body: string }).body, is_read: true, sent_at: now, attachments: [] });
+    }
+    if (url.pathname === "/api/shipments/shp_1" && method === "GET") return json(200, trackedShipment);
+    if (url.pathname === "/api/shipments/shp_1/track" && method === "POST") return json(202, { provider: "ptt", operation: "shipments.track", request_id: "req_1", queued: true, live_gate: "queued" });
     if (url.pathname === "/api/orders/ord_1/edit") return json(200, { order: editable() });
     if (url.pathname === "/api/orders/ord_2/edit") return json(200, { order: editable({ public_id: "ord_2", order_number: "GK-1002", locked_reason: "kolaybi" }) });
     if (url.pathname === "/api/orders/ord_1" && method === "PATCH") {
@@ -172,5 +214,47 @@ test.describe("Order edit modal (legacy Siparişi Düzenle)", () => {
     await expect(modal.getByTestId("order-edit-save")).toBeDisabled();
     await expect(modal.getByTestId("order-edit-name")).toBeDisabled();
     expect(state.requests.some((entry) => entry.method === "PATCH")).toBe(false);
+  });
+
+  test("shows the legacy row badges, sends a quick message and opens the tracking modal", async ({ page }) => {
+    const state = await mockBackend(page, "calisan", rowExtrasOrders());
+    await loginAt(page, `${app.url}/siparisler`, "calisan");
+    await expect(page.getByTestId("order-badge-confirmation-ord_1")).toHaveText("Teyitli (2)");
+    await expect(page.getByTestId("order-badge-kolaybi-ord_1")).toHaveText("Aktarıldı · e-Fatura: sent");
+    await expect(page.getByTestId("order-badge-shipment-ord_1")).toContainText("PTT · in_transit");
+    await expect(page.getByTestId("order-badge-shipment-ord_1")).toContainText("TRK123");
+    await expect(page.getByTestId("order-badge-confirmation-ord_2")).toHaveText("9'a bastı (1)");
+    await expect(page.getByTestId("order-badge-kolaybi-ord_2")).toHaveText("KB iptal");
+    await expect(page.getByTestId("order-badge-shipment-ord_2")).toHaveCount(0);
+
+    // Hızlı mesaj on the linked conversation.
+    await page.getByTestId("order-row-ord_1").click();
+    await page.getByTestId("order-quick-message-ord_1").click();
+    await page.getByTestId("order-quick-message-text").fill("Kargonuz yola çıktı");
+    await page.getByTestId("order-quick-message-send").click();
+    await expect(page.getByTestId("order-quick-message-feedback")).toHaveText("Mesaj kuyruğa alındı");
+    const sent = state.requests.find((entry) => entry.method === "POST" && entry.path === "/api/conversations/cnv_1/messages")?.body;
+    expect(sent).toEqual({ sender_type: "user", sender_name: "calisan@example.com", body: "Kargonuz yola çıktı", external_message_id: null, raw_payload: null, attachments: [] });
+
+    // No linked conversation: resolved through the customer phone first.
+    await page.getByTestId("order-row-ord_2").click();
+    await page.getByTestId("order-quick-message-ord_2").click();
+    await page.getByTestId("order-quick-message-text").fill("Merhaba");
+    await page.getByTestId("order-quick-message-send").click();
+    await expect(page.getByTestId("order-quick-message-feedback")).toHaveText("Mesaj kuyruğa alındı");
+    expect(state.requests.some((entry) => entry.method === "GET" && entry.path === "/api/conversations" && entry.search.includes("search=05551234567") && entry.search.includes("limit=1"))).toBe(true);
+    expect((state.requests.find((entry) => entry.method === "POST" && entry.path === "/api/conversations/cnv_2/messages")?.body as { body: string }).body).toBe("Merhaba");
+
+    // Kargo takip modal.
+    await page.getByTestId("order-row-ord_1").click();
+    await page.getByTestId("order-tracking-open").click();
+    const modal = page.getByTestId("order-tracking-modal");
+    await expect(modal.getByTestId("order-tracking-event")).toHaveCount(2);
+    await expect(modal.getByTestId("order-tracking-event").first()).toContainText("Dağıtımda");
+    await expect(modal.getByTestId("order-tracking-event").first()).toContainText("Kurye dağıtıma çıktı");
+    await modal.getByTestId("order-tracking-refresh").click();
+    await expect(modal.getByTestId("order-tracking-notice")).toHaveText("Takip sorgusu kuyruğa alındı");
+    expect(state.requests.filter((entry) => entry.method === "POST" && entry.path === "/api/shipments/shp_1/track")).toHaveLength(1);
+    expect(state.requests.filter((entry) => entry.method === "GET" && entry.path === "/api/shipments/shp_1").length).toBeGreaterThanOrEqual(2);
   });
 });
