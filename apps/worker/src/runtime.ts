@@ -214,7 +214,7 @@ export function createWorkerRuntime(options: WorkerRuntimeOptions): WorkerRuntim
     });
 
     worker.on("failed", (job, error) => {
-      recordJobFailure(metrics, queue, job);
+      recordJobFailure(metrics, queue, job, error);
       options.logger.error(
         createStructuredLog({
           level: "error",
