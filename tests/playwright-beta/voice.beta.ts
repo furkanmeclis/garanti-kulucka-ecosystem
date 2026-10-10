@@ -98,8 +98,8 @@ async function signIn(page: Page, role: string, viewport: { width: number; heigh
 
 test("calls: auto-confirmation settings and call records", async ({ page }) => {
   const state = await signIn(page, "admin");
-  await page.getByTestId("desktop-more-trigger").click();
-  await page.getByTestId("more-calls").click();
+  await page.getByTestId("nav-group-trigger-voice").click();
+  await page.getByTestId("nav-item-calls").click();
   await expect.poll(() => pathOf(page)).toBe("/sesli-asistan");
   await expect(page.getByTestId("page-calls")).toBeVisible();
 
@@ -192,6 +192,7 @@ test("calisan is redirected away from voice pages", async ({ page }) => {
   await signIn(page, "calisan");
   await page.goto("/sesli-asistan");
   await expect.poll(() => pathOf(page)).not.toBe("/sesli-asistan");
-  await page.getByTestId("desktop-more-trigger").click();
-  await expect(page.getByTestId("more-calls")).toHaveCount(0);
+  // The whole Sesli Asistan group is manager-only, so staff get no trigger at all.
+  await expect(page.getByTestId("nav-group-trigger-operations")).toBeVisible();
+  await expect(page.getByTestId("nav-group-trigger-voice")).toHaveCount(0);
 });

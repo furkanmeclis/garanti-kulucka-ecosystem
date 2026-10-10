@@ -50,8 +50,13 @@ test("mobile: hamburger sheet and bottom bar navigate; header keeps search, bell
   await page.getByTestId("mobile-menu-trigger").click();
   const sheet = page.getByTestId("mobile-menu");
   await expect(sheet).toBeVisible();
-  await expect(sheet.getByTestId("mobile-menu-main").getByRole("link")).toHaveText(["Pano", "Siparişler", "Mesajlar", "Müşteriler", "Kargolar", "Ayarlar"]);
-  await expect(sheet.getByTestId("mobile-menu-more").getByRole("link")).toHaveText(["Kargo Pipeline", "İptaller", "Stoklar", "Bakiyeler", "Yorumlar", "SMS", "Instagram Analitik", "Instagram Yayın"]);
+  await expect(sheet.getByTestId("mobile-menu-main").getByRole("link")).toHaveText(["Pano", "Siparişler", "Mesajlar", "Müşteriler", "Kargolar"]);
+  await expect(sheet.getByTestId("mobile-menu-operations").getByRole("link")).toHaveText(["Kargo Pipeline", "İptaller", "Stoklar", "Yorumlar", "SMS"]);
+  await expect(sheet.getByTestId("mobile-menu-accounting").getByRole("link")).toHaveText(["Bakiyeler"]);
+  await expect(sheet.getByTestId("mobile-menu-instagram").getByRole("link")).toHaveText(["Instagram Analitik", "Instagram Yayın"]);
+  // Staff see no voice pages, so that section is left out; settings is always there.
+  await expect(sheet.getByTestId("mobile-menu-voice")).toHaveCount(0);
+  await expect(sheet.getByTestId("mobile-menu-settings").getByRole("link")).toHaveText(["Genel"]);
   await expectResponsiveLayout(page, { checkTouchTargets: true });
   await sheet.getByRole("link", { name: "Müşteriler" }).click();
   await expect(sheet).toBeHidden();
@@ -100,7 +105,7 @@ test("desktop: header has nav, search, bell with backend counts, language, theme
   await login(page, state);
   await expect(page.getByTestId("desktop-nav")).toBeVisible();
   await expect(page.getByTestId("mobile-menu-trigger")).toBeHidden();
-  for (const testId of ["notification-trigger", "language-menu-trigger", "theme-menu-trigger", "profile-menu-trigger"]) {
+  for (const testId of ["notification-trigger", "language-menu-trigger", "theme-toggle", "profile-menu-trigger"]) {
     await expect(page.getByTestId(testId)).toBeVisible();
   }
   // 5 unread + 7 pending confirmations + 6 missing tracking numbers.
@@ -116,4 +121,44 @@ test("desktop: header has nav, search, bell with backend counts, language, theme
   await page.getByRole("searchbox", { name: "Ara" }).fill("Zeynep");
   await page.getByRole("button", { name: /Müşteriler içinde ara/ }).click();
   await expect.poll(() => `${pathOf(page)}${new URL(page.url()).search}`).toBe("/musteriler?q=Zeynep");
+});
+
+test("desktop: grouped dropdowns and the settings area with its sub-nav", async ({ page }) => {
+  await page.setViewportSize(viewports.desktop);
+  const state = await mockBackend(page, mockUser("admin"));
+  await page.goto("/giris");
+  await login(page, state);
+  const nav = page.getByTestId("desktop-nav");
+  for (const group of ["operations", "accounting", "instagram", "voice"]) await expect(nav.getByTestId(`nav-group-trigger-${group}`)).toBeVisible();
+  await expect(nav.getByRole("link", { name: "Ayarlar" })).toHaveAttribute("data-testid", "desktop-settings-link");
+
+  await nav.getByTestId("nav-group-trigger-instagram").click();
+  await expect(page.getByTestId("nav-group-menu-instagram").getByRole("menuitem")).toHaveText(["Instagram Analitik", "Instagram Yayın"]);
+  await page.getByTestId("nav-item-instagramAnalytics").click();
+  await expect.poll(() => pathOf(page)).toBe("/instagram/analitik");
+  await expect(nav.getByTestId("nav-group-trigger-instagram")).toHaveClass(/bg-accent/);
+
+  // Settings: one gear link, then a sectioned sub-nav; debug pages under /kargolar light up settings, not Kargolar.
+  await page.getByTestId("desktop-settings-link").click();
+  await expect.poll(() => pathOf(page)).toBe("/ayarlar");
+  await expect(page.getByRole("heading", { name: "Ayarlar", level: 1 })).toBeVisible();
+  const sub = page.getByTestId("settings-nav");
+  await expect(sub.getByTestId("settings-nav-general").getByRole("link")).toHaveText(["Genel"]);
+  await expect(sub.getByTestId("settings-nav-management").getByRole("link")).toHaveText(["Kullanıcılar", "İşlem Logları", "Veri Silme Talepleri"]);
+  await expect(sub.getByTestId("settings-nav-developer").getByRole("link")).toHaveText(["Sürat Debug", "Cron Debug", "WhatsApp Debug", "Instagram Debug", "AI Debug", "AI Eğitim"]);
+  await expect(page.getByTestId("settings-nav-item-settings")).toHaveAttribute("aria-current", "page");
+  await page.getByTestId("settings-nav-item-cronDebug").click();
+  await expect.poll(() => pathOf(page)).toBe("/kargolar/cron-debug");
+  await expect(page.getByTestId("settings-nav-item-cronDebug")).toHaveAttribute("aria-current", "page");
+  await expect(page.getByTestId("desktop-settings-link")).toHaveAttribute("aria-current", "page");
+  await expect(nav.getByRole("link", { name: "Kargolar" })).not.toHaveAttribute("aria-current", "page");
+  await expectResponsiveLayout(page, { checkTouchTargets: false });
+
+  // Phone: the sub-nav becomes a horizontally scrolling strip without page overflow.
+  await page.setViewportSize(viewports.phone360);
+  await page.goto("/kullanicilar");
+  await expect(page.getByTestId("settings-nav-item-users")).toHaveAttribute("aria-current", "page");
+  const strip = await page.getByTestId("settings-nav").evaluate((element) => ({ overflowX: getComputedStyle(element).overflowX, scrollable: element.scrollWidth > element.clientWidth }));
+  expect(strip).toEqual({ overflowX: "auto", scrollable: true });
+  await expectResponsiveLayout(page, { checkTouchTargets: true });
 });

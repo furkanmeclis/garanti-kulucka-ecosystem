@@ -1,46 +1,54 @@
-import { ChevronDown, LayoutGrid, Menu, Search, WifiOff } from "lucide-react";
+import { ChevronDown, Menu, Search, Settings, WifiOff } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { displayName, initialsOf, useAuth } from "@/app/auth";
-import { bottomBarFor, homePathFor, mainNavigationFor, moreNavigationFor, type NavItem } from "@/app/navigation";
+import { bottomBarFor, homePathFor, mainNavigationFor, navGroupsFor, navOwnerOf, settingsNavFor, type NavItem } from "@/app/navigation";
 import { useOnlineStatus } from "@/app/pwa-hooks";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { Brand } from "./brand";
 import { GlobalSearch } from "./global-search";
-import { LanguageMenu, NotificationBell, ProfileMenu, roleLabelKey, ThemeMenu } from "./header-menus";
+import { LanguageMenu, NotificationBell, ProfileMenu, roleLabelKey, ThemeToggle } from "./header-menus";
+import { settingsItemLabelKey } from "./settings-layout";
 
 function isActive(item: NavItem, pathname: string) {
   return item.path === "/" ? pathname === "/" : pathname === item.path || pathname.startsWith(`${item.path}/`);
 }
 
+/** Top bar and sheet highlight the most specific owner, so /kargolar/cron-debug lights up settings, not Kargolar. */
+function useNavOwner() {
+  return navOwnerOf(useLocation().pathname);
+}
+
 function MobileMenu() {
   const { t } = useTranslation();
   const { user } = useAuth();
-  const { pathname } = useLocation();
+  const owner = useNavOwner();
   const [open, setOpen] = useState(false);
   const items = mainNavigationFor(user?.role);
-  const more = moreNavigationFor(user?.role);
-  const link = (item: NavItem) => (
-    <NavLink
+  const groups = navGroupsFor(user?.role);
+  const settings = settingsNavFor(user?.role).flatMap((section) => section.items);
+  const link = (item: NavItem, label: string = t(`nav.${item.key}`)) => (
+    <Link
       key={item.key}
       to={item.path}
-      end={item.path === "/"}
       onClick={() => setOpen(false)}
+      aria-current={owner?.key === item.key ? "page" : undefined}
       className={cn(
         "flex min-h-12 items-center gap-3 rounded-md px-3 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground",
-        isActive(item, pathname) && "bg-accent text-accent-foreground",
+        owner?.key === item.key && "bg-accent text-accent-foreground",
       )}
     >
       <item.icon className="size-5" aria-hidden="true" />
-      {t(`nav.${item.key}`)}
-    </NavLink>
+      {label}
+    </Link>
   );
+  const sectionTitle = "px-3 pb-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase";
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild>
@@ -63,14 +71,18 @@ function MobileMenu() {
         </SheetHeader>
         <div className="flex flex-1 flex-col overflow-y-auto">
           <nav aria-label={t("nav.main")} className="flex flex-col gap-1 p-3" data-testid="mobile-menu-main">
-            {items.map(link)}
+            {items.map((item) => link(item))}
           </nav>
-          {more.length > 0 && (
-            <nav aria-label={t("nav.more")} className="flex flex-col gap-1 border-t p-3" data-testid="mobile-menu-more">
-              <p className="px-3 pb-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase">{t("nav.more")}</p>
-              {more.map(link)}
+          {groups.map((group) => (
+            <nav key={group.key} aria-label={t(`nav.${group.key}`)} className="flex flex-col gap-1 border-t p-3" data-testid={`mobile-menu-${group.key}`}>
+              <p className={sectionTitle}>{t(`nav.${group.key}`)}</p>
+              {group.items.map((item) => link(item))}
             </nav>
-          )}
+          ))}
+          <nav aria-label={t("nav.settings")} className="flex flex-col gap-1 border-t p-3" data-testid="mobile-menu-settings">
+            <p className={sectionTitle}>{t("nav.settings")}</p>
+            {settings.map((item) => link(item, t(settingsItemLabelKey(item))))}
+          </nav>
         </div>
         <Separator />
         <div className="flex items-center justify-between gap-2 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
@@ -79,7 +91,7 @@ function MobileMenu() {
           </span>
           <div className="flex items-center gap-1">
             <LanguageMenu />
-            <ThemeMenu />
+            <ThemeToggle />
           </div>
         </div>
       </SheetContent>
@@ -145,34 +157,38 @@ function BottomNav() {
   );
 }
 
-/** Desktop "More" menu for pages outside the main bar (accounting, cancellations, …). */
-function MoreMenu() {
+const topLinkClass =
+  "inline-flex min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-md px-2.5 text-sm font-medium whitespace-nowrap text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground";
+
+/** Desktop dropdown for one menu group (Operasyon, Muhasebe, …); active while any of its pages is open. */
+function NavGroupMenu({ group }: { group: ReturnType<typeof navGroupsFor>[number] }) {
   const { t } = useTranslation();
-  const { user } = useAuth();
-  const { pathname } = useLocation();
+  const owner = useNavOwner();
   const navigate = useNavigate();
-  const more = moreNavigationFor(user?.role);
-  if (more.length === 0) return null;
-  const active = more.some((item) => isActive(item, pathname));
+  const label = t(`nav.${group.key}`);
+  const active = owner?.group === group.key;
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button
           variant="ghost"
-          className={cn("min-h-11 gap-1 px-2.5 text-sm font-medium text-muted-foreground", active && "bg-accent text-accent-foreground")}
-          aria-label={t("nav.more")}
-          title={t("nav.more")}
-          data-testid="desktop-more-trigger"
+          className={cn("min-h-11 min-w-11 gap-0.5 px-1.5 text-sm font-medium text-muted-foreground", active && "bg-accent text-accent-foreground")}
+          aria-label={label}
+          title={label}
+          data-testid={`nav-group-trigger-${group.key}`}
         >
-          <LayoutGrid className="size-4" aria-hidden="true" />
-          {/* Icon-only on every desktop width: the labelled main items plus a labelled "More" left no slack at 1280/1536 px. */}
-          <span className="sr-only">{t("nav.more")}</span>
-          <ChevronDown className="size-3.5" aria-hidden="true" />
+          <group.icon className="size-4" aria-hidden="true" />
+          {/* Icon-only on every desktop width (like the old "More" trigger): the labelled main links plus four
+              labelled groups need ~1150 px and overflow even the 1536 px container, so the name lives in
+              the tooltip, the accessible name and the menu heading. */}
+          <span className="sr-only">{label}</span>
+          <ChevronDown className="size-3" aria-hidden="true" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="min-w-52" data-testid="desktop-more-menu">
-        {more.map((item) => (
-          <DropdownMenuItem key={item.key} onSelect={() => navigate(item.path)} className="min-h-10 gap-3" data-testid={`more-${item.key}`}>
+      <DropdownMenuContent align="start" className="min-w-52" data-testid={`nav-group-menu-${group.key}`}>
+        <DropdownMenuLabel className="text-xs text-muted-foreground">{label}</DropdownMenuLabel>
+        {group.items.map((item) => (
+          <DropdownMenuItem key={item.key} onSelect={() => navigate(item.path)} className={cn("min-h-10 gap-3", owner?.key === item.key && "bg-accent/60")} data-testid={`nav-item-${item.key}`}>
             <item.icon className="size-4" aria-hidden="true" />
             {t(`nav.${item.key}`)}
           </DropdownMenuItem>
@@ -185,9 +201,11 @@ function MoreMenu() {
 export function AppShell({ children }: { children: ReactNode }) {
   const { t } = useTranslation();
   const { user } = useAuth();
-  const { pathname } = useLocation();
+  const owner = useNavOwner();
   const online = useOnlineStatus();
   const items = mainNavigationFor(user?.role);
+  const groups = navGroupsFor(user?.role);
+  const settingsActive = owner?.group === "settings";
   const hasBottomNav = bottomBarFor(user?.role).length > 0;
 
   return (
@@ -202,24 +220,34 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="mx-auto flex h-16 max-w-screen-2xl items-center gap-1 px-2 sm:gap-2 sm:px-4">
           <MobileMenu />
           <Brand to={homePathFor(user?.role)} compact className="mr-1 lg:mr-3" />
-          <nav aria-label={t("nav.main")} className="hidden shrink-0 items-center gap-0.5 lg:flex xl:gap-1" data-testid="desktop-nav">
+          <nav aria-label={t("nav.main")} className="hidden shrink-0 items-center gap-0.5 lg:flex" data-testid="desktop-nav">
             {items.map((item) => (
-              <NavLink
+              <Link
                 key={item.key}
                 to={item.path}
-                end={item.path === "/"}
                 title={t(`nav.${item.key}`)}
-                className={cn(
-                  "inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-md px-3 text-sm font-medium whitespace-nowrap text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground",
-                  isActive(item, pathname) && "bg-accent text-accent-foreground",
-                )}
+                aria-current={owner?.key === item.key ? "page" : undefined}
+                className={cn(topLinkClass, owner?.key === item.key && "bg-accent text-accent-foreground")}
               >
                 <item.icon className="size-4" aria-hidden="true" />
                 {/* lg: icon-only (label stays for screen readers); xl+: icon and label. */}
                 <span className="sr-only xl:not-sr-only">{t(`nav.${item.key}`)}</span>
-              </NavLink>
+              </Link>
             ))}
-            <MoreMenu />
+            {groups.map((group) => (
+              <NavGroupMenu key={group.key} group={group} />
+            ))}
+            {/* Settings is a single link: its pages have their own sub-nav (SettingsLayout). */}
+            <Link
+              to="/ayarlar"
+              title={t("nav.settings")}
+              aria-current={settingsActive ? "page" : undefined}
+              className={cn(topLinkClass, "px-0", settingsActive && "bg-accent text-accent-foreground")}
+              data-testid="desktop-settings-link"
+            >
+              <Settings className="size-4" aria-hidden="true" />
+              <span className="sr-only">{t("nav.settings")}</span>
+            </Link>
           </nav>
           <div className="ml-auto flex min-w-0 items-center gap-0.5 sm:gap-1" data-testid="header-actions">
             <GlobalSearch className="mr-1 hidden w-56 2xl:block" />
@@ -227,7 +255,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <NotificationBell />
             <div className="hidden items-center gap-0.5 sm:flex">
               <LanguageMenu />
-              <ThemeMenu />
+              <ThemeToggle />
             </div>
             <ProfileMenu />
           </div>

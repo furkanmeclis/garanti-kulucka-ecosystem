@@ -58,8 +58,8 @@ async function signIn(page: Page, role: string, viewport: { width: number; heigh
 
 test("users: list, search, create with validation and server error", async ({ page }) => {
   const state = await signIn(page, "admin");
-  await page.getByTestId("desktop-more-trigger").click();
-  await page.getByTestId("more-users").click();
+  await page.getByTestId("desktop-settings-link").click();
+  await page.getByTestId("settings-nav-item-users").click();
   await expect.poll(() => pathOf(page)).toBe("/kullanicilar");
   const table = page.getByTestId("users-table");
   await expect(table).toContainText("Mehmet Demir");

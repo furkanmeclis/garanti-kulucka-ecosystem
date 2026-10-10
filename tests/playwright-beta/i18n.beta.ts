@@ -39,9 +39,10 @@ test("theme switch toggles dark mode and is remembered", async ({ page }) => {
   await page.goto("/giris");
   await login(page, state);
   await expect(page.locator("html")).not.toHaveClass(/dark/);
-  await page.getByTestId("theme-menu-trigger").click();
-  await page.getByTestId("theme-option-dark").click();
+  await page.getByTestId("theme-toggle").click();
   await expect(page.locator("html")).toHaveClass(/dark/);
   await page.reload();
   await expect(page.locator("html")).toHaveClass(/dark/);
+  await page.getByTestId("theme-toggle").click();
+  await expect(page.locator("html")).not.toHaveClass(/dark/);
 });

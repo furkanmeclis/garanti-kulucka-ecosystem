@@ -238,7 +238,8 @@ function AccountTab() {
  * /ayarlar — profile, password and preferences for every role; managers also get the web
  * AyarlarPage provider tabs (AI, integrations overview, WhatsApp, Instagram, Messenger, NetGSM,
  * Santral). Users, logs, data deletion, VAPI and the cargo pipeline keep their own pages and are
- * linked from the integrations overview. The selected tab lives in `?tab=`.
+ * linked from the integrations overview. The selected tab lives in `?tab=`. Rendered as the "Genel"
+ * entry of the SettingsLayout, which owns the page's h1.
  */
 export function SettingsPage() {
   const { t } = useTranslation();
@@ -263,7 +264,7 @@ export function SettingsPage() {
 
   return (
     <section data-testid="page-settings">
-      <PageHeader title={t("settings.title")} description={manager ? t("settingsTabs.managerSubtitle") : t("settings.subtitle")} />
+      <PageHeader title={t("nav.settingsGeneral")} description={manager ? t("settingsTabs.managerSubtitle") : t("settings.subtitle")} />
       {tabs.length > 1 && (
         <>
           <div className="mb-4 md:hidden">

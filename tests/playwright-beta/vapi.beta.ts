@@ -72,8 +72,8 @@ async function signIn(page: Page, role: string, viewport: { width: number; heigh
 
 test("vapi: stats, cargo-not-received selection and queueing", async ({ page }) => {
   const state = await signIn(page, "admin");
-  await page.getByTestId("desktop-more-trigger").click();
-  await page.getByTestId("more-vapi").click();
+  await page.getByTestId("nav-group-trigger-voice").click();
+  await page.getByTestId("nav-item-vapi").click();
   await expect.poll(() => pathOf(page)).toBe("/sesli-asistan/vapi");
   await expect(page.getByTestId("vapi-stats")).toContainText("%75");
   await expect(page.getByTestId("voice-link-vapi")).toHaveAttribute("aria-current", "page");

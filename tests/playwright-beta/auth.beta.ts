@@ -40,10 +40,10 @@ test("anonymous visitors land on /giris and return to the requested page after l
 });
 
 const roleCases = [
-  { role: "owner", home: "/", menu: ["Pano", "Siparişler", "Mesajlar", "Müşteriler", "Kargolar", "Ayarlar"], label: "Sahip" },
-  { role: "admin", home: "/", menu: ["Pano", "Siparişler", "Mesajlar", "Müşteriler", "Kargolar", "Ayarlar"], label: "Yönetici" },
-  { role: "calisan", home: "/", menu: ["Pano", "Siparişler", "Mesajlar", "Müşteriler", "Kargolar", "Ayarlar"], label: "Personel" },
-  { role: "kargo_operatoru", home: "/siparisler", menu: ["Siparişler", "Mesajlar", "Kargolar", "Ayarlar"], label: "Kargo operatörü" },
+  { role: "owner", home: "/", menu: ["Pano", "Siparişler", "Mesajlar", "Müşteriler", "Kargolar", "Ayarlar"], groups: ["Operasyon", "Muhasebe", "Instagram", "Sesli Asistan"], label: "Sahip" },
+  { role: "admin", home: "/", menu: ["Pano", "Siparişler", "Mesajlar", "Müşteriler", "Kargolar", "Ayarlar"], groups: ["Operasyon", "Muhasebe", "Instagram", "Sesli Asistan"], label: "Yönetici" },
+  { role: "calisan", home: "/", menu: ["Pano", "Siparişler", "Mesajlar", "Müşteriler", "Kargolar", "Ayarlar"], groups: ["Operasyon", "Muhasebe", "Instagram"], label: "Personel" },
+  { role: "kargo_operatoru", home: "/siparisler", menu: ["Siparişler", "Mesajlar", "Kargolar", "Ayarlar"], groups: ["Operasyon"], label: "Kargo operatörü" },
 ] as const;
 
 for (const item of roleCases) {
@@ -54,6 +54,8 @@ for (const item of roleCases) {
     await login(page, state);
     await expect.poll(() => pathOf(page)).toBe(item.home);
     await expect(page.getByTestId("desktop-nav").getByRole("link")).toHaveText([...item.menu]);
+    // Dropdown groups the role sees nothing of are left out of the bar.
+    await expect(page.getByTestId("desktop-nav").getByRole("button")).toHaveText([...item.groups]);
     await page.getByTestId("profile-menu-trigger").click();
     await expect(page.getByTestId("profile-role")).toHaveText(item.label);
     await page.keyboard.press("Escape");

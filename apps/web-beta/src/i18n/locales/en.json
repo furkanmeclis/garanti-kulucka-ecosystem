@@ -21,7 +21,10 @@
     "customers": "Customers",
     "shipments": "Shipments",
     "settings": "Settings",
-    "more": "More",
+    "operations": "Operations",
+    "accounting": "Accounting",
+    "instagram": "Instagram",
+    "voice": "Voice Assistant",
     "cancellations": "Cancellations",
     "invoices": "Invoices",
     "accounts": "Accounts",
@@ -45,7 +48,12 @@
     "whatsappDebug": "WhatsApp Debug",
     "instagramDebug": "Instagram Debug",
     "aiDebug": "AI Debug",
-    "aiTraining": "AI Training"
+    "aiTraining": "AI Training",
+    "settingsNav": "Settings menu",
+    "settingsDescription": "Manage your account, team, integrations and developer tools.",
+    "settingsGeneral": "General",
+    "settingsManagement": "Management",
+    "settingsDeveloper": "Developer"
   },
   "header": {
     "search": "Search",
