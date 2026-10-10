@@ -204,5 +204,6 @@ test("order rows: legacy badges, quick message and the tracking sheet", async ({
   await modal.getByTestId("order-tracking-refresh").click();
   await expect(modal.getByTestId("order-tracking-notice")).toHaveText("Takip sorgusu kuyruğa alındı");
   expect(state.bodies.filter((entry) => entry.method === "POST" && entry.path === "/api/shipments/shp_1/track")).toHaveLength(1);
-  expect(state.requests.filter((entry) => entry.method === "GET" && entry.path === "/api/shipments/shp_1").length).toBeGreaterThanOrEqual(2);
+  // The notice shows before the shipment is re-fetched, so wait for the second GET instead of reading it once.
+  await expect.poll(() => state.requests.filter((entry) => entry.method === "GET" && entry.path === "/api/shipments/shp_1").length).toBeGreaterThanOrEqual(2);
 });
