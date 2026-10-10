@@ -133,12 +133,13 @@ export function ReportsView() {
   const query = toAnalyticsQuery(state);
   const queryKey = new URLSearchParams(Object.entries(query).filter(([, value]) => value !== undefined) as Array<[string, string]>).toString();
 
+  // Merge into the latest URL state, not the render's snapshot: two quick changes (provider, then personnel) used
+  // to race and the second dropped the first.
   const update = useCallback(
     (next: Partial<ReportFilterState>) => {
-      const merged = { ...state, ...next };
-      setParams(serializeReportFilters(merged), { replace: true });
+      setParams((prev) => serializeReportFilters({ ...parseReportFilters(prev), ...next }), { replace: true });
     },
-    [setParams, state],
+    [setParams],
   );
 
   const timeseries = useQuery(`reports-ts:${queryKey}`, () => api.reportTimeseries(query));
