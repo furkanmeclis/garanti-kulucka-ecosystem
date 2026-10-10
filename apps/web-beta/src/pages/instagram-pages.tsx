@@ -6,12 +6,14 @@ import { ErrorState } from "@/components/data-list";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { BrandIcon } from "@/components/brand-icons";
 import { PageHeader } from "@/layout/page-header";
 import { formatDate, formatDateTime, formatNumber } from "@/lib/format";
 import type { InstagramPublication } from "@/lib/reports-instagram";
 import { useQuery } from "@/lib/use-query";
 import { cn } from "@/lib/utils";
-import { errorText, FeedbackLine, Field, idempotencyKey, NativeSelect, type Feedback } from "./accounting-shared";
+import { Textarea } from "@/components/ui/textarea";
+import { errorText, FeedbackLine, Field, idempotencyKey, FormSelect, type Feedback } from "./accounting-shared";
 
 /** /instagram/analitik — legacy AnalitikPage: day range, summary cards, daily performance and all metrics; "Yenile" also queues the worker's live refresh. */
 export function InstagramAnalyticsPage() {
@@ -46,15 +48,16 @@ export function InstagramAnalyticsPage() {
   return (
     <section data-testid="page-instagram-analytics">
       <PageHeader
+        brand="instagram"
         title={t("instagramAnalytics.title")}
         description={t("instagramAnalytics.subtitle")}
         actions={
           <div className="flex flex-wrap gap-2">
-            <NativeSelect value={String(days)} onChange={(event) => setDays(Number(event.target.value))} aria-label={t("instagramAnalytics.dayRangeAria")} className="w-auto" data-testid="instagram-days">
+            <FormSelect value={String(days)} onChange={(event) => setDays(Number(event.target.value))} aria-label={t("instagramAnalytics.dayRangeAria")} className="w-auto" data-testid="instagram-days">
               <option value="7">{t("instagramAnalytics.last7Days")}</option>
               <option value="14">{t("instagramAnalytics.last14Days")}</option>
               <option value="28">{t("instagramAnalytics.last28Days")}</option>
-            </NativeSelect>
+            </FormSelect>
             <Button variant="outline" className="min-h-11" onClick={() => void refresh()} data-testid="instagram-refresh">
               <RefreshCw className={cn("size-4", insights.loading && "animate-spin")} aria-hidden="true" />
               {t("instagramAnalytics.refresh")}
@@ -195,7 +198,7 @@ export function InstagramPublishPage() {
   const preview = /^https?:\/\//.test(imageUrl.trim()) ? imageUrl.trim() : null;
   return (
     <section data-testid="page-instagram-publish">
-      <PageHeader title={t("instagramPublish.title")} description={t("instagramPublish.subtitle")} />
+      <PageHeader brand="instagram" title={t("instagramPublish.title")} description={t("instagramPublish.subtitle")} />
       <div className="grid gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         <Card className="p-4">
           <form className="flex flex-col gap-4" onSubmit={(event) => void submit(event)} data-testid="instagram-publish-form">
@@ -204,8 +207,8 @@ export function InstagramPublishPage() {
               <span className="text-xs font-normal text-muted-foreground">{t("instagramPublish.imageUrlHelp")}</span>
             </Field>
             <Field label={t("instagramPublish.captionLabel")}>
-              <textarea
-                className="min-h-32 w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 md:text-sm dark:bg-input/30"
+              <Textarea
+                className="min-h-32 w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 lg:text-sm dark:bg-input/30"
                 rows={6}
                 value={caption}
                 onChange={(event) => setCaption(event.target.value)}
@@ -221,13 +224,14 @@ export function InstagramPublishPage() {
               <p className="text-sm" data-testid="instagram-publish-result">
                 {t("instagramPublish.mediaId", { id: result.media_id })}{" "}
                 <a className="inline-flex items-center gap-1 text-primary underline" href={`https://www.instagram.com/`} target="_blank" rel="noreferrer">
+                  <BrandIcon brand="instagram" title="" className="size-3.5" />
                   {t("instagramPublish.viewOnInstagram")}
                   <ExternalLink className="size-3.5" aria-hidden="true" />
                 </a>
               </p>
             )}
             <Button type="submit" className="min-h-11" disabled={busy} data-testid="instagram-publish">
-              {busy ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Send className="size-4" aria-hidden="true" />}
+              {busy ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <BrandIcon brand="instagram" title="" />}
               {busy ? t("instagramPublish.publishing") : t("instagramPublish.publishToInstagram")}
             </Button>
           </form>

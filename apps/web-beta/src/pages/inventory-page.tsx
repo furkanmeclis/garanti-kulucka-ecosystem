@@ -1,4 +1,4 @@
-import { ArrowDownToLine, ArrowLeft, ArrowUpFromLine, History, Package, Pencil, Plus, Trash2, AlertTriangle } from "lucide-react";
+import { AlertTriangle, ArrowDownToLine, ArrowLeft, ArrowUpFromLine, History, Loader2, Package, Pencil, Plus, Save, Trash2 } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/app/auth";
@@ -14,7 +14,12 @@ import type { ProductCategory, ProductSummary, ProductUnit, StockMovementSummary
 import { formatDateTime, formatMoney, formatNumber } from "@/lib/format";
 import { useListParams } from "@/lib/list-params";
 import { useQuery } from "@/lib/use-query";
-import { errorText, FeedbackLine, Field, NativeSelect, type Feedback } from "./accounting-shared";
+import { BrandIcon } from "@/components/brand-icons";
+import { ProviderLabel } from "@/components/provider-label";
+import { Hint } from "@/components/hint";
+import { useConfirm } from "@/components/confirm-dialog";
+import { Combobox } from "@/components/ui/combobox";
+import { errorText, FeedbackLine, Field, FormSelect, type Feedback } from "./accounting-shared";
 
 const categories: Array<{ key: ProductCategory; title: "categoryIncubatorTitle" | "categorySparePartTitle" | "categoryOtherTitle"; subtitle: "categoryIncubatorSubtitle" | "categorySparePartSubtitle" | "categoryOtherSubtitle" }> = [
   { key: "incubator", title: "categoryIncubatorTitle", subtitle: "categoryIncubatorSubtitle" },
@@ -33,11 +38,16 @@ function stockState(product: ProductSummary, threshold: number): StockState {
 function StockBadge({ state }: { state: StockState }) {
   const { t } = useTranslation();
   const label = state === "out" ? "statusOutOfStock" : state === "critical" ? "statusCritical" : "statusNormal";
-  return <Badge tone={state === "out" ? "danger" : state === "critical" ? "warning" : "success"}>{t(`inventory.${label}`)}</Badge>;
+  return (
+    <Hint content={t("hints.stockState", { state: t(`inventory.${label}`) })}>
+      <Badge tone={state === "out" ? "danger" : state === "critical" ? "warning" : "success"}>{t(`inventory.${label}`)}</Badge>
+    </Hint>
+  );
 }
 
 /** /stok — legacy StokPage: category cards, per-category list with search and stock state, stock in/out, edit, history, delete. */
 export function InventoryPage() {
+  const confirm = useConfirm();
   const { t, i18n } = useTranslation();
   const { api } = useAuth();
   const list = useListParams(["category", "state"] as const);
@@ -55,7 +65,7 @@ export function InventoryPage() {
   };
 
   async function remove(product: ProductSummary) {
-    if (!window.confirm(t("inventory.confirmDelete", { name: product.name }))) return;
+    if (!(await confirm(t("inventory.confirmDelete", { name: product.name }), { tone: "danger" }))) return;
     setFeedback(null);
     try {
       await api.deactivateProduct(product.public_id);
@@ -351,15 +361,24 @@ function ProductSheet({ mode, category, onClose, onDone }: { mode: Mode | null; 
               <>
                 {input("name", t("inventory.fieldName"), { className: "sm:col-span-2" })}
                 {input("sku", t("inventory.fieldCode"))}
-                <Field label={t("inventory.fieldKolaybiMatch")}>
-                  <Input list="beta-kolaybi-products" value={form.external} onChange={(event) => setForm((current) => ({ ...current, external: event.target.value }))} className="h-11 md:h-9" data-testid="product-external" />
-                  <datalist id="beta-kolaybi-products">
-                    {(kolaybi?.products ?? []).map((item) => (
-                      <option key={item.id} value={item.id}>
-                        {item.name ?? item.id}
-                      </option>
-                    ))}
-                  </datalist>
+                <Field label={<ProviderLabel brand="kolaybi">{t("inventory.fieldKolaybiMatch")}</ProviderLabel>}>
+                  <Input value={form.external} placeholder={t("inventory.fieldKolaybiPlaceholder")} onChange={(event) => setForm((current) => ({ ...current, external: event.target.value }))} className="h-11 lg:h-9" data-testid="product-external" />
+                  {(kolaybi?.products.length ?? 0) > 0 && (
+                    <Combobox
+                      options={(kolaybi?.products ?? []).map((item) => ({ value: item.id, label: item.name ? `${item.name} (${item.id})` : item.id }))}
+                      value={form.external}
+                      onChange={(value) => setForm((current) => ({ ...current, external: value }))}
+                      label={t("inventory.fieldKolaybiMatch")}
+                      placeholder={t("common.select")}
+                      emptyText={t("common.empty")}
+                      triggerClassName="h-11 w-full rounded-md border border-input bg-transparent px-3 text-sm font-normal shadow-xs lg:h-9 dark:bg-input/30"
+                      itemClassName="text-sm"
+                      activeItemClassName="bg-accent text-accent-foreground"
+                      selectedItemClassName="font-medium"
+                      inputClassName="text-sm"
+                      testId="product-external-picker"
+                    />
+                  )}
                 </Field>
                 <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground sm:col-span-2">
                   <span data-testid="product-kolaybi-info">
@@ -367,18 +386,19 @@ function ProductSheet({ mode, category, onClose, onDone }: { mode: Mode | null; 
                     {kolaybiNote ? ` · ${kolaybiNote}` : ""}
                   </span>
                   <Button type="button" variant="outline" className="min-h-11 md:min-h-9" onClick={() => void refreshKolaybi()} data-testid="product-kolaybi-refresh">
+                    <BrandIcon brand="kolaybi" title="" />
                     {t("inventory.kolaybiListRefresh")}
                   </Button>
                 </div>
                 {input("quantity", t("inventory.fieldQuantity"), { inputMode: "decimal" })}
                 <Field label={t("inventory.fieldUnit")}>
-                  <NativeSelect value={form.unit} onChange={(event) => setForm((current) => ({ ...current, unit: event.target.value as ProductUnit }))} data-testid="product-unit">
+                  <FormSelect value={form.unit} onChange={(event) => setForm((current) => ({ ...current, unit: event.target.value as ProductUnit }))} data-testid="product-unit">
                     {units.map((unit) => (
                       <option key={unit} value={unit}>
                         {unit}
                       </option>
                     ))}
-                  </NativeSelect>
+                  </FormSelect>
                 </Field>
                 {input("price", t("inventory.fieldUnitPrice"), { inputMode: "decimal" })}
                 {input("description", t("inventory.fieldDescription"), { className: "sm:col-span-2" })}
@@ -388,6 +408,7 @@ function ProductSheet({ mode, category, onClose, onDone }: { mode: Mode | null; 
               <FeedbackLine feedback={feedback} testId="inventory-sheet-feedback" />
             </div>
             <Button type="submit" className="min-h-11 sm:col-span-2" disabled={saving} data-testid="inventory-submit">
+              {saving ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : mode?.kind === "in" ? <ArrowDownToLine className="size-4" aria-hidden="true" /> : mode?.kind === "out" ? <ArrowUpFromLine className="size-4" aria-hidden="true" /> : <Save className="size-4" aria-hidden="true" />}
               {saving ? t("inventory.saving") : mode?.kind === "in" || mode?.kind === "out" ? t("inventory.confirm") : t("inventory.save")}
             </Button>
           </form>

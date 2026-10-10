@@ -1,4 +1,5 @@
-import { expect, type Page, type Route } from "@playwright/test";
+import { expect, type Locator, type Page, type Route } from "@playwright/test";
+import { breakdownsFixture, dashboardFixture, invoicesFixture, timeseriesFixture } from "./analytics-fixtures";
 
 /** Must match `e2eBackendBaseUrl` in apps/web-beta/vite.config.ts (baked into the `build:e2e` bundle). */
 export const backendBaseUrl = "http://127.0.0.1:65531";
@@ -174,6 +175,17 @@ export async function mockBackend(page: Page, user: MockUser, options: { orderCo
     const search = (url.searchParams.get("search") ?? "").toLocaleLowerCase("tr-TR");
     const page_ = <T,>(rows: T[]) => json(200, { data: rows.slice(offset, offset + limit), meta: { total_count: rows.length, limit, offset } });
 
+    // Pano / İş Analizi aggregates (role gates mirror apps/api report-routes).
+    if (url.pathname === "/api/reports/dashboard") {
+      if (!["admin", "owner", "calisan", "kargo_operatoru"].includes(state.user.role)) return json(403, { error: { code: "forbidden", message: "Forbidden" } });
+      return json(200, dashboardFixture(url, state.user.role));
+    }
+    if (["/api/reports/timeseries", "/api/reports/breakdowns", "/api/reports/invoices"].includes(url.pathname)) {
+      if (!["admin", "owner"].includes(state.user.role)) return json(403, { error: { code: "forbidden", message: "Forbidden" } });
+      if (url.pathname === "/api/reports/timeseries") return json(200, timeseriesFixture(url));
+      if (url.pathname === "/api/reports/breakdowns") return json(200, breakdownsFixture(url));
+      return json(200, invoicesFixture(url));
+    }
     if (url.pathname === "/api/orders/summary") {
       return json(200, { total_count: state.orders.length, active_count: 12, delivered_count: 15, pending_confirmation_count: 7, total_revenue: 154230.5, currency: "TRY", daily: weeklyOrders });
     }
@@ -292,6 +304,8 @@ export async function expectResponsiveLayout(page: Page, options: { checkTouchTa
       for (const element of Array.from(document.querySelectorAll<HTMLElement>("a[href], button, input:not([type=hidden]), select, [role=button], [role=menuitem], [role=combobox]"))) {
         const box = element.getBoundingClientRect();
         if (box.width === 0 || box.height === 0 || element.closest(".sr-only")) continue;
+        // Radix renders an aria-hidden 1px native <select>/<input> next to Select/Checkbox for form submission.
+        if (element.closest('[aria-hidden="true"]')) continue;
         if (box.bottom < 0 || box.top > window.innerHeight * 3) continue;
         if (box.height < 43.5 || (box.width < 43.5 && element.tagName !== "INPUT")) {
           problems.push(`touch:${element.tagName.toLowerCase()}[${(element.getAttribute("aria-label") ?? element.textContent ?? "").trim().slice(0, 30)}]=${Math.round(box.width)}x${Math.round(box.height)}`);
@@ -301,4 +315,13 @@ export async function expectResponsiveLayout(page: Page, options: { checkTouchTa
     return problems;
   }, options.checkTouchTargets);
   expect(report).toEqual([]);
+}
+
+/**
+ * Picks `value` in a beta select (shadcn Select or Combobox, both expose `[role=option][data-value]`):
+ * the replacement for `locator.selectOption()` now that no native <select> is left.
+ */
+export async function chooseOption(trigger: Locator, value: string) {
+  await trigger.click();
+  await trigger.page().locator(`[role="option"][data-value="${value}"]`).first().click();
 }

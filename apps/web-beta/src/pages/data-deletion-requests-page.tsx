@@ -12,7 +12,8 @@ import { pageCount, pageSize } from "@/lib/list-params";
 import { dataDeletionStatuses, type DataDeletionRequest, type DataDeletionStatus } from "@/lib/privacy";
 import { useQuery } from "@/lib/use-query";
 import { cn } from "@/lib/utils";
-import { errorText, FeedbackLine, NativeSelect, type Feedback } from "./accounting-shared";
+import { Hint } from "@/components/hint";
+import { errorText, FeedbackLine, FormSelect, type Feedback } from "./accounting-shared";
 
 const tone: Record<DataDeletionStatus, "warning" | "info" | "success" | "danger"> = { pending: "warning", in_progress: "info", completed: "success", rejected: "danger" };
 
@@ -77,7 +78,12 @@ export function DataDeletionRequestsPage() {
         </span>
       ),
     },
-    { key: "status", header: t("dataDeletion.colStatus"), mobile: "badge", cell: (row) => <Badge tone={tone[row.status]}>{t(`dataDeletion.status_${row.status}`)}</Badge> },
+    { key: "status", header: t("dataDeletion.colStatus"), mobile: "badge", cell: (row) => (
+        <Hint content={t("hints.deletionStatus", { status: t(`dataDeletion.status_${row.status}`) })}>
+          <Badge tone={tone[row.status]}>{t(`dataDeletion.status_${row.status}`)}</Badge>
+        </Hint>
+      ),
+    },
     { key: "reference", header: t("dataDeletion.colReference"), cell: (row) => <span className="font-mono text-xs">{row.reference}</span> },
     { key: "source", header: t("dataDeletion.colSource"), cell: (row) => (row.source === "facebook" ? t("dataDeletion.sourceFacebook") : t("dataDeletion.sourceForm")) },
     {
@@ -98,13 +104,13 @@ export function DataDeletionRequestsPage() {
         const dirty = draft.status !== row.status || draft.note !== (row.resolution_note ?? "");
         return (
           <span className="flex w-full min-w-0 flex-col gap-2 md:min-w-64" data-testid={`deletion-row-${row.reference}`}>
-            <NativeSelect aria-label={t("dataDeletion.colStatus")} value={draft.status} onChange={(event) => setDraft(row, { status: event.target.value as DataDeletionStatus })} data-testid="deletion-row-status">
+            <FormSelect aria-label={t("dataDeletion.colStatus")} value={draft.status} onChange={(event) => setDraft(row, { status: event.target.value as DataDeletionStatus })} data-testid="deletion-row-status">
               {dataDeletionStatuses.map((value) => (
                 <option key={value} value={value}>
                   {t(`dataDeletion.status_${value}`)}
                 </option>
               ))}
-            </NativeSelect>
+            </FormSelect>
             <Input className="h-11 md:h-9" aria-label={t("dataDeletion.note")} placeholder={t("dataDeletion.notePlaceholder")} maxLength={2000} value={draft.note} onChange={(event) => setDraft(row, { note: event.target.value })} data-testid="deletion-row-note" />
             <Button className="min-h-11 md:min-h-9" disabled={!dirty || saving === row.public_id} onClick={() => void save(row)} data-testid="deletion-row-save">
               <Save className="size-4" aria-hidden="true" />
@@ -130,7 +136,7 @@ export function DataDeletionRequestsPage() {
         }
       />
       <div className="mb-3 flex flex-col gap-2">
-        <NativeSelect
+        <FormSelect
           className="sm:w-56"
           aria-label={t("dataDeletion.colStatus")}
           value={status}
@@ -146,7 +152,7 @@ export function DataDeletionRequestsPage() {
               {t(`dataDeletion.status_${value}`)}
             </option>
           ))}
-        </NativeSelect>
+        </FormSelect>
         <FeedbackLine feedback={feedback} testId="deletion-feedback" />
       </div>
       {list.error && !list.data ? (

@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { backendBaseUrl, expectResponsiveLayout, login, mockBackend, mockUser, pathOf, viewports, type BackendState, type ExtraRoute } from "./helpers";
+import { backendBaseUrl, expectResponsiveLayout, login, mockBackend, mockUser, pathOf, viewports, type BackendState, type ExtraRoute, chooseOption } from "./helpers";
 
 test.use({ serviceWorkers: "block" });
 
@@ -260,11 +260,9 @@ test("settings: Instagram queues the webhook subscription and thread control, th
   expect(threadControl).toHaveLength(1);
   expect(threadControl[0]).toMatchObject({ method: "POST", body: { action: "take", recipient_id: "1234567890" } });
 
-  page.once("dialog", (dialog) => {
-    expect(dialog.message()).toContain("instagram bağlantısı kesilecek");
-    void dialog.accept();
-  });
   await card.getByTestId("instagram-disconnect").click();
+  await expect(page.getByTestId("confirm-dialog-message")).toContainText("instagram bağlantısı kesilecek");
+  await page.getByTestId("confirm-dialog-action").click();
   await expect(card.getByTestId("instagram-action-feedback")).toHaveText("Bağlantı kesildi; 0 token silindi.");
   await expect(page.getByTestId("instagram-status")).toContainText("Instagram bağlı değil");
   expect(writes(state, "/admin/integrations/accounts/acc_instagram/disconnect")).toHaveLength(1);
@@ -357,7 +355,7 @@ test("settings: mobile tab picker and layout at 360px", async ({ page }) => {
     ["netgsm", "netgsm-form"],
     ["santral", "santral-config-form"],
   ] as const) {
-    await picker.selectOption(tab);
+    await chooseOption(picker, tab);
     await expect(page).toHaveURL(new RegExp(`\\?tab=${tab}$`));
     await expect(page.getByTestId(panel)).toBeVisible();
     await page.waitForLoadState("networkidle");

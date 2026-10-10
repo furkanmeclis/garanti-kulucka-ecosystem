@@ -1,4 +1,4 @@
-import { Bug, CheckCircle, ChevronDown, ChevronRight, Loader2, Play, RefreshCw, Search, Trash2, Truck, Wifi, WifiOff, XCircle } from "lucide-react";
+import { Bug, CheckCircle, ChevronDown, ChevronRight, Loader2, Play, RefreshCw, Search, Trash2, Wifi, WifiOff, XCircle } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/app/auth";
@@ -6,13 +6,16 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { BrandIcon } from "@/components/brand-icons";
+import { enumLabel } from "@/lib/status";
 import { PageHeader } from "@/layout/page-header";
 import { attemptOutcome, compactJson, requestPreview, type AttemptOutcome, type CronProvider, type ProviderAttempt } from "@/lib/debug";
 import { formatDateTime } from "@/lib/format";
 import { localeFor } from "@/i18n";
 import { useQuery } from "@/lib/use-query";
 import { cn } from "@/lib/utils";
-import { errorText, FeedbackLine, idempotencyKey, NativeSelect, type Feedback } from "./accounting-shared";
+import { useConfirm } from "@/components/confirm-dialog";
+import { errorText, FeedbackLine, idempotencyKey, FormSelect, type Feedback } from "./accounting-shared";
 import { StatTile } from "./debug-pages";
 
 /**
@@ -136,6 +139,7 @@ const suratEndpoints = [
 
 /** /kargolar/surat-debug — Sürat provider attempts, stats, filters and the live gate (web SuratDebugPage). */
 export function SuratDebugPage() {
+  const confirm = useConfirm();
   const { t, i18n } = useTranslation();
   const { api } = useAuth();
   const [live, setLive] = useState(false);
@@ -185,7 +189,7 @@ export function SuratDebugPage() {
 
   /** Legacy "Temizle": deletes every Sürat attempt on the server (all operations), then hides the rest client side. */
   async function clearOnServer() {
-    if (!window.confirm(t("debugPages.logs.clearServerConfirmSurat"))) return;
+    if (!(await confirm(t("debugPages.logs.clearServerConfirmSurat"), { tone: "danger" }))) return;
     setClearing(true);
     setClearResult(null);
     try {
@@ -203,6 +207,7 @@ export function SuratDebugPage() {
   return (
     <section data-testid="page-surat-debug">
       <PageHeader
+        brand="surat"
         title={t("debugPages.surat.title")}
         description={t("debugPages.surat.lastRefresh", { time: timeOf(query.data?.fetchedAt, i18n.language), visible: visible.length, limit: logLimit })}
         actions={<LogActions live={live} onLive={() => setLive((value) => !value)} loading={query.loading} onRefresh={query.reload} onClear={() => setClearedAt(new Date().toISOString())} onClearServer={() => void clearOnServer()} clearing={clearing} />}
@@ -225,20 +230,20 @@ export function SuratDebugPage() {
       </Card>
       <div className="mb-4 flex flex-col gap-2 sm:flex-row">
         <SearchBox value={search} onChange={setSearch} placeholder={t("debugPages.surat.searchPlaceholder")} />
-        <NativeSelect className="sm:w-48" aria-label={t("debugPages.surat.endpointLabel")} value={endpoint} onChange={(event) => setEndpoint(event.target.value)} data-testid="surat-endpoint-filter">
+        <FormSelect className="sm:w-48" aria-label={t("debugPages.surat.endpointLabel")} value={endpoint} onChange={(event) => setEndpoint(event.target.value)} data-testid="surat-endpoint-filter">
           <option value="all">{t("debugPages.surat.allEndpoints")}</option>
           {suratEndpoints.map(([path, label]) => (
             <option key={path} value={path}>
               {t(`debugPages.surat.${label}`)}
             </option>
           ))}
-        </NativeSelect>
-        <NativeSelect className="sm:w-44" aria-label={t("debugPages.surat.statusLabel")} value={outcome} onChange={(event) => setOutcome(event.target.value as OutcomeFilter)} data-testid="surat-status-filter">
+        </FormSelect>
+        <FormSelect className="sm:w-44" aria-label={t("debugPages.surat.statusLabel")} value={outcome} onChange={(event) => setOutcome(event.target.value as OutcomeFilter)} data-testid="surat-status-filter">
           <option value="all">{t("debugPages.surat.allStatuses")}</option>
           <option value="success">{t("debugPages.surat.statSuccess")}</option>
           <option value="error">{t("debugPages.surat.statError")}</option>
           <option value="recovered">{t("debugPages.surat.statRecovered")}</option>
-        </NativeSelect>
+        </FormSelect>
       </div>
       {filtered.length === 0 ? (
         query.loading && !query.data ? (
@@ -262,10 +267,10 @@ export function SuratDebugPage() {
                   <>
                     <span className="font-mono text-xs text-muted-foreground">{timeOf(log.started_at, i18n.language)}</span>
                     <span className="font-medium break-all">
-                      {log.operation} / {log.direction}
+                      {enumLabel(t, "operation", log.operation)} / {enumLabel(t, "direction", log.direction)}
                     </span>
                     <Badge tone={outcomeTone[result]}>
-                      {log.status} / {log.retry_decision}
+                      {enumLabel(t, "jobStatus", log.status)} / {enumLabel(t, "retryDecision", log.retry_decision)}
                     </Badge>
                     <span className="min-w-0 font-mono text-xs break-all text-muted-foreground">{preview ? `${preview.method} ${preview.path}` : "-"}</span>
                     <span className="font-mono text-xs text-muted-foreground">{log.duration_ms}ms</span>
@@ -304,6 +309,7 @@ const carrierName: Record<CronProvider, string> = { ptt: "PTT", surat: "Sürat" 
 
 /** /kargolar/cron-debug — shipment tracking cron runs for PTT + Sürat and the dry-run triggers (web CronDebugPage). */
 export function CronDebugPage() {
+  const confirm = useConfirm();
   const { t, i18n } = useTranslation();
   const { api } = useAuth();
   const [live, setLive] = useState(false);
@@ -366,7 +372,7 @@ export function CronDebugPage() {
 
   /** Legacy cron-debug "Temizle": deletes the PTT + Sürat shipment.track attempts on the server, then hides the rest client side. */
   async function clearOnServer() {
-    if (!window.confirm(t("debugPages.logs.clearServerConfirmCron"))) return;
+    if (!(await confirm(t("debugPages.logs.clearServerConfirmCron"), { tone: "danger" }))) return;
     setClearing(true);
     setClearResult(null);
     try {
@@ -397,8 +403,8 @@ export function CronDebugPage() {
         actions={
           <LogActions live={live} onLive={() => setLive((value) => !value)} loading={query.loading} onRefresh={query.reload} onClear={() => setClearedAt(new Date().toISOString())} onClearServer={() => void clearOnServer()} clearing={clearing}>
             {triggerButton("all", t("debugPages.cron.runAll"), <Play className="size-4" aria-hidden="true" />, "cron-run-all")}
-            {triggerButton("ptt", t("debugPages.cron.pttCron"), <Truck className="size-4" aria-hidden="true" />, "cron-run-ptt")}
-            {triggerButton("surat", t("debugPages.cron.suratCron"), <Truck className="size-4" aria-hidden="true" />, "cron-run-surat")}
+            {triggerButton("ptt", t("debugPages.cron.pttCron"), <BrandIcon brand="ptt" title="" />, "cron-run-ptt")}
+            {triggerButton("surat", t("debugPages.cron.suratCron"), <BrandIcon brand="surat" title="" />, "cron-run-surat")}
           </LogActions>
         }
       />
@@ -411,7 +417,7 @@ export function CronDebugPage() {
           return (
             <Card key={carrier} className="flex flex-col gap-2 p-4" data-testid={`cron-card-${carrier}`}>
               <p className="flex items-center gap-2 font-medium">
-                <Truck className="size-4" aria-hidden="true" />
+                <BrandIcon brand={carrier} title="" />
                 {carrier === "ptt" ? t("debugPages.cron.pttCardTitle") : t("debugPages.cron.suratCardTitle")}
               </p>
               <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
@@ -432,11 +438,11 @@ export function CronDebugPage() {
       </div>
       <div className="mb-2 flex flex-col gap-2 sm:flex-row">
         <SearchBox value={search} onChange={setSearch} placeholder={t("debugPages.cron.searchPlaceholder")} />
-        <NativeSelect className="sm:w-44" aria-label={t("debugPages.cron.providerLabel")} value={provider} onChange={(event) => setProvider(event.target.value as "all" | CronProvider)} data-testid="cron-provider-filter">
+        <FormSelect className="sm:w-44" aria-label={t("debugPages.cron.providerLabel")} value={provider} onChange={(event) => setProvider(event.target.value as "all" | CronProvider)} data-testid="cron-provider-filter">
           <option value="all">{t("debugPages.cron.allProviders")}</option>
           <option value="ptt">PTT</option>
           <option value="surat">Sürat</option>
-        </NativeSelect>
+        </FormSelect>
       </div>
       <p className="mb-3 text-xs text-muted-foreground" data-testid="cron-showing">
         {t("debugPages.cron.showingCount", { filtered: filtered.length, total: logs.length })}
@@ -462,9 +468,12 @@ export function CronDebugPage() {
                 summary={
                   <>
                     {succeeded(log) ? <CheckCircle className="size-4 shrink-0 text-emerald-600" aria-hidden="true" /> : <XCircle className="size-4 shrink-0 text-red-600" aria-hidden="true" />}
-                    <Badge tone={carrier === "ptt" ? "info" : "warning"}>{carrierName[carrier]}</Badge>
+                    <Badge tone={carrier === "ptt" ? "info" : "warning"}>
+                      <BrandIcon brand={carrier} title="" className="size-3.5" />
+                      {carrierName[carrier]}
+                    </Badge>
                     <Badge tone="outline">
-                      {log.status} / {log.retry_decision}
+                      {enumLabel(t, "jobStatus", log.status)} / {enumLabel(t, "retryDecision", log.retry_decision)}
                     </Badge>
                     <span className="min-w-0 font-mono text-xs break-all text-muted-foreground">{log.request_id}</span>
                     <span className="font-mono text-xs text-muted-foreground">{formatDateTime(log.started_at, i18n.language)}</span>

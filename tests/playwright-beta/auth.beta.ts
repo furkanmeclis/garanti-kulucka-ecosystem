@@ -40,10 +40,10 @@ test("anonymous visitors land on /giris and return to the requested page after l
 });
 
 const roleCases = [
-  { role: "owner", home: "/", menu: ["Pano", "Siparişler", "Mesajlar", "Müşteriler", "Kargolar", "Ayarlar"], groups: ["Operasyon", "Muhasebe", "Instagram", "Sesli Asistan"], label: "Sahip" },
-  { role: "admin", home: "/", menu: ["Pano", "Siparişler", "Mesajlar", "Müşteriler", "Kargolar", "Ayarlar"], groups: ["Operasyon", "Muhasebe", "Instagram", "Sesli Asistan"], label: "Yönetici" },
-  { role: "calisan", home: "/", menu: ["Pano", "Siparişler", "Mesajlar", "Müşteriler", "Kargolar", "Ayarlar"], groups: ["Operasyon", "Muhasebe", "Instagram"], label: "Personel" },
-  { role: "kargo_operatoru", home: "/siparisler", menu: ["Siparişler", "Mesajlar", "Kargolar", "Ayarlar"], groups: ["Operasyon"], label: "Kargo operatörü" },
+  { role: "owner", home: "/", menu: ["Mesajlar", "Siparişler", "Kargolar", "Müşteriler", "Pano", "Ayarlar"], groups: ["Operasyon", "Muhasebe", "Instagram", "Sesli Asistan"], label: "Sahip" },
+  { role: "admin", home: "/", menu: ["Mesajlar", "Siparişler", "Kargolar", "Müşteriler", "Pano", "Ayarlar"], groups: ["Operasyon", "Muhasebe", "Instagram", "Sesli Asistan"], label: "Yönetici" },
+  { role: "calisan", home: "/", menu: ["Mesajlar", "Siparişler", "Kargolar", "Müşteriler", "Pano", "Ayarlar"], groups: ["Operasyon", "Muhasebe", "Instagram"], label: "Personel" },
+  { role: "kargo_operatoru", home: "/siparisler", menu: ["Mesajlar", "Siparişler", "Kargolar", "Ayarlar"], groups: ["Operasyon"], label: "Kargo operatörü" },
 ] as const;
 
 for (const item of roleCases) {

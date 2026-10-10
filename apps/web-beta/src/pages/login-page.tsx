@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LanguageMenu, ThemeToggle } from "@/layout/header-menus";
 import { ApiError, isNetworkError } from "@/lib/api";
+import { Checkbox } from "@/components/ui/checkbox";
 
 export function redirectTarget(state: unknown) {
   const from = (state as { from?: string } | null)?.from;
@@ -91,7 +92,7 @@ export function LoginPage() {
               <Input id="password" name="password" type="password" autoComplete="current-password" required />
             </div>
             <label className="flex min-h-11 items-center gap-3 text-sm">
-              <input type="checkbox" name="remember" className="h-11 w-5 accent-primary md:size-5" defaultChecked={remembered !== null} data-testid="login-remember" />
+              <Checkbox name="remember" defaultChecked={remembered !== null} data-testid="login-remember" />
               {t("login.rememberMe")}
             </label>
             <Link to="/sifre-sifirla" className="-mt-2 inline-flex min-h-11 items-center self-end text-sm text-primary underline-offset-4 hover:underline" data-testid="login-forgot">

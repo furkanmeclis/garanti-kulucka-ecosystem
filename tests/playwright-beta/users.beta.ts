@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { expectResponsiveLayout, login, mockBackend, mockUser, pathOf, viewports, type ExtraRoute } from "./helpers";
+import { expectResponsiveLayout, login, mockBackend, mockUser, pathOf, viewports, type ExtraRoute, chooseOption } from "./helpers";
 
 test.use({ serviceWorkers: "block" });
 
@@ -83,7 +83,7 @@ test("users: list, search, create with validation and server error", async ({ pa
   await sheet.getByTestId("user-save").click();
   await expect(sheet.getByTestId("user-form-feedback")).toContainText("Bu e-posta zaten kayıtlı.");
   await sheet.getByTestId("user-email").fill("zeynep@example.com");
-  await sheet.getByTestId("user-role").selectOption("kargo_operatoru");
+  await chooseOption(sheet.getByTestId("user-role"), "kargo_operatoru");
   await sheet.getByTestId("user-save").click();
   await expect(page.getByTestId("users-feedback")).toHaveText("Zeynep oluşturuldu.");
   await expect(table).toContainText("zeynep@example.com");
@@ -118,15 +118,11 @@ test("users: edit with SIP, toggle active and delete; self is protected", async 
   await expect(can).toContainText("Aktif");
   expect(state.bodies.find((entry) => entry.method === "PATCH" && entry.path === "/admin/users/usr_3")?.body).toEqual({ is_active: true });
 
-  const dialogs: string[] = [];
-  page.on("dialog", (dialog) => {
-    dialogs.push(dialog.message());
-    void dialog.accept();
-  });
   await can.getByTestId("user-delete").click();
+  await expect(page.getByTestId("confirm-dialog-message")).toContainText("Can Kargo pasife alınır");
+  await page.getByTestId("confirm-dialog-action").click();
   await expect(page.getByTestId("users-feedback")).toHaveText("Kullanıcı silindi.");
   await expect(table).not.toContainText("kargo@example.com");
-  expect(dialogs[0]).toContain("Can Kargo pasife alınır");
   expect(state.bodies.some((entry) => entry.method === "DELETE" && entry.path === "/admin/users/usr_3")).toBe(true);
 });
 
@@ -137,12 +133,12 @@ test("activity logs: search and module filter, English", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Activity Logs" })).toBeVisible();
   const table = page.getByTestId("logs-table");
   await expect(table).toContainText("providers.netgsm.live_mode");
-  await page.getByTestId("logs-module").selectOption("orders");
+  await chooseOption(page.getByTestId("logs-module"), "orders");
   await expect(table).toContainText("ord_42");
   await expect(table).not.toContainText("usr_9");
-  await page.getByTestId("logs-module").selectOption("");
+  await chooseOption(page.getByTestId("logs-module"), "");
   await page.getByTestId("logs-search").fill("usr_9");
-  await expect(table).toContainText("delete");
+  await expect(table).toContainText("Delete");
   await expect(table).not.toContainText("ord_42");
 });
 

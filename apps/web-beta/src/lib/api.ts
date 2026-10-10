@@ -2,6 +2,10 @@ import type {
   AuthSession,
   AuthUser,
   BackendErrorBody,
+  BreakdownAnalytics,
+  DashboardAnalytics,
+  InvoiceAnalytics,
+  TimeseriesAnalytics,
   ConversationSummary,
   ConversationSummaryStats,
   CustomerDetail,
@@ -127,6 +131,21 @@ export function isNetworkError(error: unknown) {
 }
 
 type QueryValue = string | number | boolean | null | undefined;
+
+/** Shared analytics query string (empty values are dropped by buildUrl). */
+export interface AnalyticsQueryParams {
+  from: string;
+  to: string;
+  granularity?: "day" | "week" | "month";
+  compare?: "1" | "0";
+  cargo_provider?: string;
+  personnel_public_id?: string;
+  channel?: string;
+  status?: string;
+  product_public_id?: string;
+  category?: string;
+  city?: string;
+}
 
 export interface ApiClientOptions {
   baseUrl?: string;
@@ -394,6 +413,11 @@ export function createApiClient(options: ApiClientOptions) {
     suggestCommentReply: (publicId: string) => request<CommentAiSuggestionResponse>(`/api/comments/${encodeURIComponent(publicId)}/ai-suggestion`, { method: "POST", body: {} }),
     reportAnalysis: (query: { start_date: string; end_date: string; cargo_provider: ReportCargoProvider; personnel_public_id?: string }) =>
       request<ReportAnalysis>("/api/reports/analysis", { query: { ...query } }),
+    /** Pano and İş Analizi aggregates (`/api/reports/dashboard|timeseries|breakdowns|invoices`). */
+    dashboardAnalytics: (query: AnalyticsQueryParams) => request<DashboardAnalytics>("/api/reports/dashboard", { query: { ...query } }),
+    reportTimeseries: (query: AnalyticsQueryParams) => request<TimeseriesAnalytics>("/api/reports/timeseries", { query: { ...query } }),
+    reportBreakdowns: (query: AnalyticsQueryParams) => request<BreakdownAnalytics>("/api/reports/breakdowns", { query: { ...query } }),
+    reportInvoices: (query: Pick<AnalyticsQueryParams, "from" | "to">) => request<InvoiceAnalytics>("/api/reports/invoices", { query: { ...query } }),
     instagramInsights: (days: number) => request<InstagramAccountInsights>("/api/instagram/insights/account", { query: { days } }),
     refreshInstagramInsights: () => request<InstagramInsightsRefresh>("/api/instagram/insights/account/refresh", { method: "POST", body: {} }),
     publishInstagram: (input: InstagramPublishRequest) => request<InstagramPublishResponse>("/api/instagram/publications", { method: "POST", body: input }),

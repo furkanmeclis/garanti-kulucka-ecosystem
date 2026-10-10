@@ -1,5 +1,5 @@
-import { BrainCircuit, CheckCircle, Copy, Download, Loader2, RefreshCw, Send, XCircle } from "lucide-react";
-import { useState, type FormEvent, type ReactNode } from "react";
+import { BrainCircuit, CheckCircle, ChevronLeft, ChevronRight, Copy, Download, Loader2, RefreshCw, XCircle } from "lucide-react";
+import { Fragment, useState, type FormEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/app/auth";
 import { DataList, type Column } from "@/components/data-list";
@@ -13,7 +13,13 @@ import { countTrainingRecords, type AiDebug, type AiTrainingFormat, type Channel
 import { formatDateTime, formatNumber } from "@/lib/format";
 import { useQuery } from "@/lib/use-query";
 import { cn } from "@/lib/utils";
-import { errorText, FeedbackLine, Field, idempotencyKey, NativeSelect, type Feedback } from "./accounting-shared";
+import { BrandIcon } from "@/components/brand-icons";
+import { Hint } from "@/components/hint";
+import { channelBrand, providerBrand, ProviderLabel } from "@/components/provider-label";
+import { enumLabel, statusLabel } from "@/lib/status";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
+import { errorText, FeedbackLine, Field, idempotencyKey, FormSelect, type Feedback } from "./accounting-shared";
 
 /**
  * Admin debug pages (web DebugPages.tsx: WhatsApp, Instagram, AI debug and AI training export).
@@ -28,7 +34,7 @@ export function RefreshActions({ loading, onRefresh, auto, onAuto }: { loading: 
     <>
       {onAuto && (
         <label className="flex min-h-11 items-center gap-2 text-sm">
-          <input type="checkbox" className="h-11 w-5 accent-primary md:size-5" checked={auto ?? false} onChange={(event) => onAuto(event.target.checked)} data-testid="debug-auto-refresh" />
+          <Switch size="sm" className="size-11 lg:size-auto" checked={auto ?? false} onCheckedChange={onAuto} data-testid="debug-auto-refresh" />
           {t("debugPages.autoRefresh")}
         </label>
       )}
@@ -183,9 +189,14 @@ function WebhookVerifyForm({ path }: { path: string }) {
 function WebhookList({ events }: { events: DebugWebhookEvent[] }) {
   const { t, i18n } = useTranslation();
   const columns: Column<DebugWebhookEvent>[] = [
-    { key: "event", header: t("debugPages.colEvent"), mobile: "title", cell: (row) => <span className="font-medium">{row.event_type}</span> },
-    { key: "status", header: t("debugPages.colStatus"), mobile: "badge", cell: (row) => <Badge tone={row.status === "failed" ? "danger" : row.status === "processed" ? "success" : "neutral"}>{row.status}</Badge> },
-    { key: "provider", header: t("debugPages.colProvider"), cell: (row) => row.provider },
+    { key: "event", header: t("debugPages.colEvent"), mobile: "title", cell: (row) => <span className="font-medium">{enumLabel(t, "operation", row.event_type)}</span> },
+    { key: "status", header: t("debugPages.colStatus"), mobile: "badge", cell: (row) => (
+        <Hint content={t("hints.webhookStatus", { status: enumLabel(t, "jobStatus", row.status) })}>
+          <Badge tone={row.status === "failed" ? "danger" : row.status === "processed" ? "success" : "neutral"}>{enumLabel(t, "jobStatus", row.status)}</Badge>
+        </Hint>
+      ),
+    },
+    { key: "provider", header: t("debugPages.colProvider"), cell: (row) => <ProviderLabel brand={providerBrand(row.provider)}>{enumLabel(t, "provider", row.provider)}</ProviderLabel> },
     { key: "time", header: t("debugPages.colTime"), cell: (row) => formatDateTime(row.received_at, i18n.language) },
     { key: "preview", header: t("debugPages.colPreview"), className: "max-w-96", cell: (row) => <code className="font-mono text-xs break-all whitespace-normal">{row.preview}</code> },
   ];
@@ -199,8 +210,13 @@ function WebhookList({ events }: { events: DebugWebhookEvent[] }) {
 function AttemptList({ attempts }: { attempts: DebugProviderAttempt[] }) {
   const { t, i18n } = useTranslation();
   const columns: Column<DebugProviderAttempt>[] = [
-    { key: "operation", header: t("debugPages.colOperation"), mobile: "title", cell: (row) => <span className="font-medium">{row.operation}</span> },
-    { key: "status", header: t("debugPages.colStatus"), mobile: "badge", cell: (row) => <Badge tone={row.status === "success" ? "success" : "danger"}>{row.status}</Badge> },
+    { key: "operation", header: t("debugPages.colOperation"), mobile: "title", cell: (row) => <span className="font-medium">{enumLabel(t, "operation", row.operation)}</span> },
+    { key: "status", header: t("debugPages.colStatus"), mobile: "badge", cell: (row) => (
+        <Hint content={[t("hints.attemptStatus", { status: enumLabel(t, "jobStatus", row.status) }), row.status_code ? t("hints.httpCode", { code: row.status_code }) : null]}>
+          <Badge tone={row.status === "success" ? "success" : "danger"}>{enumLabel(t, "jobStatus", row.status)}</Badge>
+        </Hint>
+      ),
+    },
     { key: "code", header: t("debugPages.colCode"), cell: (row) => row.status_code ?? "-" },
     { key: "duration", header: t("debugPages.colDuration"), cell: (row) => t("debugPages.durationMs", { ms: row.duration_ms }) },
     { key: "time", header: t("debugPages.colTime"), cell: (row) => formatDateTime(row.started_at, i18n.language) },
@@ -242,7 +258,7 @@ export function WhatsappDebugPage() {
 
   return (
     <section data-testid="page-whatsapp-debug">
-      <PageHeader title={t("debugPages.whatsapp.title")} description={t("debugPages.whatsapp.subtitle")} actions={<RefreshActions loading={query.loading} onRefresh={query.reload} auto={auto} onAuto={setAuto} />} />
+      <PageHeader brand="whatsapp" title={t("debugPages.whatsapp.title")} description={t("debugPages.whatsapp.subtitle")} actions={<RefreshActions loading={query.loading} onRefresh={query.reload} auto={auto} onAuto={setAuto} />} />
       <LoadError error={query.error} />
       {data && (
         <>
@@ -283,7 +299,7 @@ export function WhatsappDebugPage() {
                 <Input type="tel" className="h-11 md:h-9" value={to} onChange={(event) => setTo(event.target.value)} required placeholder="905xxxxxxxxx" data-testid="whatsapp-test-to" />
               </Field>
               <Button type="submit" className="min-h-11 self-start md:min-h-9" disabled={sending || !to.trim()} data-testid="whatsapp-test-submit">
-                {sending ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Send className="size-4" aria-hidden="true" />}
+                {sending ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <BrandIcon brand="whatsapp" title="" />}
                 {sending ? t("debugPages.whatsapp.sending") : t("debugPages.whatsapp.send")}
               </Button>
               <FeedbackLine feedback={feedback} testId="whatsapp-test-result" />
@@ -307,7 +323,7 @@ export function InstagramDebugPage() {
   const data = query.data;
   return (
     <section data-testid="page-instagram-debug">
-      <PageHeader title={t("debugPages.instagram.title")} description={t("debugPages.instagram.subtitle")} actions={<RefreshActions loading={query.loading} onRefresh={query.reload} auto={auto} onAuto={setAuto} />} />
+      <PageHeader brand="instagram" title={t("debugPages.instagram.title")} description={t("debugPages.instagram.subtitle")} actions={<RefreshActions loading={query.loading} onRefresh={query.reload} auto={auto} onAuto={setAuto} />} />
       <LoadError error={query.error} />
       {data && (
         <>
@@ -321,8 +337,8 @@ export function InstagramDebugPage() {
                   <KeyValues
                     testId={`instagram-debug-account-${account.provider}`}
                     rows={[
-                      [account.provider, `${account.display_name} (${account.external_account_id ?? "-"})`],
-                      [t("debugPages.accountStatus"), account.status],
+                      [enumLabel(t, "provider", account.provider), <ProviderLabel key="account" brand={channelBrand(account.provider)}>{`${account.display_name} (${account.external_account_id ?? "-"})`}</ProviderLabel>],
+                      [t("debugPages.accountStatus"), statusLabel(t, account.status)],
                       [t("debugPages.accessToken"), <Flag key="token" ok={account.access_token_configured} okText={t("debugPages.configured")} badText={t("debugPages.missing")} />],
                       [t("debugPages.verifyToken"), <Flag key="verify" ok={account.verify_token_configured} okText={t("debugPages.configured")} badText={t("debugPages.missing")} />],
                       [t("debugPages.liveCalls"), <Flag key="live" ok={account.live_call_permitted} okText={t("debugPages.liveOn")} badText={t("debugPages.liveOff")} />],
@@ -335,7 +351,9 @@ export function InstagramDebugPage() {
             {Object.entries(data.callback_paths).map(([provider, path]) => (
               <div key={provider} className="flex flex-col gap-2">
                 <h3 className="text-sm font-semibold">
-                  {t("debugPages.callbackTitle")} · {provider}
+                  <ProviderLabel brand={channelBrand(provider)}>
+                    {t("debugPages.callbackTitle")} · {enumLabel(t, "provider", provider)}
+                  </ProviderLabel>
                 </h3>
                 <CopyLine value={webhookUrl(api.baseUrl, path)} testId={`instagram-debug-callback-${provider}`} />
               </div>
@@ -380,7 +398,13 @@ export function AiDebugPage() {
 
   const columns: Column<AiRecent>[] = [
     { key: "customer", header: t("debugPages.colCustomer"), mobile: "title", cell: (row) => <span className="font-medium">{row.customer_name ?? row.customer_phone ?? "-"}</span> },
-    { key: "channel", header: t("debugPages.colChannel"), mobile: "badge", cell: (row) => <Badge tone="info">{row.channel}</Badge> },
+    { key: "channel", header: t("debugPages.colChannel"), mobile: "badge", cell: (row) => (
+        <Badge tone="info">
+          {channelBrand(row.channel) && <BrandIcon brand={channelBrand(row.channel)!} title="" className="size-3.5" />}
+          {enumLabel(t, "provider", row.channel)}
+        </Badge>
+      ),
+    },
     { key: "time", header: t("debugPages.colTime"), cell: (row) => formatDateTime(row.sent_at, i18n.language) },
     { key: "body", header: t("debugPages.colMessage"), className: "max-w-[28rem]", cell: (row) => <span className="whitespace-pre-wrap break-words">{row.body ?? "-"}</span> },
   ];
@@ -410,8 +434,8 @@ export function AiDebugPage() {
           <Card className="mb-4 p-4">
             <form className="flex flex-col gap-3" onSubmit={(event) => void runTest(event)} data-testid="ai-debug-test">
               <h2 className="text-base font-semibold">{t("debugPages.ai.testTitle")}</h2>
-              <textarea
-                className="min-h-24 w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 md:text-sm dark:bg-input/30"
+              <Textarea
+                className="min-h-24 w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 lg:text-sm dark:bg-input/30"
                 rows={3}
                 aria-label={t("debugPages.ai.testTitle")}
                 placeholder={t("debugPages.ai.testPlaceholder")}
@@ -484,18 +508,20 @@ export function AiTrainingPage() {
         </p>
         {data && (
           <p className="text-sm text-muted-foreground" data-testid="ai-training-channels">
-            {Object.entries(data.by_channel)
-              .map(([name, count]) => `${name}: ${formatNumber(count, i18n.language)}`)
-              .join(" · ")}
+            {Object.entries(data.by_channel).map(([name, count], index) => (
+              <Fragment key={name}>
+                {index > 0 && " · "}
+                <ProviderLabel brand={channelBrand(name)} iconClassName="size-3.5">{`${enumLabel(t, "provider", name)}: ${formatNumber(count, i18n.language)}`}</ProviderLabel>
+              </Fragment>
+            ))}
           </p>
         )}
         <label className="flex min-h-11 items-center gap-3 text-sm font-medium">
-          <input
-            type="checkbox"
-            className="h-11 w-5 accent-primary md:size-5"
+          <Switch
+            className="h-11 lg:h-auto"
             checked={answeredOnly}
-            onChange={(event) => {
-              setAnsweredOnly(event.target.checked);
+            onCheckedChange={(next) => {
+              setAnsweredOnly(next);
               setOffset(0);
             }}
             data-testid="ai-training-answered"
@@ -504,7 +530,7 @@ export function AiTrainingPage() {
         </label>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <Field label={t("debugPages.training.channel")}>
-            <NativeSelect
+            <FormSelect
               value={channel}
               onChange={(event) => {
                 setChannel(event.target.value);
@@ -518,17 +544,17 @@ export function AiTrainingPage() {
                   {trainingChannelLabel[value]}
                 </option>
               ))}
-            </NativeSelect>
+            </FormSelect>
           </Field>
           <Field label={t("debugPages.training.format")}>
-            <NativeSelect value={format} onChange={(event) => setFormat(event.target.value as AiTrainingFormat)} data-testid="ai-training-format">
+            <FormSelect value={format} onChange={(event) => setFormat(event.target.value as AiTrainingFormat)} data-testid="ai-training-format">
               <option value="text">{t("debugPages.training.formatText")}</option>
               <option value="jsonl">{t("debugPages.training.formatJsonl")}</option>
               <option value="json">{t("debugPages.training.formatJson")}</option>
-            </NativeSelect>
+            </FormSelect>
           </Field>
           <Field label={t("debugPages.training.batchSize")}>
-            <NativeSelect
+            <FormSelect
               value={batchSize}
               onChange={(event) => {
                 setBatchSize(Number(event.target.value));
@@ -541,11 +567,12 @@ export function AiTrainingPage() {
                   {size}
                 </option>
               ))}
-            </NativeSelect>
+            </FormSelect>
           </Field>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Button type="button" variant="outline" className="min-h-11 md:min-h-9" disabled={offset === 0} onClick={() => setOffset((value) => Math.max(0, value - batchSize))} data-testid="ai-training-previous">
+            <ChevronLeft className="size-4" aria-hidden="true" />
             {t("debugPages.training.previous")}
           </Button>
           <span className="text-sm tabular-nums" data-testid="ai-training-batch">
@@ -553,6 +580,7 @@ export function AiTrainingPage() {
           </span>
           <Button type="button" variant="outline" className="min-h-11 md:min-h-9" disabled={offset + batchSize >= total} onClick={() => setOffset((value) => value + batchSize)} data-testid="ai-training-next">
             {t("debugPages.training.next")}
+            <ChevronRight className="size-4" aria-hidden="true" />
           </Button>
         </div>
         <Button type="button" className="min-h-11 self-start md:min-h-9" onClick={() => void download()} disabled={downloading || total === 0} data-testid="ai-training-download">

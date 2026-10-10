@@ -21,6 +21,7 @@ import {
 import { isLanguage, supportedLanguages } from "@/i18n";
 import { useQuery } from "@/lib/use-query";
 import { cn } from "@/lib/utils";
+import { Tip } from "@/components/ui/tooltip";
 
 export function roleLabelKey(role: string | undefined) {
   return role === "owner" || role === "admin" || role === "calisan" || role === "kargo_operatoru" ? (`roles.${role}` as const) : ("roles.unknown" as const);
@@ -57,24 +58,22 @@ export function ThemeToggle() {
   const dark = resolved === "dark";
   const Icon = dark ? Moon : Sun;
   return (
-    <Button
+    <Tip label={t(dark ? "header.themeLight" : "header.themeDark")}><Button
       variant="ghost"
       size="icon"
       aria-label={t("header.theme")}
       aria-pressed={dark}
-      title={t(dark ? "header.themeLight" : "header.themeDark")}
       onClick={() => setTheme(dark ? "light" : "dark")}
       data-testid="theme-toggle"
     >
       <Icon />
-    </Button>
+    </Button></Tip>
   );
 }
 
 /** Bell fed by backend summaries (unread messages, pending confirmations, missing tracking), refreshed every minute. */
-export function NotificationBell() {
-  const { t } = useTranslation();
-  const navigate = useNavigate();
+/** Attention counts (unread messages, pending confirmations, missing tracking) shared by the bell and the menu badges. */
+export function useNavCounts() {
   const { api, user } = useAuth();
   const allowed = new Set(navigationFor(user?.role).map((item) => item.key));
   const { data } = useQuery(
@@ -93,7 +92,14 @@ export function NotificationBell() {
     },
     { enabled: Boolean(user), refreshMs: 60_000 },
   );
-  const items = (data ?? []).filter((item) => item.count > 0);
+  return data ?? [];
+}
+
+export function NotificationBell() {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const data = useNavCounts();
+  const items = data.filter((item) => item.count > 0);
   const total = items.reduce((sum, item) => sum + item.count, 0);
 
   return (

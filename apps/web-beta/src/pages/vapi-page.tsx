@@ -1,4 +1,4 @@
-import { Bot, Loader2, Phone, PhoneOutgoing, Play, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { Bot, FlaskConical, History, ListOrdered, Loader2, PackageX, Phone, PhoneOutgoing, Play, Plus, RefreshCw, Trash2, type LucideIcon } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/app/auth";
@@ -14,8 +14,14 @@ import { pageCount, pageSize } from "@/lib/list-params";
 import { useQuery } from "@/lib/use-query";
 import { cn } from "@/lib/utils";
 import type { VapiCall, VapiCargoNotReceived, VapiQueueItem } from "@/lib/voice";
+import { BrandIcon } from "@/components/brand-icons";
+import { Hint } from "@/components/hint";
+import { enumLabel } from "@/lib/status";
+import { Checkbox } from "@/components/ui/checkbox";
+import { SelectAllCheckbox } from "@/components/select-all";
+import { Tip } from "@/components/ui/tooltip";
 import { VoiceLinks } from "./voice-pages";
-import { errorText, FeedbackLine, Field, idempotencyKey, NativeSelect, type Feedback } from "./accounting-shared";
+import { errorText, FeedbackLine, Field, idempotencyKey, FormSelect, type Feedback } from "./accounting-shared";
 
 type Notify = (feedback: Feedback) => void;
 
@@ -33,8 +39,13 @@ const statusStyle: Record<string, { tone: "info" | "success" | "warning" | "dang
 
 function VapiStatus({ status }: { status: string | null | undefined }) {
   const { t } = useTranslation();
-  const style = statusStyle[status ?? ""] ?? statusStyle.bekliyor!;
-  return <Badge tone={style.tone}>{t(`vapi.${style.label}` as "vapi.statusWaiting")}</Badge>;
+  const style = statusStyle[status ?? ""];
+  const label = style ? t(`vapi.${style.label}` as "vapi.statusWaiting") : status ? t("common.unknownValue", { value: status }) : t("vapi.statusWaiting");
+  return (
+    <Hint content={t("hints.vapiStatus", { status: label })}>
+      <Badge tone={style?.tone ?? "neutral"}>{label}</Badge>
+    </Hint>
+  );
 }
 
 function duration(seconds: number | null | undefined) {
@@ -43,11 +54,26 @@ function duration(seconds: number | null | undefined) {
 }
 
 function CargoTag({ provider }: { provider: string | null | undefined }) {
+  const { t } = useTranslation();
   const ptt = (provider ?? "").toLowerCase() === "ptt";
-  return <Badge tone={ptt ? "warning" : "info"}>{ptt ? "PTT" : "Sürat"}</Badge>;
+  return (
+    <Hint content={t("hints.carrier", { carrier: ptt ? "PTT Kargo" : "Sürat Kargo" })}>
+      <Badge tone={ptt ? "warning" : "info"}>
+        <BrandIcon brand={ptt ? "ptt" : "surat"} title="" className="size-3.5" />
+        {ptt ? "PTT" : "Sürat"}
+      </Badge>
+    </Hint>
+  );
 }
 
 type Tab = "cargo" | "queue" | "history" | "test";
+
+const tabIcons: Record<Tab, LucideIcon> = { cargo: PackageX, queue: ListOrdered, history: History, test: FlaskConical };
+
+function VapiTabIcon({ tab }: { tab: Tab }) {
+  const Icon = tabIcons[tab];
+  return <Icon className="size-4" aria-hidden="true" />;
+}
 const tabs: Array<{ id: Tab; label: "tabCargoNotReceived" | "tabQueue" | "tabHistory" | "tabTest" }> = [
   { id: "cargo", label: "tabCargoNotReceived" },
   { id: "queue", label: "tabQueue" },
@@ -93,10 +119,11 @@ export function VapiPage() {
             type="button"
             role="tab"
             aria-selected={tab === id}
-            className={cn("min-h-11 shrink-0 border-b-2 px-3 text-sm font-medium", tab === id ? "border-primary" : "border-transparent text-muted-foreground")}
+            className={cn("inline-flex min-h-11 shrink-0 items-center gap-2 border-b-2 px-3 text-sm font-medium", tab === id ? "border-primary" : "border-transparent text-muted-foreground")}
             onClick={() => setTab(id)}
             data-testid={`vapi-tab-${id}`}
           >
+            <VapiTabIcon tab={id} />
             {t(`vapi.${label}`)}
           </button>
         ))}
@@ -160,7 +187,7 @@ function CargoNotReceivedTab({ notify }: { notify: Notify }) {
       mobile: "title",
       cell: (row) => (
         <label className="flex min-h-11 items-center gap-3 md:min-h-0">
-          <input type="checkbox" className="h-11 w-5 shrink-0 accent-primary md:size-5" aria-label={t("vapi.selectRow", { name: row.alici_ad })} checked={selected.has(row.id)} onChange={() => toggle(row.id)} data-testid="vapi-cargo-select" />
+          <Checkbox aria-label={t("vapi.selectRow", { name: row.alici_ad })} checked={selected.has(row.id)} onCheckedChange={() => toggle(row.id)} data-testid="vapi-cargo-select" />
           <span className="min-w-0">
             <span className="block font-medium">{row.alici_ad || "—"}</span>
             <span className="block text-xs text-muted-foreground">{row.alici_telefon}</span>
@@ -199,19 +226,23 @@ function CargoNotReceivedTab({ notify }: { notify: Notify }) {
   return (
     <div>
       <div className="mb-3 flex flex-wrap items-center gap-2">
-        <NativeSelect className="sm:w-48" aria-label={t("vapi.cargoProvider")} value={provider} onChange={(event) => { setProvider(event.target.value); setPage(1); }} data-testid="vapi-cargo-provider">
+        <FormSelect className="sm:w-48" aria-label={t("vapi.cargoProvider")} value={provider} onChange={(event) => { setProvider(event.target.value); setPage(1); }} data-testid="vapi-cargo-provider">
           <option value="tumu">{t("vapi.allCargo")}</option>
           <option value="ptt">{t("vapi.pttCargo")}</option>
           <option value="surat">{t("vapi.suratCargo")}</option>
-        </NativeSelect>
+        </FormSelect>
         <Button variant="outline" className="min-h-11" onClick={list.reload} disabled={list.loading}>
           <RefreshCw className={cn("size-4", list.loading && "animate-spin")} aria-hidden="true" />
           {t("vapi.refresh")}
         </Button>
         {rows.length > 0 && (
-          <Button variant="outline" className="min-h-11" onClick={() => setSelected(selected.size === rows.length ? new Set() : new Set(rows.map((row) => row.id)))} data-testid="vapi-cargo-select-all">
-            {t("vapi.selectAll")}
-          </Button>
+          <SelectAllCheckbox
+            total={rows.length}
+            selected={rows.filter((row) => selected.has(row.id)).length}
+            onChange={(all) => setSelected(all ? new Set(rows.map((row) => row.id)) : new Set())}
+            label={t("vapi.selectAll")}
+            testId="vapi-cargo-select-all"
+          />
         )}
         {selected.size > 0 && (
           <Button className="min-h-11" onClick={() => void addToQueue()} disabled={adding} data-testid="vapi-add-queue">
@@ -334,13 +365,13 @@ function QueueTab({ notify, onChange }: { notify: Notify; onChange: () => void }
       cell: (row) => (
         <span className="flex gap-2">
           {row.durum === "bekliyor" && (
-            <Button size="icon" variant="outline" className="size-11 md:size-9" aria-label={t("vapi.callNow")} title={t("vapi.callNow")} onClick={() => void call(row)} data-testid="vapi-call-now">
+            <Tip label={t("vapi.callNow")}><Button size="icon" variant="outline" className="size-11 md:size-9" aria-label={t("vapi.callNow")} onClick={() => void call(row)} data-testid="vapi-call-now">
               <PhoneOutgoing className="size-4" aria-hidden="true" />
-            </Button>
+            </Button></Tip>
           )}
-          <Button size="icon" variant="outline" className="size-11 text-destructive md:size-9" aria-label={t("vapi.removeFromQueue")} title={t("vapi.removeFromQueue")} onClick={() => void remove(row)} data-testid="vapi-queue-delete">
+          <Tip label={t("vapi.removeFromQueue")}><Button size="icon" variant="outline" className="size-11 text-destructive md:size-9" aria-label={t("vapi.removeFromQueue")} onClick={() => void remove(row)} data-testid="vapi-queue-delete">
             <Trash2 className="size-4" aria-hidden="true" />
-          </Button>
+          </Button></Tip>
         </span>
       ),
     },
@@ -349,13 +380,13 @@ function QueueTab({ notify, onChange }: { notify: Notify; onChange: () => void }
   return (
     <div>
       <div className="mb-3 flex flex-wrap items-center gap-2">
-        <NativeSelect className="sm:w-48" aria-label={t("vapi.queueStatus")} value={status} onChange={(event) => { setStatus(event.target.value); setPage(1); }} data-testid="vapi-queue-status">
+        <FormSelect className="sm:w-48" aria-label={t("vapi.queueStatus")} value={status} onChange={(event) => { setStatus(event.target.value); setPage(1); }} data-testid="vapi-queue-status">
           <option value="tumu">{t("vapi.allStatuses")}</option>
           <option value="bekliyor">{t("vapi.statusWaiting")}</option>
           <option value="araniyor">{t("vapi.statusDialing")}</option>
           <option value="tamamlandi">{t("vapi.statusCompleted")}</option>
           <option value="basarisiz">{t("vapi.statusFailed")}</option>
-        </NativeSelect>
+        </FormSelect>
         <Button variant="outline" className="min-h-11" onClick={refresh} disabled={list.loading}>
           <RefreshCw className={cn("size-4", list.loading && "animate-spin")} aria-hidden="true" />
           {t("vapi.refresh")}
@@ -440,13 +471,13 @@ function HistoryTab() {
           aria-label={t("vapi.historySearchLabel")}
           data-testid="vapi-calls-search"
         />
-        <NativeSelect className="sm:w-48" aria-label={t("vapi.callStatus")} value={status} onChange={(event) => { setStatus(event.target.value); setPage(1); }} data-testid="vapi-calls-status">
+        <FormSelect className="sm:w-48" aria-label={t("vapi.callStatus")} value={status} onChange={(event) => { setStatus(event.target.value); setPage(1); }} data-testid="vapi-calls-status">
           <option value="tumu">{t("vapi.allStatuses")}</option>
           <option value="tamamlandi">{t("vapi.statusCompleted")}</option>
           <option value="cevaplandi">{t("vapi.statusAnswered")}</option>
           <option value="cevapsiz">{t("vapi.statusMissed")}</option>
           <option value="hata">{t("vapi.statusError")}</option>
-        </NativeSelect>
+        </FormSelect>
         <Button variant="outline" size="icon" className="size-11 md:size-9" onClick={list.reload} aria-label={t("vapi.refresh")}>
           <RefreshCw className={cn("size-4", list.loading && "animate-spin")} aria-hidden="true" />
         </Button>
@@ -568,7 +599,7 @@ function TestCallPanel({ notify }: { notify: Notify }) {
         last_event_text: "şubede bekliyor",
         idempotency_key: `vapi_test_${phone.trim().replace(/[^0-9a-zA-Z_-]+/g, "_")}`,
       });
-      setLast(`${attempt.operation} ${attempt.request_id}`);
+      setLast(`${enumLabel(t, "operation", attempt.operation)} ${attempt.request_id}`);
       notify({ tone: "success", text: t("vapi.testCallStarted") });
     } catch (error) {
       notify({ tone: "error", text: `${t("vapi.testCallFailed")} ${errorText(error)}` });

@@ -8,6 +8,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 export interface FilterOption {
   value: string;
   label: string;
+  /** Optional leading mark (e.g. a BrandIcon for channel/carrier filters); shown in the list and the trigger. */
+  icon?: ReactNode;
 }
 
 /** Search box (debounced into the URL) plus filter selects and a clear button. */
@@ -72,7 +74,14 @@ export function FilterSelect({ label, value, options, onChange, testId }: { labe
       <SelectContent>
         {options.map((option) => (
           <SelectItem key={option.value} value={option.value} data-testid={`${testId}-${option.value}`}>
-            {option.label}
+            {option.icon ? (
+              <span className="inline-flex items-center gap-2">
+                {option.icon}
+                {option.label}
+              </span>
+            ) : (
+              option.label
+            )}
           </SelectItem>
         ))}
       </SelectContent>

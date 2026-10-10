@@ -15,6 +15,8 @@ import { PageHeader } from "@/layout/page-header";
 import { ApiError } from "@/lib/api";
 import { channelLabel, formatDateTime, formatMoney } from "@/lib/format";
 import { useQuery } from "@/lib/use-query";
+import { channelBrand, ProviderLabel } from "@/components/provider-label";
+import { Textarea } from "@/components/ui/textarea";
 
 type Feedback = { tone: "success" | "error"; text: string } | null;
 const fields = ["full_name", "phone", "email", "username"] as const;
@@ -205,7 +207,7 @@ export function CustomerDetailPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
-            <textarea
+            <Textarea
               aria-label={t("customerDetail.notes")}
               className="min-h-32 w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 md:text-sm"
               placeholder={t("customerDetail.notesPlaceholder")}
@@ -300,11 +302,13 @@ export function CustomerDetailPage() {
                 {detail.conversations.map((conversation) => (
                   <li key={conversation.public_id}>
                     <Link
-                      to={`/mesajlar?q=${encodeURIComponent(customer.full_name)}`}
+                      to={`/mesajlar?konusma=${encodeURIComponent(conversation.public_id)}`}
                       className="flex min-h-11 flex-wrap items-center gap-x-3 gap-y-1 py-2 text-sm hover:bg-muted/40"
                       data-testid="customer-conversation-link"
                     >
-                      <span className="font-medium text-primary">{channelLabel(conversation.channel)}</span>
+                      <span className="font-medium text-primary">
+                        <ProviderLabel brand={channelBrand(conversation.channel)}>{channelLabel(conversation.channel)}</ProviderLabel>
+                      </span>
                       {conversation.unread_count > 0 && <Badge tone="info">{t("customerDetail.unread", { count: conversation.unread_count })}</Badge>}
                       <span className="w-full truncate text-muted-foreground">{conversation.last_message_text ?? t("common.none")}</span>
                     </Link>

@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { expectResponsiveLayout, login, mockBackend, mockUser, pathOf, viewports, type ExtraRoute } from "./helpers";
+import { expectResponsiveLayout, login, mockBackend, mockUser, pathOf, viewports, type ExtraRoute, chooseOption } from "./helpers";
 
 test.use({ serviceWorkers: "block" });
 
@@ -135,7 +135,7 @@ test("invoices: totals, KolayBi panel, detail with PDF, payment and cancel", asy
   expect((await download).suggestedFilename()).toBe("GK2026000001.pdf");
 
   await detail.getByTestId("payment-amount").fill("250");
-  await detail.getByTestId("payment-method").selectOption("bank_transfer");
+  await chooseOption(detail.getByTestId("payment-method"), "bank_transfer");
   await detail.getByTestId("payment-submit").click();
   await expect(detail.getByTestId("invoice-feedback")).toHaveText("Tahsilat kaydedildi.");
   await expect(detail.getByTestId("invoice-open-amount")).toContainText("350");
@@ -143,8 +143,8 @@ test("invoices: totals, KolayBi panel, detail with PDF, payment and cancel", asy
   expect(payment).toMatchObject({ amount: "250", method: "bank_transfer" });
   expect(payment.idempotency_key).toMatch(/^tahsilat_/);
 
-  page.once("dialog", (dialog) => void dialog.accept());
   await detail.getByTestId("invoice-cancel").click();
+  await page.getByTestId("confirm-dialog-action").click();
   await expect(detail.getByTestId("invoice-feedback")).toHaveText("Fatura iptal edildi.");
 });
 
@@ -155,14 +155,14 @@ test("invoices: create with two lines", async ({ page }) => {
   const sheet = page.getByTestId("invoice-create");
   await sheet.getByTestId("invoice-create-submit").click();
   await expect(sheet.getByTestId("invoice-create-feedback")).toHaveText("Cari hesap seçin.");
-  await sheet.getByTestId("invoice-contact").selectOption("acc_1");
+  await chooseOption(sheet.getByTestId("invoice-contact"), "acc_1");
   await sheet.getByTestId("line-description").first().fill("Viyol");
   await sheet.getByTestId("line-quantity").first().fill("2");
   await sheet.getByTestId("line-price").first().fill("100");
   await sheet.getByTestId("invoice-add-line").click();
   await sheet.getByTestId("line-description").nth(1).fill("Nem sensörü");
   await sheet.getByTestId("line-price").nth(1).fill("50,5");
-  await sheet.getByTestId("line-vat").nth(1).selectOption("10");
+  await chooseOption(sheet.getByTestId("line-vat").nth(1), "10");
   await expect(sheet.getByTestId("invoice-create-totals")).toContainText("250,50");
   await sheet.getByTestId("invoice-create-submit").click();
   await expect(page.getByTestId("invoices-feedback")).toHaveText("GK2026000003 numaralı fatura oluşturuldu.");
@@ -188,7 +188,7 @@ test("accounts: list, sync error, create and edit", async ({ page }) => {
   const sheet = page.getByTestId("account-sheet");
   await sheet.getByTestId("account-save").click();
   await expect(sheet.getByTestId("account-feedback")).toHaveText("Cari adı gerekli.");
-  await sheet.getByTestId("account-contact_type").selectOption("corporate");
+  await chooseOption(sheet.getByTestId("account-contact_type"), "corporate");
   await sheet.getByTestId("account-name").fill("Yeni Çiftlik A.Ş.");
   await sheet.getByTestId("account-tax_number").fill("9876543210");
   await sheet.getByTestId("account-city").fill("Ankara");
@@ -242,14 +242,14 @@ test("invoices: delete a KolayBi payment, resend the e-invoice and delete the in
   const detail = page.getByTestId("invoice-detail");
   await expect(detail.getByTestId("invoice-payments")).toContainText("1.200");
   await expect(detail.getByTestId("invoice-delete")).toHaveCount(0);
-  page.once("dialog", (dialog) => void dialog.accept());
   await detail.getByTestId("invoice-payment-delete").click();
+  await page.getByTestId("confirm-dialog-action").click();
   await expect(detail.getByTestId("invoice-feedback")).toHaveText("Tahsilat silindi; KolayBi silme isteği kuyruğa alındı.");
   await expect(detail.getByTestId("invoice-open-amount")).toContainText("1.200");
   await detail.getByTestId("invoice-resend").click();
   await expect(detail.getByTestId("invoice-feedback")).toHaveText("e-Fatura yeniden gönderimi kuyruğa alındı.");
-  page.once("dialog", (dialog) => void dialog.accept());
   await detail.getByTestId("invoice-delete").click();
+  await page.getByTestId("confirm-dialog-action").click();
   await expect(detail).toHaveCount(0);
   await expect(table.getByTestId("invoices-row")).toHaveCount(1);
   expect(state.requests.filter((entry) => entry.method !== "GET" && entry.path.startsWith("/api/accounting/invoices/inv_2")).map((entry) => `${entry.method} ${entry.path}`)).toEqual([

@@ -42,7 +42,7 @@ test("mobile: hamburger sheet and bottom bar navigate; header keeps search, bell
   }
 
   const bottom = page.getByTestId("bottom-nav");
-  await expect(bottom.getByRole("link")).toHaveText(["Pano", "Siparişler", "Mesajlar", "Kargolar"]);
+  await expect(bottom.getByRole("link")).toHaveText(["Mesajlar", "Siparişler", "Kargolar", "Pano"]);
   await bottom.getByRole("link", { name: "Kargolar" }).click();
   await expect.poll(() => pathOf(page)).toBe("/kargolar");
   await expect(bottom.getByRole("link", { name: "Kargolar" })).toHaveAttribute("aria-current", "page");
@@ -50,7 +50,12 @@ test("mobile: hamburger sheet and bottom bar navigate; header keeps search, bell
   await page.getByTestId("mobile-menu-trigger").click();
   const sheet = page.getByTestId("mobile-menu");
   await expect(sheet).toBeVisible();
-  await expect(sheet.getByTestId("mobile-menu-main").getByRole("link")).toHaveText(["Pano", "Siparişler", "Mesajlar", "Müşteriler", "Kargolar"]);
+  await expect(sheet.getByTestId("mobile-menu-main").getByRole("link")).toHaveText([/^Mesajlar/, /^Siparişler/, /^Kargolar/, "Müşteriler", "Pano"]);
+  // Attention counts from the summaries: unread messages, pending confirmations, missing tracking.
+  await expect(sheet.getByTestId("mobile-menu-badge-messages")).toHaveText("5");
+  await expect(sheet.getByTestId("mobile-menu-badge-orders")).toHaveText("7");
+  await expect(sheet.getByTestId("mobile-menu-badge-shipments")).toHaveText("6");
+  await expect(sheet.getByTestId("mobile-menu-badge-messages")).toHaveAttribute("aria-label", /5/);
   await expect(sheet.getByTestId("mobile-menu-operations").getByRole("link")).toHaveText(["Kargo Pipeline", "İptaller", "Stoklar", "Yorumlar", "SMS"]);
   await expect(sheet.getByTestId("mobile-menu-accounting").getByRole("link")).toHaveText(["Bakiyeler"]);
   await expect(sheet.getByTestId("mobile-menu-instagram").getByRole("link")).toHaveText(["Instagram Analitik", "Instagram Yayın"]);

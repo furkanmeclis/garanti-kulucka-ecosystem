@@ -1,4 +1,4 @@
-import { Ban, FileDown, Loader2, Plus, Send, Trash2, Wallet } from "lucide-react";
+import { Ban, FileDown, Loader2, Plus, Save, Send, Trash2, Wallet } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/app/auth";
@@ -13,7 +13,10 @@ import type { Invoice, InvoiceDetail, InvoiceStatus, PaymentMethod } from "@/lib
 import { formatDate, formatMoney } from "@/lib/format";
 import { pageCount, pageSize, useListParams } from "@/lib/list-params";
 import { useQuery } from "@/lib/use-query";
-import { errorText, FeedbackLine, Field, idempotencyKey, InvoiceStatusBadge, KolaybiPanel, NativeSelect, SyncBadge, type Feedback } from "./accounting-shared";
+import { DatePicker } from "@/components/ui/date-picker";
+import { useConfirm } from "@/components/confirm-dialog";
+import { Tip } from "@/components/ui/tooltip";
+import { errorText, FeedbackLine, Field, idempotencyKey, InvoiceStatusBadge, KolaybiPanel, FormSelect, SyncBadge, type Feedback } from "./accounting-shared";
 
 const statusFilters = ["open", "issued", "partially_paid", "paid", "cancelled"] as const;
 const statusFilterLabel = { open: "statusOpen", issued: "statusIssued", partially_paid: "statusPartiallyPaid", paid: "statusPaid", cancelled: "statusCancelled" } as const;
@@ -141,6 +144,7 @@ export function InvoicesPage() {
 }
 
 function InvoiceDetailSheet({ publicId, onClose, onChanged }: { publicId: string | null; onClose: () => void; onChanged: () => void }) {
+  const confirm = useConfirm();
   const { t, i18n } = useTranslation();
   const { api } = useAuth();
   const [detail, setDetail] = useState<InvoiceDetail | null>(null);
@@ -206,7 +210,7 @@ function InvoiceDetailSheet({ publicId, onClose, onChanged }: { publicId: string
   }
 
   async function cancel() {
-    if (!detail || !window.confirm(t("accounting.cancelConfirm", { number: detail.invoice_number }))) return;
+    if (!detail || !(await confirm(t("accounting.cancelConfirm", { number: detail.invoice_number }), { tone: "danger" }))) return;
     setBusy("cancel");
     setFeedback(null);
     try {
@@ -221,7 +225,7 @@ function InvoiceDetailSheet({ publicId, onClose, onChanged }: { publicId: string
   }
 
   async function removePayment(paymentPublicId: string, amount: string) {
-    if (!detail || !window.confirm(t("accounting.deletePaymentConfirm", { amount: money(amount) }))) return;
+    if (!detail || !(await confirm(t("accounting.deletePaymentConfirm", { amount: money(amount) }), { tone: "danger" }))) return;
     setBusy(`payment:${paymentPublicId}`);
     setFeedback(null);
     try {
@@ -252,7 +256,7 @@ function InvoiceDetailSheet({ publicId, onClose, onChanged }: { publicId: string
   }
 
   async function removeInvoice() {
-    if (!detail || !window.confirm(t("accounting.deleteInvoiceConfirm", { number: detail.invoice_number }))) return;
+    if (!detail || !(await confirm(t("accounting.deleteInvoiceConfirm", { number: detail.invoice_number }), { tone: "danger" }))) return;
     setBusy("delete");
     setFeedback(null);
     try {
@@ -346,18 +350,17 @@ function InvoiceDetailSheet({ publicId, onClose, onChanged }: { publicId: string
                         <span className="flex items-center gap-2">
                           {money(payment.amount)}
                           <SyncBadge sync={payment.sync} />
-                          <Button
+                          <Tip label={t("accounting.deletePayment")}><span className="inline-flex"><Button
                             variant="ghost"
                             size="icon"
                             className="size-11 text-destructive md:size-8"
                             aria-label={t("accounting.deletePayment")}
-                            title={t("accounting.deletePayment")}
                             disabled={busy !== null}
                             onClick={() => void removePayment(payment.public_id, payment.amount)}
                             data-testid="invoice-payment-delete"
                           >
                             <Trash2 className="size-4" aria-hidden="true" />
-                          </Button>
+                          </Button></span></Tip>
                         </span>
                       </li>
                     ))}
@@ -370,13 +373,13 @@ function InvoiceDetailSheet({ publicId, onClose, onChanged }: { publicId: string
                     <Input inputMode="decimal" value={amount} onChange={(event) => setAmount(event.target.value)} className="h-11 md:h-9" data-testid="payment-amount" />
                   </Field>
                   <Field label={t("accounting.paymentMethod")}>
-                    <NativeSelect value={method} onChange={(event) => setMethod(event.target.value as PaymentMethod)} data-testid="payment-method">
+                    <FormSelect value={method} onChange={(event) => setMethod(event.target.value as PaymentMethod)} data-testid="payment-method">
                       {methods.map(([value, label]) => (
                         <option key={value} value={value}>
                           {t(`accounting.${label}`)}
                         </option>
                       ))}
-                    </NativeSelect>
+                    </FormSelect>
                   </Field>
                   <Field label={t("accounting.vaultId")} className="sm:col-span-2">
                     <Input value={vaultId} onChange={(event) => setVaultId(event.target.value)} className="h-11 md:h-9" placeholder={t("accounting.vaultHint")} />
@@ -465,18 +468,18 @@ function CreateInvoiceSheet({ open, onClose, onCreated }: { open: boolean; onClo
         </SheetHeader>
         <form className="flex flex-col gap-4 px-4 pb-4" onSubmit={(event) => void submit(event)}>
           <Field label={t("accounting.account")}>
-            <NativeSelect value={contactId} onChange={(event) => setContactId(event.target.value)} data-testid="invoice-contact">
+            <FormSelect value={contactId} onChange={(event) => setContactId(event.target.value)} data-testid="invoice-contact">
               <option value="">{t("accounting.chooseAccount")}</option>
               {(contacts.data?.data ?? []).map((contact) => (
                 <option key={contact.public_id} value={contact.public_id}>
                   {contact.name}
                 </option>
               ))}
-            </NativeSelect>
+            </FormSelect>
           </Field>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label={t("accounting.issueDate")}>
-              <Input type="date" value={issueDate} onChange={(event) => setIssueDate(event.target.value)} className="h-11 md:h-9" />
+              <DatePicker value={issueDate} clearable={false} label={t("accounting.issueDate")} onChange={(value) => value && setIssueDate(value)} testId="invoice-issue-date" />
             </Field>
             <Field label={t("accounting.description")}>
               <Input value={description} onChange={(event) => setDescription(event.target.value)} className="h-11 md:h-9" />
@@ -496,13 +499,13 @@ function CreateInvoiceSheet({ open, onClose, onCreated }: { open: boolean; onClo
                   <Input inputMode="decimal" value={line.unit_price} onChange={(event) => update(line.id, { unit_price: event.target.value })} className="h-11 md:h-9" data-testid="line-price" />
                 </Field>
                 <Field label={t("accounting.vatRate")}>
-                  <NativeSelect value={line.vat_rate} onChange={(event) => update(line.id, { vat_rate: event.target.value })} data-testid="line-vat">
+                  <FormSelect value={line.vat_rate} onChange={(event) => update(line.id, { vat_rate: event.target.value })} data-testid="line-vat">
                     {["0", "1", "10", "20"].map((rate) => (
                       <option key={rate} value={rate}>
                         %{rate}
                       </option>
                     ))}
-                  </NativeSelect>
+                  </FormSelect>
                 </Field>
                 <div className="flex items-end">
                   <Button
@@ -534,6 +537,7 @@ function CreateInvoiceSheet({ open, onClose, onCreated }: { open: boolean; onClo
           </dl>
           <FeedbackLine feedback={feedback} testId="invoice-create-feedback" />
           <Button type="submit" className="min-h-11" disabled={saving} data-testid="invoice-create-submit">
+            {saving ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Save className="size-4" aria-hidden="true" />}
             {saving ? t("accounting.saving") : t("accounting.save")}
           </Button>
         </form>

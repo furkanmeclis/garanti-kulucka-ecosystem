@@ -17,7 +17,7 @@ import { BalancesPage } from "@/pages/balances-page";
 import { InstagramAnalyticsPage, InstagramPublishPage } from "@/pages/instagram-pages";
 import { InventoryPage } from "@/pages/inventory-page";
 import { InvoicesPage } from "@/pages/invoices-page";
-import { MessagesPage } from "@/pages/messages-page";
+import { MessagesPage } from "@/pages/messages/messages-page";
 import { OrdersPage } from "@/pages/orders-page";
 import { ReportsPage } from "@/pages/reports-page";
 import { SettingsPage } from "@/pages/settings-page";

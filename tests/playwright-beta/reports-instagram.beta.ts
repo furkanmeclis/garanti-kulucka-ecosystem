@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { expectResponsiveLayout, login, mockBackend, mockUser, pathOf, viewports, type ExtraRoute } from "./helpers";
+import { expectResponsiveLayout, login, mockBackend, mockUser, pathOf, viewports, type ExtraRoute, chooseOption } from "./helpers";
 
 test.use({ serviceWorkers: "block" });
 
@@ -71,29 +71,33 @@ async function signIn(page: Page, role: string, viewport: { width: number; heigh
   return state;
 }
 
-test("reports: KPIs, presets, filters and breakdowns", async ({ page }) => {
+test("reports: legacy KPIs, presets, filters and breakdowns", async ({ page }) => {
   const state = await signIn(page, "admin");
   await page.getByTestId("nav-group-trigger-accounting").click();
   await page.getByTestId("nav-item-reports").click();
   await expect.poll(() => pathOf(page)).toBe("/raporlar");
-  await expect(page.getByTestId("reports-kpi-total")).toContainText("120");
-  await expect(page.getByTestId("reports-kpi-revenue")).toContainText("245.000");
-  await expect(page.getByTestId("reports-kpi-confirmation")).toContainText("%83.3");
-  await expect(page.getByTestId("reports-status")).toContainText("Teslim Edildi");
-  await expect(page.getByTestId("reports-status")).not.toContainText("Oluşturuldu");
-  await expect(page.getByTestId("reports-personnel-performance")).toContainText("Ayşe Yılmaz");
-  await expect(page.getByTestId("reports-rates")).toContainText("%66.7");
+  await expect(page.getByTestId("reports-legacy-total-value")).toHaveText("120");
+  await expect(page.getByTestId("reports-legacy-revenue-value")).toContainText("245.000");
+  await expect(page.getByTestId("reports-legacy-confirmation-value")).toHaveText("%83,3");
+  await expect(page.getByTestId("reports-rates")).toContainText("%66,7");
+  await page.getByTestId("reports-status-view-table").click();
+  await expect(page.getByTestId("reports-status-table")).toContainText("Teslim edildi");
+  await page.getByTestId("reports-personnel-performance-view-table").click();
+  await expect(page.getByTestId("reports-personnel-table")).toContainText("Ayşe Yılmaz");
 
-  await page.getByTestId("reports-preset-7").click();
-  await page.getByTestId("reports-provider").selectOption("ptt");
-  await page.getByTestId("reports-personnel").selectOption("usr_1");
-  await expect(page.getByTestId("reports-kpi-total")).toContainText("60");
-  // The provider change alone already yields 60, so wait for the request that carries both filters.
-  const filtered = () => state.requests.filter((entry) => entry.path === "/api/reports/analysis").map((entry) => new URLSearchParams(entry.search)).find((query) => query.get("cargo_provider") === "ptt" && query.get("personnel_public_id") === "usr_1");
+  await page.getByTestId("reports-preset-last7").click();
+  await chooseOption(page.getByTestId("reports-provider"), "ptt");
+  await chooseOption(page.getByTestId("reports-personnel"), "usr_1");
+  await expect(page.getByTestId("reports-legacy-total-value")).toHaveText("60");
+  const filtered = () =>
+    state.requests
+      .filter((entry) => entry.path === "/api/reports/breakdowns")
+      .map((entry) => new URLSearchParams(entry.search))
+      .find((query) => query.get("cargo_provider") === "ptt" && query.get("personnel_public_id") === "usr_1");
   await expect.poll(() => Boolean(filtered())).toBe(true);
   const params = filtered()!;
-  const span = (Date.parse(params.get("end_date")!) - Date.parse(params.get("start_date")!)) / 86_400_000;
-  expect(span).toBe(6);
+  expect((Date.parse(params.get("to")!) - Date.parse(params.get("from")!)) / 86_400_000).toBe(6);
+  expect(new URL(page.url()).searchParams.get("range")).toBe("last7");
 });
 
 test("instagram analytics: day range, live refresh and sync line", async ({ page }) => {
@@ -102,7 +106,7 @@ test("instagram analytics: day range, live refresh and sync line", async ({ page
   await expect(page.getByTestId("instagram-card-followers")).toHaveText("15.230");
   await expect(page.getByTestId("instagram-card-reach")).toHaveText("300");
   await expect(page.getByTestId("instagram-sync")).toContainText("Canlı senkron yok");
-  await page.getByTestId("instagram-days").selectOption("14");
+  await chooseOption(page.getByTestId("instagram-days"), "14");
   await expect(page.getByTestId("instagram-card-reach")).toHaveText("580");
   await page.getByTestId("instagram-refresh").click();
   await expect(page.getByTestId("instagram-feedback")).toHaveText("Instagram istatistikleri için yenileme kuyruğa alındı.");

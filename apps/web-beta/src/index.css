@@ -2,7 +2,7 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* shadcn/ui "new-york" tokens with a green primary (brand #15803d). */
+/* shadcn/ui "new-york" tokens with the logo orange primary (brand #F47B06; light uses a deeper #C2570C for 4.5:1 white text). */
 :root {
   --radius: 0.625rem;
   --background: oklch(0.985 0.002 247);
@@ -11,21 +11,55 @@
   --card-foreground: oklch(0.18 0.02 260);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.18 0.02 260);
-  --primary: oklch(0.527 0.137 150.07);
+  --primary: oklch(0.58 0.165 45);
   --primary-foreground: oklch(0.985 0 0);
   --secondary: oklch(0.96 0.005 250);
   --secondary-foreground: oklch(0.22 0.02 260);
   --muted: oklch(0.96 0.005 250);
   --muted-foreground: oklch(0.5 0.02 257);
-  --accent: oklch(0.95 0.02 150);
-  --accent-foreground: oklch(0.3 0.08 150);
+  --accent: oklch(0.96 0.03 65);
+  --accent-foreground: oklch(0.4 0.11 45);
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(0.985 0 0);
   --border: oklch(0.91 0.006 250);
   --input: oklch(0.91 0.006 250);
-  --ring: oklch(0.527 0.137 150.07);
+  --ring: oklch(0.58 0.165 45);
   --success: oklch(0.6 0.15 150);
   --warning: oklch(0.75 0.15 75);
+
+  /* Mesajlar (legacy MesajlarPage) tokens: dark mirrors the legacy slate palette 1:1, light is its harmonious counterpart. */
+  --msg-base: #f8fafc;
+  --msg-raised: #ffffff;
+  --msg-field: #f1f5f9;
+  --msg-field-focus: #ffffff;
+  --msg-hover: #f1f5f9;
+  --msg-hover-raised: #e2e8f0;
+  --msg-border: #e2e8f0;
+  --msg-border-strong: #cbd5e1;
+  --msg-fg-max: #0f172a;
+  --msg-fg-strong: #0f172a;
+  --msg-fg: #1e293b;
+  --msg-fg-soft: #334155;
+  --msg-muted: #475569;
+  --msg-subtle: #64748b;
+  --msg-faint: #94a3b8;
+  --msg-toggle-off: #cbd5e1;
+  --msg-chip: #e2e8f0;
+  --msg-out-bg: #ede9fe;
+  --msg-out-fg: #2e1065;
+  --msg-out-meta: rgb(46 16 101 / 0.55);
+  --msg-in-bg: #ffffff;
+  --msg-in-border: #e2e8f0;
+  --msg-in-fg: #1e293b;
+  --msg-ai-bg: #faf5ff;
+  --msg-ai-border: #e9d5ff;
+  --msg-ai-fg: #581c87;
+  --msg-ai-meta: #9333ea;
+  --msg-primary: #c2570c;
+  --msg-primary-text: #c2570c;
+  --msg-on-primary: #ffffff;
+  --msg-scrollbar: #cbd5e1;
+  --msg-scrollbar-hover: #94a3b8;
 }
 
 .dark {
@@ -35,21 +69,54 @@
   --card-foreground: oklch(0.96 0.005 250);
   --popover: oklch(0.205 0.022 262);
   --popover-foreground: oklch(0.96 0.005 250);
-  --primary: oklch(0.72 0.17 150);
-  --primary-foreground: oklch(0.17 0.03 150);
+  --primary: oklch(0.71 0.185 52);
+  --primary-foreground: oklch(0.2 0.04 50);
   --secondary: oklch(0.27 0.02 262);
   --secondary-foreground: oklch(0.96 0.005 250);
   --muted: oklch(0.27 0.02 262);
   --muted-foreground: oklch(0.72 0.02 257);
-  --accent: oklch(0.3 0.05 150);
-  --accent-foreground: oklch(0.92 0.05 150);
+  --accent: oklch(0.3 0.06 50);
+  --accent-foreground: oklch(0.93 0.06 65);
   --destructive: oklch(0.65 0.2 25);
   --destructive-foreground: oklch(0.985 0 0);
   --border: oklch(1 0 0 / 12%);
   --input: oklch(1 0 0 / 16%);
-  --ring: oklch(0.72 0.17 150);
+  --ring: oklch(0.71 0.185 52);
   --success: oklch(0.72 0.17 150);
   --warning: oklch(0.8 0.14 80);
+
+  --msg-base: #0f172a;
+  --msg-raised: #1e293b;
+  --msg-field: #334155;
+  --msg-field-focus: #475569;
+  --msg-hover: #1e293b;
+  --msg-hover-raised: #334155;
+  --msg-border: #334155;
+  --msg-border-strong: #475569;
+  --msg-fg-max: #ffffff;
+  --msg-fg-strong: #f1f5f9;
+  --msg-fg: #e2e8f0;
+  --msg-fg-soft: #cbd5e1;
+  --msg-muted: #94a3b8;
+  --msg-subtle: #64748b;
+  --msg-faint: #475569;
+  --msg-toggle-off: #475569;
+  --msg-chip: #334155;
+  --msg-out-bg: #3b1f6b;
+  --msg-out-fg: #f1f5f9;
+  --msg-out-meta: rgb(255 255 255 / 0.5);
+  --msg-in-bg: rgb(30 41 59 / 0.6);
+  --msg-in-border: rgb(51 65 85 / 0.4);
+  --msg-in-fg: #e2e8f0;
+  --msg-ai-bg: rgb(59 7 100 / 0.6);
+  --msg-ai-border: rgb(107 33 168 / 0.4);
+  --msg-ai-fg: #e9d5ff;
+  --msg-ai-meta: rgb(192 132 252 / 0.7);
+  --msg-primary: #f47b06;
+  --msg-primary-text: #f47b06;
+  --msg-on-primary: #1f1300;
+  --msg-scrollbar: #475569;
+  --msg-scrollbar-hover: #64748b;
 }
 
 @theme inline {
@@ -74,6 +141,36 @@
   --color-ring: var(--ring);
   --color-success: var(--success);
   --color-warning: var(--warning);
+  --color-msg-base: var(--msg-base);
+  --color-msg-raised: var(--msg-raised);
+  --color-msg-field: var(--msg-field);
+  --color-msg-field-focus: var(--msg-field-focus);
+  --color-msg-hover: var(--msg-hover);
+  --color-msg-hover-raised: var(--msg-hover-raised);
+  --color-msg-border: var(--msg-border);
+  --color-msg-border-strong: var(--msg-border-strong);
+  --color-msg-fg-max: var(--msg-fg-max);
+  --color-msg-fg-strong: var(--msg-fg-strong);
+  --color-msg-fg: var(--msg-fg);
+  --color-msg-fg-soft: var(--msg-fg-soft);
+  --color-msg-muted: var(--msg-muted);
+  --color-msg-subtle: var(--msg-subtle);
+  --color-msg-faint: var(--msg-faint);
+  --color-msg-toggle-off: var(--msg-toggle-off);
+  --color-msg-chip: var(--msg-chip);
+  --color-msg-out-bg: var(--msg-out-bg);
+  --color-msg-out-fg: var(--msg-out-fg);
+  --color-msg-out-meta: var(--msg-out-meta);
+  --color-msg-in-bg: var(--msg-in-bg);
+  --color-msg-in-border: var(--msg-in-border);
+  --color-msg-in-fg: var(--msg-in-fg);
+  --color-msg-ai-bg: var(--msg-ai-bg);
+  --color-msg-ai-border: var(--msg-ai-border);
+  --color-msg-ai-fg: var(--msg-ai-fg);
+  --color-msg-ai-meta: var(--msg-ai-meta);
+  --color-msg-primary: var(--msg-primary);
+  --color-msg-primary-text: var(--msg-primary-text);
+  --color-msg-on-primary: var(--msg-on-primary);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -95,6 +192,34 @@
   body {
     @apply bg-background text-foreground antialiased;
     min-height: 100dvh;
+  }
+}
+
+/* Legacy `scrollbar-thin` / `scrollbar-hide` for the Mesajlar panes. */
+@utility msg-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--msg-scrollbar) transparent;
+  &::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  &::-webkit-scrollbar-thumb {
+    background-color: var(--msg-scrollbar);
+    border-radius: 3px;
+  }
+  &::-webkit-scrollbar-thumb:hover {
+    background-color: var(--msg-scrollbar-hover);
+  }
+}
+
+@utility msg-scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  &::-webkit-scrollbar {
+    display: none;
   }
 }
 

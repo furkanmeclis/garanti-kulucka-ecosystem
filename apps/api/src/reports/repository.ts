@@ -259,11 +259,11 @@ export function buildReportAnalysis(filters: ReportFilters, aggregates: ReportAg
   };
 }
 
-function statusInList(key: LegacyOrderStatusKey) {
+export function statusInList(key: LegacyOrderStatusKey) {
   return sql.join(legacyOrderStatusSynonyms[key].map((status) => sql.lit(status)));
 }
 
-function patternArray(patterns: readonly string[]) {
+export function patternArray(patterns: readonly string[]) {
   return sql`ARRAY[${sql.join(patterns.map((pattern) => sql.lit(pattern)))}]::text[]`;
 }
 
@@ -309,7 +309,8 @@ export class ReportRepository {
         ORDER BY s.created_at DESC
         LIMIT 1
       ) last_event ON true
-      WHERE o.created_at >= ${startBound}
+      WHERE o.deleted_at IS NULL
+        AND o.created_at >= ${startBound}
         AND o.created_at < ${endBound}
         ${personnel}
         ${cargo}

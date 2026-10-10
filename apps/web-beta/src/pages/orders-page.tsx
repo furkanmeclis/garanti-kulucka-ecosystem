@@ -1,5 +1,5 @@
 import type { OrderSummary } from "@garanti-kulucka/shared";
-import { Download, Loader2, MessageSquare, Phone, Plus, Truck, X } from "lucide-react";
+import { Download, FileSpreadsheet, Filter, ListChecks, Loader2, MessageSquare, PenLine, Phone, Plus, Sparkles, Store, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/app/auth";
@@ -10,7 +10,10 @@ import {
   StatusBadge,
   type Column,
 } from "@/components/data-list";
+import { BrandIcon } from "@/components/brand-icons";
+import { Hint } from "@/components/hint";
 import { FilterSelect, ListToolbar } from "@/components/list-toolbar";
+import { carrierBrand, ProviderLabel } from "@/components/provider-label";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -36,7 +39,14 @@ import {
   type CargoProviderKey,
   type OrderRow,
 } from "@/lib/orders";
+import { enumLabel, statusLabel } from "@/lib/status";
 import { useQuery } from "@/lib/use-query";
+import { Checkbox } from "@/components/ui/checkbox";
+import { SelectAllCheckbox } from "@/components/select-all";
+import { DatePicker, DateRangePicker } from "@/components/ui/date-picker";
+import { useConfirm } from "@/components/confirm-dialog";
+import { Tip } from "@/components/ui/tooltip";
+import { Textarea } from "@/components/ui/textarea";
 import {
   errorText,
   FeedbackLine,
@@ -56,6 +66,7 @@ const orderStatuses = [
   "returned",
 ] as const;
 const sources = ["manual", "conversation", "ai", "woocommerce"] as const;
+const sourceIcons = { manual: PenLine, conversation: MessageSquare, ai: Sparkles, woocommerce: Store } as const;
 const sorts: Record<
   string,
   Pick<OrderListQuery, "sort_by" | "sort_direction">
@@ -71,6 +82,7 @@ function downloadExcel(
   format: "liste" | "telefon",
   labels: {
     status: (value: string) => string;
+    source: (value: string) => string;
     date: (value: string) => string;
   },
 ) {
@@ -99,7 +111,7 @@ function downloadExcel(
           order.customer_full_name ?? "",
           order.customer_phone ?? "",
           labels.status(order.status),
-          order.source,
+          labels.source(order.source),
           carrierLabel(order.cargo_provider ?? null, "-"),
           order.created_by_user_email ?? "",
           `${order.total_amount} ${order.currency}`,
@@ -143,53 +155,82 @@ function OrderRowBadges({ row }: { row: OrderRow }) {
   );
   if (!confirmation && callCount === 0 && !hasKolaybi && !row.shipment)
     return <span className="text-muted-foreground">-</span>;
+  const shipmentBrand = row.shipment ? carrierBrand(row.shipment.provider) : null;
   return (
     <span className="flex flex-wrap items-center gap-1">
       {(confirmation || callCount > 0) && (
-        <Badge
-          tone={confirmation?.tone ?? "neutral"}
-          data-testid={`order-badge-confirmation-${row.public_id}`}
+        <Hint
+          content={[
+            row.confirmation_status ? t("hints.confirmationStatus", { status: enumLabel(t, "confirmationStatus", row.confirmation_status) }) : null,
+            t("hints.confirmationCalls", { count: callCount }),
+            row.confirmation_call_status ? t("hints.callStatus", { status: enumLabel(t, "callStatus", row.confirmation_call_status) }) : null,
+            row.confirmation_pressed_key ? t("hints.pressedKey", { key: row.confirmation_pressed_key }) : null,
+          ]}
         >
-          {confirmation ? t(`orders.${confirmation.key}`) : null}
-          {callCount > 0 ? `${confirmation ? " " : ""}(${callCount})` : null}
-        </Badge>
+          <Badge
+            tone={confirmation?.tone ?? "neutral"}
+            data-testid={`order-badge-confirmation-${row.public_id}`}
+          >
+            <Phone className="size-3.5" aria-hidden="true" />
+            {confirmation ? t(`orders.${confirmation.key}`) : null}
+            {callCount > 0 ? `${confirmation ? " " : ""}(${callCount})` : null}
+          </Badge>
+        </Hint>
       )}
       {hasKolaybi && (
-        <Badge
-          tone={
-            kbCancelled
-              ? "danger"
-              : row.kolaybi_invoice_id
-                ? "success"
-                : "neutral"
-          }
-          data-testid={`order-badge-kolaybi-${row.public_id}`}
+        <Hint
+          content={[
+            row.kolaybi_status ? t("hints.kolaybiTransfer", { status: enumLabel(t, "kolaybiStatus", row.kolaybi_status) }) : null,
+            row.kolaybi_invoice_id ? t("hints.kolaybiInvoice", { id: row.kolaybi_invoice_id }) : t("hints.kolaybiNoInvoice"),
+            row.e_document_status ? t("hints.eDocument", { status: enumLabel(t, "eDocumentStatus", row.e_document_status) }) : null,
+          ]}
         >
-          {kbCancelled
-            ? t("orders.badgeKbCancelled")
-            : row.kolaybi_invoice_id
-              ? t("orders.badgeKbTransferred")
-              : row.kolaybi_status}
-          {row.e_document_status
-            ? ` · ${t("orders.badgeEDocument", { status: row.e_document_status })}`
-            : null}
-        </Badge>
+          <Badge
+            tone={
+              kbCancelled
+                ? "danger"
+                : row.kolaybi_invoice_id
+                  ? "success"
+                  : "neutral"
+            }
+            data-testid={`order-badge-kolaybi-${row.public_id}`}
+          >
+            <BrandIcon brand="kolaybi" title="" className="size-3.5" />
+            {kbCancelled
+              ? t("orders.badgeKbCancelled")
+              : row.kolaybi_invoice_id
+                ? t("orders.badgeKbTransferred")
+                : enumLabel(t, "kolaybiStatus", row.kolaybi_status)}
+            {row.e_document_status
+              ? ` · ${t("orders.badgeEDocument", { status: enumLabel(t, "eDocumentStatus", row.e_document_status) })}`
+              : null}
+          </Badge>
+        </Hint>
       )}
       {row.shipment && (
-        <Badge
-          tone="info"
-          data-testid={`order-badge-shipment-${row.public_id}`}
+        <Hint
+          content={[
+            t("hints.carrier", { carrier: carrierLabel(row.shipment.provider, t("shipments.otherProvider")) || t("common.none") }),
+            t("hints.shipmentStatus", { status: statusLabel(t, row.shipment.status) }),
+            row.shipment.tracking_number ? t("hints.trackingNumber", { number: row.shipment.tracking_number }) : t("hints.noTracking"),
+          ]}
         >
-          {[
-            carrierLabel(row.shipment.provider, t("shipments.otherProvider")),
-            row.shipment.status,
-          ]
-            .filter(Boolean)
-            .join(" · ")}
-          {row.shipment.tracking_number
-            ? ` · ${row.shipment.tracking_number}`
-            : null}
-        </Badge>
+          <Badge
+            tone="info"
+            data-testid={`order-badge-shipment-${row.public_id}`}
+          >
+            {shipmentBrand && <BrandIcon brand={shipmentBrand} title="" className="size-3.5" />}
+            {[
+              carrierLabel(row.shipment.provider, t("shipments.otherProvider")),
+              row.shipment.status ? statusLabel(t, row.shipment.status) : null,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+            {row.shipment.tracking_number
+              ? ` · ${row.shipment.tracking_number}`
+              : null}
+          </Badge>
+        </Hint>
       )}
     </span>
   );
@@ -267,8 +308,8 @@ function QuickMessageSheet({
             {order?.customer_full_name ?? "-"} · {order?.customer_phone ?? "-"}
           </SheetDescription>
         </SheetHeader>
-        <textarea
-          className="min-h-24 w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 md:text-sm dark:bg-input/30"
+        <Textarea
+          className="min-h-24 w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 lg:text-sm dark:bg-input/30"
           rows={3}
           aria-label={t("orders.quickMessage")}
           placeholder={t("orders.quickMessagePlaceholder")}
@@ -303,6 +344,7 @@ function QuickMessageSheet({
 }
 
 export function OrdersPage() {
+  const confirm = useConfirm();
   const { t, i18n } = useTranslation();
   const { api } = useAuth();
   const list = useListParams([
@@ -349,7 +391,8 @@ export function OrdersPage() {
     rows.length > 0 && rows.every((row) => selected.has(row.public_id));
   const selectedRows = rows.filter((row) => selected.has(row.public_id));
   const labels = {
-    status: (value: string) => t(`status.${value}`, { defaultValue: value }),
+    status: (value: string) => statusLabel(t, value),
+    source: (value: string) => ((sources as readonly string[]).includes(value) ? t(`orders.source_${value as (typeof sources)[number]}`) : t("common.unknownValue", { value })),
     date: (value: string) => formatDateTime(value, i18n.language),
   };
 
@@ -380,7 +423,7 @@ export function OrdersPage() {
               count: ids.length,
               provider: kind === "ptt" ? "PTT Kargo" : "Sürat Kargo",
             });
-    if (!window.confirm(prompt)) return;
+    if (!(await confirm(prompt))) return;
     setBulkBusy(kind);
     setFeedback(null);
     try {
@@ -435,12 +478,10 @@ export function OrdersPage() {
       mobile: "hidden",
       className: "w-10",
       cell: (row) => (
-        <input
-          type="checkbox"
-          className="size-5 accent-primary"
+        <Checkbox
           aria-label={t("orders.selectRow", { order: row.order_number })}
           checked={selected.has(row.public_id)}
-          onChange={() => toggle(row.public_id)}
+          onCheckedChange={() => toggle(row.public_id)}
           data-testid="order-select"
         />
       ),
@@ -451,12 +492,11 @@ export function OrdersPage() {
       mobile: "title",
       cell: (row) => (
         <span className="flex items-center gap-3">
-          <input
-            type="checkbox"
-            className="h-11 w-5 shrink-0 accent-primary md:hidden"
+          <Checkbox
+            className="md:hidden"
             aria-label={t("orders.selectRow", { order: row.order_number })}
             checked={selected.has(row.public_id)}
-            onChange={() => toggle(row.public_id)}
+            onCheckedChange={() => toggle(row.public_id)}
             data-testid="order-select-mobile"
           />
           <button
@@ -490,8 +530,13 @@ export function OrdersPage() {
       key: "cargo",
       header: t("orders.cargo"),
       cell: (row) =>
-        carrierLabel(row.cargo_provider, t("shipments.otherProvider")) ||
-        t("common.none"),
+        carrierLabel(row.cargo_provider, t("shipments.otherProvider")) ? (
+          <ProviderLabel brand={carrierBrand(row.cargo_provider)}>
+            {carrierLabel(row.cargo_provider, t("shipments.otherProvider"))}
+          </ProviderLabel>
+        ) : (
+          t("common.none")
+        ),
     },
     {
       key: "amount",
@@ -509,18 +554,17 @@ export function OrdersPage() {
       header: "",
       className: "w-12 text-right",
       cell: (row) => (
-        <Button
+        <Tip label={t("orders.quickMessage")}><span className="inline-flex"><Button
           variant="ghost"
           className="relative min-h-11 md:min-h-9"
           disabled={!(row.conversation_public_id || row.customer_phone)}
-          title={t("orders.quickMessage")}
           aria-label={t("orders.quickMessage")}
           onClick={() => setQuickMessage(row.public_id)}
           data-testid={`order-quick-message-${row.public_id}`}
         >
           <MessageSquare className="size-4" aria-hidden="true" />
           <span className="md:sr-only">{t("orders.quickMessage")}</span>
-        </Button>
+        </Button></span></Tip>
       ),
     },
   ];
@@ -549,6 +593,7 @@ export function OrdersPage() {
                   onSelect={() => void exportOrders("visible")}
                   data-testid="orders-export-visible"
                 >
+                  <FileSpreadsheet className="size-4" aria-hidden="true" />
                   {t("orders.exportVisible")}
                 </DropdownMenuItem>
                 <DropdownMenuItem
@@ -556,6 +601,7 @@ export function OrdersPage() {
                   onSelect={() => void exportOrders("filtered")}
                   data-testid="orders-export-filtered"
                 >
+                  <Filter className="size-4" aria-hidden="true" />
                   {t("orders.exportFiltered")}
                 </DropdownMenuItem>
                 <DropdownMenuItem
@@ -564,6 +610,7 @@ export function OrdersPage() {
                   onSelect={() => void exportOrders("selected")}
                   data-testid="orders-export-selected"
                 >
+                  <ListChecks className="size-4" aria-hidden="true" />
                   {t("orders.exportSelected")}
                 </DropdownMenuItem>
                 <DropdownMenuItem
@@ -572,6 +619,7 @@ export function OrdersPage() {
                   onSelect={() => void exportOrders("phones")}
                   data-testid="orders-export-phones"
                 >
+                  <Phone className="size-4" aria-hidden="true" />
                   {t("orders.exportPhones")}
                 </DropdownMenuItem>
               </DropdownMenuContent>
@@ -617,8 +665,8 @@ export function OrdersPage() {
           onChange={(value) => list.update({ cargo: value })}
           options={[
             { value: "all", label: `${t("orders.cargo")}: ${t("common.all")}` },
-            { value: "ptt", label: "PTT" },
-            { value: "surat", label: "Sürat" },
+            { value: "ptt", label: "PTT", icon: <BrandIcon brand="ptt" title="" /> },
+            { value: "surat", label: "Sürat", icon: <BrandIcon brand="surat" title="" /> },
           ]}
         />
         <FilterSelect
@@ -631,10 +679,14 @@ export function OrdersPage() {
               value: "all",
               label: `${t("orders.filterSource")}: ${t("common.all")}`,
             },
-            ...sources.map((value) => ({
-              value,
-              label: t(`orders.source_${value}`),
-            })),
+            ...sources.map((value) => {
+              const Icon = sourceIcons[value];
+              return {
+                value,
+                label: t(`orders.source_${value}`),
+                icon: <Icon className="size-4 text-muted-foreground" aria-hidden="true" />,
+              };
+            }),
           ]}
         />
         <FilterSelect
@@ -650,23 +702,15 @@ export function OrdersPage() {
             { value: "amount", label: t("orders.sortAmount") },
           ]}
         />
-        <Input
-          type="date"
-          className="h-11 sm:w-40 md:h-9"
-          aria-label={t("orders.filterFrom")}
-          value={from === "all" ? "" : from}
-          onChange={(event) =>
-            list.update({ from: event.target.value || null })
-          }
-          data-testid="filter-from"
-        />
-        <Input
-          type="date"
-          className="h-11 sm:w-40 md:h-9"
-          aria-label={t("orders.filterTo")}
-          value={to === "all" ? "" : to}
-          onChange={(event) => list.update({ to: event.target.value || null })}
-          data-testid="filter-to"
+        <DateRangePicker
+          className="col-span-2 sm:w-64"
+          label={`${t("orders.filterFrom")} – ${t("orders.filterTo")}`}
+          from={from === "all" ? "" : from}
+          to={to === "all" ? "" : to}
+          onChange={(range) => list.update({ from: range.from || null, to: range.to || null })}
+          testId="filter-dates"
+          fromTestId="filter-from"
+          toTestId="filter-to"
         />
       </ListToolbar>
       <div className="mb-3 flex flex-col gap-2">
@@ -695,6 +739,7 @@ export function OrdersPage() {
               onClick={() => void bulk("kolaybi")}
               data-testid="orders-bulk-kolaybi"
             >
+              {bulkBusy === "kolaybi" ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <BrandIcon brand="kolaybi" title="" />}
               {t("orderActions.bulkKolaybiButton")}
             </Button>
             {(["surat", "ptt"] as const).map((provider) => (
@@ -709,7 +754,7 @@ export function OrdersPage() {
                 {bulkBusy === provider ? (
                   <Loader2 className="size-4 animate-spin" aria-hidden="true" />
                 ) : (
-                  <Truck className="size-4" aria-hidden="true" />
+                  <BrandIcon brand={provider} title="" />
                 )}
                 {t(
                   provider === "surat"
@@ -729,22 +774,13 @@ export function OrdersPage() {
           </div>
         )}
         {rows.length > 0 && (
-          <Button
-            variant="ghost"
-            className="min-h-11 self-start"
-            onClick={() =>
-              setSelected(
-                allVisible
-                  ? new Set()
-                  : new Set(rows.map((row) => row.public_id)),
-              )
-            }
-            data-testid="orders-select-all"
-          >
-            {allVisible
-              ? t("orders.clearSelection")
-              : t("orders.selectAllVisible")}
-          </Button>
+          <SelectAllCheckbox
+            total={rows.length}
+            selected={selectedRows.length}
+            onChange={(all) => setSelected(all ? new Set(rows.map((row) => row.public_id)) : new Set())}
+            label={allVisible ? t("orders.clearSelection") : t("orders.selectAllVisible")}
+            testId="orders-select-all"
+          />
         )}
         <FeedbackLine feedback={feedback} testId="orders-feedback" />
       </div>

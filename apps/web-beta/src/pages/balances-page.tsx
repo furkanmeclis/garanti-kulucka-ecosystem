@@ -15,6 +15,8 @@ import { formatDateTime, formatMoney } from "@/lib/format";
 import { pageCount, pageSize } from "@/lib/list-params";
 import { useQuery } from "@/lib/use-query";
 import { cn } from "@/lib/utils";
+import { Hint } from "@/components/hint";
+import { useConfirm } from "@/components/confirm-dialog";
 import { errorText, FeedbackLine, Field, idempotencyKey, type Feedback } from "./accounting-shared";
 
 const movementLabel: Record<BalanceMovementKind, "movementCommission" | "movementCancellation" | "movementReturn" | "movementPayment" | "movementAdjustment" | "movementRollback"> = {
@@ -34,6 +36,7 @@ const requestLabel: Record<BalancePaymentRequestStatus, "paymentPending" | "paym
 
 /** /bakiye — legacy BakiyePage: managers see every staff balance and process payment requests; staff see their own and ask for payment. */
 export function BalancesPage() {
+  const confirm = useConfirm();
   const { t, i18n } = useTranslation();
   const { api, user } = useAuth();
   const manager = panelRoleOf(user?.role) === "manager";
@@ -59,7 +62,7 @@ export function BalancesPage() {
 
   async function reset(row: StaffBalance) {
     const name = `${row.first_name} ${row.last_name}`.trim();
-    if (!window.confirm(t("balances.confirmReset", { name }))) return;
+    if (!(await confirm(t("balances.confirmReset", { name }), { tone: "danger" }))) return;
     setBusy(row.user_public_id);
     setFeedback(null);
     try {
@@ -116,7 +119,11 @@ export function BalancesPage() {
       key: "status",
       header: t("balances.columnStatus"),
       mobile: "badge",
-      cell: (row) => <Badge tone={row.status === "approved" ? "success" : row.status === "rejected" ? "danger" : "warning"}>{t(`balances.${requestLabel[row.status]}`)}</Badge>,
+      cell: (row) => (
+        <Hint content={t("hints.balanceRequest", { status: t(`balances.${requestLabel[row.status]}`) })}>
+          <Badge tone={row.status === "approved" ? "success" : row.status === "rejected" ? "danger" : "warning"}>{t(`balances.${requestLabel[row.status]}`)}</Badge>
+        </Hint>
+      ),
     },
     ...(manager ? [{ key: "staff", header: t("balances.columnStaff"), cell: (row: BalancePaymentRequest) => row.user_full_name ?? t("common.none") }] : []),
     { key: "date", header: t("balances.columnDate"), cell: (row) => formatDateTime(row.created_at, i18n.language) },
@@ -189,9 +196,11 @@ export function BalancesPage() {
                   <span className="min-w-0">
                     <span className="font-medium">{`${row.first_name} ${row.last_name}`.trim()}</span>
                     {row.pending_request_count > 0 && (
-                      <Badge tone="warning" className="ml-2">
-                        {row.pending_request_count} {t("balances.pendingBadge")}
-                      </Badge>
+                      <Hint content={t("hints.pendingRequests")} className="ml-2">
+                        <Badge tone="warning">
+                          {row.pending_request_count} {t("balances.pendingBadge")}
+                        </Badge>
+                      </Hint>
                     )}
                     <span className="block text-sm text-muted-foreground">{money(row.balance)}</span>
                   </span>

@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { expectResponsiveLayout, login, mockBackend, mockUser, pathOf, viewports, type ExtraRoute } from "./helpers";
+import { expectResponsiveLayout, login, mockBackend, mockUser, pathOf, viewports, type ExtraRoute, chooseOption } from "./helpers";
 
 test.use({ serviceWorkers: "block" });
 
@@ -96,11 +96,11 @@ test("sms: template + variables guard, send, history filter and automatic sweep"
   await page.getByTestId("nav-item-sms").click();
   await expect.poll(() => pathOf(page)).toBe("/sms");
   await page.getByTestId("sms-phones").fill("0555 111 22 33\n05559998877, abc");
-  await page.getByTestId("sms-template").selectOption("tpl_1");
+  await chooseOption(page.getByTestId("sms-template"), "tpl_1");
   await expect(page.getByTestId("sms-message")).toHaveValue(/Sayın \{musteri_adi\}/);
   await page.getByTestId("sms-send").click();
   await expect(page.getByTestId("sms-feedback")).toHaveText("Mesajda doldurulmamış değişken var ({musteri_adi} vb.)");
-  await page.getByTestId("sms-template").selectOption("tpl_2");
+  await chooseOption(page.getByTestId("sms-template"), "tpl_2");
   await expect(page.getByTestId("sms-counter")).toContainText("39 karakter");
   await expect(page.getByTestId("sms-counter")).toContainText("Türkçe karakter → 70 karakter/SMS");
   await page.getByTestId("sms-send").click();
@@ -136,8 +136,8 @@ test("sms templates: add, edit and the system template cannot be deleted", async
   await expect(page.getByTestId("sms-template-feedback")).toHaveText("Şablon eklendi");
   await expect(page.getByTestId("sms-template-card")).toHaveCount(3);
 
-  page.once("dialog", (dialog) => void dialog.accept());
   await page.getByTestId("sms-template-card").nth(1).getByTestId("sms-template-delete").click();
+  await page.getByTestId("confirm-dialog-action").click();
   await expect(page.getByTestId("sms-template-feedback")).toHaveText("Şablon silindi");
   expect(state.bodies.some((entry) => entry.method === "DELETE" && entry.path === "/api/sms/templates/tpl_2")).toBe(true);
 });

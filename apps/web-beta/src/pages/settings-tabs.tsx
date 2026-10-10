@@ -1,8 +1,9 @@
-import { Bot, CheckCircle2, Copy, ExternalLink, Instagram, KeyRound, Loader2, MessageCircle, MessageSquare, Phone, PhoneCall, RefreshCw, RotateCcw, Save, ScrollText, Server, ShieldX, Smartphone, Unplug, UserCog, Wallet, Webhook, XCircle, Zap, type LucideIcon } from "lucide-react";
+import { BellOff, BellRing, Bot, CheckCircle2, Copy, ExternalLink, Hand, KeyRound, Loader2, PhoneCall, RefreshCw, RotateCcw, Save, ScrollText, Server, Settings2, ShieldX, Unplug, UserCog, UserSearch, Wallet, Webhook, XCircle, Zap, type LucideIcon } from "lucide-react";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/app/auth";
+import { BrandIcon, type Brand } from "@/components/brand-icons";
 import { ErrorState } from "@/components/data-list";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -26,6 +27,9 @@ import {
 } from "@/lib/settings";
 import { useQuery } from "@/lib/use-query";
 import { cn } from "@/lib/utils";
+import { Hint } from "@/components/hint";
+import { useConfirm } from "@/components/confirm-dialog";
+import { Textarea } from "@/components/ui/textarea";
 import { errorText, FeedbackLine, Field, idempotencyKey, type Feedback } from "./accounting-shared";
 
 /**
@@ -48,12 +52,12 @@ function StatusBadge({ ok, okText, badText, testId, neutral }: { ok: boolean; ok
   );
 }
 
-function SectionHeading({ icon: Icon, title, description, action }: { icon: LucideIcon; title: string; description?: string | undefined; action?: ReactNode }) {
+function SectionHeading({ icon: Icon, brand, title, description, action }: { icon?: LucideIcon; brand?: Brand; title: string; description?: string | undefined; action?: ReactNode }) {
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
       <div className="flex min-w-0 items-start gap-3">
-        <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-          <Icon className="size-5" aria-hidden="true" />
+        <span className={cn("flex size-10 shrink-0 items-center justify-center rounded-lg", brand ? "bg-muted" : "bg-primary/10 text-primary")}>
+          {brand ? <BrandIcon brand={brand} title="" className="size-5" /> : Icon ? <Icon className="size-5" aria-hidden="true" /> : null}
         </span>
         <div className="min-w-0">
           <h2 className="text-lg font-semibold">{title}</h2>
@@ -164,9 +168,11 @@ function AccountStatusBadge({ account, testId }: { account: IntegrationAccount |
 function LiveBadge({ live, testId }: { live: boolean; testId: string }) {
   const { t } = useTranslation();
   return (
-    <Badge tone={live ? "success" : "neutral"} data-testid={testId}>
-      {live ? t("settingsTabs.liveOn") : t("settingsTabs.liveOff")}
-    </Badge>
+    <Hint content={t("hints.liveMode")}>
+      <Badge tone={live ? "success" : "neutral"} data-testid={testId}>
+        {live ? t("settingsTabs.liveOn") : t("settingsTabs.liveOff")}
+      </Badge>
+    </Hint>
   );
 }
 
@@ -295,7 +301,7 @@ export function AiSettingsTab() {
             <form className="flex flex-col gap-3" onSubmit={(event) => void savePrompt(event)}>
               <label className="flex flex-col gap-1.5 text-sm font-medium">
                 <span className="sr-only">{t("settingsTabs.aiPromptTitle")}</span>
-                <textarea
+                <Textarea
                   className="min-h-64 w-full rounded-md border border-input bg-transparent px-3 py-2 font-mono text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30"
                   value={prompt}
                   rows={14}
@@ -325,13 +331,16 @@ export function AiSettingsTab() {
 
 // ─── Entegrasyonlar overview ─────────────────────────────────────────────────
 
-const providerMeta: Record<ProviderTab, { icon: LucideIcon; label: string }> = {
-  whatsapp: { icon: MessageSquare, label: "WhatsApp" },
-  instagram: { icon: Instagram, label: "Instagram" },
-  messenger: { icon: MessageCircle, label: "Messenger" },
-  netgsm: { icon: Smartphone, label: "NetGSM" },
-  santral: { icon: Phone, label: "Santral" },
+/** Every provider tab maps to its brand; Santral is the NetGSM SIP santral (sip.netgsm.com.tr). */
+export const providerTabBrand: Record<ProviderTab, Brand> = {
+  whatsapp: "whatsapp",
+  instagram: "instagram",
+  messenger: "messenger",
+  netgsm: "netgsm",
+  santral: "netgsm",
 };
+
+const providerLabel: Record<ProviderTab, string> = { whatsapp: "WhatsApp", instagram: "Instagram", messenger: "Messenger", netgsm: "NetGSM", santral: "Santral" };
 
 const credentialToken: Record<MessagingProvider, string> = { whatsapp: "access_token", instagram: "access_token", messenger: "access_token", netgsm: "sms_password" };
 
@@ -396,13 +405,12 @@ export function IntegrationsOverviewTab({ onOpen }: { onOpen: (tab: ProviderTab)
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3" data-testid="settings-integration-cards">
           {(["whatsapp", "instagram", "messenger", "netgsm"] as const).map((provider) => {
             const state = data?.snapshots[provider];
-            const meta = providerMeta[provider];
             const credential = integrationTokenExists(state?.snapshot, credentialToken[provider]);
             return (
               <Card key={provider} className="flex flex-col gap-3 p-4" data-testid={`settings-integration-card-${provider}`}>
                 <div className="flex items-center gap-2 font-medium">
-                  <meta.icon className="size-4 text-muted-foreground" aria-hidden="true" />
-                  {meta.label}
+                  <BrandIcon brand={providerTabBrand[provider]} title="" />
+                  {providerLabel[provider]}
                 </div>
                 {data ? (
                   <div className="flex flex-wrap gap-1.5">
@@ -415,6 +423,7 @@ export function IntegrationsOverviewTab({ onOpen }: { onOpen: (tab: ProviderTab)
                 )}
                 {state?.account?.external_account_id && <p className="truncate text-xs text-muted-foreground">{t("settingsTabs.externalId", { id: state.account.external_account_id })}</p>}
                 <Button variant="outline" className="mt-auto min-h-11 self-start" onClick={() => onOpen(provider)} data-testid={`settings-integration-open-${provider}`}>
+                  <Settings2 className="size-4" aria-hidden="true" />
                   {t("settingsTabs.manage")}
                 </Button>
               </Card>
@@ -422,7 +431,7 @@ export function IntegrationsOverviewTab({ onOpen }: { onOpen: (tab: ProviderTab)
           })}
           <Card className="flex flex-col gap-3 p-4" data-testid="settings-integration-card-santral">
             <div className="flex items-center gap-2 font-medium">
-              <Phone className="size-4 text-muted-foreground" aria-hidden="true" />
+              <BrandIcon brand="netgsm" title="" />
               {t("settingsTabs.tabSantral")}
             </div>
             {data ? (
@@ -433,6 +442,7 @@ export function IntegrationsOverviewTab({ onOpen }: { onOpen: (tab: ProviderTab)
               <p className="text-sm text-muted-foreground">{t("settingsTabs.loading")}</p>
             )}
             <Button variant="outline" className="mt-auto min-h-11 self-start" onClick={() => onOpen("santral")} data-testid="settings-integration-open-santral">
+              <Settings2 className="size-4" aria-hidden="true" />
               {t("settingsTabs.manage")}
             </Button>
           </Card>
@@ -531,7 +541,7 @@ export function WhatsAppTab() {
   return (
     <div className="flex flex-col gap-6" data-testid="settings-tab-panel-whatsapp">
       <Card className="flex flex-col gap-3 p-4 sm:p-6">
-        <SectionHeading icon={MessageSquare} title={t("settingsTabs.whatsappTitle")} description={t("settingsTabs.whatsappSubtitle")} action={<RefreshButton loading={state.loading} onClick={state.reload} />} />
+        <SectionHeading brand="whatsapp" title={t("settingsTabs.whatsappTitle")} description={t("settingsTabs.whatsappSubtitle")} action={<RefreshButton loading={state.loading} onClick={state.reload} />} />
         {state.error != null && !state.data && <p className="text-sm text-destructive">{t("settingsTabs.loadFailed", { error: errorText(state.error) })}</p>}
         <div className="flex flex-wrap gap-1.5" data-testid="whatsapp-status">
           <AccountStatusBadge account={account} />
@@ -587,6 +597,7 @@ export function WhatsAppTab() {
 // ─── Instagram / Messenger ───────────────────────────────────────────────────
 
 export function MetaProviderTab({ provider }: { provider: "instagram" | "messenger" }) {
+  const confirm = useConfirm();
   const { t } = useTranslation();
   const { api } = useAuth();
   const state = useIntegrationAccount(provider);
@@ -656,7 +667,7 @@ export function MetaProviderTab({ provider }: { provider: "instagram" | "messeng
 
   async function disconnect() {
     if (!account) return;
-    if (!window.confirm(t("settingsTabs.disconnectConfirm", { provider: account.display_name }))) return;
+    if (!(await confirm(t("settingsTabs.disconnectConfirm", { provider: account.display_name }), { tone: "danger" }))) return;
     setBusy(true);
     setActionFeedback(null);
     try {
@@ -676,7 +687,7 @@ export function MetaProviderTab({ provider }: { provider: "instagram" | "messeng
     <div className="flex flex-col gap-6" data-testid={`settings-tab-panel-${provider}`}>
       <Card className="flex flex-col gap-3 p-4 sm:p-6">
         <SectionHeading
-          icon={provider === "instagram" ? Instagram : MessageCircle}
+          brand={provider}
           title={t(provider === "instagram" ? "settingsTabs.instagramTitle" : "settingsTabs.messengerTitle")}
           description={t(provider === "instagram" ? "settingsTabs.instagramSubtitle" : "settingsTabs.messengerSubtitle")}
           action={<RefreshButton loading={state.loading} onClick={state.reload} />}
@@ -714,9 +725,11 @@ export function MetaProviderTab({ provider }: { provider: "instagram" | "messeng
         <SectionHeading icon={Webhook} title={t("settingsTabs.webhookConnection")} description={t("settingsTabs.webhookConnectionHint", { gate: liveGate })} />
         <div className="flex flex-wrap gap-2">
           <Button type="button" variant="outline" className="h-11 md:h-9" disabled={actionsDisabled} onClick={() => void webhookSubscription("subscribe")} data-testid={`${provider}-webhook-subscribe`}>
+            <BellRing className="size-4" aria-hidden="true" />
             {t("settingsTabs.webhookSubscribe")}
           </Button>
           <Button type="button" variant="outline" className="h-11 md:h-9" disabled={actionsDisabled} onClick={() => void webhookSubscription("unsubscribe")} data-testid={`${provider}-webhook-unsubscribe`}>
+            <BellOff className="size-4" aria-hidden="true" />
             {t("settingsTabs.webhookUnsubscribe")}
           </Button>
           <Button type="button" variant="destructive" className="h-11 md:h-9" disabled={actionsDisabled} onClick={() => void disconnect()} data-testid={`${provider}-disconnect`}>
@@ -729,12 +742,15 @@ export function MetaProviderTab({ provider }: { provider: "instagram" | "messeng
         </Field>
         <div className="flex flex-wrap items-center gap-2">
           <Button type="button" variant="outline" className="h-11 md:h-9" disabled={actionsDisabled} onClick={() => void threadControl("owner")} data-testid={`${provider}-thread-owner`}>
+            <UserSearch className="size-4" aria-hidden="true" />
             {t("settingsTabs.threadOwner")}
           </Button>
           <Button type="button" variant="outline" className="h-11 md:h-9" disabled={actionsDisabled} onClick={() => void threadControl("take")} data-testid={`${provider}-thread-take`}>
+            <Hand className="size-4" aria-hidden="true" />
             {t("settingsTabs.threadTake")}
           </Button>
           <Button type="button" variant="outline" className="h-11 md:h-9" disabled={actionsDisabled} onClick={() => void threadControl("release")} data-testid={`${provider}-thread-release`}>
+            <RotateCcw className="size-4" aria-hidden="true" />
             {t("settingsTabs.threadRelease")}
           </Button>
         </div>
@@ -847,7 +863,7 @@ export function NetgsmTab() {
   return (
     <div className="flex flex-col gap-6" data-testid="settings-tab-panel-netgsm">
       <Card className="flex flex-col gap-3 p-4 sm:p-6">
-        <SectionHeading icon={Smartphone} title={t("settingsTabs.netgsmTitle")} description={t("settingsTabs.netgsmSubtitle")} action={<RefreshButton loading={state.loading} onClick={state.reload} />} />
+        <SectionHeading brand="netgsm" title={t("settingsTabs.netgsmTitle")} description={t("settingsTabs.netgsmSubtitle")} action={<RefreshButton loading={state.loading} onClick={state.reload} />} />
         {state.error != null && !state.data && <p className="text-sm text-destructive">{t("settingsTabs.loadFailed", { error: errorText(state.error) })}</p>}
         <div className="flex flex-wrap gap-1.5" data-testid="netgsm-status">
           <AccountStatusBadge account={account} />
@@ -942,7 +958,7 @@ export function SantralTab() {
 
   return (
     <div className="flex flex-col gap-6" data-testid="settings-tab-panel-santral">
-      <SectionHeading icon={Phone} title={t("settingsTabs.pbxTitle")} description={t("settingsTabs.pbxSubtitle")} action={<RefreshButton loading={settings.loading} onClick={settings.reload} />} />
+      <SectionHeading brand="netgsm" title={t("settingsTabs.pbxTitle")} description={t("settingsTabs.pbxSubtitle")} action={<RefreshButton loading={settings.loading} onClick={settings.reload} />} />
       {settings.error != null && !settings.data && <p className="text-sm text-destructive">{t("settingsTabs.loadFailed", { error: errorText(settings.error) })}</p>}
 
       <Card>

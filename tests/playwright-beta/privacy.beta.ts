@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { expectResponsiveLayout, login, mockBackend, mockUser, pathOf, viewports, type ExtraRoute } from "./helpers";
+import { expectResponsiveLayout, login, mockBackend, mockUser, pathOf, viewports, type ExtraRoute, chooseOption } from "./helpers";
 
 test.use({ serviceWorkers: "block" });
 
@@ -55,7 +55,7 @@ test("veri silme: anonymous form validates, reports server errors and shows the 
   await form.locator('input[name="instagram"]').fill("@zeynep.k");
   await submit.click();
   await expect(page.getByTestId("deletion-error")).toHaveText("Veri silme talebini onaylamanız gerekmektedir.");
-  await form.locator('input[name="onay"]').check();
+  await form.getByTestId("deletion-consent").check();
   await form.locator('input[name="email"]').fill("down@example.com");
   await submit.click();
   await expect(page.getByTestId("deletion-error")).toHaveText("Talep gönderilemedi: Sunucu hatası");
@@ -89,12 +89,12 @@ test("data deletion requests: managers review and close requests", async ({ page
   await expect(table).toContainText("Meta geri çağrısı");
   const row = table.getByTestId("deletion-row-DEL-ABC123");
   await expect(row.getByTestId("deletion-row-save")).toBeDisabled();
-  await row.getByTestId("deletion-row-status").selectOption("completed");
+  await chooseOption(row.getByTestId("deletion-row-status"), "completed");
   await row.getByTestId("deletion-row-note").fill("Müşteri ve mesajlar silindi");
   await row.getByTestId("deletion-row-save").click();
   await expect(page.getByTestId("deletion-feedback")).toHaveText("DEL-ABC123 güncellendi.");
   expect(state.bodies.find((entry) => entry.method === "PATCH")?.body).toEqual({ status: "completed", note: "Müşteri ve mesajlar silindi" });
-  await page.getByTestId("deletion-filter").selectOption("in_progress");
+  await chooseOption(page.getByTestId("deletion-filter"), "in_progress");
   await expect(table).not.toContainText("Zeynep Kaya");
 });
 
