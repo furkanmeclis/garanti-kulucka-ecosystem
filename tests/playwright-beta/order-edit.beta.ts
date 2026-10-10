@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { expectResponsiveLayout, login, mockBackend, mockUser, viewports, type ExtraRoute } from "./helpers";
+import { expectResponsiveLayout, login, mockBackend, mockUser, viewports, type ExtraRoute, chooseOption } from "./helpers";
 
 test.use({ serviceWorkers: "block" });
 
@@ -90,7 +90,7 @@ test("order edit: staff edit customer, address, lines and save the line total", 
   await form.getByTestId("order-edit-name").fill("Ayşe Kaya");
   await form.getByTestId("order-edit-city").fill("Ankara");
   await form.getByTestId("order-edit-district").fill("Çankaya");
-  await form.getByTestId("order-edit-cargo").selectOption("surat");
+  await chooseOption(form.getByTestId("order-edit-cargo"), "surat");
   await form.getByTestId("order-edit-line").nth(1).getByTestId("order-edit-line-remove").click();
   await form.getByTestId("order-edit-line").first().getByTestId("order-edit-line-quantity").fill("2");
   await form.getByTestId("order-edit-add-line").click();
@@ -166,8 +166,8 @@ test("order rows: legacy badges, quick message and the tracking sheet", async ({
   await page.goto("/siparisler");
   const table = page.getByTestId("orders-table");
   await expect(table.getByTestId("order-badge-confirmation-ord_1")).toHaveText("Teyitli (2)");
-  await expect(table.getByTestId("order-badge-kolaybi-ord_1")).toHaveText("Aktarıldı · e-Fatura: sent");
-  await expect(table.getByTestId("order-badge-shipment-ord_1")).toHaveText("PTT · in_transit · TRK123");
+  await expect(table.getByTestId("order-badge-kolaybi-ord_1")).toHaveText("Aktarıldı · e-Fatura: Gönderildi");
+  await expect(table.getByTestId("order-badge-shipment-ord_1")).toHaveText("PTT · Yolda · TRK123");
   await expect(table.getByTestId("order-badge-confirmation-ord_2")).toHaveText("9'a bastı (1)");
   await expect(table.getByTestId("order-badge-kolaybi-ord_2")).toHaveText("KB iptal");
   await expect(table.getByTestId("order-badge-shipment-ord_2")).toHaveCount(0);

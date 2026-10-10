@@ -58,6 +58,11 @@ export async function initI18n(language: Language = readStoredLanguage()) {
       supportedLngs: [...supportedLanguages],
       interpolation: { escapeValue: false },
       returnNull: false,
+      // Development only: report keys that have no translation so raw keys never ship unnoticed.
+      saveMissing: import.meta.env?.DEV === true,
+      missingKeyHandler: (languages, _namespace, key) => {
+        console.warn(`[i18n] missing key "${key}" for ${languages.join(", ")}`);
+      },
     });
     i18n.on("languageChanged", (next) => {
       if (isLanguage(next)) {

@@ -139,8 +139,8 @@ test("stock: categories, critical warning, stock in/out, edit, history and delet
   await expect(sheet.getByTestId("inventory-movements")).toContainText("Giriş · 5");
   await page.keyboard.press("Escape");
 
-  page.once("dialog", (dialog) => void dialog.accept());
   await table.getByTestId("inventory-row").nth(1).getByTestId("inventory-delete").click();
+  await page.getByTestId("confirm-dialog-action").click();
   await expect(page.getByTestId("inventory-feedback")).toContainText("silindi");
   await expect(table.getByTestId("inventory-row")).toHaveCount(1);
 });
@@ -155,7 +155,9 @@ test("stock: create a card in the open category", async ({ page }) => {
   await sheet.getByTestId("product-name").fill("Termostat");
   await sheet.getByTestId("product-sku").fill("YP-2");
   await expect(sheet.getByTestId("product-kolaybi-info")).toContainText("1 KolayBi ürünü");
-  await expect(page.locator("#beta-kolaybi-products option")).toHaveAttribute("value", "7633402");
+  await sheet.getByTestId("product-external-picker").click();
+  await expect(page.locator('[role="option"][data-value="7633402"]')).toBeVisible();
+  await page.keyboard.press("Escape");
   await sheet.getByTestId("product-kolaybi-refresh").click();
   await expect(sheet.getByTestId("product-kolaybi-info")).toContainText("Liste isteği kuyruğa alındı");
   await sheet.getByTestId("product-external").fill("7633402");
@@ -181,8 +183,8 @@ test("balances: manager processes requests, resets a balance and opens staff ord
   await expect(page.getByTestId("staff-orders")).toContainText("GK-9100");
   await page.keyboard.press("Escape");
 
-  page.once("dialog", (dialog) => void dialog.accept());
   await staff.getByTestId("staff-balance-row").first().getByTestId("staff-reset").click();
+  await page.getByTestId("confirm-dialog-action").click();
   await expect(page.getByTestId("balances-feedback")).toHaveText("Ayşe Yılmaz bakiyesi sıfırlandı (₺650.00)");
 
   await page.getByTestId("balance-tab-requests").click();

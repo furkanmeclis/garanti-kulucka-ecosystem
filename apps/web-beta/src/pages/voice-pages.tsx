@@ -1,4 +1,4 @@
-import { BookUser, Bot, Loader2, MessageSquare, Phone, PhoneIncoming, PhoneOutgoing, RefreshCw, Save, Send } from "lucide-react";
+import { BarChart3, BookUser, Bot, FileAudio, FileBarChart, Loader2, MessageSquare, Phone, PhoneIncoming, PhoneOutgoing, RefreshCw, Save, Send, Type } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
@@ -16,7 +16,12 @@ import { pageCount, pageSize, useListParams } from "@/lib/list-params";
 import { useQuery } from "@/lib/use-query";
 import { cn } from "@/lib/utils";
 import type { NetgsmCdrRecord, NetgsmTeyitSettings, PhonebookEntry, VoiceMessage, VoiceMessageStatus } from "@/lib/voice";
-import { errorText, FeedbackLine, Field, idempotencyKey, NativeSelect, type Feedback } from "./accounting-shared";
+import { Hint } from "@/components/hint";
+import { enumLabel } from "@/lib/status";
+import { Switch } from "@/components/ui/switch";
+import { NumberInput } from "@/components/ui/number-input";
+import { Textarea } from "@/components/ui/textarea";
+import { errorText, FeedbackLine, Field, idempotencyKey, FormSelect, type Feedback } from "./accounting-shared";
 
 export function VoiceLinks({ current }: { current: "calls" | "voiceMessages" | "vapi" | "phonebook" }) {
   const { t } = useTranslation();
@@ -70,13 +75,12 @@ export function CallsPage() {
 
   const number = (field: "ilk_arama_dakika" | "max_deneme" | "deneme_arasi_dakika", label: string, hint: string, max: number) => (
     <Field label={label}>
-      <Input
-        type="number"
+      <NumberInput
         min={1}
         max={max}
-        value={form?.[field] ?? ""}
-        onChange={(event) => form && setForm({ ...form, [field]: Math.max(1, Math.min(max, Number(event.target.value) || 1)) })}
-        className="h-11 md:h-9"
+        value={form?.[field] ?? 1}
+        onValueChange={(value) => form && setForm({ ...form, [field]: Math.round(value) })}
+        className="h-11 lg:h-9"
         data-testid={`teyit-${field}`}
       />
       <span className="text-xs font-normal text-muted-foreground">{hint}</span>
@@ -85,7 +89,7 @@ export function CallsPage() {
 
   return (
     <section data-testid="page-calls">
-      <PageHeader title={t("calls.pageTitle")} description={t("calls.pageSubtitle")} />
+      <PageHeader brand="netgsm" title={t("calls.pageTitle")} description={t("calls.pageSubtitle")} />
       <VoiceLinks current="calls" />
       <Card className="mb-4 p-4">
         <h2 className="font-semibold">{t("calls.autoCallTitle")}</h2>
@@ -97,7 +101,7 @@ export function CallsPage() {
         ) : (
           <form className="flex flex-col gap-3" onSubmit={(event) => void save(event)} data-testid="teyit-form">
             <label className="flex min-h-11 items-center gap-3 text-sm">
-              <input type="checkbox" className="size-5 accent-primary" checked={form.aktif} onChange={(event) => setForm({ ...form, aktif: event.target.checked })} data-testid="teyit-aktif" />
+              <Switch checked={form.aktif} onCheckedChange={(next) => setForm({ ...form, aktif: next })} data-testid="teyit-aktif" />
               <span>
                 <span className="font-medium">{t("calls.autoCallActive")}</span>
                 <span className="block text-xs text-muted-foreground">{t("calls.autoCallActiveHint")}</span>
@@ -162,7 +166,15 @@ function CallRecords() {
         </span>
       ),
     },
-    { key: "status", header: t("calls.colStatus"), mobile: "badge", cell: (row) => <Badge tone={row.yonKod === 2 ? "warning" : row.yonKod === 0 ? "info" : "success"}>{row.yon}</Badge> },
+    { key: "status", header: t("calls.colStatus"), mobile: "badge", cell: (row) => {
+        const direction = row.yonKod === null ? (row.yon ?? t("common.none")) : enumLabel(t, "cdrDirection", row.yonKod);
+        return (
+          <Hint content={t("hints.cdrDirection", { direction })}>
+            <Badge tone={row.yonKod === 2 ? "warning" : row.yonKod === 0 ? "info" : "success"}>{direction}</Badge>
+          </Hint>
+        );
+      },
+    },
     { key: "callee", header: t("calls.colCallee"), cell: (row) => row.arananNumara ?? t("common.none") },
     { key: "date", header: t("calls.colDate"), cell: (row) => row.tarih ?? t("common.none") },
     { key: "duration", header: t("calls.colDuration"), cell: (row) => row.sure },
@@ -199,13 +211,14 @@ function CallRecords() {
             type="button"
             role="tab"
             aria-selected={direction === key}
-            className={cn("min-h-11 shrink-0 border-b-2 px-3 text-sm font-medium", direction === key ? "border-primary" : "border-transparent text-muted-foreground")}
+            className={cn("inline-flex min-h-11 shrink-0 items-center gap-2 border-b-2 px-3 text-sm font-medium", direction === key ? "border-primary" : "border-transparent text-muted-foreground")}
             onClick={() => {
               setDirection(key);
               setPage(1);
             }}
             data-testid={`cdr-tab-${key}`}
           >
+            {key === "gelen" ? <PhoneIncoming className="size-4" aria-hidden="true" /> : key === "giden" ? <PhoneOutgoing className="size-4" aria-hidden="true" /> : <BarChart3 className="size-4" aria-hidden="true" />}
             {t(`calls.${label}`)}
           </button>
         ))}
@@ -262,7 +275,12 @@ const callStatuses = ["cevaplandi", "cevaplanmadi", "mesgul", "ulasilamadi", "ar
 
 function VoiceStatusBadge({ status }: { status: VoiceMessageStatus }) {
   const { t } = useTranslation();
-  return <Badge tone={status === "sent" ? "success" : status === "failed" ? "danger" : status === "dry_run" ? "warning" : "info"}>{t(`voiceMessages.status_${status}`)}</Badge>;
+  const label = t(`voiceMessages.status_${status}`);
+  return (
+    <Hint content={t("hints.voiceStatus", { status: label })}>
+      <Badge tone={status === "sent" ? "success" : status === "failed" ? "danger" : status === "dry_run" ? "warning" : "info"}>{label}</Badge>
+    </Hint>
+  );
 }
 
 /** /sesli-asistan/sesli-mesajlar — legacy SesliMesajlarPage: queue a NetGSM voice message (text or audio id) and read the per-number report. */
@@ -320,16 +338,16 @@ export function VoiceMessagesPage() {
     { key: "bulk", header: t("voiceMessages.colBulkId"), cell: (row) => row.bulk_id ?? t("common.none") },
     { key: "date", header: t("voiceMessages.colDate"), cell: (row) => formatDateTime(row.created_at, i18n.language) },
   ];
-  const area = "min-h-24 w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 md:text-sm dark:bg-input/30";
+  const area = "min-h-24 w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 lg:text-sm dark:bg-input/30";
 
   return (
     <section data-testid="page-voice-messages">
-      <PageHeader title={t("voiceMessages.pageTitle")} description={t("voiceMessages.pageSubtitle")} />
+      <PageHeader brand="netgsm" title={t("voiceMessages.pageTitle")} description={t("voiceMessages.pageSubtitle")} />
       <VoiceLinks current="voiceMessages" />
       <Card className="mb-4 p-4">
         <form className="grid grid-cols-1 gap-3 md:grid-cols-2" onSubmit={(event) => void send(event)} data-testid="voice-form">
           <Field label={t("voiceMessages.recipientsLabel")} className="md:row-span-2">
-            <textarea className={area} rows={5} value={recipients} onChange={(event) => setRecipients(event.target.value)} placeholder="05551112233" data-testid="voice-recipients" />
+            <Textarea className={area} rows={5} value={recipients} onChange={(event) => setRecipients(event.target.value)} placeholder="05551112233" data-testid="voice-recipients" />
             <span className="text-xs font-normal text-muted-foreground">
               {t("voiceMessages.recipientsHint")} · <strong data-testid="voice-recipient-count">{t("voiceMessages.recipientsCount", { count: parsed.length })}</strong>
             </span>
@@ -339,24 +357,25 @@ export function VoiceMessagesPage() {
             <div className="flex gap-2">
               {(["text", "audio"] as const).map((value) => (
                 <Button key={value} type="button" variant={mode === value ? "default" : "outline"} className="min-h-11 flex-1" aria-pressed={mode === value} onClick={() => setMode(value)} data-testid={`voice-mode-${value}`}>
+                  {value === "text" ? <Type className="size-4" aria-hidden="true" /> : <FileAudio className="size-4" aria-hidden="true" />}
                   {t(value === "text" ? "voiceMessages.contentText" : "voiceMessages.contentAudio")}
                 </Button>
               ))}
             </div>
             {mode === "text" ? (
-              <textarea className={area} rows={3} maxLength={1000} aria-label={t("voiceMessages.messageLabel")} value={content} onChange={(event) => setContent(event.target.value)} data-testid="voice-content" />
+              <Textarea className={area} rows={3} maxLength={1000} aria-label={t("voiceMessages.messageLabel")} value={content} onChange={(event) => setContent(event.target.value)} data-testid="voice-content" />
             ) : (
               <Input aria-label={t("voiceMessages.audioIdLabel")} maxLength={64} value={content} onChange={(event) => setContent(event.target.value)} className="h-11 md:h-9" data-testid="voice-content" />
             )}
           </div>
           <Field label={t("voiceMessages.ringtimeLabel")}>
-            <NativeSelect value={String(ringtime)} onChange={(event) => setRingtime(Number(event.target.value))} data-testid="voice-ringtime">
+            <FormSelect value={String(ringtime)} onChange={(event) => setRingtime(Number(event.target.value))} data-testid="voice-ringtime">
               {[10, 15, 20, 25, 30].map((value) => (
                 <option key={value} value={value}>
                   {t("voiceMessages.seconds", { count: value })}
                 </option>
               ))}
-            </NativeSelect>
+            </FormSelect>
           </Field>
           <div className="flex flex-col gap-2 md:col-span-2">
             <FeedbackLine feedback={feedback} testId="voice-feedback" />
@@ -457,6 +476,7 @@ function VoiceDetailSheet({ publicId, onClose }: { publicId: string | null; onCl
             {row.error_message && <p className="text-destructive">{row.error_message}</p>}
             <div className="flex flex-wrap gap-2">
               <Button className="min-h-11" disabled={busy || !row.bulk_id} onClick={() => void report()} data-testid="voice-request-report">
+                {busy ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <FileBarChart className="size-4" aria-hidden="true" />}
                 {t("voiceMessages.requestReport")}
               </Button>
               <Button variant="outline" className="min-h-11" onClick={() => void load(row.public_id)} data-testid="voice-detail-refresh">
@@ -510,7 +530,12 @@ export function PhonebookPage() {
     );
   const columns: Column<PhonebookEntry>[] = [
     { key: "name", header: t("voiceMessages.colName"), mobile: "title", cell: (row) => <span className="font-medium">{row.name}</span> },
-    { key: "kind", header: t("voiceMessages.colKind"), mobile: "badge", cell: (row) => <Badge tone={row.kind === "staff" ? "info" : "neutral"}>{t(`voiceMessages.kind_${row.kind}`)}</Badge> },
+    { key: "kind", header: t("voiceMessages.colKind"), mobile: "badge", cell: (row) => (
+        <Hint content={t("hints.phonebookKind", { kind: t(`voiceMessages.kind_${row.kind}`) })}>
+          <Badge tone={row.kind === "staff" ? "info" : "neutral"}>{t(`voiceMessages.kind_${row.kind}`)}</Badge>
+        </Hint>
+      ),
+    },
     { key: "phone", header: t("voiceMessages.colPhone"), cell: (row) => dial(row.phone) },
     { key: "extension", header: t("voiceMessages.colExtension"), cell: (row) => (row.kind === "staff" ? dial(row.extension) : t("common.none")) },
     { key: "role", header: t("voiceMessages.colRole"), cell: (row) => row.role ?? t("common.none") },

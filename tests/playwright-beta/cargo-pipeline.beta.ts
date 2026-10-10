@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { expectResponsiveLayout, login, mockBackend, mockUser, pathOf, viewports, type ExtraRoute } from "./helpers";
+import { expectResponsiveLayout, login, mockBackend, mockUser, pathOf, viewports, type ExtraRoute, chooseOption } from "./helpers";
 
 test.use({ serviceWorkers: "block" });
 
@@ -71,12 +71,12 @@ test("kargo pipeline: managers filter, act on rows and delete from the More menu
   await expect(row.getByTestId("pipeline-cancel")).toHaveCount(0);
   await expect.poll(() => state.bodies.filter((entry) => entry.path === "/api/cargo-pipeline/cpl_1/actions").map((entry) => (entry.body as { action: string }).action)).toEqual(["run_now", "cancel"]);
 
-  page.once("dialog", (dialog) => void dialog.accept());
   await table.getByRole("row").filter({ has: page.getByTestId("pipeline-row-cpl_2") }).getByTestId("pipeline-delete").click();
+  await page.getByTestId("confirm-dialog-action").click();
   await expect(page.getByTestId("pipeline-row-cpl_2")).toHaveCount(0);
   await expect(page.getByTestId("pipeline-total")).toHaveText("Toplam: 1");
 
-  await page.getByTestId("pipeline-filter").selectOption("teslim");
+  await chooseOption(page.getByTestId("pipeline-filter"), "teslim");
   await expect.poll(() => state.requests.some((entry) => entry.path === "/api/cargo-pipeline" && entry.search.includes("status=teslim"))).toBe(true);
 });
 

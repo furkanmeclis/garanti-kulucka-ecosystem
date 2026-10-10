@@ -1,5 +1,6 @@
 export * from "./contracts/http/health.js";
 export * from "./contracts/http/panel.js";
+export * from "./contracts/http/analytics.js";
 export * from "./contracts/observability/runtime-metrics.js";
 export * from "./contracts/observability/storage-metrics.js";
 export * from "./contracts/providers/provider.js";

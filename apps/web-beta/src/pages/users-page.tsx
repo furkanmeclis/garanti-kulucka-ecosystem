@@ -13,7 +13,12 @@ import { formatDateTime } from "@/lib/format";
 import { useQuery } from "@/lib/use-query";
 import { cn } from "@/lib/utils";
 import type { AdminLogEntry, ManagedRole, ManagedUser } from "@/lib/users";
-import { errorText, FeedbackLine, Field, NativeSelect, type Feedback } from "./accounting-shared";
+import { Hint } from "@/components/hint";
+import { enumLabel } from "@/lib/status";
+import { Switch } from "@/components/ui/switch";
+import { useConfirm } from "@/components/confirm-dialog";
+import { Tip } from "@/components/ui/tooltip";
+import { errorText, FeedbackLine, Field, FormSelect, type Feedback } from "./accounting-shared";
 
 const roleLabels: Record<string, "roleAdmin" | "roleEmployee" | "roleCargoOperator"> = {
   admin: "roleAdmin",
@@ -26,7 +31,7 @@ function useRoleName() {
   const { t } = useTranslation();
   return (role: string | undefined) => {
     const key = role ? roleLabels[role] : undefined;
-    return key ? t(`users.${key}`) : (role ?? "-");
+    return key ? t(`users.${key}`) : role ? t("common.unknownValue", { value: role }) : t("common.none");
   };
 }
 
@@ -35,6 +40,7 @@ type UserForm = typeof emptyForm;
 
 /** /kullanicilar — legacy KullanicilarPage (`/admin/users`, admin-only): list, create, edit (incl. SIP extension), activate/deactivate, delete. */
 export function UsersPage() {
+  const confirm = useConfirm();
   const { t, i18n } = useTranslation();
   const { api, user: me } = useAuth();
   const roleName = useRoleName();
@@ -65,7 +71,7 @@ export function UsersPage() {
 
   async function remove(row: ManagedUser) {
     const name = `${row.first_name} ${row.last_name}`.trim();
-    if (!window.confirm(`${t("users.deleteTitle")}\n${t("users.deleteBody", { name })}`)) return;
+    if (!(await confirm(`${t("users.deleteTitle")}\n${t("users.deleteBody", { name })}`, { tone: "danger" }))) return;
     try {
       await api.deactivateUser(row.public_id);
       setRows((prev) => prev.filter((item) => item.public_id !== row.public_id));
@@ -97,10 +103,12 @@ export function UsersPage() {
       header: t("users.colRole"),
       mobile: "badge",
       cell: (row) => (
-        <Badge tone={row.role === "admin" || row.role === "owner" ? "info" : "neutral"}>
-          <Shield className="size-3" aria-hidden="true" />
-          {roleName(row.role)}
-        </Badge>
+        <Hint content={t("hints.role", { role: roleName(row.role) })}>
+          <Badge tone={row.role === "admin" || row.role === "owner" ? "info" : "neutral"}>
+            <Shield className="size-3" aria-hidden="true" />
+            {roleName(row.role)}
+          </Badge>
+        </Hint>
       ),
     },
     {
@@ -119,10 +127,10 @@ export function UsersPage() {
       key: "status",
       header: t("users.colStatus"),
       cell: (row) => (
-        <label className={cn("inline-flex min-h-11 items-center gap-2 md:min-h-0", isSelf(row) && "opacity-60")} title={row.is_active ? t("users.deactivate") : t("users.activate")}>
-          <input type="checkbox" role="switch" className="h-11 w-5 accent-primary md:size-5" checked={row.is_active} disabled={isSelf(row)} onChange={() => void toggleActive(row)} data-testid="user-active" />
+        <Tip label={row.is_active ? t("users.deactivate") : t("users.activate")}><label className={cn("inline-flex min-h-11 items-center gap-2 md:min-h-0", isSelf(row) && "opacity-60")}>
+          <Switch size="sm" className="h-11 min-w-11 lg:h-auto lg:min-w-0" checked={row.is_active} disabled={isSelf(row)} onCheckedChange={() => void toggleActive(row)} data-testid="user-active" />
           <span className={row.is_active ? "text-emerald-700 dark:text-emerald-300" : "text-muted-foreground"}>{row.is_active ? t("users.active") : t("users.inactive")}</span>
-        </label>
+        </label></Tip>
       ),
     },
     { key: "seen", header: t("users.colLastLogin"), cell: (row) => (row.last_seen_at ? formatDateTime(row.last_seen_at, i18n.language) : "-") },
@@ -135,9 +143,9 @@ export function UsersPage() {
             <Pencil className="size-4" aria-hidden="true" />
             {t("users.edit")}
           </Button>
-          <Button variant="outline" size="icon" className="size-11 text-destructive md:size-9" aria-label={t("users.delete")} title={t("users.delete")} disabled={isSelf(row)} onClick={() => void remove(row)} data-testid="user-delete">
+          <Tip label={t("users.delete")}><span className="inline-flex"><Button variant="outline" size="icon" className="size-11 text-destructive md:size-9" aria-label={t("users.delete")} disabled={isSelf(row)} onClick={() => void remove(row)} data-testid="user-delete">
             <Trash2 className="size-4" aria-hidden="true" />
-          </Button>
+          </Button></span></Tip>
         </span>
       ),
     },
@@ -267,14 +275,14 @@ function UserSheet({ target, roles, onClose, onSaved }: { target: ManagedUser | 
             </Field>
           )}
           <Field label={t("users.role")}>
-            <NativeSelect value={form.role} onChange={set("role")} data-testid="user-role">
+            <FormSelect value={form.role} onChange={set("role")} data-testid="user-role">
               <option value="">{creating ? roleName("calisan") : t("users.keepRole")}</option>
               {roles.map((role) => (
                 <option key={role} value={role}>
                   {roleName(role)}
                 </option>
               ))}
-            </NativeSelect>
+            </FormSelect>
           </Field>
           {existing && (
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -321,11 +329,16 @@ export function ActivityLogsPage() {
   const modules = [...new Set(rows.map((row) => row.module))].sort();
   const needle = query.trim().toLocaleLowerCase("tr-TR");
   const visible = rows.filter(
-    (row) => (!module || row.module === module) && (!needle || [row.actor_name, row.action, row.module, row.entity_id].some((value) => value?.toLocaleLowerCase("tr-TR").includes(needle))),
+    (row) => (!module || row.module === module) && (!needle || [row.actor_name, row.action, row.module, enumLabel(t, "logAction", row.action), enumLabel(t, "logModule", row.module), row.entity_id].some((value) => value?.toLocaleLowerCase("tr-TR").includes(needle))),
   );
   const columns: Column<AdminLogEntry>[] = [
-    { key: "action", header: t("users.colAction"), mobile: "title", cell: (row) => <span className="font-medium">{row.action}</span> },
-    { key: "module", header: t("users.colModule"), mobile: "badge", cell: (row) => <Badge tone="neutral">{row.module}</Badge> },
+    { key: "action", header: t("users.colAction"), mobile: "title", cell: (row) => <span className="font-medium">{enumLabel(t, "logAction", row.action)}</span> },
+    { key: "module", header: t("users.colModule"), mobile: "badge", cell: (row) => (
+        <Hint content={t("hints.logModule", { module: enumLabel(t, "logModule", row.module) })}>
+          <Badge tone="neutral">{enumLabel(t, "logModule", row.module)}</Badge>
+        </Hint>
+      ),
+    },
     { key: "date", header: t("users.colDate"), cell: (row) => formatDateTime(row.created_at, i18n.language) },
     { key: "user", header: t("users.colUser"), cell: (row) => row.actor_name ?? "-" },
     { key: "record", header: t("users.colRecord"), cell: (row) => <span className="break-all font-mono text-xs">{row.entity_id ?? "-"}</span> },
@@ -345,14 +358,14 @@ export function ActivityLogsPage() {
       />
       <Card className="mb-3 flex flex-col gap-2 p-3 sm:flex-row">
         <Input className="h-11 md:h-9" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("users.logSearch")} aria-label={t("users.logSearch")} data-testid="logs-search" />
-        <NativeSelect className="sm:w-56" value={module} aria-label={t("users.logModule")} onChange={(event) => setModule(event.target.value)} data-testid="logs-module">
+        <FormSelect className="sm:w-56" value={module} aria-label={t("users.logModule")} onChange={(event) => setModule(event.target.value)} data-testid="logs-module">
           <option value="">{t("users.logAllModules")}</option>
           {modules.map((value) => (
             <option key={value} value={value}>
-              {value}
+              {enumLabel(t, "logModule", value)}
             </option>
           ))}
-        </NativeSelect>
+        </FormSelect>
       </Card>
       {logs.error && !logs.data ? <ErrorState onRetry={logs.reload} /> : <DataList testId="logs" rows={visible} columns={columns} rowKey={(row) => String(row.id)} loading={logs.loading} />}
     </section>

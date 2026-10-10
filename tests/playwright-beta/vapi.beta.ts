@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { expectResponsiveLayout, login, mockBackend, mockUser, pathOf, viewports, type ExtraRoute } from "./helpers";
+import { expectResponsiveLayout, login, mockBackend, mockUser, pathOf, viewports, type ExtraRoute, chooseOption } from "./helpers";
 
 test.use({ serviceWorkers: "block" });
 
@@ -81,7 +81,7 @@ test("vapi: stats, cargo-not-received selection and queueing", async ({ page }) 
   const table = page.getByTestId("vapi-cargo-table");
   await expect(table).toContainText("Zeynep Kaya");
   await expect(table).toContainText("Aranmadı");
-  await page.getByTestId("vapi-cargo-provider").selectOption("ptt");
+  await chooseOption(page.getByTestId("vapi-cargo-provider"), "ptt");
   await expect(table).not.toContainText("Mehmet Demir");
   await expect(page.getByTestId("vapi-cargo-count")).toHaveText("1 kargo almayan müşteri");
   await table.getByTestId("vapi-cargo-select").first().check();
@@ -119,7 +119,7 @@ test("vapi: call history detail with AI summary and transcript, English", async 
   await page.getByTestId("vapi-calls-search").fill("ahmet");
   await expect(page.getByTestId("vapi-calls-empty")).toBeVisible();
   await page.getByTestId("vapi-calls-search").fill("");
-  await page.getByTestId("vapi-calls-status").selectOption("tamamlandi");
+  await chooseOption(page.getByTestId("vapi-calls-status"), "tamamlandi");
   await expect.poll(() => state.requests.some((entry) => entry.path === "/api/vapi/calls" && entry.search.includes("status=tamamlandi"))).toBe(true);
   await table.getByTestId("vapi-call-open").click();
   const sheet = page.getByTestId("vapi-call-detail");
@@ -138,7 +138,7 @@ test("vapi: dry-run test call", async ({ page }) => {
   await expect(page.getByTestId("vapi-feedback")).toBeVisible();
   await page.getByTestId("vapi-test-phone").fill("0555 999 88 77");
   await page.getByTestId("vapi-test-call").click();
-  await expect(page.getByTestId("vapi-test-last")).toContainText("call.create req_test");
+  await expect(page.getByTestId("vapi-test-last")).toContainText("Arama başlatma req_test");
   expect(state.bodies.find((entry) => entry.path === "/api/webphone/test-call")?.body).toMatchObject({ customer_name: "Test Müşteri", customer_phone: "0555 999 88 77", idempotency_key: "vapi_test_0555_999_88_77" });
 });
 

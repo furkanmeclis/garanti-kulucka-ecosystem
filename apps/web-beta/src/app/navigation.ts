@@ -1,6 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import { AudioLines, BarChart3, BookUser, Bot, Boxes, BrainCircuit, Bug, Calculator, Contact, FileText, GraduationCap, Instagram, LineChart, LayoutDashboard, MessageCircle, MessageSquare, MessageSquareCode, MessageSquareText, Package, PhoneCall, ScrollText, Settings, ShieldX, ShoppingCart, TimerReset, Truck, UserCog, Users, Voicemail, Wallet, Webhook, XCircle, Zap } from "lucide-react";
 import { panelRoleOf, type PanelRole } from "@garanti-kulucka/shared";
+import type { Brand } from "@/components/brand-icons";
 
 export type NavKey = "dashboard" | "orders" | "messages" | "customers" | "shipments" | "settings" | "cancellations" | "invoices" | "accounts" | "inventory" | "balances" | "comments" | "sms" | "reports" | "instagramAnalytics" | "instagramPublish" | "calls" | "voiceMessages" | "phonebook" | "vapi" | "users" | "activityLogs" | "dataDeletionRequests" | "cargoPipeline" | "suratDebug" | "cronDebug" | "whatsappDebug" | "instagramDebug" | "aiDebug" | "aiTraining";
 
@@ -13,6 +14,8 @@ export interface NavItem {
   key: NavKey;
   path: string;
   icon: LucideIcon;
+  /** Provider-specific pages show the provider's logo instead of `icon` (see components/nav-icon). */
+  brand?: Brand;
   roles: readonly PanelRole[];
   /** Shown in the mobile bottom bar (frequently used pages). */
   bottomBar: boolean;
@@ -25,13 +28,13 @@ const everyone: readonly PanelRole[] = ["manager", "calisan", "kargo_operatoru"]
 const office: readonly PanelRole[] = ["manager", "calisan"];
 const managers: readonly PanelRole[] = ["manager"];
 
-// Order matters: the first entry a role sees is its home page, and menus keep this order.
+// Menus (top bar, mobile sheet, bottom bar) keep this order; the home page is picked separately in homePathFor.
 export const navItems: readonly NavItem[] = [
-  { key: "dashboard", path: "/", icon: LayoutDashboard, roles: office, bottomBar: true, group: "main" },
-  { key: "orders", path: "/siparisler", icon: ShoppingCart, roles: everyone, bottomBar: true, group: "main" },
   { key: "messages", path: "/mesajlar", icon: MessageCircle, roles: everyone, bottomBar: true, group: "main" },
-  { key: "customers", path: "/musteriler", icon: Users, roles: office, bottomBar: false, group: "main" },
+  { key: "orders", path: "/siparisler", icon: ShoppingCart, roles: everyone, bottomBar: true, group: "main" },
   { key: "shipments", path: "/kargolar", icon: Truck, roles: everyone, bottomBar: true, group: "main" },
+  { key: "customers", path: "/musteriler", icon: Users, roles: office, bottomBar: false, group: "main" },
+  { key: "dashboard", path: "/", icon: LayoutDashboard, roles: office, bottomBar: true, group: "main" },
   { key: "cargoPipeline", path: "/kargolar/pipeline", icon: Zap, roles: everyone, bottomBar: false, group: "operations" },
   { key: "cancellations", path: "/iptaller", icon: XCircle, roles: office, bottomBar: false, group: "operations" },
   { key: "inventory", path: "/stok", icon: Package, roles: office, bottomBar: false, group: "operations" },
@@ -52,19 +55,19 @@ export const navItems: readonly NavItem[] = [
   { key: "activityLogs", path: "/islem-loglari", icon: ScrollText, roles: managers, bottomBar: false, group: "settings", settingsSection: "management" },
   { key: "dataDeletionRequests", path: "/veri-silme-talepleri", icon: ShieldX, roles: managers, bottomBar: false, group: "settings", settingsSection: "management" },
   // Admin debug pages (web: /kargo/surat-debug, /kargo/cron-debug and the /ayarlar/* debug routes).
-  { key: "suratDebug", path: "/kargolar/surat-debug", icon: Bug, roles: managers, bottomBar: false, group: "settings", settingsSection: "developer" },
+  { key: "suratDebug", path: "/kargolar/surat-debug", icon: Bug, brand: "surat", roles: managers, bottomBar: false, group: "settings", settingsSection: "developer" },
   { key: "cronDebug", path: "/kargolar/cron-debug", icon: TimerReset, roles: managers, bottomBar: false, group: "settings", settingsSection: "developer" },
-  { key: "whatsappDebug", path: "/ayarlar/whatsapp-debug", icon: MessageSquareCode, roles: managers, bottomBar: false, group: "settings", settingsSection: "developer" },
-  { key: "instagramDebug", path: "/ayarlar/instagram-debug", icon: Webhook, roles: managers, bottomBar: false, group: "settings", settingsSection: "developer" },
+  { key: "whatsappDebug", path: "/ayarlar/whatsapp-debug", icon: MessageSquareCode, brand: "whatsapp", roles: managers, bottomBar: false, group: "settings", settingsSection: "developer" },
+  { key: "instagramDebug", path: "/ayarlar/instagram-debug", icon: Webhook, brand: "instagram", roles: managers, bottomBar: false, group: "settings", settingsSection: "developer" },
   { key: "aiDebug", path: "/ayarlar/ai-debug", icon: BrainCircuit, roles: managers, bottomBar: false, group: "settings", settingsSection: "developer" },
   { key: "aiTraining", path: "/ayarlar/ai-egitim", icon: GraduationCap, roles: managers, bottomBar: false, group: "settings", settingsSection: "developer" },
 ];
 
 /** Desktop dropdowns / mobile sheet sections, in display order. */
-export const menuGroups: ReadonlyArray<{ key: MenuGroup; icon: LucideIcon }> = [
+export const menuGroups: ReadonlyArray<{ key: MenuGroup; icon: LucideIcon; brand?: Brand }> = [
   { key: "operations", icon: Boxes },
   { key: "accounting", icon: Calculator },
-  { key: "instagram", icon: Instagram },
+  { key: "instagram", icon: Instagram, brand: "instagram" },
   { key: "voice", icon: AudioLines },
 ];
 
@@ -98,8 +101,12 @@ export function settingsNavFor(role: string | null | undefined) {
 }
 
 /** Legacy HomeRedirect: kargo operatörü starts on orders, everyone else on the dashboard. */
+const homePriority: readonly NavKey[] = ["dashboard", "orders"];
+
 export function homePathFor(role: string | null | undefined) {
-  return navigationFor(role)[0]?.path ?? "/ayarlar";
+  const allowed = navigationFor(role);
+  const home = homePriority.map((key) => allowed.find((item) => item.key === key)).find(Boolean) ?? allowed[0];
+  return home?.path ?? "/ayarlar";
 }
 
 /** The most specific menu entry owns a path, so /ayarlar/ai-debug belongs to the debug page, not /ayarlar. */

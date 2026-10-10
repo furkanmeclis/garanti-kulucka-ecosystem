@@ -1,11 +1,12 @@
 import { panelRoleOf } from "@garanti-kulucka/shared";
-import { CheckCircle2, Download, Loader2 } from "lucide-react";
+import { Bot, CheckCircle2, Download, KeyRound, Loader2, Plug, Save, UserRound } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
 import { useAuth } from "@/app/auth";
 import { useInstallPrompt } from "@/app/pwa-hooks";
 import { useTheme, type ThemePreference } from "@/app/theme";
+import { BrandIcon } from "@/components/brand-icons";
 import { FilterSelect } from "@/components/list-toolbar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,8 +16,8 @@ import { roleLabelKey } from "@/layout/header-menus";
 import { PageHeader } from "@/layout/page-header";
 import { isLanguage } from "@/i18n";
 import { cn } from "@/lib/utils";
-import { NativeSelect } from "./accounting-shared";
-import { AiSettingsTab, IntegrationsOverviewTab, MetaProviderTab, NetgsmTab, SantralTab, WhatsAppTab } from "./settings-tabs";
+import { FormSelect } from "./accounting-shared";
+import { AiSettingsTab, IntegrationsOverviewTab, MetaProviderTab, NetgsmTab, providerTabBrand, SantralTab, WhatsAppTab } from "./settings-tabs";
 
 type Feedback = { tone: "success" | "error"; text: string } | null;
 
@@ -78,7 +79,7 @@ function ProfileCard() {
           </div>
           <div className="flex flex-wrap items-center gap-3 sm:col-span-2">
             <Button type="submit" disabled={saving} data-testid="profile-save">
-              {saving && <Loader2 className="animate-spin" aria-hidden="true" />}
+              {saving ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Save aria-hidden="true" />}
               {saving ? t("common.saving") : t("common.save")}
             </Button>
             <FeedbackLine feedback={feedback} testId="profile-feedback" />
@@ -134,7 +135,7 @@ function PasswordCard() {
           </div>
           <div className="flex flex-wrap items-center gap-3 sm:col-span-2">
             <Button type="submit" variant="secondary" disabled={saving} data-testid="password-save">
-              {saving && <Loader2 className="animate-spin" aria-hidden="true" />}
+              {saving ? <Loader2 className="animate-spin" aria-hidden="true" /> : <KeyRound aria-hidden="true" />}
               {saving ? t("common.saving") : t("common.save")}
             </Button>
             <FeedbackLine feedback={feedback} testId="password-feedback" />
@@ -222,6 +223,13 @@ const tabLabel = {
   santral: "settingsTabs.tabSantral",
 } as const;
 
+function TabIcon({ id }: { id: SettingsTab }) {
+  if (id === "account") return <UserRound className="size-4" aria-hidden="true" />;
+  if (id === "ai") return <Bot className="size-4" aria-hidden="true" />;
+  if (id === "integrations") return <Plug className="size-4" aria-hidden="true" />;
+  return <BrandIcon brand={providerTabBrand[id]} title="" />;
+}
+
 function AccountTab() {
   return (
     <div className="grid gap-6 xl:grid-cols-2" data-testid="settings-tab-panel-account">
@@ -268,13 +276,13 @@ export function SettingsPage() {
       {tabs.length > 1 && (
         <>
           <div className="mb-4 md:hidden">
-            <NativeSelect aria-label={t("settingsTabs.tabsLabel")} value={tab} onChange={(event) => select(event.target.value as SettingsTab)} data-testid="settings-tab-select">
+            <FormSelect aria-label={t("settingsTabs.tabsLabel")} value={tab} onChange={(event) => select(event.target.value as SettingsTab)} data-testid="settings-tab-select">
               {tabs.map((id) => (
                 <option key={id} value={id}>
                   {t(tabLabel[id])}
                 </option>
               ))}
-            </NativeSelect>
+            </FormSelect>
           </div>
           <div className="mb-6 hidden flex-wrap gap-1 border-b md:flex" role="tablist" aria-label={t("settingsTabs.tabsLabel")} data-testid="settings-tabs">
             {tabs.map((id) => (
@@ -283,10 +291,11 @@ export function SettingsPage() {
                 type="button"
                 role="tab"
                 aria-selected={tab === id}
-                className={cn("-mb-px min-h-11 shrink-0 border-b-2 px-3 text-sm font-medium transition-colors", tab === id ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}
+                className={cn("-mb-px inline-flex min-h-11 shrink-0 items-center gap-2 border-b-2 px-3 text-sm font-medium transition-colors", tab === id ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}
                 onClick={() => select(id)}
                 data-testid={`settings-tab-${id}`}
               >
+                <TabIcon id={id} />
                 {t(tabLabel[id])}
               </button>
             ))}

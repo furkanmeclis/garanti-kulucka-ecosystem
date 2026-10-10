@@ -3,6 +3,8 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/app/auth";
+import { BrandIcon } from "@/components/brand-icons";
+import { providerBrand } from "@/components/provider-label";
 import { Button } from "@/components/ui/button";
 import type { ShipmentPrintData } from "@/lib/orders";
 import { errorText } from "./accounting-shared";
@@ -46,7 +48,10 @@ function PrintPage({ data }: { data: ShipmentPrintData }) {
       {data.barcode_value ? (
         <div className="mt-4 flex flex-wrap items-center justify-between gap-4 border-t-2 border-dashed pt-4" data-testid="print-barcode">
           <div>
-            <p className="font-semibold">{data.provider_label} - Kargo Takip</p>
+            <p className="flex items-center gap-2 font-semibold">
+              {providerBrand(data.provider_label) && <BrandIcon brand={providerBrand(data.provider_label)!} variant="logo" title="" className="h-6" />}
+              {data.provider_label} - Kargo Takip
+            </p>
             <p className="font-mono text-lg" data-testid="print-barcode-value">
               {data.barcode_value}
             </p>

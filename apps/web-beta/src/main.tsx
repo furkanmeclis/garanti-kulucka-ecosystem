@@ -5,6 +5,8 @@ import { BrowserRouter } from "react-router-dom";
 import { App } from "./App";
 import { AuthProvider } from "./app/auth";
 import { ThemeProvider } from "./app/theme";
+import { ConfirmProvider } from "./components/confirm-dialog";
+import { TooltipProvider } from "./components/ui/tooltip";
 import { i18n, initI18n } from "./i18n";
 import { registerServiceWorker } from "./lib/pwa";
 import "./index.css";
@@ -19,7 +21,11 @@ void initI18n().then(() => {
         <ThemeProvider>
           <BrowserRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
             <AuthProvider>
-              <App />
+              <ConfirmProvider>
+                <TooltipProvider delayDuration={300}>
+                  <App />
+                </TooltipProvider>
+              </ConfirmProvider>
             </AuthProvider>
           </BrowserRouter>
         </ThemeProvider>

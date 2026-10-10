@@ -91,18 +91,14 @@ test("desktop More menu opens İptaller; filter, search and inline note", async 
 
 test("restore and permanently delete an invoiced order after confirmation", async ({ page }) => {
   const state = await signIn(page, viewports.desktop, "admin");
-  const dialogs: string[] = [];
-  page.on("dialog", (dialog) => {
-    dialogs.push(dialog.message());
-    void dialog.accept();
-  });
   await page.goto("/iptaller");
   const table = page.getByTestId("cancellations-table");
   await expect(table.getByTestId("cancellations-row")).toHaveCount(3);
 
   await table.getByTestId("cancellations-row").filter({ hasText: "GK-9002" }).getByTestId("cancellation-restore").click();
+  await expect(page.getByTestId("confirm-dialog-message")).toContainText('"GK-9002" siparişi geri alınacak');
+  await page.getByTestId("confirm-dialog-action").click();
   await expect(page.getByTestId("cancellations-feedback")).toContainText("Sipariş geri alındı");
-  expect(dialogs[0]).toContain('"GK-9002" siparişi geri alınacak');
   await expect(table.getByTestId("cancellations-row")).toHaveCount(2);
   expect(state.bodies.some((entry) => entry.method === "POST" && entry.path === "/api/orders/ord_r1/restore")).toBe(true);
 
@@ -111,8 +107,9 @@ test("restore and permanently delete an invoiced order after confirmation", asyn
   await expect(detail.getByTestId("cancellation-detail-invoice")).toHaveText("kb_inv_77");
   await expect(detail).toContainText("05551112233");
   await detail.getByTestId("cancellation-detail-delete").click();
+  await expect(page.getByTestId("confirm-dialog-message")).toContainText("KolayBi e-belgesi iptal kuyruğuna alınacak");
+  await page.getByTestId("confirm-dialog-action").click();
   await expect(page.getByTestId("cancellations-feedback")).toContainText("KolayBi e-belge iptali kuyruğa alındı");
-  expect(dialogs[1]).toContain("KolayBi e-belgesi iptal kuyruğuna alınacak");
   await expect(page.getByTestId("cancellation-detail")).toHaveCount(0);
   await expect(table.getByTestId("cancellations-row")).toHaveCount(1);
   const removal = state.bodies.find((entry) => entry.method === "DELETE" && entry.path === "/api/orders/ord_c1");
@@ -121,13 +118,13 @@ test("restore and permanently delete an invoiced order after confirmation", asyn
 
 test("mobile cards, dismissed confirmation, English and the cargo operator is redirected", async ({ page }) => {
   const state = await signIn(page, viewports.phone360);
-  page.on("dialog", (dialog) => void dialog.dismiss());
   await page.getByTestId("mobile-menu-trigger").click();
   await page.getByTestId("mobile-menu-operations").getByRole("link", { name: "İptaller" }).click();
   await expect.poll(() => pathOf(page)).toBe("/iptaller");
   const cards = page.getByTestId("cancellations-cards");
   await expect(cards.getByTestId("cancellations-card")).toHaveCount(3);
   await cards.getByTestId("cancellations-card").first().getByTestId("cancellation-restore").click();
+  await page.getByTestId("confirm-dialog-cancel").click();
   await expect(cards.getByTestId("cancellations-card")).toHaveCount(3);
   expect(state.bodies.some((entry) => entry.path.endsWith("/restore"))).toBe(false);
   await expectResponsiveLayout(page, { checkTouchTargets: true });

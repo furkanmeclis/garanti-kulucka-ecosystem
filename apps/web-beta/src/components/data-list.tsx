@@ -1,13 +1,14 @@
-import { AlertCircle, ChevronLeft, ChevronRight, Inbox, RefreshCw } from "lucide-react";
+import { AlertCircle, Ban, CheckCircle2, ChevronLeft, ChevronRight, CircleDot, Clock, FilePlus2, Inbox, Lock, PackageCheck, PackageOpen, PhoneOff, RefreshCw, Truck, Undo2, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { Hint } from "@/components/hint";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatNumber } from "@/lib/format";
 import { pageSize } from "@/lib/list-params";
-import { statusKey, statusTone } from "@/lib/status";
+import { statusHint, statusKey, statusLabel, statusTone } from "@/lib/status";
 import { cn } from "@/lib/utils";
 
 export interface Column<T> {
@@ -117,11 +118,44 @@ export function Pagination({ page, pages, total, onPage }: { page: number; pages
   );
 }
 
+/** Leading glyph per canonical status key (lib/status.ts) so badges can be scanned without reading. */
+const statusIcons: Record<string, LucideIcon> = {
+  draft: FilePlus2,
+  created: FilePlus2,
+  pending_confirmation: Clock,
+  pending: Clock,
+  confirmed: CheckCircle2,
+  unreachable: PhoneOff,
+  preparing: PackageOpen,
+  shipped: Truck,
+  in_transit: Truck,
+  out_for_delivery: Truck,
+  delivered: PackageCheck,
+  returned: Undo2,
+  cancelled: Ban,
+  open: CircleDot,
+  closed: Lock,
+  active: CheckCircle2,
+  exception: AlertCircle,
+};
+
+export function StatusIcon({ value, className }: { value: string | null | undefined; className?: string }) {
+  const key = statusKey(value);
+  const Icon = key ? statusIcons[key] : undefined;
+  return Icon ? <Icon className={cn("size-3.5 shrink-0", className)} aria-hidden="true" /> : null;
+}
+
 export function StatusBadge({ value }: { value: string | null | undefined }) {
   const { t } = useTranslation();
   if (!value) return <span className="text-muted-foreground">{t("common.none")}</span>;
-  const key = statusKey(value);
-  return <Badge tone={statusTone(value)}>{key ? t(`status.${key}` as "status.delivered") : value}</Badge>;
+  return (
+    <Hint content={statusHint(t, value)}>
+      <Badge tone={statusTone(value)}>
+        <StatusIcon value={value} />
+        {statusLabel(t, value)}
+      </Badge>
+    </Hint>
+  );
 }
 
 export function ErrorState({ onRetry }: { onRetry: () => void }) {

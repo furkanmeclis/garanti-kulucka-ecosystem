@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { expectResponsiveLayout, login, mockBackend, mockUser, pathOf, viewports, type ExtraRoute } from "./helpers";
+import { expectResponsiveLayout, login, mockBackend, mockUser, pathOf, viewports, type ExtraRoute, chooseOption } from "./helpers";
 
 test.use({ serviceWorkers: "block" });
 
@@ -134,7 +134,7 @@ test("voice messages: queue, list filter and per-number report", async ({ page }
   await page.getByTestId("voice-recipients").fill("0555 111 22 33\n05554445566, 05554445566; abc");
   await expect(page.getByTestId("voice-recipient-count")).toHaveText("2 numara");
   await page.getByTestId("voice-content").fill("Siparişiniz yola çıktı");
-  await page.getByTestId("voice-ringtime").selectOption("30");
+  await chooseOption(page.getByTestId("voice-ringtime"), "30");
   await page.getByTestId("voice-send").click();
   await expect(page.getByTestId("voice-feedback")).toContainText("Sesli mesaj kuyruğa alındı (2 numara).");
   const sent = state.bodies.find((entry) => entry.method === "POST" && entry.path === "/api/netgsm/sesli-mesaj")?.body as Record<string, unknown>;

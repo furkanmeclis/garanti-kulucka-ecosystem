@@ -1,8 +1,9 @@
 import type { OrderSummary } from "@garanti-kulucka/shared";
-import { Loader2, Plus, Trash2 } from "lucide-react";
+import { AlertTriangle, Loader2, Plus, Save, Trash2 } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/app/auth";
+import { BrandIcon } from "@/components/brand-icons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -10,7 +11,8 @@ import { ApiError } from "@/lib/api";
 import { formatMoney } from "@/lib/format";
 import { orderTotals, parseMoney, type CargoProviderKey, type ProductOption } from "@/lib/orders";
 import { cn } from "@/lib/utils";
-import { errorText, FeedbackLine, Field, NativeSelect, type Feedback } from "./accounting-shared";
+import { Textarea } from "@/components/ui/textarea";
+import { errorText, FeedbackLine, Field, FormSelect, type Feedback } from "./accounting-shared";
 
 interface FormItem {
   product_public_id: string;
@@ -183,8 +185,8 @@ export function OrderFormSheet({ open, onClose, onCreated, initial }: { open: bo
             </Field>
           </div>
           <Field label={t("orders.address")}>
-            <textarea
-              className="min-h-20 w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 md:text-sm dark:bg-input/30"
+            <Textarea
+              className="min-h-20 w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 lg:text-sm dark:bg-input/30"
               rows={2}
               value={form.address}
               onChange={set("address")}
@@ -205,6 +207,7 @@ export function OrderFormSheet({ open, onClose, onCreated, initial }: { open: bo
                   onClick={() => setForm((prev) => ({ ...prev, cargo: value, force_surat_at: false }))}
                   data-testid={`order-form-cargo-${value}`}
                 >
+                  <BrandIcon brand={value} title="" />
                   {value === "ptt" ? "PTT Kargo" : "Sürat Kargo"}
                 </Button>
               ))}
@@ -215,18 +218,18 @@ export function OrderFormSheet({ open, onClose, onCreated, initial }: { open: bo
             {form.items.map((item, index) => (
               <div key={index} className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 rounded-md border p-2" data-testid="order-form-item">
                 <div className="grid min-w-0 grid-cols-2 gap-2">
-                  <NativeSelect className="col-span-2" aria-label={t("orders.product")} value={item.product_public_id} onChange={(event) => pickProduct(index, event.target.value)} data-testid="order-form-product">
+                  <FormSelect className="col-span-2" aria-label={t("orders.product")} value={item.product_public_id} onChange={(event) => pickProduct(index, event.target.value)} data-testid="order-form-product">
                     <option value="">{t("orders.productCustom")}</option>
                     {products.map((product) => (
                       <option key={product.public_id} value={product.public_id}>
                         {product.name} · {formatMoney(product.unit_price, "TRY", i18n.language)} · {product.stock_quantity}
                       </option>
                     ))}
-                  </NativeSelect>
+                  </FormSelect>
                   {!item.product_public_id && (
                     <Input className="col-span-2 h-11 md:h-9" aria-label={t("orders.itemName")} placeholder={t("orders.itemName")} value={item.name} onChange={(event) => updateItem(index, { name: event.target.value })} data-testid="order-form-item-name" />
                   )}
-                  <Input className="h-11 md:h-9" type="number" min={1} aria-label={t("orders.quantity")} value={item.quantity} onChange={(event) => updateItem(index, { quantity: event.target.value })} data-testid="order-form-quantity" />
+                  <Input className="h-11 md:h-9" inputMode="numeric" aria-label={t("orders.quantity")} value={item.quantity} onChange={(event) => updateItem(index, { quantity: event.target.value })} data-testid="order-form-quantity" />
                   <Input className="h-11 md:h-9" inputMode="decimal" aria-label={t("orders.unitPrice")} value={item.unit_price} onChange={(event) => updateItem(index, { unit_price: event.target.value })} data-testid="order-form-price" />
                 </div>
                 <Button
@@ -262,7 +265,7 @@ export function OrderFormSheet({ open, onClose, onCreated, initial }: { open: bo
           </dl>
           <FeedbackLine feedback={feedback} testId="order-form-feedback" />
           <Button type="submit" className={cn("min-h-11", forced && "bg-amber-600 hover:bg-amber-600/90")} disabled={saving} data-testid="order-form-submit">
-            {saving && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}
+            {saving ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : forced ? <AlertTriangle className="size-4" aria-hidden="true" /> : <Save className="size-4" aria-hidden="true" />}
             {saving ? t("orders.submitting") : forced ? t("orders.submitAnyway") : t("orders.submit")}
           </Button>
         </form>

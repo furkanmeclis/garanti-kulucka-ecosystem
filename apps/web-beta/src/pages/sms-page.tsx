@@ -1,4 +1,4 @@
-import { Loader2, Pencil, Plus, RefreshCw, Send, Trash2, Truck } from "lucide-react";
+import { ChevronLeft, ChevronRight, Eraser, FileText, History, Loader2, Pencil, PenLine, Plus, RefreshCw, Save, Send, Trash2 } from "lucide-react";
 import { useRef, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/app/auth";
@@ -14,7 +14,12 @@ import { formatDateTime } from "@/lib/format";
 import type { SmsHistoryType, SmsMessage, SmsTemplate } from "@/lib/sms-comments";
 import { useQuery } from "@/lib/use-query";
 import { cn } from "@/lib/utils";
-import { errorText, FeedbackLine, Field, idempotencyKey, NativeSelect, type Feedback } from "./accounting-shared";
+import { BrandIcon } from "@/components/brand-icons";
+import { Hint } from "@/components/hint";
+import { useConfirm } from "@/components/confirm-dialog";
+import { Tip } from "@/components/ui/tooltip";
+import { Textarea } from "@/components/ui/textarea";
+import { errorText, FeedbackLine, Field, idempotencyKey, FormSelect, type Feedback } from "./accounting-shared";
 
 const variables = [
   { label: "variableCustomerName", value: "{musteri_adi}", example: "Ahmet Yılmaz" },
@@ -38,7 +43,7 @@ export function parsePhones(text: string) {
 }
 
 const textareaClass =
-  "min-h-28 w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 md:text-sm dark:bg-input/30";
+  "min-h-28 w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 lg:text-sm dark:bg-input/30";
 
 /** /sms — legacy SmsGonderPage: manual send with templates and variables, history, template management and the PTT/Sürat sweep. */
 export function SmsPage() {
@@ -52,7 +57,7 @@ export function SmsPage() {
   ];
   return (
     <section data-testid="page-sms">
-      <PageHeader title={t("sms.title")} description={t("sms.subtitle")} />
+      <PageHeader brand="netgsm" title={t("sms.title")} description={t("sms.subtitle")} />
       <div className="mb-4 flex gap-1 overflow-x-auto border-b" role="tablist">
         {tabs.map(([key, label]) => (
           <button
@@ -60,10 +65,11 @@ export function SmsPage() {
             type="button"
             role="tab"
             aria-selected={tab === key}
-            className={cn("min-h-11 shrink-0 border-b-2 px-3 text-sm font-medium whitespace-nowrap", tab === key ? "border-primary text-foreground" : "border-transparent text-muted-foreground")}
+            className={cn("inline-flex min-h-11 shrink-0 items-center gap-2 border-b-2 px-3 text-sm font-medium whitespace-nowrap", tab === key ? "border-primary text-foreground" : "border-transparent text-muted-foreground")}
             onClick={() => setTab(key)}
             data-testid={`sms-tab-${key}`}
           >
+            <SmsTabIcon tab={key} />
             {t(`sms.${label}`)}
           </button>
         ))}
@@ -127,10 +133,10 @@ function ManualTab() {
       <Card className="p-4">
         <form className="flex flex-col gap-4" onSubmit={(event) => void submit(event)} data-testid="sms-form">
           <Field label={t("sms.recipientPhones")}>
-            <textarea className={textareaClass} rows={3} value={phones} onChange={(event) => setPhones(event.target.value)} placeholder="05551112233" data-testid="sms-phones" />
+            <Textarea className={textareaClass} rows={3} value={phones} onChange={(event) => setPhones(event.target.value)} placeholder="05551112233" data-testid="sms-phones" />
           </Field>
           <Field label={t("sms.templateOptional")}>
-            <NativeSelect
+            <FormSelect
               value={templateId}
               onChange={(event) => {
                 setTemplateId(event.target.value);
@@ -147,7 +153,7 @@ function ManualTab() {
                     {template.title}
                   </option>
                 ))}
-            </NativeSelect>
+            </FormSelect>
           </Field>
           <div className="flex flex-col gap-1.5">
             <label htmlFor="sms-message" className="text-sm font-medium">
@@ -157,11 +163,12 @@ function ManualTab() {
               <span className="text-muted-foreground">{t("sms.addVariable")}</span>
               {variables.map((variable) => (
                 <Button key={variable.value} type="button" variant="outline" size="sm" className="min-h-11 md:min-h-8" onClick={() => insert(variable.value)} data-testid={`sms-variable-${variable.value.slice(1, -1)}`}>
+                  <Plus className="size-4" aria-hidden="true" />
                   {variable.value}
                 </Button>
               ))}
             </div>
-            <textarea id="sms-message" ref={textarea} className={textareaClass} rows={5} value={message} onChange={(event) => setMessage(event.target.value)} placeholder={t("sms.messagePlaceholder")} data-testid="sms-message" />
+            <Textarea id="sms-message" ref={textarea} className={textareaClass} rows={5} value={message} onChange={(event) => setMessage(event.target.value)} placeholder={t("sms.messagePlaceholder")} data-testid="sms-message" />
             <p className="flex flex-wrap gap-x-3 text-xs text-muted-foreground" data-testid="sms-counter">
               <span>{t("sms.characterCount", { count: info.length })}</span>
               <span>{t("sms.smsCount", { count: info.parts })}</span>
@@ -181,6 +188,7 @@ function ManualTab() {
           <h2 className="font-semibold">{t("sms.thisSession")}</h2>
           {session.length > 0 && (
             <Button variant="ghost" size="sm" className="min-h-11 md:min-h-8" onClick={() => setSession([])}>
+              <Eraser className="size-4" aria-hidden="true" />
               {t("sms.clear")}
             </Button>
           )}
@@ -207,7 +215,12 @@ function ManualTab() {
 
 function StatusBadge({ status }: { status: SmsMessage["status"] }) {
   const { t } = useTranslation();
-  return <Badge tone={status === "sent" ? "success" : status === "failed" ? "danger" : "info"}>{t(status === "sent" ? "sms.statusSent" : status === "failed" ? "sms.statusFailed" : "sms.statusQueued")}</Badge>;
+  const label = t(status === "sent" ? "sms.statusSent" : status === "failed" ? "sms.statusFailed" : "sms.statusQueued");
+  return (
+    <Hint content={t("hints.smsStatus", { status: label })}>
+      <Badge tone={status === "sent" ? "success" : status === "failed" ? "danger" : "info"}>{label}</Badge>
+    </Hint>
+  );
 }
 
 function HistoryTab() {
@@ -224,7 +237,7 @@ function HistoryTab() {
     { key: "phone", header: t("sms.columnPhone"), mobile: "title", cell: (row) => <span className="font-medium">{row.recipient_phone}</span> },
     { key: "status", header: t("sms.columnStatus"), mobile: "badge", cell: (row) => <StatusBadge status={row.status} /> },
     { key: "customer", header: t("sms.columnCustomer"), cell: (row) => row.customer_name ?? t("common.none") },
-    { key: "message", header: t("sms.columnMessage"), cell: (row) => <span title={row.message}>{row.message}</span> },
+    { key: "message", header: t("sms.columnMessage"), cell: (row) => <Tip label={row.message}><span>{row.message}</span></Tip> },
     { key: "type", header: t("sms.columnType"), cell: (row) => t(row.is_automatic ? "sms.historyTypeAutomatic" : "sms.historyTypeManual") },
     { key: "time", header: t("sms.columnTime"), cell: (row) => formatDateTime(row.created_at, i18n.language) },
   ];
@@ -267,11 +280,13 @@ function HistoryTab() {
           {total > historyPageSize && (
             <div className="mt-3 flex items-center justify-between gap-2 text-sm">
               <Button variant="outline" className="min-h-11" disabled={page <= 1} onClick={() => setPage(page - 1)}>
+                <ChevronLeft className="size-4" aria-hidden="true" />
                 {t("sms.previousPage")}
               </Button>
               <span className="text-muted-foreground">{t("sms.paginationSummary", { total, from: (page - 1) * historyPageSize + 1, to: Math.min(page * historyPageSize, total) })}</span>
               <Button variant="outline" className="min-h-11" disabled={page >= pages} onClick={() => setPage(page + 1)}>
                 {t("sms.nextPage")}
+                <ChevronRight className="size-4" aria-hidden="true" />
               </Button>
             </div>
           )}
@@ -282,6 +297,7 @@ function HistoryTab() {
 }
 
 function TemplatesTab() {
+  const confirm = useConfirm();
   const { t } = useTranslation();
   const { api } = useAuth();
   const templates = useQuery("sms:templates", () => api.listSmsTemplates());
@@ -317,7 +333,7 @@ function TemplatesTab() {
 
   async function remove(template: SmsTemplate) {
     if (template.is_system) return setFeedback({ tone: "error", text: t("sms.systemTemplateNotDeletable") });
-    if (!window.confirm(t("sms.confirmDeleteTemplate"))) return;
+    if (!(await confirm(t("sms.confirmDeleteTemplate"), { tone: "danger" }))) return;
     try {
       await api.deleteSmsTemplate(template.public_id);
       setFeedback({ tone: "success", text: t("sms.templateDeleted") });
@@ -347,8 +363,16 @@ function TemplatesTab() {
               <Card className="flex h-full flex-col gap-2 p-4" data-testid="sms-template-card">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-medium">{template.title}</span>
-                  {template.is_system && <Badge tone="info">{t("sms.badgeSystem")}</Badge>}
-                  {!template.is_active && <Badge tone="warning">{t("sms.badgeInactive")}</Badge>}
+                  {template.is_system && (
+                    <Hint content={t("hints.templateSystem")}>
+                      <Badge tone="info">{t("sms.badgeSystem")}</Badge>
+                    </Hint>
+                  )}
+                  {!template.is_active && (
+                    <Hint content={t("hints.templateInactive")}>
+                      <Badge tone="warning">{t("sms.badgeInactive")}</Badge>
+                    </Hint>
+                  )}
                 </div>
                 <p className="text-sm break-words whitespace-pre-wrap text-muted-foreground">{template.body}</p>
                 <div className="mt-auto flex gap-2">
@@ -389,9 +413,10 @@ function TemplatesTab() {
               <Input value={title} onChange={(event) => setTitle(event.target.value)} className="h-11 md:h-9" data-testid="sms-template-title" />
             </Field>
             <Field label={t("sms.templateBodyPlaceholder")}>
-              <textarea className={textareaClass} rows={5} value={body} onChange={(event) => setBody(event.target.value)} data-testid="sms-template-body" />
+              <Textarea className={textareaClass} rows={5} value={body} onChange={(event) => setBody(event.target.value)} data-testid="sms-template-body" />
             </Field>
             <Button type="submit" className="min-h-11" disabled={saving} data-testid="sms-template-save">
+              {saving ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Save className="size-4" aria-hidden="true" />}
               {t("sms.save")}
             </Button>
           </form>
@@ -427,7 +452,7 @@ function AutomaticTab() {
       <div className="flex flex-wrap gap-2">
         {(["ptt", "surat"] as const).map((provider) => (
           <Button key={provider} variant="outline" className="min-h-11" disabled={busy !== null} onClick={() => void trigger(provider)} data-testid={`sms-trigger-${provider}`}>
-            {busy === provider ? <RefreshCw className="size-4 animate-spin" aria-hidden="true" /> : <Truck className="size-4" aria-hidden="true" />}
+            {busy === provider ? <RefreshCw className="size-4 animate-spin" aria-hidden="true" /> : <BrandIcon brand={provider} title="" />}
             {t(provider === "ptt" ? "sms.updatePttTracking" : "sms.updateSuratTracking")}
           </Button>
         ))}
@@ -436,4 +461,9 @@ function AutomaticTab() {
       <p className="text-xs text-muted-foreground">{t("sms.backgroundNote")}</p>
     </Card>
   );
+}
+
+function SmsTabIcon({ tab }: { tab: Tab }) {
+  const Icon = tab === "manual" ? PenLine : tab === "history" ? History : tab === "templates" ? FileText : RefreshCw;
+  return <Icon className="size-4" aria-hidden="true" />;
 }

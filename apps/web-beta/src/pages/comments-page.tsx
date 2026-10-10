@@ -1,5 +1,5 @@
-import { AlertTriangle, CheckCircle2, EyeOff, Hand, Loader2, MessageSquareReply, Settings2, Sparkles, Trash2 } from "lucide-react";
-import { useEffect, useState, type FormEvent } from "react";
+import { AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight, EyeOff, Globe, Hand, Loader2, Lock, MessageSquareReply, Save, Send, Settings2, Sparkles, Trash2 } from "lucide-react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/app/auth";
 import { ErrorState } from "@/components/data-list";
@@ -15,7 +15,13 @@ import { formatDateTime } from "@/lib/format";
 import type { CommentModerationConfig, CommentPlatform, CommentReplyType, CommentStatus, SocialComment } from "@/lib/sms-comments";
 import { useQuery } from "@/lib/use-query";
 import { cn } from "@/lib/utils";
-import { errorText, FeedbackLine, Field, idempotencyKey, type Feedback } from "./accounting-shared";
+import { BrandIcon } from "@/components/brand-icons";
+import { Hint } from "@/components/hint";
+import { ProviderLabel } from "@/components/provider-label";
+import { Switch } from "@/components/ui/switch";
+import { NumberInput } from "@/components/ui/number-input";
+import { Textarea } from "@/components/ui/textarea";
+import { errorText, FeedbackLine, Field, FormSelect, idempotencyKey, type Feedback } from "./accounting-shared";
 
 const pageSize = 30;
 const filters: Array<[CommentStatus | "all", "filterManual" | "filterAutoReplied" | "filterDeleted" | "filterHidden" | "filterAll"]> = [
@@ -38,6 +44,7 @@ const statusLabel: Record<CommentStatus, "statusPending" | "statusManual" | "sta
 /** /yorumlar — legacy YorumlarPage: AI comment moderation queue with reply / hide / delete / manual, the readiness check and settings. */
 export function CommentsPage() {
   const { t, i18n } = useTranslation();
+  const commentStatus = (value: CommentStatus) => (statusLabel[value] ? t(`comments.${statusLabel[value]}`) : t("common.unknownValue", { value }));
   const { api } = useAuth();
   const [status, setStatus] = useState<CommentStatus | "all">("manual");
   const [platform, setPlatform] = useState<CommentPlatform | "all">("all");
@@ -164,8 +171,8 @@ export function CommentsPage() {
           }}
           options={[
             { value: "all", label: t("comments.allPlatforms") },
-            { value: "instagram", label: "Instagram" },
-            { value: "facebook", label: "Facebook" },
+            { value: "instagram", label: "Instagram", icon: <BrandIcon brand="instagram" title="" /> },
+            { value: "facebook", label: "Facebook", icon: <BrandIcon brand="facebook" title="" /> },
           ]}
         />
       </ListToolbar>
@@ -193,9 +200,20 @@ export function CommentsPage() {
                 <Card className="flex flex-col gap-2 p-4" data-testid="comment-card">
                   <div className="flex flex-wrap items-center gap-2 text-sm">
                     <span className="font-medium">@{comment.username ?? t("comments.fallbackUser")}</span>
-                    <Badge tone="outline">{comment.platform === "instagram" ? "Instagram" : "Facebook"}</Badge>
-                    <Badge tone={comment.status === "error" ? "danger" : comment.status === "manual" || comment.status === "pending" ? "warning" : closed ? "neutral" : "success"}>{t(`comments.${statusLabel[comment.status]}`)}</Badge>
-                    {comment.confidence !== null && <span className="text-xs text-muted-foreground">{t("comments.confidence", { value: comment.confidence.toFixed(2) })}</span>}
+                    <Hint content={t("hints.commentPlatform", { platform: comment.platform === "instagram" ? "Instagram" : "Facebook" })}>
+                      <Badge tone="outline">
+                        <BrandIcon brand={comment.platform === "instagram" ? "instagram" : "facebook"} title="" className="size-3.5" />
+                        {comment.platform === "instagram" ? "Instagram" : "Facebook"}
+                      </Badge>
+                    </Hint>
+                    <Hint content={t("hints.commentStatus", { status: commentStatus(comment.status) })}>
+                      <Badge tone={comment.status === "error" ? "danger" : comment.status === "manual" || comment.status === "pending" ? "warning" : closed ? "neutral" : "success"}>{commentStatus(comment.status)}</Badge>
+                    </Hint>
+                    {comment.confidence !== null && (
+                      <Hint content={t("hints.commentConfidence")}>
+                        <span className="text-xs text-muted-foreground">{t("comments.confidence", { value: comment.confidence.toFixed(2) })}</span>
+                      </Hint>
+                    )}
                     <span className="ml-auto text-xs text-muted-foreground">{formatDateTime(comment.received_at, i18n.language)}</span>
                   </div>
                   <p className="break-words">{comment.text || t("comments.emptyComment")}</p>
@@ -235,11 +253,13 @@ export function CommentsPage() {
       {total > pageSize && (
         <div className="mt-3 flex items-center justify-between gap-2 text-sm">
           <Button variant="outline" className="min-h-11" disabled={page <= 1} onClick={() => setPage(page - 1)}>
+            <ChevronLeft className="size-4" aria-hidden="true" />
             {t("comments.previous")}
           </Button>
           <span className="text-muted-foreground">{t("comments.pageOf", { page, total: pages })}</span>
           <Button variant="outline" className="min-h-11" disabled={page >= pages} onClick={() => setPage(page + 1)}>
             {t("comments.next")}
+            <ChevronRight className="size-4" aria-hidden="true" />
           </Button>
         </div>
       )}
@@ -314,12 +334,13 @@ function ReplySheet({ comment, onClose, onSent }: { comment: SocialComment | nul
           <div className="flex gap-2" role="radiogroup" aria-label={t("comments.replyType")}>
             {(["public", "private"] as const).map((value) => (
               <Button key={value} type="button" variant={replyType === value ? "default" : "outline"} className="min-h-11 flex-1" aria-pressed={replyType === value} onClick={() => setReplyType(value)} data-testid={`comment-reply-type-${value}`}>
+                {value === "public" ? <Globe className="size-4" aria-hidden="true" /> : <Lock className="size-4" aria-hidden="true" />}
                 {t(value === "public" ? "comments.replyTypePublic" : "comments.replyTypePrivate")}
               </Button>
             ))}
           </div>
-          <textarea
-            className="min-h-28 w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 md:text-sm dark:bg-input/30"
+          <Textarea
+            className="min-h-28 w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 lg:text-sm dark:bg-input/30"
             rows={4}
             aria-label={t("comments.replyPlaceholder")}
             placeholder={t("comments.replyPlaceholder")}
@@ -334,6 +355,7 @@ function ReplySheet({ comment, onClose, onSent }: { comment: SocialComment | nul
               {t("comments.reprocessWithAi")}
             </Button>
             <Button type="submit" className="min-h-11 flex-1" disabled={busy !== null || !message.trim()} data-testid="comment-reply-send">
+              {busy === "send" ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Send className="size-4" aria-hidden="true" />}
               {t("comments.send")}
             </Button>
           </div>
@@ -378,13 +400,13 @@ function SettingsSheet({ open, onClose, onSaved }: { open: boolean; onClose: () 
     }
   }
 
-  const toggle = (label: string, checked: boolean, onChange: (value: boolean) => void, testId: string) => (
+  const toggle = (label: ReactNode, checked: boolean, onChange: (value: boolean) => void, testId: string) => (
     <label className="flex min-h-11 items-center gap-3 text-sm">
-      <input type="checkbox" className="size-5 accent-primary" checked={checked} onChange={(event) => onChange(event.target.checked)} data-testid={testId} />
+      <Switch checked={checked} onCheckedChange={onChange} data-testid={testId} />
       {label}
     </label>
   );
-  const area = "min-h-24 w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 md:text-sm dark:bg-input/30";
+  const area = "min-h-24 w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 lg:text-sm dark:bg-input/30";
 
   return (
     <Sheet open={open} onOpenChange={(next) => !next && onClose()}>
@@ -399,40 +421,36 @@ function SettingsSheet({ open, onClose, onSaved }: { open: boolean; onClose: () 
           <form className="flex flex-col gap-2 px-4 pb-4" onSubmit={(event) => void save(event)}>
             {toggle(t("comments.pipelineEnabled"), config.enabled, (value) => setConfig({ ...config, enabled: value }), "comments-enabled")}
             <p className="mt-2 text-sm font-medium">{t("comments.platforms")}</p>
-            {toggle("Instagram", config.platforms.instagram, (value) => setConfig({ ...config, platforms: { ...config.platforms, instagram: value } }), "comments-platform-instagram")}
-            {toggle("Facebook", config.platforms.facebook, (value) => setConfig({ ...config, platforms: { ...config.platforms, facebook: value } }), "comments-platform-facebook")}
+            {toggle(<ProviderLabel brand="instagram">Instagram</ProviderLabel>, config.platforms.instagram, (value) => setConfig({ ...config, platforms: { ...config.platforms, instagram: value } }), "comments-platform-instagram")}
+            {toggle(<ProviderLabel brand="facebook">Facebook</ProviderLabel>, config.platforms.facebook, (value) => setConfig({ ...config, platforms: { ...config.platforms, facebook: value } }), "comments-platform-facebook")}
             <Field label={t("comments.replyType")} className="mt-2">
-              <select
-                className="h-11 rounded-md border border-input bg-transparent px-3 text-sm md:h-9 dark:bg-input/30"
-                value={config.reply_type}
-                onChange={(event) => setConfig({ ...config, reply_type: event.target.value as CommentReplyType })}
-              >
+              <FormSelect value={config.reply_type} aria-label={t("comments.replyType")} onChange={(event) => setConfig({ ...config, reply_type: event.target.value as CommentReplyType })}>
                 <option value="public">{t("comments.replyTypePublicLong")}</option>
                 <option value="private">{t("comments.replyTypePrivateLong")}</option>
-              </select>
+              </FormSelect>
             </Field>
             {toggle(t("comments.deleteProfanity"), config.delete_profanity, (value) => setConfig({ ...config, delete_profanity: value }), "comments-delete-profanity")}
             {toggle(t("comments.deleteBrandDisparagement"), config.delete_brand_disparagement, (value) => setConfig({ ...config, delete_brand_disparagement: value }), "comments-delete-brand")}
             <Field label={t("comments.minConfidence")}>
-              <Input
-                type="number"
+              <NumberInput
+                decimal
                 min={0}
                 max={1}
-                step={0.05}
                 value={config.min_confidence}
-                onChange={(event) => setConfig({ ...config, min_confidence: Number(event.target.value) })}
-                className="h-11 md:h-9"
+                onValueChange={(value) => setConfig({ ...config, min_confidence: value })}
+                className="h-11 lg:h-9"
                 data-testid="comments-min-confidence"
               />
             </Field>
             <Field label={t("comments.riskManualExamples")}>
-              <textarea className={area} rows={3} value={risk} placeholder={t("comments.riskManualPlaceholder")} onChange={(event) => setRisk(event.target.value)} />
+              <Textarea className={area} rows={3} value={risk} placeholder={t("comments.riskManualPlaceholder")} onChange={(event) => setRisk(event.target.value)} />
             </Field>
             <Field label={t("comments.autoReplyTopics")}>
-              <textarea className={area} rows={3} value={topics} placeholder={t("comments.autoReplyTopicsPlaceholder")} onChange={(event) => setTopics(event.target.value)} data-testid="comments-topics" />
+              <Textarea className={area} rows={3} value={topics} placeholder={t("comments.autoReplyTopicsPlaceholder")} onChange={(event) => setTopics(event.target.value)} data-testid="comments-topics" />
             </Field>
             <FeedbackLine feedback={feedback} testId="comments-settings-feedback" />
             <Button type="submit" className="min-h-11" disabled={saving} data-testid="comments-settings-save">
+              {saving ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Save className="size-4" aria-hidden="true" />}
               {t("comments.save")}
             </Button>
           </form>

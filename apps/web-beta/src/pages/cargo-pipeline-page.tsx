@@ -1,25 +1,35 @@
 import { defaultCargoPipelineMessageTemplate, fillCargoPipelineTemplate, panelRoleOf } from "@garanti-kulucka/shared";
-import { CheckCircle, FlaskConical, Loader2, MessageSquare, Phone, Play, RefreshCw, Save, Send, Settings2, SkipForward, Trash2, X, Zap } from "lucide-react";
+import { AlertCircle, AudioLines, Ban, CheckCircle, CheckCircle2, Clock, FlaskConical, Loader2, MessageSquare, MessageSquareText, PackageCheck, Phone, Play, RefreshCw, Save, Send, Settings2, SkipForward, Trash2, X, Zap, type LucideIcon } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/app/auth";
 import { DataList, ErrorState, Pagination, type Column } from "@/components/data-list";
+import { Hint } from "@/components/hint";
+import { carrierBrand, channelBrand, ProviderLabel } from "@/components/provider-label";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { PageHeader } from "@/layout/page-header";
-import { channelLabel, formatDateTime } from "@/lib/format";
+import { carrierLabel, channelLabel, formatDateTime } from "@/lib/format";
 import { cargoPipelineStatuses, type CargoPipelineAction, type CargoPipelineConfig, type CargoPipelineItem, type CargoPipelineStatus, type CargoPipelineTestType } from "@/lib/cargo-pipeline";
 import { pageCount, pageSize } from "@/lib/list-params";
 import { useQuery } from "@/lib/use-query";
 import { cn } from "@/lib/utils";
-import { errorText, FeedbackLine, Field, idempotencyKey, NativeSelect, type Feedback } from "./accounting-shared";
+import { Switch } from "@/components/ui/switch";
+import { TimeSelect } from "@/components/ui/date-picker";
+import { NumberInput } from "@/components/ui/number-input";
+import { useConfirm } from "@/components/confirm-dialog";
+import { Tip } from "@/components/ui/tooltip";
+import { Textarea } from "@/components/ui/textarea";
+import { errorText, FeedbackLine, Field, idempotencyKey, FormSelect, type Feedback } from "./accounting-shared";
 
 type Tone = "warning" | "info" | "success" | "danger" | "neutral";
 
 const statusTone: Record<CargoPipelineStatus, Tone> = { bekliyor: "info", isleniyor: "warning", tamamlandi: "success", teslim: "success", hata: "danger", iptal: "neutral" };
+const statusIcon: Record<CargoPipelineStatus, LucideIcon> = { bekliyor: Clock, isleniyor: RefreshCw, tamamlandi: CheckCircle2, teslim: PackageCheck, hata: AlertCircle, iptal: Ban };
+const stepIcon: Record<string, LucideIcon> = { mesaj: MessageSquare, sms: MessageSquareText, vapi: AudioLines, tamamlandi: CheckCircle2, teslim: PackageCheck };
 const finished = (row: CargoPipelineItem) => row.status === "tamamlandi" || row.status === "teslim" || row.status === "iptal";
 
 /** Legacy KargoPipelineAyarlar inside a sheet (manager only). */
@@ -59,13 +69,12 @@ function ConfigSheet({ open, onClose }: { open: boolean; onClose: () => void }) 
   const number = (key: "mesaj_gecikme_dk" | "sms_gecikme_dk" | "vapi_gecikme_dk" | "max_deneme", min: number, max: number) =>
     config && (
       <Field label={t(`cargoPipeline.config_${key}`)}>
-        <Input
-          type="number"
+        <NumberInput
           min={min}
           max={max}
-          className="h-11 md:h-9"
+          className="h-11 lg:h-9"
           value={config[key]}
-          onChange={(event) => setConfig({ ...config, [key]: Math.min(max, Math.max(min, Number.parseInt(event.target.value, 10) || min)) })}
+          onValueChange={(value) => setConfig({ ...config, [key]: Math.round(value) })}
           data-testid={`pipeline-config-${key}`}
         />
       </Field>
@@ -85,7 +94,7 @@ function ConfigSheet({ open, onClose }: { open: boolean; onClose: () => void }) 
         ) : (
           <form className="flex flex-col gap-3 p-4" onSubmit={(event) => void save(event)}>
             <label className="flex min-h-11 items-center gap-3 text-sm font-medium">
-              <input type="checkbox" role="switch" className="size-5 accent-primary" checked={config.aktif} onChange={(event) => setConfig({ ...config, aktif: event.target.checked })} data-testid="pipeline-config-active" />
+              <Switch checked={config.aktif} onCheckedChange={(next) => setConfig({ ...config, aktif: next })} data-testid="pipeline-config-active" />
               <span>
                 {t("cargoPipeline.configActive")}
                 <span className="block text-xs font-normal text-muted-foreground">{t("cargoPipeline.configActiveHint")}</span>
@@ -93,10 +102,10 @@ function ConfigSheet({ open, onClose }: { open: boolean; onClose: () => void }) 
             </label>
             <div className="grid grid-cols-2 gap-3">
               <Field label={t("cargoPipeline.configStart")}>
-                <Input type="time" className="h-11 md:h-9" value={config.baslangic_saati} onChange={(event) => setConfig({ ...config, baslangic_saati: event.target.value })} data-testid="pipeline-config-start" />
+                <TimeSelect value={config.baslangic_saati} label={t("cargoPipeline.configStart")} onChange={(value) => setConfig({ ...config, baslangic_saati: value })} testId="pipeline-config-start" />
               </Field>
               <Field label={t("cargoPipeline.configEnd")}>
-                <Input type="time" className="h-11 md:h-9" value={config.bitis_saati} onChange={(event) => setConfig({ ...config, bitis_saati: event.target.value })} data-testid="pipeline-config-end" />
+                <TimeSelect value={config.bitis_saati} label={t("cargoPipeline.configEnd")} onChange={(value) => setConfig({ ...config, bitis_saati: value })} testId="pipeline-config-end" />
               </Field>
               {number("mesaj_gecikme_dk", 0, 1440)}
               {number("sms_gecikme_dk", 0, 1440)}
@@ -104,8 +113,8 @@ function ConfigSheet({ open, onClose }: { open: boolean; onClose: () => void }) 
               {number("max_deneme", 1, 10)}
             </div>
             <Field label={t("cargoPipeline.configTemplate")}>
-              <textarea
-                className="min-h-24 w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 md:text-sm dark:bg-input/30"
+              <Textarea
+                className="min-h-24 w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 lg:text-sm dark:bg-input/30"
                 maxLength={2000}
                 value={config.mesaj_sablonu}
                 onChange={(event) => setConfig({ ...config, mesaj_sablonu: event.target.value })}
@@ -191,10 +200,10 @@ function TestSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
           <div className="grid grid-cols-2 gap-3">
             {text("tracking", t("cargoPipeline.testTracking"))}
             <Field label={t("cargoPipeline.testProvider")}>
-              <NativeSelect value={form.provider} onChange={(event) => setForm((prev) => ({ ...prev, provider: event.target.value }))}>
+              <FormSelect value={form.provider} onChange={(event) => setForm((prev) => ({ ...prev, provider: event.target.value }))}>
                 <option value="PTT">PTT</option>
                 <option value="Sürat">Sürat</option>
-              </NativeSelect>
+              </FormSelect>
             </Field>
           </div>
           {text("lastMove", t("cargoPipeline.testLastMove"))}
@@ -228,9 +237,12 @@ function TestSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
 
 /** /kargolar/pipeline — legacy KargoPipelinePage: teslim alınmayan kargo mesaj → SMS → VAPI akışı. */
 export function CargoPipelinePage() {
+  const confirm = useConfirm();
   const { t, i18n } = useTranslation();
   const { api, user } = useAuth();
   const manager = panelRoleOf(user?.role) === "manager";
+  const stepLabel = (step: string) => (i18n.exists(`cargoPipeline.step_${step}`) ? t(`cargoPipeline.step_${step}` as "cargoPipeline.step_sms") : t("common.unknownValue", { value: step }));
+  const pipelineStatusLabel = (value: string) => (i18n.exists(`cargoPipeline.status_${value}`) ? t(`cargoPipeline.status_${value}` as "cargoPipeline.status_hata") : t("common.unknownValue", { value }));
   const [status, setStatus] = useState<CargoPipelineStatus | "">("");
   const [page, setPage] = useState(1);
   // Legacy: 30 sn'de bir otomatik yenile.
@@ -264,7 +276,7 @@ export function CargoPipelinePage() {
   }
 
   async function remove(row: CargoPipelineItem) {
-    if (!window.confirm(t("cargoPipeline.deleteConfirm"))) return;
+    if (!(await confirm(t("cargoPipeline.deleteConfirm"), { tone: "danger" }))) return;
     setBusy(`${row.public_id}:delete`);
     setFeedback(null);
     try {
@@ -280,18 +292,17 @@ export function CargoPipelinePage() {
   }
 
   const iconButton = (row: CargoPipelineItem, action: CargoPipelineAction | "delete", Icon: typeof Play, label: string, onClick: () => void, className?: string) => (
-    <Button
+    <Tip label={label}><span className="inline-flex"><Button
       variant="ghost"
       size="icon"
       className={cn("size-11 md:size-9", className)}
       aria-label={label}
-      title={label}
       disabled={busy !== null}
       onClick={onClick}
       data-testid={`pipeline-${action}`}
     >
       {busy === `${row.public_id}:${action}` ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Icon className="size-4" aria-hidden="true" />}
-    </Button>
+    </Button></span></Tip>
   );
 
   const columns: Column<CargoPipelineItem>[] = [
@@ -313,8 +324,18 @@ export function CargoPipelinePage() {
       mobile: "badge",
       cell: (row) => (
         <span className="flex flex-wrap items-center gap-1">
-          <Badge tone="neutral">{t(`cargoPipeline.step_${row.step}`)}</Badge>
-          <Badge tone={statusTone[row.status] ?? "neutral"}>{t(`cargoPipeline.status_${row.status}`)}</Badge>
+          <Hint content={t("hints.pipelineStep", { step: stepLabel(row.step) })}>
+            <Badge tone="neutral">
+              <BadgeIcon icon={stepIcon[row.step]} />
+              {stepLabel(row.step)}
+            </Badge>
+          </Hint>
+          <Hint content={t("hints.pipelineStatus", { status: pipelineStatusLabel(row.status) })}>
+            <Badge tone={statusTone[row.status] ?? "neutral"}>
+              <BadgeIcon icon={statusIcon[row.status]} />
+              {pipelineStatusLabel(row.status)}
+            </Badge>
+          </Hint>
         </span>
       ),
     },
@@ -323,8 +344,10 @@ export function CargoPipelinePage() {
       header: t("cargoPipeline.colAttempt"),
       cell: (row) => (
         <span className="block min-w-0">
-          <span className="block">{t("cargoPipeline.attempt", { count: row.attempt_count, max: row.max_attempts })}</span>
-          {row.error_message && <span className="block max-w-64 truncate text-xs text-destructive" title={row.error_message}>{row.error_message}</span>}
+          <Hint content={t("hints.pipelineAttempts")}>
+            <span className="block">{t("cargoPipeline.attempt", { count: row.attempt_count, max: row.max_attempts })}</span>
+          </Hint>
+          {row.error_message && <Tip label={row.error_message}><span className="block max-w-64 truncate text-xs text-destructive">{row.error_message}</span></Tip>}
         </span>
       ),
     },
@@ -333,12 +356,18 @@ export function CargoPipelinePage() {
       header: t("cargoPipeline.colChannel"),
       cell: (row) => (
         <span>
-          {row.channel ? channelLabel(row.channel) : t("common.none")}
-          {row.cargo_provider && <span className="block text-xs uppercase text-muted-foreground">{row.cargo_provider}</span>}
+          {row.channel ? <ProviderLabel brand={channelBrand(row.channel)}>{channelLabel(row.channel)}</ProviderLabel> : t("common.none")}
+          {row.cargo_provider && (
+            <span className="block text-xs uppercase text-muted-foreground">
+              <ProviderLabel brand={carrierBrand(row.cargo_provider)} iconClassName="size-3.5">
+                {carrierLabel(row.cargo_provider, t("shipments.otherProvider"))}
+              </ProviderLabel>
+            </span>
+          )}
         </span>
       ),
     },
-    { key: "last", header: t("cargoPipeline.colLastMove"), cell: (row) => <span className="line-clamp-2" title={row.last_event_text ?? undefined}>{row.last_event_text ?? t("common.none")}</span> },
+    { key: "last", header: t("cargoPipeline.colLastMove"), cell: (row) => <Tip label={row.last_event_text ?? undefined}><span className="line-clamp-2">{row.last_event_text ?? t("common.none")}</span></Tip> },
     { key: "next", header: t("cargoPipeline.colNextRun"), cell: (row) => formatDateTime(row.next_run_at, i18n.language) },
     {
       key: "actions",
@@ -346,11 +375,11 @@ export function CargoPipelinePage() {
       cell: (row) => (
         <span className="flex flex-wrap items-center gap-1">
           {row.conversation_public_id && (
-            <Button asChild variant="ghost" size="icon" className="size-11 md:size-9" aria-label={t("cargoPipeline.openConversation")} title={t("cargoPipeline.openConversation")}>
+            <Tip label={t("cargoPipeline.openConversation")}><Button asChild variant="ghost" size="icon" className="size-11 md:size-9" aria-label={t("cargoPipeline.openConversation")}>
               <Link to={`/mesajlar?konusma=${encodeURIComponent(row.conversation_public_id)}`} data-testid="pipeline-open-conversation">
                 <Zap className="size-4" aria-hidden="true" />
               </Link>
-            </Button>
+            </Button></Tip>
           )}
           {manager && !finished(row) && (
             <>
@@ -393,7 +422,7 @@ export function CargoPipelinePage() {
         }
       />
       <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center">
-        <NativeSelect
+        <FormSelect
           className="sm:w-56"
           aria-label={t("cargoPipeline.colStep")}
           value={status}
@@ -409,7 +438,7 @@ export function CargoPipelinePage() {
               {t(`cargoPipeline.status_${value}`)}
             </option>
           ))}
-        </NativeSelect>
+        </FormSelect>
         <span className="text-sm text-muted-foreground sm:ml-auto" data-testid="pipeline-total">
           {t("cargoPipeline.total", { count: total })}
         </span>
@@ -427,4 +456,8 @@ export function CargoPipelinePage() {
       {manager && <TestSheet open={testOpen} onClose={() => setTestOpen(false)} />}
     </section>
   );
+}
+
+function BadgeIcon({ icon: Icon }: { icon: LucideIcon | undefined }) {
+  return Icon ? <Icon className="size-3.5 shrink-0" aria-hidden="true" /> : null;
 }

@@ -16,7 +16,7 @@ describe("role-based menu", () => {
   });
 
   it("gives managers and staff the full menu", () => {
-    const full = ["dashboard", "orders", "messages", "customers", "shipments"];
+    const full = ["messages", "orders", "shipments", "customers", "dashboard"];
     expect(keys("owner")).toEqual(full);
     expect(keys("admin")).toEqual(full);
     expect(keys("calisan")).toEqual(full);
@@ -72,7 +72,7 @@ describe("role-based menu", () => {
   });
 
   it("limits cargo operators to orders, messages, shipments and settings", () => {
-    expect(keys("kargo_operatoru")).toEqual(["orders", "messages", "shipments"]);
+    expect(keys("kargo_operatoru")).toEqual(["messages", "orders", "shipments"]);
     expect(canAccessPath("kargo_operatoru", "/musteriler")).toBe(false);
     expect(canAccessPath("kargo_operatoru", "/")).toBe(false);
     expect(canAccessPath("kargo_operatoru", "/kargolar")).toBe(true);
@@ -104,8 +104,8 @@ describe("role-based menu", () => {
   });
 
   it("keeps at most four frequent pages in the mobile bottom bar", () => {
-    expect(bottomBarFor("admin").map((item) => item.key)).toEqual(["dashboard", "orders", "messages", "shipments"]);
-    expect(bottomBarFor("kargo_operatoru").map((item) => item.key)).toEqual(["orders", "messages", "shipments"]);
+    expect(bottomBarFor("admin").map((item) => item.key)).toEqual(["messages", "orders", "shipments", "dashboard"]);
+    expect(bottomBarFor("kargo_operatoru").map((item) => item.key)).toEqual(["messages", "orders", "shipments"]);
     for (const role of ["admin", "calisan", "kargo_operatoru"]) expect(bottomBarFor(role).length).toBeLessThanOrEqual(4);
   });
 });

@@ -58,8 +58,10 @@ test("kargolar: legacy views and date range reach the API; managers can queue tr
   await page.getByTestId("filter-view").click();
   await page.getByTestId("filter-view-shipped").click();
   await expect.poll(() => lastQuery(state)).toContain("stage=shipped");
-  await page.getByTestId("filter-from").fill("2026-10-01");
+  await page.getByTestId("filter-dates").click();
+  await page.getByTestId("filter-from").fill("01.10.2026");
   await expect.poll(() => lastQuery(state)).toContain("created_from=2026-10-01");
+  await page.keyboard.press("Escape");
   await page.getByTestId("shipments-refresh-tracking").click();
   await expect(page.getByTestId("shipments-feedback")).toHaveText("PTT ve Sürat takip güncellemesi kuyruğa alındı");
   expect(state.bodies.filter((entry) => entry.path.startsWith("/admin/integrations/provider-cron-triggers/")).map((entry) => entry.path).sort()).toEqual([

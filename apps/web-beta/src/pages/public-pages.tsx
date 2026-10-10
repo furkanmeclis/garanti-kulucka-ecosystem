@@ -10,6 +10,8 @@ import { Input } from "@/components/ui/input";
 import { LanguageMenu, ThemeToggle } from "@/layout/header-menus";
 import { formatDateTime } from "@/lib/format";
 import type { DataDeletionStatusLookup } from "@/lib/privacy";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Textarea } from "@/components/ui/textarea";
 import { errorText, Field } from "./accounting-shared";
 
 /** Shell for the anonymous legacy pages (veri silme, şifre sıfırla, yasal metinler). */
@@ -44,7 +46,7 @@ export function PublicLayout({ title, subtitle, icon, children, testId }: { titl
 }
 
 const emptyForm = { ad: "", email: "", telefon: "", instagram: "", messenger: "", aciklama: "", onay: false };
-const area = "min-h-24 w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 md:text-sm dark:bg-input/30";
+const area = "min-h-24 w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 lg:text-sm dark:bg-input/30";
 
 /** /veri-silme — legacy DataDeletionPage: KVKK form (`POST /api/veri-silme-talebi`) and `?ref=` status (Meta callback URL). */
 export function DataDeletionPage() {
@@ -182,10 +184,10 @@ export function DataDeletionPage() {
                 </Field>
               </div>
               <Field label={t("dataDeletion.description")}>
-                <textarea className={area} name="aciklama" rows={3} maxLength={2000} value={form.aciklama} onChange={set("aciklama")} placeholder={t("dataDeletion.descriptionPlaceholder")} />
+                <Textarea className={area} name="aciklama" rows={3} maxLength={2000} value={form.aciklama} onChange={set("aciklama")} placeholder={t("dataDeletion.descriptionPlaceholder")} />
               </Field>
               <label className="flex items-start gap-3 text-sm">
-                <input type="checkbox" name="onay" className="mt-0.5 h-11 w-5 shrink-0 accent-primary md:size-5" checked={form.onay} onChange={(event) => setForm((prev) => ({ ...prev, onay: event.target.checked }))} />
+                <Checkbox name="onay" className="-mt-2.5 lg:mt-0" checked={form.onay} onCheckedChange={(next) => setForm((prev) => ({ ...prev, onay: next === true }))} data-testid="deletion-consent" />
                 <span className="pt-3 md:pt-0">{t("dataDeletion.consent")}</span>
               </label>
               <Button type="submit" variant="destructive" className="min-h-11 sm:self-start" disabled={sending} data-testid="deletion-submit">

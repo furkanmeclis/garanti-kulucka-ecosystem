@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { expect, test, type Page } from "@playwright/test";
-import { expectResponsiveLayout, login, mockBackend, mockUser, viewports, type ExtraRoute } from "./helpers";
+import { expectResponsiveLayout, login, mockBackend, mockUser, viewports, type ExtraRoute, chooseOption } from "./helpers";
 
 test.use({ serviceWorkers: "block" });
 
@@ -88,7 +88,7 @@ test("orders: create with phone lookup, product lines, totals and the duplicate 
   await form.getByTestId("order-form-submit").click();
   await expect(form.getByTestId("order-form-feedback")).toHaveText("Kargo firması seçimi zorunlu (PTT veya Sürat)");
   await form.getByTestId("order-form-cargo-surat").click();
-  await form.getByTestId("order-form-product").selectOption("prd_1");
+  await chooseOption(form.getByTestId("order-form-product"), "prd_1");
   await form.getByTestId("order-form-quantity").fill("2");
   await expect(form.getByTestId("order-form-grand-total")).toContainText("9.000");
   await form.getByTestId("order-form-add-item").click();
@@ -127,7 +127,7 @@ test("orders: detail actions, manual confirmation, notes, KolayBi and cargo tran
   await expect(detail.getByTestId("order-teyit-badge")).toHaveText("Teyitli");
   await detail.getByTestId("order-kolaybi-transfer").click();
   await expect(detail.getByTestId("order-kolaybi-badge")).toHaveText("Aktarılıyor...");
-  await expect(detail.getByTestId("order-provider-steps")).toContainText("kolaybi.contact.find #1");
+  await expect(detail.getByTestId("order-provider-steps")).toContainText("KolayBi · Cari arama #1");
   await detail.getByTestId("order-notes-input").fill("Kapıda arayın");
   await detail.getByTestId("order-notes-save").click();
   await expect(detail.getByTestId("order-action-message")).toContainText("Not kaydedildi");
@@ -136,31 +136,32 @@ test("orders: detail actions, manual confirmation, notes, KolayBi and cargo tran
   const transfer = detail.getByTestId("order-cargo-transfer");
   await expect(transfer.getByTestId("order-cargo-missing-address")).toBeVisible();
   await transfer.getByTestId("order-cargo-district").fill("Çankaya");
-  await transfer.getByTestId("order-cargo-payment").selectOption("odeme_alindi");
+  await chooseOption(transfer.getByTestId("order-cargo-payment"), "odeme_alindi");
   await transfer.getByTestId("order-cargo-create").click();
   await expect(detail.getByTestId("order-action-message")).toHaveText("Sürat Kargo barkodu oluşturuldu: SRT123");
   const shipment = state.bodies.find((entry) => entry.path === "/api/orders/ord_2/shipments")?.body as Record<string, unknown>;
   expect(shipment).toMatchObject({ provider: "surat", payment_status: "odeme_alindi", recipient_district: "Çankaya" });
   expect(shipment.recipient_city).toBeUndefined();
 
-  page.once("dialog", (dialog) => void dialog.accept());
   await detail.getByTestId("order-cancel").click();
+  await page.getByTestId("confirm-dialog-action").click();
   await expect(detail.getByTestId("order-restore")).toBeVisible();
 });
 
 test("orders: bulk confirmation, bulk cargo transfer and Excel exports", async ({ page }) => {
   const state = await signIn(page);
-  page.on("dialog", (dialog) => void dialog.accept());
   await page.getByTestId("orders-select-all").click();
   await expect(page.getByTestId("orders-bulk-bar")).toContainText("20 seçili");
   await page.getByTestId("orders-table").getByTestId("order-select").nth(0).uncheck();
   await expect(page.getByTestId("orders-bulk-bar")).toContainText("19 seçili");
   await page.getByTestId("orders-bulk-confirmation").click();
+  await page.getByTestId("confirm-dialog-action").click();
   await expect(page.getByTestId("orders-feedback")).toContainText("1");
   const bulk = state.bodies.find((entry) => entry.path === "/api/orders/bulk/confirmation-calls")?.body as { order_public_ids: string[] };
   expect(bulk.order_public_ids).toHaveLength(19);
   expect(bulk.order_public_ids).not.toContain("ord_1");
   await page.getByTestId("orders-bulk-ptt").click();
+  await page.getByTestId("confirm-dialog-action").click();
   await expect(page.getByTestId("orders-feedback")).toHaveText("2 sipariş PTT Kargo'ya aktarıldı");
 
   await page.getByTestId("orders-table").getByTestId("order-select").nth(1).check();
@@ -180,8 +181,10 @@ test("orders: source and date filters reach the API; mobile cards stay touch fri
   await page.getByTestId("filter-source").click();
   await page.getByTestId("filter-source-ai").click();
   await expect.poll(() => state.requests.filter((entry) => entry.path === "/api/orders").at(-1)?.search).toContain("source=ai");
-  await page.getByTestId("filter-from").fill("2026-10-01");
+  await page.getByTestId("filter-dates").click();
+  await page.getByTestId("filter-from").fill("01.10.2026");
   await expect.poll(() => state.requests.filter((entry) => entry.path === "/api/orders").at(-1)?.search).toContain("created_from=2026-10-01");
+  await page.keyboard.press("Escape");
   await page.getByTestId("filter-source").click();
   await page.getByTestId("filter-source-all").click();
   await expect(page.getByTestId("orders-cards")).toBeVisible();

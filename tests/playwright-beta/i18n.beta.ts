@@ -18,7 +18,7 @@ test("TR is the default; EN switch translates login, menu and pages and is remem
   expect(await page.evaluate(() => window.localStorage.getItem("garanti-beta-lang"))).toBe("en");
 
   await login(page, state);
-  await expect(page.getByTestId("desktop-nav").getByRole("link")).toHaveText(["Dashboard", "Orders", "Messages", "Customers", "Shipments", "Settings"]);
+  await expect(page.getByTestId("desktop-nav").getByRole("link")).toHaveText(["Messages", "Orders", "Shipments", "Customers", "Dashboard", "Settings"]);
   await page.getByTestId("profile-menu-trigger").click();
   await expect(page.getByTestId("profile-role")).toHaveText("Staff");
   await expect(page.getByTestId("profile-menu-logout")).toHaveText("Sign out");
@@ -29,7 +29,7 @@ test("TR is the default; EN switch translates login, menu and pages and is remem
   await expect(page.getByTestId("desktop-nav").getByRole("link", { name: "Orders" })).toBeVisible();
   await page.getByTestId("language-menu-trigger").click();
   await page.getByTestId("language-option-tr").click();
-  await expect(page.getByTestId("desktop-nav").getByRole("link")).toHaveText(["Pano", "Siparişler", "Mesajlar", "Müşteriler", "Kargolar", "Ayarlar"]);
+  await expect(page.getByTestId("desktop-nav").getByRole("link")).toHaveText(["Mesajlar", "Siparişler", "Kargolar", "Müşteriler", "Pano", "Ayarlar"]);
   await expect(page.locator("html")).toHaveAttribute("lang", "tr");
 });
 

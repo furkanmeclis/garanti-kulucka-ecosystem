@@ -1,5 +1,5 @@
 import type { OrderSummary } from "@garanti-kulucka/shared";
-import { CheckCircle2, RotateCcw, Trash2 } from "lucide-react";
+import { Ban, CheckCircle2, RotateCcw, Save, Trash2, Undo2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/app/auth";
@@ -13,6 +13,9 @@ import type { OrderActionState } from "@/lib/api";
 import { formatDateTime, formatMoney } from "@/lib/format";
 import { pageCount, pageSize, useListParams } from "@/lib/list-params";
 import { useQuery } from "@/lib/use-query";
+import { ProviderLabel } from "@/components/provider-label";
+import { enumLabel } from "@/lib/status";
+import { useConfirm } from "@/components/confirm-dialog";
 
 type Feedback = { tone: "success" | "error"; text: string } | null;
 
@@ -30,6 +33,7 @@ function idempotencyKey(prefix: string) {
  * the KolayBi e-document cancellation) and inline notes.
  */
 export function CancellationsPage() {
+  const confirm = useConfirm();
   const { t, i18n } = useTranslation();
   const { api } = useAuth();
   const list = useListParams(["status"] as const);
@@ -65,7 +69,7 @@ export function CancellationsPage() {
   };
 
   async function restore(order: { public_id: string; order_number: string }) {
-    if (busy || !window.confirm(t("cancellations.confirmRestore", { order: order.order_number }))) return;
+    if (busy || !(await confirm(t("cancellations.confirmRestore", { order: order.order_number })))) return;
     setBusy(order.public_id);
     setFeedback(null);
     try {
@@ -87,7 +91,7 @@ export function CancellationsPage() {
       // The legacy confirmation names the KolayBi invoice, so read the order's invoice state first.
       const state = detail?.public_id === order.public_id ? detail : (await api.getOrderActions(order.public_id)).order;
       const invoiced = Boolean(state.kolaybi.invoice_id);
-      if (!window.confirm(t(invoiced ? "cancellations.confirmDeleteInvoiced" : "cancellations.confirmDelete", { order: order.order_number }))) return;
+      if (!(await confirm(t(invoiced ? "cancellations.confirmDeleteInvoiced" : "cancellations.confirmDelete", { order: order.order_number }), { tone: "danger" }))) return;
       const result = await api.deleteOrder(order.public_id, idempotencyKey("iptal_sil"));
       removeRow(order.public_id);
       setFeedback({ tone: "success", text: result.e_document_cancel ? t("cancellations.deletedWithInvoice") : t("cancellations.deleted") });
@@ -161,6 +165,7 @@ export function CancellationsPage() {
             />
             {changed && (
               <Button size="sm" variant="outline" className="min-h-11 md:min-h-8" disabled={busy !== null} onClick={() => void saveNote(row)} data-testid="cancellation-note-save">
+                <Save className="size-4" aria-hidden="true" />
                 {t("common.save")}
               </Button>
             )}
@@ -198,8 +203,8 @@ export function CancellationsPage() {
           onChange={(value) => list.update({ status: value })}
           options={[
             { value: "all", label: `${t("cancellations.status")}: ${t("cancellations.filterAll")}` },
-            { value: "cancelled", label: t("cancellations.filterCancelled") },
-            { value: "returned", label: t("cancellations.filterReturned") },
+            { value: "cancelled", label: t("cancellations.filterCancelled"), icon: <Ban className="size-4 text-muted-foreground" aria-hidden="true" /> },
+            { value: "returned", label: t("cancellations.filterReturned"), icon: <Undo2 className="size-4 text-muted-foreground" aria-hidden="true" /> },
           ]}
         />
       </ListToolbar>
@@ -237,11 +242,13 @@ export function CancellationsPage() {
                 <dt className="text-muted-foreground">{t("cancellations.amount")}</dt>
                 <dd>{formatMoney(detail.total_amount, detail.currency, i18n.language)}</dd>
                 <dt className="text-muted-foreground">{t("cancellations.confirmation")}</dt>
-                <dd>{detail.confirmation_status ?? t("common.none")}</dd>
-                <dt className="text-muted-foreground">{t("cancellations.invoice")}</dt>
+                <dd>{enumLabel(t, "confirmationStatus", detail.confirmation_status)}</dd>
+                <dt className="text-muted-foreground">
+                  <ProviderLabel brand="kolaybi">{t("cancellations.invoice")}</ProviderLabel>
+                </dt>
                 <dd className="break-all" data-testid="cancellation-detail-invoice">{detail.kolaybi.invoice_id ?? t("common.none")}</dd>
                 <dt className="text-muted-foreground">{t("cancellations.eDocument")}</dt>
-                <dd>{detail.kolaybi.e_document_status ?? t("common.none")}</dd>
+                <dd>{enumLabel(t, "eDocumentStatus", detail.kolaybi.e_document_status)}</dd>
                 <dt className="text-muted-foreground">{t("cancellations.note")}</dt>
                 <dd className="break-words">{detail.notes ?? t("common.none")}</dd>
                 <dt className="text-muted-foreground">{t("cancellations.created")}</dt>

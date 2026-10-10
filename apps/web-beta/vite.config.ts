@@ -41,7 +41,7 @@ export default defineConfig(({ mode }) => ({
         scope: "/",
         display: "standalone",
         background_color: "#0b1220",
-        theme_color: "#15803d",
+        theme_color: "#F47B06",
         categories: ["business", "productivity"],
         icons: [
           { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },

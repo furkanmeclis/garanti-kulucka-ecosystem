@@ -1,10 +1,12 @@
 import type { ShipmentSummary } from "@garanti-kulucka/shared";
-import { CheckCircle2, Download, Printer, RefreshCw, X } from "lucide-react";
+import { CheckCircle2, Download, FileSpreadsheet, Package, Phone, Printer, RefreshCw, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/app/auth";
 import { panelRoleOf } from "@garanti-kulucka/shared";
+import { BrandIcon } from "@/components/brand-icons";
 import { DataList, ErrorState, Pagination, StatusBadge, type Column } from "@/components/data-list";
+import { carrierBrand, ProviderLabel } from "@/components/provider-label";
 import { FilterSelect, ListToolbar } from "@/components/list-toolbar";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -13,9 +15,14 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { PageHeader } from "@/layout/page-header";
 import type { ShipmentListQuery } from "@/lib/api";
 import { carrierLabel, formatDateTime } from "@/lib/format";
+import { statusText } from "@/lib/status";
 import { pageCount, pageSize, useListParams } from "@/lib/list-params";
 import { useQuery } from "@/lib/use-query";
 import { cn } from "@/lib/utils";
+import { Checkbox } from "@/components/ui/checkbox";
+import { SelectAllCheckbox } from "@/components/select-all";
+import { DatePicker, DateRangePicker } from "@/components/ui/date-picker";
+import { Tip } from "@/components/ui/tooltip";
 import { errorText, FeedbackLine, idempotencyKey, type Feedback } from "./accounting-shared";
 import { ShipmentPrintOverlay } from "./shipment-print";
 
@@ -33,12 +40,12 @@ function viewQuery(view: string): Partial<ShipmentListQuery> {
 }
 
 /** Legacy Excel: "liste" (ad, telefon, il) or "telefon" (telefon, ad). */
-function downloadExcel(rows: ShipmentSummary[], format: "liste" | "telefon") {
+function downloadExcel(rows: ShipmentSummary[], format: "liste" | "telefon", labels: { provider: (value: string) => string; status: (value: string) => string }) {
   const headers = format === "telefon" ? ["Telefon", "Ad Soyad"] : ["Ad Soyad", "Telefon", "İl", "İlçe", "Kargo", "Takip No", "Sipariş No", "Durum", "Son Hareket"];
   const body = rows.map((row) =>
     format === "telefon"
       ? [row.recipient_phone ?? "", row.recipient_name ?? ""]
-      : [row.recipient_name ?? "", row.recipient_phone ?? "", row.recipient_city ?? "", row.recipient_district ?? "", row.provider, row.tracking_number ?? row.barcode_number ?? "", row.order_number ?? "", row.status, row.last_event_text ?? ""],
+      : [row.recipient_name ?? "", row.recipient_phone ?? "", row.recipient_city ?? "", row.recipient_district ?? "", labels.provider(row.provider), row.tracking_number ?? row.barcode_number ?? "", row.order_number ?? "", labels.status(row.status), row.last_event_text ?? ""],
   );
   const escape = (value: string) => value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
   const table = [headers, ...body].map((row) => `<tr>${row.map((cell) => `<td>${escape(String(cell))}</td>`).join("")}</tr>`).join("");
@@ -89,7 +96,7 @@ export function ShipmentsPage() {
 
   async function exportRows(format: "liste" | "telefon", scope: "selected" | "filtered") {
     const exportRows = scope === "selected" ? rows.filter((row) => selected.has(row.public_id)) : (await api.listShipments({ ...query, limit: 200, offset: 0 })).data;
-    downloadExcel(exportRows, format);
+    downloadExcel(exportRows, format, { provider: (value) => carrierLabel(value, t("shipments.otherProvider")), status: (value) => statusText(t, value) });
     setFeedback({ tone: "success", text: t("shipments.exported", { count: exportRows.length }) });
   }
 
@@ -113,7 +120,7 @@ export function ShipmentsPage() {
       header: "",
       mobile: "hidden",
       className: "w-10",
-      cell: (row) => <input type="checkbox" className="size-5 accent-primary" aria-label={t("shipments.selectRow", { tracking: label(row) })} checked={selected.has(row.public_id)} onChange={() => toggle(row.public_id)} data-testid="shipment-select" />,
+      cell: (row) => <Checkbox aria-label={t("shipments.selectRow", { tracking: label(row) })} checked={selected.has(row.public_id)} onCheckedChange={() => toggle(row.public_id)} data-testid="shipment-select" />,
     },
     {
       key: "tracking",
@@ -121,7 +128,7 @@ export function ShipmentsPage() {
       mobile: "title",
       cell: (row) => (
         <span className="flex items-center gap-3">
-          <input type="checkbox" className="h-11 w-5 shrink-0 accent-primary md:hidden" aria-label={t("shipments.selectRow", { tracking: label(row) })} checked={selected.has(row.public_id)} onChange={() => toggle(row.public_id)} />
+          <Checkbox className="md:hidden" aria-label={t("shipments.selectRow", { tracking: label(row) })} checked={selected.has(row.public_id)} onCheckedChange={() => toggle(row.public_id)} />
           <button type="button" className="inline-flex min-h-11 min-w-11 items-center font-medium text-primary underline-offset-4 hover:underline md:min-h-0 md:min-w-0" onClick={() => setDetail(row.public_id)} data-testid="shipment-open">
             {label(row)}
           </button>
@@ -130,10 +137,10 @@ export function ShipmentsPage() {
     },
     { key: "status", header: t("shipments.status"), mobile: "badge", cell: (row) => <StatusBadge value={row.status} /> },
     { key: "recipient", header: t("shipments.recipient"), cell: (row) => row.recipient_name ?? row.customer_full_name ?? t("common.none") },
-    { key: "provider", header: t("shipments.provider"), cell: (row) => carrierLabel(row.provider, other) },
+    { key: "provider", header: t("shipments.provider"), cell: (row) => <ProviderLabel brand={carrierBrand(row.provider)}>{carrierLabel(row.provider, other)}</ProviderLabel> },
     { key: "location", header: t("shipments.location"), cell: (row) => [row.recipient_district, row.recipient_city].filter(Boolean).join(", ") || t("common.none") },
     { key: "order", header: t("shipments.order"), cell: (row) => row.order_number ?? t("common.none") },
-    { key: "event", header: t("shipments.lastEvent"), cell: (row) => <span title={row.last_event_text ?? undefined}>{row.last_event_text ?? t("common.none")}</span> },
+    { key: "event", header: t("shipments.lastEvent"), cell: (row) => <Tip label={row.last_event_text ?? undefined}><span>{row.last_event_text ?? t("common.none")}</span></Tip> },
     { key: "updated", header: t("messages.updated"), mobile: "hidden", cell: (row) => formatDateTime(row.updated_at, i18n.language) },
   ];
 
@@ -164,6 +171,7 @@ export function ShipmentsPage() {
                         onSelect={() => void exportRows(format, scope)}
                         data-testid={`shipments-export-${scope}-${format}`}
                       >
+                        {format === "liste" ? <FileSpreadsheet className="size-4" aria-hidden="true" /> : <Phone className="size-4" aria-hidden="true" />}
                         {t(format === "liste" ? "shipments.exportList" : "shipments.exportPhone")}
                       </DropdownMenuItem>
                     ))}
@@ -186,7 +194,7 @@ export function ShipmentsPage() {
           label={t("shipments.view")}
           value={view}
           onChange={(value) => list.update({ view: value })}
-          options={views.map((value) => ({ value, label: t(`shipments.view_${value}`) }))}
+          options={views.map((value) => ({ value, label: t(`shipments.view_${value}`), icon: value === "ptt_not_received" ? <BrandIcon brand="ptt" title="" /> : value === "surat_not_received" ? <BrandIcon brand="surat" title="" /> : undefined }))}
         />
         <FilterSelect
           testId="filter-provider"
@@ -195,9 +203,9 @@ export function ShipmentsPage() {
           onChange={(value) => list.update({ provider: value })}
           options={[
             { value: "all", label: `${t("shipments.provider")}: ${t("common.all")}` },
-            { value: "ptt", label: "PTT" },
-            { value: "surat", label: "Sürat" },
-            { value: "other", label: other },
+            { value: "ptt", label: "PTT", icon: <BrandIcon brand="ptt" title="" /> },
+            { value: "surat", label: "Sürat", icon: <BrandIcon brand="surat" title="" /> },
+            { value: "other", label: other, icon: <Package className="size-4 text-muted-foreground" aria-hidden="true" /> },
           ]}
         />
         <FilterSelect
@@ -207,8 +215,16 @@ export function ShipmentsPage() {
           onChange={(value) => list.update({ status: value })}
           options={[{ value: "all", label: `${t("shipments.status")}: ${t("common.all")}` }, ...shipmentStatuses.map((value) => ({ value, label: t(`status.${value}`) }))]}
         />
-        <Input type="date" className="h-11 sm:w-40 md:h-9" aria-label={t("shipments.dateFrom")} value={from === "all" ? "" : from} onChange={(event) => list.update({ from: event.target.value || null })} data-testid="filter-from" />
-        <Input type="date" className="h-11 sm:w-40 md:h-9" aria-label={t("shipments.dateTo")} value={to === "all" ? "" : to} onChange={(event) => list.update({ to: event.target.value || null })} data-testid="filter-to" />
+        <DateRangePicker
+          className="col-span-2 sm:w-64"
+          label={`${t("shipments.dateFrom")} – ${t("shipments.dateTo")}`}
+          from={from === "all" ? "" : from}
+          to={to === "all" ? "" : to}
+          onChange={(range) => list.update({ from: range.from || null, to: range.to || null })}
+          testId="filter-dates"
+          fromTestId="filter-from"
+          toTestId="filter-to"
+        />
       </ListToolbar>
       <div className="mb-3 flex flex-col gap-2">
         {selected.size > 0 && (
@@ -225,9 +241,13 @@ export function ShipmentsPage() {
           </div>
         )}
         {rows.length > 0 && (
-          <Button variant="ghost" className="min-h-11 self-start" onClick={() => setSelected(allVisible ? new Set() : new Set(rows.map((row) => row.public_id)))} data-testid="shipments-select-all">
-            {allVisible ? t("shipments.clearSelection") : t("shipments.selectAllVisible")}
-          </Button>
+          <SelectAllCheckbox
+            total={rows.length}
+            selected={rows.filter((row) => selected.has(row.public_id)).length}
+            onChange={(all) => setSelected(all ? new Set(rows.map((row) => row.public_id)) : new Set())}
+            label={allVisible ? t("shipments.clearSelection") : t("shipments.selectAllVisible")}
+            testId="shipments-select-all"
+          />
         )}
         <FeedbackLine feedback={feedback} testId="shipments-feedback" />
       </div>
@@ -306,7 +326,7 @@ function ShipmentDetailSheet({ publicId, onClose, onChanged, onPrint }: { public
       <SheetContent side="right" closeLabel={t("cargoPrint.close")} className="w-[min(32rem,100vw)] overflow-y-auto p-0" data-testid="shipment-detail">
         <SheetHeader className="border-b p-4 pr-14">
           <SheetTitle>{shipment ? (shipment.tracking_number ?? shipment.barcode_number ?? t("shipments.detail")) : t("shipments.detail")}</SheetTitle>
-          <SheetDescription>{shipment ? `${carrierLabel(shipment.provider, t("shipments.otherProvider"))} · ${shipment.order_number ?? "-"}` : ""}</SheetDescription>
+          <SheetDescription>{shipment ? <ProviderLabel brand={carrierBrand(shipment.provider)}>{`${carrierLabel(shipment.provider, t("shipments.otherProvider"))} · ${shipment.order_number ?? "-"}`}</ProviderLabel> : ""}</SheetDescription>
         </SheetHeader>
         <div className="flex flex-col gap-3 p-4 text-sm">
           <FeedbackLine feedback={feedback} testId="shipment-detail-feedback" />
@@ -337,10 +357,10 @@ function ShipmentDetailSheet({ publicId, onClose, onChanged, onPrint }: { public
                   <CheckCircle2 className="size-4" aria-hidden="true" />
                   {t("shipments.markDelivered")}
                 </Button>
-                <Button className="min-h-11" disabled={!printable} title={printable ? undefined : t("shipments.transferFirst")} onClick={() => onPrint(shipment.public_id)} data-testid="shipment-print">
+                <Tip label={printable ? undefined : t("shipments.transferFirst")}><span className="inline-flex"><Button className="min-h-11" disabled={!printable} onClick={() => onPrint(shipment.public_id)} data-testid="shipment-print">
                   <Printer className="size-4" aria-hidden="true" />
                   {t("shipments.print")}
-                </Button>
+                </Button></span></Tip>
               </div>
               <section className="flex flex-col gap-2 border-t pt-3" data-testid="shipment-history">
                 <h3 className="font-semibold">{t("shipments.history")}</h3>
@@ -350,7 +370,7 @@ function ShipmentDetailSheet({ publicId, onClose, onChanged, onPrint }: { public
                   <ol className="flex flex-col gap-2">
                     {shipment.tracking_events!.map((event) => (
                       <li key={event.public_id} className="border-l-2 pl-3">
-                        <p className="font-medium">{event.description ?? event.status}</p>
+                        <p className="font-medium">{event.description ?? statusText(t, event.status)}</p>
                         <p className="text-xs text-muted-foreground">
                           {event.location ?? "-"} · {formatDateTime(event.occurred_at, i18n.language)}
                         </p>

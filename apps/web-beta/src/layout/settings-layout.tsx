@@ -3,6 +3,7 @@ import { Link, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "@/app/auth";
 import { navOwnerOf, settingsNavFor, type NavItem, type SettingsSection } from "@/app/navigation";
 import { cn } from "@/lib/utils";
+import { NavIcon } from "@/components/nav-icon";
 import { PageHeadingLevel } from "./page-header";
 
 const sectionLabel = {
@@ -54,7 +55,7 @@ export function SettingsLayout() {
                       )}
                       data-testid={`settings-nav-item-${item.key}`}
                     >
-                      <item.icon className="size-4" aria-hidden="true" />
+                      <NavIcon item={item} className="size-4" />
                       {t(settingsItemLabelKey(item))}
                     </Link>
                   );

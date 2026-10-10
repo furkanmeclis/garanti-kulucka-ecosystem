@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { backendBaseUrl, expectResponsiveLayout, login, mockBackend, mockUser, pathOf, viewports, type ExtraRoute } from "./helpers";
+import { backendBaseUrl, expectResponsiveLayout, login, mockBackend, mockUser, pathOf, viewports, type ExtraRoute, chooseOption } from "./helpers";
 
 test.use({ serviceWorkers: "block" });
 
@@ -161,19 +161,19 @@ test("ai training: stats, filters, batches and the export download", async ({ pa
   const state = await open(page);
   await page.goto("/ayarlar/ai-egitim");
   await expect(page.getByTestId("ai-training-total")).toHaveText("Dışa aktarılabilir konuşma: 240");
-  await expect(page.getByTestId("ai-training-channels")).toHaveText("whatsapp: 120 · instagram: 80 · messenger: 40");
+  await expect(page.getByTestId("ai-training-channels")).toHaveText("WhatsApp: 120 · Instagram: 80 · Messenger: 40");
   await page.getByTestId("ai-training-answered").uncheck();
   await expect(page.getByTestId("ai-training-total")).toHaveText("Dışa aktarılabilir konuşma: 300");
   await expect.poll(() => state.requests.some((entry) => entry.path === "/api/debug/ai-training/stats" && entry.search.includes("answered_only=false"))).toBe(true);
   await page.getByTestId("ai-training-answered").check();
-  await page.getByTestId("ai-training-channel").selectOption("instagram");
+  await chooseOption(page.getByTestId("ai-training-channel"), "instagram");
   await expect(page.getByTestId("ai-training-total")).toHaveText("Dışa aktarılabilir konuşma: 80");
-  await page.getByTestId("ai-training-batch-size").selectOption("50");
+  await chooseOption(page.getByTestId("ai-training-batch-size"), "50");
   await expect(page.getByTestId("ai-training-batch")).toHaveText("Parti 1–50");
   await page.getByTestId("ai-training-next").click();
   await expect(page.getByTestId("ai-training-batch")).toHaveText("Parti 51–80");
   await expect(page.getByTestId("ai-training-next")).toBeDisabled();
-  await page.getByTestId("ai-training-format").selectOption("json");
+  await chooseOption(page.getByTestId("ai-training-format"), "json");
 
   const download = page.waitForEvent("download");
   await page.getByTestId("ai-training-download").click();
@@ -212,12 +212,12 @@ test("sürat debug: stats, gate, filters, redacted detail and clear", async ({ p
   await expect(detail).not.toContainText("hidden-value");
   await expect(detail).toContainText("canlı çağrı yok");
 
-  await page.getByTestId("surat-status-filter").selectOption("error");
+  await chooseOption(page.getByTestId("surat-status-filter"), "error");
   await expect(logs.locator("li")).toHaveCount(1);
   await page.getByTestId("debug-log-pa_s2").getByTestId("debug-log-toggle").click();
   await expect(page.getByTestId("debug-log-pa_s2").getByTestId("debug-log-detail")).toContainText("Hata: timeout Sürat zaman aşımı");
-  await page.getByTestId("surat-status-filter").selectOption("all");
-  await page.getByTestId("surat-endpoint-filter").selectOption("/kargo-takip");
+  await chooseOption(page.getByTestId("surat-status-filter"), "all");
+  await chooseOption(page.getByTestId("surat-endpoint-filter"), "/kargo-takip");
   await expect(logs.locator("li")).toHaveCount(2);
   await page.getByTestId("debug-search").fill("req_s3");
   await expect(logs.locator("li")).toHaveCount(1);
@@ -230,14 +230,10 @@ test("sürat debug: server-side clear confirms, deletes every Sürat attempt and
   const state = await open(page);
   await page.goto("/kargolar/surat-debug");
   await expect(page.getByTestId("surat-stat-total")).toContainText("3");
-  const dialogs: string[] = [];
-  page.on("dialog", (dialog) => {
-    dialogs.push(dialog.message());
-    void dialog.accept();
-  });
   await page.getByTestId("debug-clear-server").click();
+  await expect(page.getByTestId("confirm-dialog-message")).toHaveText("Sunucudaki tüm Sürat denemeleri silinecek. Devam?");
+  await page.getByTestId("confirm-dialog-action").click();
   await expect(page.getByTestId("debug-clear-result")).toHaveText("Sunucudan 9 kayıt silindi.");
-  expect(dialogs).toEqual(["Sunucudaki tüm Sürat denemeleri silinecek. Devam?"]);
   const deletes = state.requests.filter((request) => request.method === "DELETE");
   expect(deletes.map((request) => `${request.path}${request.search}`)).toEqual(["/admin/integrations/provider-attempts?provider_key=surat"]);
   await expect(page.getByTestId("surat-stat-total")).toContainText("0");
@@ -267,7 +263,7 @@ test("cron debug: carrier cards, dry-run triggers with idempotency keys and filt
   expect((triggers[2]?.body as { idempotency_key: string }).idempotency_key).toMatch(/^cron_debug_surat_/);
   await expect(page.getByTestId("cron-showing")).toHaveText("6 / 6 cron çalışması gösteriliyor");
 
-  await page.getByTestId("cron-provider-filter").selectOption("surat");
+  await chooseOption(page.getByTestId("cron-provider-filter"), "surat");
   await expect(page.getByTestId("cron-showing")).toHaveText("3 / 6 cron çalışması gösteriliyor");
   const failed = page.getByTestId("debug-log-pa_s2");
   await failed.getByTestId("debug-log-toggle").click();
@@ -275,18 +271,18 @@ test("cron debug: carrier cards, dry-run triggers with idempotency keys and filt
 
   // Server-side clear (legacy cron-debug temizle): a dismissed confirm sends nothing, an accepted one deletes
   // the shipment.track attempts of both carriers and reports the summed count.
-  let accept = false;
-  page.on("dialog", (dialog) => void (accept ? dialog.accept() : dialog.dismiss()));
   await page.getByTestId("debug-clear-server").click();
+  await page.getByTestId("confirm-dialog-cancel").click();
+  await expect(page.getByTestId("confirm-dialog")).toHaveCount(0);
   expect(state.requests.filter((request) => request.method === "DELETE")).toEqual([]);
-  accept = true;
   await page.getByTestId("debug-clear-server").click();
+  await page.getByTestId("confirm-dialog-action").click();
   await expect(page.getByTestId("debug-clear-result")).toHaveText("Sunucudan 13 kayıt silindi.");
   expect(state.requests.filter((request) => request.method === "DELETE").map((request) => `${request.path}${request.search}`)).toEqual([
     "/admin/integrations/provider-attempts?provider_key=ptt&operation=shipment.track",
     "/admin/integrations/provider-attempts?provider_key=surat&operation=shipment.track",
   ]);
-  await page.getByTestId("cron-provider-filter").selectOption("all");
+  await chooseOption(page.getByTestId("cron-provider-filter"), "all");
   await expect(page.getByTestId("cron-showing")).toHaveText("0 / 0 cron çalışması gösteriliyor");
 });
 

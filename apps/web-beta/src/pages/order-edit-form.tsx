@@ -1,15 +1,17 @@
-import { Loader2, Plus, Save, Trash2 } from "lucide-react";
+import { Loader2, Plus, Save, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/app/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { EditableOrder } from "@/lib/orders";
+import { carrierBrand, ProviderLabel } from "@/components/provider-label";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   errorText,
   FeedbackLine,
   Field,
-  NativeSelect,
+  FormSelect,
   type Feedback,
 } from "./accounting-shared";
 
@@ -251,8 +253,8 @@ export function OrderEditForm({
             data-testid="order-edit-district"
           />
         </Field>
-        <Field label={t("orderEdit.cargo")}>
-          <NativeSelect
+        <Field label={<ProviderLabel brand={carrierBrand(form.cargo)}>{t("orderEdit.cargo")}</ProviderLabel>}>
+          <FormSelect
             value={form.cargo}
             onChange={(event) =>
               update({ cargo: event.target.value as "" | "ptt" | "surat" })
@@ -262,7 +264,7 @@ export function OrderEditForm({
             <option value="">{t("orderEdit.cargoNone")}</option>
             <option value="ptt">PTT</option>
             <option value="surat">Sürat</option>
-          </NativeSelect>
+          </FormSelect>
         </Field>
         <Field label={t("orderEdit.notes")} className="sm:col-span-2">
           <Input
@@ -296,8 +298,7 @@ export function OrderEditForm({
               <Input
                 className="h-11 md:h-9"
                 aria-label={t("orderEdit.quantity")}
-                type="number"
-                min={1}
+                inputMode="numeric"
                 value={line.quantity}
                 onChange={(event) =>
                   updateLine(line.key, { quantity: event.target.value })
@@ -357,14 +358,12 @@ export function OrderEditForm({
           </Button>
         </div>
         <label className="flex min-h-11 items-center gap-3 text-sm sm:col-span-2">
-          <input
-            type="checkbox"
-            className="h-11 w-5 accent-primary md:size-5"
+          <Checkbox
             checked={form.manual}
-            onChange={(event) =>
+            onCheckedChange={(next) =>
               update({
-                manual: event.target.checked,
-                total: event.target.checked ? form.total : money(lineSum),
+                manual: next === true,
+                total: next === true ? form.total : money(lineSum),
               })
             }
             data-testid="order-edit-manual"
@@ -394,6 +393,7 @@ export function OrderEditForm({
           onClick={onCancel}
           data-testid="order-edit-cancel"
         >
+          <X className="size-4" aria-hidden="true" />
           {t("orderEdit.cancel")}
         </Button>
         <Button

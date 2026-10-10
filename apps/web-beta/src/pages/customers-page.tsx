@@ -9,6 +9,7 @@ import { PageHeader } from "@/layout/page-header";
 import { formatDate } from "@/lib/format";
 import { paginate, useListParams } from "@/lib/list-params";
 import { useQuery } from "@/lib/use-query";
+import { Tip } from "@/components/ui/tooltip";
 
 const contactFilters: Record<string, (row: CustomerSummary) => boolean> = {
   phone: (row) => Boolean(row.phone),
@@ -47,7 +48,7 @@ export function CustomersPage() {
     },
     { key: "phone", header: t("customers.phone"), cell: (row) => row.phone ?? t("common.none") },
     { key: "email", header: t("customers.email"), cell: (row) => row.email ?? t("common.none") },
-    { key: "notes", header: t("customers.notes"), cell: (row) => <span title={row.notes ?? undefined}>{row.notes?.trim() || t("common.none")}</span> },
+    { key: "notes", header: t("customers.notes"), cell: (row) => <Tip label={row.notes ?? undefined}><span>{row.notes?.trim() || t("common.none")}</span></Tip> },
     { key: "updated", header: t("customers.updated"), cell: (row) => formatDate(row.updated_at, i18n.language) },
   ];
 

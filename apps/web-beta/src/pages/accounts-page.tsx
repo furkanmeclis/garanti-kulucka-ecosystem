@@ -1,4 +1,4 @@
-import { Pencil, Plus } from "lucide-react";
+import { Loader2, Pencil, Plus, Save } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/app/auth";
@@ -12,7 +12,7 @@ import type { AccountingContact, AccountingContactInput, SyncStatus } from "@/li
 import { formatMoney } from "@/lib/format";
 import { pageCount, pageSize, useListParams } from "@/lib/list-params";
 import { useQuery } from "@/lib/use-query";
-import { errorText, FeedbackLine, Field, KolaybiPanel, NativeSelect, SyncBadge, type Feedback } from "./accounting-shared";
+import { errorText, FeedbackLine, Field, KolaybiPanel, FormSelect, SyncBadge, type Feedback } from "./accounting-shared";
 
 const syncFilters: SyncStatus[] = ["local", "queued", "synced", "failed"];
 const syncFilterLabel = { local: "syncLocal", queued: "syncQueued", synced: "syncSynced", failed: "syncFailed" } as const;
@@ -179,10 +179,10 @@ function AccountSheet({ contact, onClose, onSaved }: { contact: AccountingContac
         </SheetHeader>
         <form className="grid grid-cols-1 gap-3 px-4 pb-4 sm:grid-cols-2" onSubmit={(event) => void submit(event)}>
           <Field label={t("accounting.contactType")}>
-            <NativeSelect value={draft.contact_type} onChange={(event) => setDraft((current) => ({ ...current, contact_type: event.target.value as Draft["contact_type"] }))} data-testid="account-contact_type">
+            <FormSelect value={draft.contact_type} onChange={(event) => setDraft((current) => ({ ...current, contact_type: event.target.value as Draft["contact_type"] }))} data-testid="account-contact_type">
               <option value="individual">{t("accounting.individual")}</option>
               <option value="corporate">{t("accounting.corporate")}</option>
-            </NativeSelect>
+            </FormSelect>
           </Field>
           {text("name", t("accounting.name"))}
           {text("tax_number", t("accounting.taxNumber"), { inputMode: "numeric" })}
@@ -197,6 +197,7 @@ function AccountSheet({ contact, onClose, onSaved }: { contact: AccountingContac
             <FeedbackLine feedback={feedback} testId="account-feedback" />
           </div>
           <Button type="submit" className="min-h-11 sm:col-span-2" disabled={saving} data-testid="account-save">
+            {saving ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Save className="size-4" aria-hidden="true" />}
             {saving ? t("accounting.saving") : t("accounting.save")}
           </Button>
         </form>

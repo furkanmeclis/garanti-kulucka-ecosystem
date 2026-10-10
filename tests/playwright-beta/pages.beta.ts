@@ -19,25 +19,15 @@ async function pickFilter(page: Page, testId: string, value: string) {
   await page.getByTestId(`${testId}-${value}`).click();
 }
 
-test("dashboard shows backend summary cards with links", async ({ page }) => {
+test("dashboard shows the analytics snapshot, KPI tiles and work-list links", async ({ page }) => {
   await signIn(page);
-  await expect(page.getByTestId("stat-orders-value")).toHaveText("45");
-  await expect(page.getByTestId("stat-revenue-value")).toHaveText("₺154.230,50");
-  await expect(page.getByTestId("stat-pending-value")).toHaveText("7");
-  await expect(page.getByTestId("stat-conversations-value")).toHaveText("27");
-  await expect(page.getByTestId("stat-customers-value")).toHaveText("31");
-  await expect(page.getByTestId("stat-shipments-value")).toHaveText("33");
-  await expect(page.getByTestId("stat-tracking-missing-value")).toHaveText("6");
+  await expect(page.getByTestId("stat-pending-shipments-value")).toHaveText("19");
+  await expect(page.getByTestId("stat-customers-value")).toHaveText("342");
+  await expect(page.getByTestId("kpi-orders-value")).toHaveText("180");
+  await expect(page.getByTestId("kpi-revenue-value")).toHaveText("₺540.000");
   await expect(page.getByTestId("dashboard-providers")).toContainText("Sürat");
-  // Last-7-days chart: one bar per day (zero days keep a 2px bar), weekday labels and the totals line.
-  const weekly = page.getByTestId("dashboard-weekly");
-  await expect(weekly).toContainText("Son 7 gün");
-  const bars = weekly.getByTestId("dashboard-weekly-bar");
-  await expect(bars).toHaveCount(7);
-  expect(await bars.evaluateAll((nodes) => nodes.map((node) => node.getAttribute("data-count")))).toEqual(["1", "2", "3", "0", "5", "6", "7"]);
-  await expect(weekly.locator("text")).toHaveText(["Per", "Cum", "Cmt", "Paz", "Pzt", "Sal", "Çar"]);
-  await expect(page.getByTestId("dashboard-weekly-summary")).toHaveText("24 sipariş · ₺24.000,00");
-  await page.getByTestId("stat-pending").click();
+  await expect(page.getByTestId("attention-awaiting-count")).toHaveText("7");
+  await page.getByTestId("attention-awaiting").click();
   await expect.poll(() => `${pathOf(page)}${new URL(page.url()).search}`).toBe("/siparisler?status=pending_confirmation");
 });
 
@@ -85,22 +75,31 @@ test("global search lands on a filtered order list", async ({ page }) => {
   await expect(page.getByTestId("orders-row")).toHaveCount(1);
 });
 
-test("messages: channel filter and search go to the API, paging runs locally", async ({ page }) => {
+test("messages: unread filter, channel filter and server search", async ({ page }) => {
   const state = await signIn(page);
   await page.goto("/mesajlar");
-  await expect(page.getByTestId("messages-row")).toHaveCount(20);
-  await expect(page.getByTestId("pagination-summary")).toHaveText("1–20 / 27");
-  await page.getByTestId("pagination-next").click();
-  await expect(page.getByTestId("messages-row")).toHaveCount(7);
+  const rows = page.getByTestId("conversation-row");
+  // Legacy default: only unread conversations (27 mocked, every third has none).
+  await expect(rows).toHaveCount(18);
+  await expect(page.getByTestId("filter-unread")).toHaveAttribute("aria-pressed", "true");
+  await page.getByTestId("filter-unread").click();
+  await expect(rows).toHaveCount(27);
 
-  await pickFilter(page, "filter-channel", "instagram");
+  await page.getByTestId("channel-filter").click();
+  await page.getByTestId("channel-filter-instagram").click();
   await expect.poll(() => lastRequest(state, "/api/conversations")?.search).toContain("channel=instagram");
-  await expect(page.getByTestId("pagination-summary")).toHaveText("1–13 / 13");
+  await expect(rows).toHaveCount(13);
+  await page.getByTestId("channel-filter").click();
+  await page.getByTestId("channel-filter-messenger").click();
+  await expect.poll(() => lastRequest(state, "/api/conversations")?.search).toContain("channel=facebook%2Cmessenger");
+  await expect(rows).toHaveCount(14);
 
-  await page.getByTestId("list-search").fill("Müşterisi 4");
-  await expect.poll(() => lastRequest(state, "/api/conversations")?.search).toContain("search=M%C3%BC%C5%9Fterisi+4");
-  await expect(page.getByTestId("messages-row")).toHaveCount(1);
-  await expect(page.getByTestId("messages-row")).toContainText("Konuşma Müşterisi 4");
+  await page.getByTestId("channel-filter").click();
+  await page.getByTestId("channel-filter-all").click();
+  await page.getByTestId("conversation-search").fill("Müşterisi 4");
+  await expect.poll(() => state.requests.some((request) => request.path === "/api/conversations" && request.search.includes("search=M%C3%BC%C5%9Fterisi+4"))).toBe(true);
+  await expect(rows).toHaveCount(1);
+  await expect(rows).toContainText("Konuşma Müşterisi 4");
 });
 
 test("customers: contact filter, search and paging", async ({ page }) => {
@@ -157,7 +156,7 @@ test("settings: profile update, password validation and preferences", async ({ p
 test("English content on list pages, including status badges and money", async ({ page }) => {
   await page.addInitScript(() => window.localStorage.setItem("garanti-beta-lang", "en"));
   await signIn(page);
-  await expect(page.getByTestId("stat-revenue-value")).toHaveText("₺154,230.50");
+  await expect(page.getByTestId("kpi-revenue-value")).toHaveText("₺540,000");
   await page.goto("/siparisler");
   await expect(page.getByRole("heading", { name: "Orders", level: 1 })).toBeVisible();
   await expect(page.getByTestId("orders-table").locator("th")).toHaveText(["", "Order no.", "Customer", "Status", "Badges", "Carrier", "Amount", "Date", ""]);
