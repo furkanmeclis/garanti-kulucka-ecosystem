@@ -28,7 +28,7 @@ function routes(options: InboxOptions = {}) {
     { public_id: "msc_1", code: "kargo", message: "Kargonuz yola çıktı.", type: "custom", is_active: true, sort_order: 0, attachments: [], updated_at: now },
     { public_id: "msc_2", code: "2", message: "Siparişiniz alındı, toplam {{fiyat}}. Yardımcı olabileceğim başka bir şey var mı?", type: "default", is_active: true, sort_order: 1, attachments: [], updated_at: now },
   ];
-  const extras = { suggestion: "Siparişiniz bugün kargoya verildi.", dryRun: false, orderResponses: [...(options.orderResponses ?? [])], aiEnabled: true };
+  const extras = { suggestion: "Siparişiniz bugün kargoya verildi.", dryRun: false, orderResponses: [...(options.orderResponses ?? [])], aiEnabled: true, offline: new Set<string>() };
   const route: ExtraRoute = ({ method, path, url, body }, backend) => {
     if (path === "/api/conversations/cnv_1/messages" && method === "GET") {
       if (url.searchParams.get("before")) return { status: 200, body: { data: older, has_more: false } };
@@ -79,12 +79,17 @@ function routes(options: InboxOptions = {}) {
       extras.aiEnabled = (body as { value: boolean }).value;
       return { status: 200, body: { key: "ai.auto_reply_enabled", value: extras.aiEnabled } };
     }
+    const presenceMatch = /^\/admin\/users\/(usr_\w+)\/presence$/.exec(path);
+    if (presenceMatch && method === "PATCH") {
+      extras.offline.add(presenceMatch[1]!);
+      return { status: 200, body: { user: { public_id: presenceMatch[1], is_online: false } } };
+    }
     if (path === "/admin/users") {
       return {
         status: 200,
         body: {
           data: [
-            { public_id: "usr_a", email: "a@example.com", first_name: "Elif", last_name: "Kaya", phone: null, role: "calisan", is_active: true, is_online: true, last_seen_at: now, sip_username: null, sip_password_configured: false, created_at: now },
+            { public_id: "usr_a", email: "a@example.com", first_name: "Elif", last_name: "Kaya", phone: null, role: "calisan", is_active: true, is_online: !extras.offline.has("usr_a"), last_seen_at: now, sip_username: null, sip_password_configured: false, created_at: now },
             { public_id: "usr_b", email: "b@example.com", first_name: "Can", last_name: "Er", phone: null, role: "calisan", is_active: true, is_online: false, last_seen_at: now, sip_username: null, sip_password_configured: false, created_at: now },
           ],
           roles: [],
@@ -188,6 +193,18 @@ test("inbox: three-column layout at 1440px matches the legacy proportions", asyn
   await expect(page.getByTestId("current-stock")).toContainText("12");
   await expect(page.getByTestId("online-agents")).toHaveText(/Elif/);
   await expect(page.getByTestId("online-agents")).not.toContainText("Can");
+});
+
+test("inbox: a manager sets an online agent offline from the top strip", async ({ page }) => {
+  const { state } = await openInbox(page, { viewport: { width: 1440, height: 900 } });
+  const chip = page.getByTestId("online-agent-usr_a");
+  await expect(chip).toHaveText(/Elif/);
+  await chip.click();
+  await expect(page.getByTestId("confirm-dialog")).toContainText("Elif Kaya");
+  await page.getByTestId("confirm-dialog-action").click();
+  await expect(toast(page, "Elif Kaya çevrimdışı yapıldı")).toBeVisible();
+  await expect(page.getByTestId("online-agents")).toHaveCount(0);
+  expect(state.bodies.filter((entry) => entry.path === "/admin/users/usr_a/presence")).toEqual([{ method: "PATCH", path: "/admin/users/usr_a/presence", body: { online: false } }]);
 });
 
 test("inbox: the order panel only shows from 1280px", async ({ page }) => {

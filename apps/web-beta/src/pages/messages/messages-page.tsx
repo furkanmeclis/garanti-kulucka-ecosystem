@@ -401,6 +401,18 @@ function MessagesWorkspace() {
   useEffect(() => loadAgents(), [loadAgents]);
   usePolling(loadAgents, agentsPollMs, isManager);
 
+  async function setAgentOffline(agent: OnlineAgent) {
+    const name = `${agent.first_name} ${agent.last_name}`.trim();
+    if (!(await confirm(t("chat.agentOfflineConfirm", { name }), { confirmLabel: t("chat.agentOfflineConfirmLabel") }))) return;
+    try {
+      await api.setUserOffline(agent.public_id);
+      setAgents((prev) => prev.filter((item) => item.public_id !== agent.public_id));
+      toast.success(t("chat.agentOfflineDone", { name }));
+    } catch (error) {
+      toast.error(t("chat.actionFailed", { error: errorText(error) }));
+    }
+  }
+
   /* ------------------------------------------------------------ toggles + menu actions */
   const [agentBusy, setAgentBusy] = useState(false);
   async function toggleHumanAgent() {
@@ -588,6 +600,7 @@ function MessagesWorkspace() {
     dailySales,
     stocks,
     onlineAgents: agents,
+    onAgentOffline: (agent) => void setAgentOffline(agent),
     agent: { enabled: Boolean(selected && isSocialChannel(selected.channel)), value: Boolean(selected && isSocialChannel(selected.channel) && selected.human_agent_enabled), busy: agentBusy, onToggle: () => void toggleHumanAgent() },
     ai: { value: aiEnabled, busy: aiBusy, canToggle: isManager, onToggle: () => void toggleAi() },
     unreadTotal,

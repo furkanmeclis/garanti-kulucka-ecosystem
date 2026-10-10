@@ -202,5 +202,6 @@
   "POST /api/netgsm/sesli-mesaj": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "deny", "admin": "allow" },
   "GET /api/netgsm/sesli-mesaj/{publicId}": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "deny", "admin": "allow" },
   "POST /api/netgsm/sesli-mesaj/{publicId}/rapor": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "deny", "admin": "allow" },
-  "GET /api/netgsm/rehber": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "deny", "admin": "allow" }
+  "GET /api/netgsm/rehber": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "deny", "admin": "allow" },
+  "PATCH /admin/users/{user_public_id}/presence": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "deny", "admin": "allow" }
 }

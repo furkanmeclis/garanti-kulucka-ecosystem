@@ -552,6 +552,8 @@ export function createApiClient(options: ApiClientOptions) {
     listUsers: () => request<{ data: ManagedUser[]; roles: ManagedRole[] }>("/admin/users"),
     createUser: (input: CreateManagedUserInput) => request<{ user: ManagedUser }>("/admin/users", { method: "POST", body: input }),
     updateUser: (publicId: string, input: UpdateManagedUserInput) => request<{ user: ManagedUser }>(`/admin/users/${encodeURIComponent(publicId)}`, { method: "PATCH", body: input }),
+    /** Manager action (legacy aktif temsilci chip): sets another agent offline; audit logged server-side. */
+    setUserOffline: (publicId: string) => request<{ user: ManagedUser }>(`/admin/users/${encodeURIComponent(publicId)}/presence`, { method: "PATCH", body: { online: false } }),
     deactivateUser: (publicId: string) => request<{ user: ManagedUser; deactivated: boolean }>(`/admin/users/${encodeURIComponent(publicId)}`, { method: "DELETE" }),
     listAdminLogs: (limit = 100) => request<{ data: AdminLogEntry[] }>("/admin/logs", { query: { limit } }),
     aiStatus: () => request<{ ai_enabled: boolean }>("/api/app-settings/ai-status"),

@@ -2436,7 +2436,12 @@
     "shipmentStatusHint": "Kargo durumu: {{status}}",
     "channelHint": "Kanal: {{channel}}",
     "channelPanel": "Panel",
-    "carrierHint": "Kargo firması: {{carrier}}"
+    "carrierHint": "Kargo firması: {{carrier}}",
+    "agentOfflineHint": "Çevrimdışı yapmak için tıklayın",
+    "agentOfflineAction": "{{name}} adlı temsilciyi çevrimdışı yap",
+    "agentOfflineConfirm": "{{name}} çevrimdışı yapılsın mı? Temsilci tekrar çevrimiçi olana kadar konuşma listesini göremez.",
+    "agentOfflineConfirmLabel": "Çevrimdışı yap",
+    "agentOfflineDone": "{{name}} çevrimdışı yapıldı"
   },
   "statusHint": {
     "draft": "Sipariş taslak olarak kaydedildi, henüz işleme alınmadı",

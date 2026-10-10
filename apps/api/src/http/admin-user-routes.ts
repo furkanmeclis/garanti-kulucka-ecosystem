@@ -39,6 +39,8 @@ const updateUserSchema = z
   })
   .strict();
 
+const presenceSchema = z.object({ online: z.literal(false) }).strict();
+
 function validationError(context: Context<AppBindings>, error: z.ZodError) {
   return context.json({ error: { code: "invalid_request", message: error.issues[0]?.message ?? "Geçersiz istek" } }, 400);
 }
@@ -116,6 +118,30 @@ export function createAdminUserRoutes() {
         ...(payload.sip_password !== undefined ? { sipPassword: emptyToNull(payload.sip_password) ?? null } : {}),
         actorUserId: context.get("actorUserId"),
       });
+      return context.json({ user: serializeAdminUser(user) });
+    } catch (error) {
+      return handleKnownErrors(context, error);
+    }
+  });
+
+  // Legacy Mesajlar: a manager clicks an online agent chip to set them offline (only `online: false` is accepted).
+  routes.patch("/users/:user_public_id/presence", async (context) => {
+    const parsed = presenceSchema.safeParse(await context.req.json().catch(() => null));
+    if (!parsed.success) return validationError(context, parsed.error);
+    try {
+      const user = await repository(context).setOffline({
+        userPublicId: context.req.param("user_public_id"),
+        actorUserId: context.get("actorUserId"),
+      });
+      const envelope = {
+        event: "presence.updated",
+        id: `evt_presence_${user.public_id}_${Date.now()}`,
+        occurred_at: new Date().toISOString(),
+        payload: { user_public_id: user.public_id, status: "offline" },
+      } as const;
+      const realtime = context.get("realtimePublisher");
+      realtime.publishToUser(user.public_id, envelope);
+      realtime.broadcast(envelope);
       return context.json({ user: serializeAdminUser(user) });
     } catch (error) {
       return handleKnownErrors(context, error);

@@ -22,6 +22,8 @@ export interface TopBarProps {
   dailySales: number | null;
   stocks: Array<{ name: string; quantity: number }>;
   onlineAgents: OnlineAgent[];
+  /** Manager clicks an agent chip to set that agent offline (legacy). */
+  onAgentOffline?: (agent: OnlineAgent) => void;
   /** Human agent toggle: only Instagram/Messenger conversations can carry the Meta Human Agent tag. */
   agent: { enabled: boolean; value: boolean; busy: boolean; onToggle: () => void };
   ai: { value: boolean; busy: boolean; canToggle: boolean; onToggle: () => void };
@@ -90,7 +92,6 @@ export function TopBar(props: TopBarProps) {
 
         {props.isManager && props.onlineAgents.length > 0 && (
           <div className="hidden max-w-[280px] items-center gap-1 overflow-x-auto border-l border-msg-border pl-3 msg-scrollbar-none lg:flex" aria-label={t("chat.onlineAgents")} data-testid="online-agents">
-            {/* TODO(backend): legacy clicks a chip to set that agent offline; there is no admin presence endpoint yet. */}
             {props.onlineAgents.map((agent) => (
               <Tip
                 key={agent.public_id}
@@ -102,13 +103,21 @@ export function TopBar(props: TopBarProps) {
                       {agent.first_name} {agent.last_name}
                     </span>
                     <span className="block text-[10px] text-emerald-600 dark:text-emerald-400">● {t("chat.online")}</span>
+                    {props.onAgentOffline && <span className="block text-[10px] text-msg-subtle">{t("chat.agentOfflineHint")}</span>}
                   </>
                 }
               >
-                <span tabIndex={0} className="flex shrink-0 items-center gap-1 rounded-full border border-emerald-600/40 bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:border-emerald-800/60 dark:bg-emerald-950/40 dark:text-emerald-300">
+                <button
+                  type="button"
+                  onClick={() => props.onAgentOffline?.(agent)}
+                  disabled={!props.onAgentOffline}
+                  aria-label={t("chat.agentOfflineAction", { name: `${agent.first_name} ${agent.last_name}`.trim() })}
+                  className="flex shrink-0 items-center gap-1 rounded-full border border-emerald-600/40 bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700 hover:border-red-500/60 hover:bg-red-50 hover:text-red-700 disabled:cursor-default dark:border-emerald-800/60 dark:bg-emerald-950/40 dark:text-emerald-300 dark:hover:bg-red-950/40 dark:hover:text-red-300"
+                  data-testid={`online-agent-${agent.public_id}`}
+                >
                   <span className="size-1.5 shrink-0 rounded-full bg-emerald-500 dark:bg-emerald-400" />
                   {agent.first_name}
-                </span>
+                </button>
               </Tip>
             ))}
           </div>

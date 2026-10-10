@@ -8528,6 +8528,55 @@
           }
         }
       }
+    },
+    "/admin/users/{user_public_id}/presence": {
+      "patch": {
+        "operationId": "setAdminUserOffline",
+        "parameters": [
+          {
+            "name": "user_public_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminUserPresenceRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Agent set offline by a manager (audit logged, presence.updated published)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminUserResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -19059,6 +19108,19 @@
           "revenue": {
             "type": "number",
             "minimum": 0
+          }
+        }
+      },
+      "AdminUserPresenceRequest": {
+        "type": "object",
+        "required": [
+          "online"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "online": {
+            "const": false,
+            "description": "Only setting an agent offline is a manager action."
           }
         }
       }

@@ -182,6 +182,7 @@ const expectedOperations = new Map<string, string[]>([
   ["/admin/integrations/netgsm/balance", ["get"]],
   ["/admin/users", ["get", "post"]],
   ["/admin/users/{user_public_id}", ["patch", "delete"]],
+  ["/admin/users/{user_public_id}/presence", ["patch"]],
   ["/admin/logs", ["get"]],
   ["/admin/data-deletion-requests", ["get"]],
   ["/admin/data-deletion-requests/{public_id}", ["patch"]],
