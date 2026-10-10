@@ -10492,6 +10492,11 @@
             "items": {
               "$ref": "#/components/schemas/OrderDailyStat"
             }
+          },
+          "today_sold_units": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Units sold today (Europe/Istanbul) over orders that are not cancelled, returned or deleted; an order without items counts as 1."
           }
         }
       },

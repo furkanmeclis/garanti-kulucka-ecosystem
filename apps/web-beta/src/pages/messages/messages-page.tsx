@@ -390,10 +390,10 @@ function MessagesWorkspace() {
   const [dailySales, setDailySales] = useState<number | null>(null);
   const loadDailySales = useCallback(() => {
     if (!isManager) return;
-    // TODO(backend): legacy counted sold units today; the summary only has today's order count.
+    // Legacy GÜNLÜK SATIŞ: units sold today (Europe/Istanbul), not cancelled/returned; an order without items is 1.
     api
       .orderSummary()
-      .then((stats) => setDailySales(stats.daily.at(-1)?.order_count ?? 0))
+      .then((stats) => setDailySales(stats.today_sold_units ?? 0))
       .catch(() => setDailySales(null));
   }, [api, isManager]);
   useEffect(() => loadDailySales(), [loadDailySales]);

@@ -2248,7 +2248,7 @@
     "fallbackOther": "Müşteri (…{{last4}})",
     "unknown": "Bilinmeyen",
     "dailySales": "Günlük Satış",
-    "dailySalesHint": "Bugün oluşturulan sipariş sayısı",
+    "dailySalesHint": "Bugün satılan ürün adedi (iptal/iade hariç)",
     "currentStock": "Güncel Stok",
     "onlineAgents": "Çevrimiçi temsilciler",
     "online": "Çevrimiçi",

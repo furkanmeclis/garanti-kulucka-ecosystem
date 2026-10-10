@@ -73,6 +73,8 @@ export interface OrderSummaryStats {
   pending_confirmation_count: number;
   total_revenue: number;
   currency: string;
+  /** Units sold today (Europe/Istanbul) over live orders; an order without items counts as one. */
+  today_sold_units?: number;
 }
 
 export interface ConversationCustomerRef {

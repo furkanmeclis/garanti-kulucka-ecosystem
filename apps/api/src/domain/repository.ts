@@ -406,6 +406,11 @@ export interface OrderSummaryRecord {
   currency: string;
   /** Legacy dashboard "haftalık satış" chart: the last 7 days (Europe/Istanbul), oldest first, zero-filled. */
   daily: OrderDailyStatRecord[];
+  /**
+   * Legacy Mesajlar "GÜNLÜK SATIŞ": units sold today (Europe/Istanbul) over live orders — not cancelled/returned,
+   * not deleted — counting each order's item quantities, and an order without items as 1.
+   */
+  today_sold_units: number;
 }
 
 export interface ProductSummaryRecord {
@@ -1450,8 +1455,22 @@ export class DomainRepository {
       .execute();
   }
 
+  async getTodaySoldUnits(): Promise<number> {
+    const result = await sql<{ units: string | number | null }>`
+      select coalesce(sum(coalesce(items.units, 1)), 0) as units
+      from orders
+      left join lateral (
+        select sum(order_items.quantity) as units from order_items where order_items.order_id = orders.id
+      ) items on true
+      where orders.deleted_at is null
+        and orders.status not in ('cancelled', 'returned')
+        and orders.created_at >= date_trunc('day', now() at time zone 'Europe/Istanbul') at time zone 'Europe/Istanbul'
+    `.execute(this.db);
+    return Number(result.rows[0]?.units ?? 0);
+  }
+
   async getOrderSummary(): Promise<OrderSummaryRecord> {
-    const [orders, dailyRows] = await Promise.all([
+    const [orders, dailyRows, todaySoldUnits] = await Promise.all([
       this.listOrders({ limit: 200 }),
       this.db
         .selectFrom("orders")
@@ -1464,6 +1483,7 @@ export class DomainRepository {
         .where(sql<boolean>`orders.created_at >= (date_trunc('day', now() at time zone 'Europe/Istanbul') - interval '6 days') at time zone 'Europe/Istanbul'`)
         .groupBy(sql`1`)
         .execute(),
+      this.getTodaySoldUnits(),
     ]);
     const byDate = new Map(dailyRows.map((row) => [row.date, row]));
     const todayIstanbul = new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Istanbul" }));
@@ -1476,6 +1496,7 @@ export class DomainRepository {
     });
     return {
       daily,
+      today_sold_units: todaySoldUnits,
       total_count: orders.length,
       active_count: orders.filter((order) => !["cancelled", "returned", "delivered"].includes(order.status)).length,
       delivered_count: orders.filter((order) => order.status === "delivered").length,

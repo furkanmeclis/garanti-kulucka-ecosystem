@@ -197,8 +197,8 @@ test("inbox: three-column layout at 1440px matches the legacy proportions", asyn
   await expect(page.getByTestId("order-cargo-ptt").locator("[data-brand=ptt] img")).toBeVisible();
   await expect(page.getByTestId("order-cargo-surat").locator("[data-brand=surat] img")).toBeVisible();
 
-  // Manager extras in the top strip: today's orders, stock, online agents.
-  await expect(page.getByTestId("daily-sales")).toContainText("7");
+  // Manager extras in the top strip: units sold today (not the order count, 7), stock, online agents.
+  await expect(page.getByTestId("daily-sales")).toContainText("11");
   await expect(page.getByTestId("current-stock")).toContainText("12");
   await expect(page.getByTestId("online-agents")).toHaveText(/Elif/);
   await expect(page.getByTestId("online-agents")).not.toContainText("Can");

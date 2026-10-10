@@ -187,7 +187,7 @@ export async function mockBackend(page: Page, user: MockUser, options: { orderCo
       return json(200, invoicesFixture(url));
     }
     if (url.pathname === "/api/orders/summary") {
-      return json(200, { total_count: state.orders.length, active_count: 12, delivered_count: 15, pending_confirmation_count: 7, total_revenue: 154230.5, currency: "TRY", daily: weeklyOrders });
+      return json(200, { total_count: state.orders.length, active_count: 12, delivered_count: 15, pending_confirmation_count: 7, total_revenue: 154230.5, currency: "TRY", daily: weeklyOrders, today_sold_units: 11 });
     }
     if (url.pathname === "/api/conversations/summary") {
       return json(200, { total_count: 27, unread_count: 5, pool_count: 9, human_agent_count: 13, channel_counts: { instagram: 14, facebook: 13 }, status_counts: { open: 20, closed: 7 } });

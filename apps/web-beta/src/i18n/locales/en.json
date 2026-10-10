@@ -2248,7 +2248,7 @@
     "fallbackOther": "Customer (…{{last4}})",
     "unknown": "Unknown",
     "dailySales": "Daily Sales",
-    "dailySalesHint": "Orders created today",
+    "dailySalesHint": "Units sold today (excluding cancellations/returns)",
     "currentStock": "Current Stock",
     "onlineAgents": "Online agents",
     "online": "Online",
