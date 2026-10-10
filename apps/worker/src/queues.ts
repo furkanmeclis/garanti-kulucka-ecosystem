@@ -16,6 +16,17 @@ export const queueNames: QueueName[] = [
   "data-retention",
 ];
 
+/**
+ * Defaults for jobs the worker publishes itself. Completed jobs are kept a week (longer than any dedupe bucket, e.g.
+ * the 6 h Instagram insights interval), failed ones two weeks for inspection, then Redis drops them.
+ */
+export const workerJobOptions = {
+  attempts: 5,
+  backoff: { type: "exponential", delay: 2_000 },
+  removeOnComplete: { age: 7 * 24 * 60 * 60, count: 5_000 },
+  removeOnFail: { age: 14 * 24 * 60 * 60, count: 5_000 },
+} satisfies JobsOptions;
+
 export interface QueueRegistry {
   connection: Redis;
   queues: Map<QueueName, Queue<JobEnvelope>>;

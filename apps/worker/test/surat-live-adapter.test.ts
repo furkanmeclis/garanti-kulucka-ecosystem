@@ -609,3 +609,34 @@ describe("provider-delivery replay guard", () => {
     expect(persisted.filter((attempt) => attempt.request_id === "req_surat_create")).toHaveLength(1);
   });
 });
+
+describe("provider-delivery retries under BullMQ", () => {
+  async function failingDispatch(status: number, attemptsMade: number) {
+    const persisted: ProviderAttempt[] = [];
+    const registry = createWorkerProcessorRegistry({
+      providerAttemptRepository: attemptRepository(persisted),
+      providerAccountConfigRepository: accountConfig(),
+      suratTransport: transportReturning([], { status, headers: {}, body: "{}" }),
+    });
+    const job = { ...deliveryJob(trackEnvelope({ hesapTipi: "cash", idempotency_key: "track-1" }), 5), attemptsMade };
+    const error = await registry.dispatch("provider-delivery", job).then(() => null, (reason: unknown) => reason);
+    return { error, attempt: persisted[0] };
+  }
+
+  it("passes the real attempt number to the live adapter and dead-letters the last attempt", async () => {
+    const early = await failingDispatch(503, 0);
+    expect(early.attempt).toMatchObject({ retry_decision: "retry" });
+    expect((early.error as Error).name).not.toBe("UnrecoverableError");
+
+    // Before the fix every attempt was computed as 1 of 3, so the 5th BullMQ attempt still said "retry".
+    const last = await failingDispatch(503, 4);
+    expect(last.attempt).toMatchObject({ retry_decision: "dead_letter", status: "terminal_failure" });
+    expect((last.error as Error).name).toBe("UnrecoverableError");
+  });
+
+  it("stops BullMQ retries at once for terminal carrier answers", async () => {
+    const terminal = await failingDispatch(400, 0);
+    expect(terminal.attempt).toMatchObject({ retry_decision: "dead_letter" });
+    expect((terminal.error as Error).name).toBe("UnrecoverableError");
+  });
+});

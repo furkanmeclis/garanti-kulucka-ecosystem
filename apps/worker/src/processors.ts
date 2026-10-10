@@ -224,6 +224,11 @@ function providerFailureInputFromJob(job: WorkerJob): {
   };
 }
 
+function liveAttemptOptionsFromJob(job: WorkerJob): { attemptNumber: number; maxAttempts: number } {
+  const input = providerFailureInputFromJob(job);
+  return { attemptNumber: input.attempt_number, maxAttempts: input.max_attempts };
+}
+
 async function persistProviderFailureAttempt(
   providerAttemptRepository: ProviderAttemptRepository | undefined,
   envelope: ProviderRequestEnvelope,
@@ -340,14 +345,21 @@ function createProviderDeliveryProcessor(
           ...(vapiTransport ? { vapiTransport } : {}),
           ...(extras.instagramGraphTransport ? { instagramGraphTransport: extras.instagramGraphTransport } : {}),
           ...(extras.mediaFileResolver ? { mediaFileResolver: extras.mediaFileResolver } : {}),
-          ...providerFailureInputFromJob(job),
+          // The handler reads camelCase; spreading attempt_number/max_attempts made every retry look like attempt 1.
+          ...liveAttemptOptionsFromJob(job),
         });
       } else {
         result = handleProviderDeliveryJob(envelope);
       }
     } catch (error) {
-      if (providerAttemptRepository && isProviderLiveTransportError(error)) {
-        await providerAttemptRepository.persist(error.attempt);
+      if (isProviderLiveTransportError(error)) {
+        await providerAttemptRepository?.persist(error.attempt);
+        // Terminal carrier answers (4xx, a non-idempotent send without a key, exhausted attempts) must not be
+        // retried by BullMQ: a retry could re-send an SMS / message the carrier may already have accepted.
+        // BullMQ treats an error named "UnrecoverableError" as final; the transport error class is kept for callers.
+        if (error.attempt.retry_decision === "dead_letter") {
+          error.name = "UnrecoverableError";
+        }
       } else {
         await persistProviderFailureAttempt(
           providerAttemptRepository,

@@ -38,6 +38,7 @@ import {
   type WorkerMetrics,
 } from "./observability.js";
 import { drainWorkers, type DrainWorkersResult } from "./shutdown.js";
+import { workerJobOptions } from "./queues.js";
 
 class RedisSettingsChangeSubscriber implements SettingsChangeSubscriber {
   private readonly subscriber: Redis;
@@ -52,9 +53,16 @@ class RedisSettingsChangeSubscriber implements SettingsChangeSubscriber {
         return;
       }
 
-      const parsed = settingsChangedMessageSchema.safeParse(JSON.parse(raw));
+      // One malformed publish must not crash every worker replica (JSON.parse used to throw here).
+      let message: unknown;
+      try {
+        message = JSON.parse(raw);
+      } catch {
+        return;
+      }
+      const parsed = settingsChangedMessageSchema.safeParse(message);
       if (parsed.success) {
-        void handler(parsed.data);
+        void Promise.resolve(handler(parsed.data)).catch(() => undefined);
       }
     });
     await this.subscriber.subscribe("settings.changed");
@@ -120,7 +128,13 @@ export function createWorkerRuntime(options: WorkerRuntimeOptions): WorkerRuntim
   const settingsChangeSubscriber =
     options.settingsChangeSubscriber ??
     (options.redisUrl ? new RedisSettingsChangeSubscriber(options.redisUrl) : undefined);
-  void bindProviderConfigInvalidation(providerAccountConfigRepository, settingsChangeSubscriber);
+  // Background startup work reports its failures instead of becoming an unhandled rejection (which exits Node).
+  const reportStartupFailure = (event: string, msg: string) => (error: unknown) => {
+    options.logger.error(createStructuredLog({ level: "error", service: "worker", event, msg, context: { err: error } }), msg);
+  };
+  bindProviderConfigInvalidation(providerAccountConfigRepository, settingsChangeSubscriber).catch(
+    reportStartupFailure("worker.provider_config_hydrate_failed", "Provider config cache could not be warmed up"),
+  );
   const registry = createWorkerProcessorRegistry({
     lifecycleRecorder:
       options.lifecycleRecorder ??
@@ -163,6 +177,24 @@ export function createWorkerRuntime(options: WorkerRuntimeOptions): WorkerRuntim
 
     worker.on("completed", (job, returnValue) => {
       recordJobCompletion(metrics, queue, job.data, returnValue);
+      // The carrier call succeeded but storing its result did not (the job is not retried, to avoid re-sending):
+      // make that visible instead of only returning "failed" in the job result.
+      const followUps = ["shipment_writeback", "instagram_analytics", "kolaybi_products"] as const;
+      const failedFollowUp = followUps.find((key) => (returnValue as Record<string, unknown> | null)?.[key] === "failed");
+      if (failedFollowUp) {
+        options.logger.error(
+          createStructuredLog({
+            level: "error",
+            service: "worker",
+            event: "worker.result_writeback_failed",
+            request_id: job.data.request_id ?? null,
+            job_id: job.data.job_id,
+            msg: "Provider call succeeded but its result could not be stored",
+            context: { queue, name: job.name, step: failedFollowUp },
+          }),
+          "Provider call succeeded but its result could not be stored",
+        );
+      }
       options.logger.info(
         createStructuredLog({
           level: "info",
@@ -220,7 +252,7 @@ export function createWorkerRuntime(options: WorkerRuntimeOptions): WorkerRuntim
 
   const storageScheduler = new Queue<JobEnvelope>("storage-orphan-reconciliation", { connection });
   schedulers.set("storage-orphan-reconciliation", storageScheduler);
-  void storageScheduler.add(
+  storageScheduler.add(
     "storage.orphans.reconcile",
     {
       job_id: "storage_orphans_reconcile_scheduled",
@@ -239,13 +271,13 @@ export function createWorkerRuntime(options: WorkerRuntimeOptions): WorkerRuntim
         every: Number.parseInt(process.env.STORAGE_ORPHAN_RECONCILIATION_INTERVAL_MS ?? "86400000", 10),
       },
     },
-  );
+  ).catch(reportStartupFailure("worker.storage_orphan_schedule_failed", "Repeatable job could not be scheduled"));
 
   // provider_attempts / webhook_events pruning (LOG_RETENTION_AND_PERSONAL_DATA.md); counts only
   // unless DATA_RETENTION_DELETE_ENABLED=true.
   const retentionScheduler = new Queue<JobEnvelope>("data-retention", { connection });
   schedulers.set("data-retention", retentionScheduler);
-  void retentionScheduler.add(
+  retentionScheduler.add(
     "data.retention.prune",
     {
       job_id: "data_retention_prune_scheduled",
@@ -261,10 +293,12 @@ export function createWorkerRuntime(options: WorkerRuntimeOptions): WorkerRuntim
         every: Number.parseInt(process.env.DATA_RETENTION_INTERVAL_MS ?? "86400000", 10),
       },
     },
-  );
+  ).catch(reportStartupFailure("worker.data_retention_schedule_failed", "Repeatable job could not be scheduled"));
 
+  // These queues also publish the worker's own jobs (cargo pipeline SMS / VAPI, Instagram insights): same retry and
+  // retention defaults as the API publishers, otherwise they ran once and were kept in Redis forever.
   const metricQueues = new Map<QueueName, Queue<JobEnvelope>>(
-    registry.queues.map((queue) => [queue, new Queue<JobEnvelope>(queue, { connection })]),
+    registry.queues.map((queue) => [queue, new Queue<JobEnvelope>(queue, { connection, defaultJobOptions: workerJobOptions })]),
   );
   registerQueueDepthCollector(metrics, metricQueues);
 
@@ -299,11 +333,10 @@ export function createWorkerRuntime(options: WorkerRuntimeOptions): WorkerRuntim
   // 0 disables; the pipeline itself stays off until global setting kargo_pipeline_ayarlar.aktif is true.
   const cargoPipelineStore = db ? new DatabaseCargoPipelineStore(db) : undefined;
   const cargoPipelineInterval = cargoPipelineIntervalMs();
-  let cargoPipelineRunning = false;
+  let cargoPipelineTick: Promise<void> | null = null;
   const tickCargoPipeline = () => {
-    if (!cargoPipelineStore || !deliveryQueue || cargoPipelineRunning) return;
-    cargoPipelineRunning = true;
-    void runCargoPipelineTick({
+    if (!cargoPipelineStore || !deliveryQueue || cargoPipelineTick) return;
+    cargoPipelineTick = runCargoPipelineTick({
       store: cargoPipelineStore,
       publish: async (job) => (await deliveryQueue.add(job.name, job, { jobId: job.job_id })).id ?? null,
     })
@@ -319,8 +352,9 @@ export function createWorkerRuntime(options: WorkerRuntimeOptions): WorkerRuntim
           "Cargo pipeline tick failed",
         );
       })
+      .then(() => undefined)
       .finally(() => {
-        cargoPipelineRunning = false;
+        cargoPipelineTick = null;
       });
   };
   const cargoPipelineTimer = cargoPipelineInterval > 0 && cargoPipelineStore ? setInterval(tickCargoPipeline, cargoPipelineInterval) : null;
@@ -337,6 +371,8 @@ export function createWorkerRuntime(options: WorkerRuntimeOptions): WorkerRuntim
     close: async () => {
       if (insightsTimer) clearInterval(insightsTimer);
       if (cargoPipelineTimer) clearInterval(cargoPipelineTimer);
+      // Let a running tick finish its claimed rows before the database goes away (they used to stay `isleniyor`).
+      await cargoPipelineTick;
       const result = await drainWorkers(workers.values(), options.shutdownTimeoutMs ?? 30_000);
       await Promise.all([...metricQueues.values()].map((queue) => queue.close()));
       await Promise.all([...schedulers.values()].map((scheduler) => scheduler.close()));
