@@ -133,11 +133,11 @@ export function ReportsView() {
   const query = toAnalyticsQuery(state);
   const queryKey = new URLSearchParams(Object.entries(query).filter(([, value]) => value !== undefined) as Array<[string, string]>).toString();
 
-  // Merge into the latest URL state, not the render's snapshot: two quick changes (provider, then personnel) used
-  // to race and the second dropped the first.
+  // Merge into the URL as it is now (history updates synchronously), not a render's snapshot: a pick made while a
+  // previous change had not re-rendered yet (preset, then provider) silently dropped that previous change.
   const update = useCallback(
     (next: Partial<ReportFilterState>) => {
-      setParams((prev) => serializeReportFilters({ ...parseReportFilters(prev), ...next }), { replace: true });
+      setParams(serializeReportFilters({ ...parseReportFilters(new URLSearchParams(window.location.search)), ...next }), { replace: true });
     },
     [setParams],
   );
