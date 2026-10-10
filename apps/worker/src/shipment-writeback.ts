@@ -1,4 +1,4 @@
-import type { AppDatabase } from "@garanti-kulucka/database";
+import { sql, type AppDatabase } from "@garanti-kulucka/database";
 import type { ProviderRequestEnvelope } from "@garanti-kulucka/shared";
 
 /**
@@ -104,7 +104,16 @@ export class DatabaseShipmentWritebackRepository implements ShipmentWritebackRep
       .updateTable("shipments")
       .set((eb) => ({
         ...(update.trackingNumber ? { tracking_number: update.trackingNumber } : {}),
-        ...(update.status ? { status: update.status } : {}),
+        // A late or out-of-order tracking answer must not move a delivered shipment back to in transit (and so
+        // back into the cargo pipeline); only a carrier return still applies after delivery.
+        ...(update.status
+          ? {
+              status:
+                update.status === "returned"
+                  ? update.status
+                  : sql<string>`case when status = 'delivered' then status else ${update.status} end`,
+            }
+          : {}),
         ...(update.lastEventText ? { last_event_text: update.lastEventText } : {}),
         ...(update.status === "delivered" ? { delivered_at: eb.fn.coalesce("delivered_at", eb.val(now)) } : {}),
         ...(update.status && update.status !== "created" && update.status !== "preparing" ? { shipped_at: eb.fn.coalesce("shipped_at", eb.val(now)) } : {}),
