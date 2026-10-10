@@ -173,6 +173,19 @@ export interface CreateMessageInput {
   externalMessageId: string | null;
   rawPayload: unknown | null;
   attachments?: MessageAttachmentInput[];
+  /**
+   * Only insert while the conversation still waits on the customer (last message from them). The row is locked,
+   * so two concurrent "AI üret ve gönder" clicks cannot both answer the same customer message.
+   */
+  onlyIfAwaitingReply?: boolean;
+}
+
+/** The conversation's last message is not from the customer any more (already answered, or empty). */
+export class ConversationNotAwaitingReplyError extends Error {
+  constructor(readonly lastSenderType: string | null) {
+    super("Son mesaj zaten yanıtlanmış");
+    this.name = "ConversationNotAwaitingReplyError";
+  }
 }
 
 export interface MessageAttachmentInput {
@@ -594,6 +607,10 @@ export class DomainRepository {
       .execute();
   }
 
+  async getConversation(conversationPublicId: string): Promise<ConversationRecord | null> {
+    return this.getConversationByPublicId(this.db, conversationPublicId);
+  }
+
   private async getConversationByPublicId(db: AppDatabase, conversationPublicId: string): Promise<ConversationRecord | null> {
     const conversation = await db
       .selectFrom("conversations")
@@ -938,12 +955,16 @@ export class DomainRepository {
     return this.db.transaction().execute(async (transaction) => {
       const conversation = await transaction
         .selectFrom("conversations")
-        .select("id")
+        .select(["id", "last_message_sender_type"])
         .where("public_id", "=", input.conversationPublicId)
+        .$if(Boolean(input.onlyIfAwaitingReply), (builder) => builder.forUpdate())
         .executeTakeFirst();
 
       if (!conversation) {
         throw new Error(`Unknown conversation: ${input.conversationPublicId}`);
+      }
+      if (input.onlyIfAwaitingReply && conversation.last_message_sender_type !== "customer") {
+        throw new ConversationNotAwaitingReplyError(conversation.last_message_sender_type);
       }
 
       const attachmentInputs = input.attachments ?? [];

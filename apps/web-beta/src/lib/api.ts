@@ -119,6 +119,8 @@ export class ApiError extends Error {
     readonly status: number,
     readonly code: string | null,
     message: string,
+    /** The backend `error` object as sent (extra fields such as a dry-run `suggestion`). */
+    readonly details: Record<string, unknown> | null = null,
   ) {
     super(message);
     this.name = "ApiError";
@@ -288,7 +290,7 @@ export function createApiClient(options: ApiClientOptions) {
       } catch {
         body = null;
       }
-      throw new ApiError(response.status, body?.error?.code ?? null, body?.error?.message ?? `HTTP ${response.status}`);
+      throw new ApiError(response.status, body?.error?.code ?? null, body?.error?.message ?? `HTTP ${response.status}`, (body?.error as Record<string, unknown> | undefined) ?? null);
     }
     if (response.status === 204) return undefined as T;
     return (await response.json()) as T;
@@ -510,6 +512,12 @@ export function createApiClient(options: ApiClientOptions) {
       request<{ public_id: string; notes: string | null }>(`/api/conversations/${encodeURIComponent(conversationPublicId)}/customer-notes`, { method: "PATCH", body: { notes } }),
     aiReplySuggestion: (conversationPublicId: string) =>
       request<{ suggestion: string; dry_run: boolean }>("/api/ai/reply-suggestion", { method: "POST", body: { conversation_public_id: conversationPublicId } }),
+    /**
+     * Legacy "AI üret ve gönder": the server drafts and sends the reply as an AI message. 409 `ai_live_disabled`
+     * (draft in `details.suggestion`, never sent) or `already_answered` when the customer is not waiting.
+     */
+    aiReplyAndSend: (conversationPublicId: string) =>
+      request<ThreadMessage>(`/api/conversations/${encodeURIComponent(conversationPublicId)}/ai-reply`, { method: "POST" }),
     listShortcuts: () => request<{ data: MessageShortcut[] }>("/api/message-shortcuts"),
     createShortcut: (input: { code: string; message: string | null; attachments: Array<{ file_public_id: string; attachment_type: string }> }) =>
       request<MessageShortcut>("/api/message-shortcuts", { method: "POST", body: { ...input, type: "custom" } }),

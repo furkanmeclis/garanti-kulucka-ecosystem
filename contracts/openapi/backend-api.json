@@ -8577,6 +8577,48 @@
           }
         }
       }
+    },
+    "/api/conversations/{conversation_public_id}/ai-reply": {
+      "post": {
+        "operationId": "sendAiConversationReply",
+        "parameters": [
+          {
+            "name": "conversation_public_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "AI reply drafted server-side and sent as an AI message (provider-delivery job behind the live gate). 409 ai_live_disabled (dry-run draft in error.suggestion, never sent) or already_answered.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Message"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
     }
   },
   "components": {

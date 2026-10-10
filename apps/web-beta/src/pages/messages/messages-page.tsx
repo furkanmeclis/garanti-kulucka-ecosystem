@@ -354,6 +354,14 @@ function MessagesWorkspace() {
     }
   }
 
+  /** "AI üret ve gönder" already stored the AI message server-side; show it without waiting for the poll. */
+  function aiSent(message: ChatMessage) {
+    const publicId = selectedId;
+    if (!publicId) return;
+    if (threadFor.current === publicId) setMessages((prev) => (prev ?? []).some((item) => item.public_id === message.public_id) ? prev : [...(prev ?? []), message]);
+    patchConversation(publicId, (row) => ({ ...row, last_message_text: message.body, last_message_at: message.sent_at, last_message_sender_type: "ai", unread_count: 0 }));
+  }
+
   function goNext() {
     const next = nextConversation(visible, selectedId);
     if (next) select(next);
@@ -691,7 +699,7 @@ function MessagesWorkspace() {
               onSaveCustomerNote={saveCustomerNote}
               menu={topBarProps}
               onOpenOrder={() => setOrderSheetOpen(true)}
-              composer={<Composer key={selected.public_id} conversationId={selected.public_id} shortcuts={shortcuts} onShortcutsChanged={loadShortcuts} onSend={(text, media) => void send(text, media)} onNext={goNext} />}
+              composer={<Composer key={selected.public_id} conversationId={selected.public_id} shortcuts={shortcuts} onShortcutsChanged={loadShortcuts} onSend={(text, media) => void send(text, media)} onNext={goNext} onAiSent={aiSent} />}
             />
           ) : (
             <EmptyChat />

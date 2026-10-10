@@ -28,7 +28,7 @@ function routes(options: InboxOptions = {}) {
     { public_id: "msc_1", code: "kargo", message: "Kargonuz yola çıktı.", type: "custom", is_active: true, sort_order: 0, attachments: [], updated_at: now },
     { public_id: "msc_2", code: "2", message: "Siparişiniz alındı, toplam {{fiyat}}. Yardımcı olabileceğim başka bir şey var mı?", type: "default", is_active: true, sort_order: 1, attachments: [], updated_at: now },
   ];
-  const extras = { suggestion: "Siparişiniz bugün kargoya verildi.", dryRun: false, orderResponses: [...(options.orderResponses ?? [])], aiEnabled: true, offline: new Set<string>() };
+  const extras = { suggestion: "Siparişiniz bugün kargoya verildi.", dryRun: false, orderResponses: [...(options.orderResponses ?? [])], aiEnabled: true, offline: new Set<string>(), answered: false };
   const route: ExtraRoute = ({ method, path, url, body }, backend) => {
     if (path === "/api/conversations/cnv_1/messages" && method === "GET") {
       if (url.searchParams.get("before")) return { status: 200, body: { data: older, has_more: false } };
@@ -73,6 +73,15 @@ function routes(options: InboxOptions = {}) {
     }
     if (path === "/api/conversations/cnv_1/notes") return { status: 200, body: { ...backend.conversations[0], notes: (body as { notes: string }).notes } };
     if (path === "/api/conversations/cnv_1/customer-notes") return { status: 200, body: { public_id: "cus_1", notes: (body as { notes: string }).notes } };
+    if (path === "/api/conversations/cnv_1/ai-reply" && method === "POST") {
+      if (extras.answered) return { status: 409, body: { error: { code: "already_answered", message: "Son mesaj zaten yanıtlanmış" } } };
+      if (extras.dryRun) return { status: 409, body: { error: { code: "ai_live_disabled", message: "Canlı AI kapalı", suggestion: extras.suggestion, dry_run: true } } };
+      if (!extras.suggestion.trim()) return { status: 422, body: { error: { code: "ai_empty", message: "AI boş yanıt üretti" } } };
+      const message = { public_id: `msg_ai${messages.length + 1}`, sender_type: "ai", sender_name: null, body: extras.suggestion.trim(), is_read: true, sent_at: now, attachments: [] };
+      messages.push(message);
+      extras.answered = true;
+      return { status: 201, body: { ...message, delivery: { provider: "messenger", queued: true } } };
+    }
     if (path === "/api/ai/reply-suggestion") return { status: 200, body: { suggestion: extras.suggestion, dry_run: extras.dryRun } };
     if (path === "/api/app-settings/ai-status") return { status: 200, body: { ai_enabled: extras.aiEnabled } };
     if (path === "/admin/settings/ai.auto_reply_enabled" && method === "PUT") {
@@ -292,7 +301,7 @@ for (const viewport of [viewports.phone390, viewports.phone360]) {
     await page.getByTestId("composer-ai").click();
     await page.getByTestId("composer-ai-menu-send").click();
     await expect(toast(page, "AI yanıt gönderildi")).toBeVisible();
-    await expect.poll(() => posts(state, "/api/conversations/cnv_1/messages")).toHaveLength(1);
+    expect(posts(state, "/api/conversations/cnv_1/ai-reply")).toHaveLength(1);
 
     // Header ⋮ carries the TEMSİLCİ / GPT switches.
     await page.getByTestId("chat-header-menu-trigger").click();
@@ -459,7 +468,13 @@ test("inbox: AI generate & send, and the empty-suggestion guard", async ({ page 
   await page.getByTestId("composer-ai-send").click();
   await expect(toast(page, "AI yanıt gönderildi")).toBeVisible();
   await expect(page.getByTestId("thread-message").last()).toContainText("Siparişiniz bugün kargoya verildi.");
-  expect(posts(state, "/api/ai/reply-suggestion")).toEqual([{ conversation_public_id: "cnv_1" }]);
+  // The server drafts and sends; the panel never posts the AI text itself.
+  expect(posts(state, "/api/conversations/cnv_1/ai-reply")).toEqual([undefined]);
+  expect(posts(state, "/api/ai/reply-suggestion")).toEqual([]);
+  // The customer is no longer waiting: the server refuses a second answer.
+  await page.getByTestId("composer-ai-send").click();
+  await expect(toast(page, "Son mesaj zaten yanıtlanmış; AI yanıtı gönderilmedi")).toBeVisible();
+  extras.answered = false;
   extras.suggestion = "  ";
   await page.getByTestId("composer-ai-send").click();
   await expect(toast(page, "AI yanıt üretemedi; mesaj gönderilmedi")).toBeVisible();
@@ -469,7 +484,9 @@ test("inbox: AI generate & send, and the empty-suggestion guard", async ({ page 
   await page.getByTestId("composer-ai-send").click();
   await expect(toast(page, "Canlı AI kapalı olduğu için yanıt gönderilmedi; öneri olarak gösterildi")).toBeVisible();
   await expect(page.getByTestId("ai-suggestion")).toContainText("Kuru çalıştırma");
-  expect(posts(state, "/api/conversations/cnv_1/messages")).toHaveLength(1);
+  await expect(page.getByTestId("ai-suggestion")).toContainText("dry-run sınırında");
+  expect(posts(state, "/api/conversations/cnv_1/messages")).toHaveLength(0);
+  expect(posts(state, "/api/conversations/cnv_1/ai-reply")).toHaveLength(4);
 });
 
 test("inbox: top strip toggles, menu actions and notes", async ({ page }) => {

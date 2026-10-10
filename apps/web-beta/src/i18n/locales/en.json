@@ -2441,7 +2441,8 @@
     "agentOfflineAction": "Set {{name}} offline",
     "agentOfflineConfirm": "Set {{name}} offline? The agent cannot see the conversation list until they go online again.",
     "agentOfflineConfirmLabel": "Set offline",
-    "agentOfflineDone": "{{name}} is now offline"
+    "agentOfflineDone": "{{name}} is now offline",
+    "aiAlreadyAnswered": "The last message is already answered; no AI reply was sent"
   },
   "statusHint": {
     "draft": "Saved as a draft, not processed yet",

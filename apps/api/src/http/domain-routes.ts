@@ -7,6 +7,7 @@ import { jobEnvelopeSchema, planOutboundDelivery, providerDeliveryJobPayloadSche
 import type { AppBindings } from "./types.js";
 import { authenticate, requireDatabase } from "./middleware.js";
 import {
+  ConversationNotAwaitingReplyError,
   DomainRepository,
   DuplicateProductSkuError,
   InsufficientStockError,
@@ -28,6 +29,7 @@ import {
   serializeStockMovement,
 } from "../domain/repository.js";
 import { calculateVatInclusiveOrder, moneyToCents } from "../domain/order-totals.js";
+import { draftConversationReply } from "../ai/reply.js";
 
 
 const limitSchema = z.coerce.number().int().min(1).max(200).default(50);
@@ -317,6 +319,7 @@ async function queueOutboundDelivery(
   context: Context<AppBindings>,
   db: AppDatabase,
   message: { public_id: string; body: string | null; attachments: Array<{ file_public_id: string; original_name?: string | null }> },
+  options: { idempotencyPrefix?: string; legacyContract?: { source: string; legacy_event: string } } = {},
 ) {
   const target = await new DomainRepository(db).getConversationDeliveryTarget(context.req.param("conversation_public_id") ?? "");
   if (!target) return null;
@@ -326,6 +329,8 @@ async function queueOutboundDelivery(
     body: message.body,
     attachments: message.attachments.map((attachment) => ({ file_public_id: attachment.file_public_id, original_name: attachment.original_name })),
     requestId: context.get("requestId"),
+    ...(options.idempotencyPrefix ? { idempotencyPrefix: options.idempotencyPrefix } : {}),
+    ...(options.legacyContract ? { legacyContract: options.legacyContract } : {}),
   });
   if ("reason" in plan) {
     return { provider: plan.provider, queued: false, job_ids: [], skipped_reason: plan.reason, skipped_attachments: 0, live_gate: plan.provider ? `providers.${plan.provider}.live_mode` : null };
@@ -344,6 +349,22 @@ async function queueOutboundDelivery(
     skipped_attachments: plan.skipped_attachments,
     live_gate: `providers.${plan.provider}.live_mode`,
   };
+}
+
+function publishMessageCreated(context: Context<AppBindings>, conversationPublicId: string, message: { public_id: string; sender_type: string }) {
+  const envelope = {
+    event: "message.created",
+    id: `evt_${message.public_id}`,
+    occurred_at: new Date().toISOString(),
+    payload: {
+      message_public_id: message.public_id,
+      conversation_public_id: conversationPublicId,
+      sender_type: message.sender_type,
+    },
+  } as const;
+  const realtimePublisher = context.get("realtimePublisher");
+  realtimePublisher.publishToConversation(conversationPublicId, envelope);
+  realtimePublisher.broadcast(envelope);
 }
 
 function jobIdFromIdempotencyKey(key: string) {
@@ -687,19 +708,7 @@ export function createDomainRoutes() {
         attachmentType: attachment.attachment_type,
       })),
     });
-    const messageCreatedEnvelope = {
-      event: "message.created",
-      id: `evt_${message.public_id}`,
-      occurred_at: new Date().toISOString(),
-      payload: {
-        message_public_id: message.public_id,
-        conversation_public_id: context.req.param("conversation_public_id"),
-        sender_type: message.sender_type,
-      },
-    } as const;
-    const realtimePublisher = context.get("realtimePublisher");
-    realtimePublisher.publishToConversation(context.req.param("conversation_public_id"), messageCreatedEnvelope);
-    realtimePublisher.broadcast(messageCreatedEnvelope);
+    publishMessageCreated(context, context.req.param("conversation_public_id"), message);
 
     const delivery = message.sender_type === "user" ? await queueOutboundDelivery(context, db, message) : null;
     return context.json({ ...serializeMessage(message), delivery }, 201);
@@ -836,14 +845,69 @@ export function createDomainRoutes() {
       return context.json({ error: { code: "invalid_request", message: "Invalid AI reply suggestion payload" } }, 400);
     }
 
-    return context.json({
-      provider: "openai",
-      operation: "messages.reply_suggestion",
-      dry_run: true,
-      live_call_permitted: false,
-      conversation_public_id: payload.data.conversation_public_id,
-      suggestion: "AI yanıt önerisi backend dry-run sınırında tutuldu.",
+    const draft = await draftConversationReply({ conversationPublicId: payload.data.conversation_public_id });
+    return context.json({ ...draft, conversation_public_id: payload.data.conversation_public_id });
+  });
+
+  /**
+   * Legacy `/api/ai-agent/yanit-ve-gonder`: draft a reply server-side and send it as an AI message. Never sends a
+   * dry-run draft (409 ai_live_disabled carries it as a suggestion) and never answers twice (409 already_answered).
+   */
+  routes.post("/conversations/:conversation_public_id/ai-reply", async (context) => {
+    if (!canManageMessages(context.get("auth")?.role)) {
+      return context.json({ error: { code: "forbidden", message: "AI reply sending is not allowed" } }, 403);
+    }
+
+    const db = context.get("db");
+    if (!db) {
+      return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
+    }
+
+    const conversationPublicId = context.req.param("conversation_public_id");
+    const repository = new DomainRepository(db);
+    const conversation = await repository.getConversation(conversationPublicId);
+    if (!conversation) {
+      return context.json({ error: { code: "not_found", message: "Konuşma bulunamadı" } }, 404);
+    }
+    if (conversation.last_message_sender_type !== "customer") {
+      return context.json({ error: { code: "already_answered", message: "Son mesaj zaten yanıtlanmış; AI yanıtı gönderilmedi" } }, 409);
+    }
+
+    const draft = await draftConversationReply({ conversationPublicId });
+    const suggestion = draft.suggestion.trim();
+    if (draft.dry_run || !draft.live_call_permitted) {
+      return context.json(
+        { error: { code: "ai_live_disabled", message: "Canlı AI kapalı; yanıt müşteriye gönderilmedi", suggestion, dry_run: true } },
+        409,
+      );
+    }
+    if (!suggestion) {
+      return context.json({ error: { code: "ai_empty", message: "AI boş yanıt üretti" } }, 422);
+    }
+
+    let message;
+    try {
+      message = await repository.createMessage({
+        conversationPublicId,
+        senderType: "ai",
+        senderName: null,
+        body: suggestion,
+        externalMessageId: null,
+        rawPayload: { source: "ai_reply", provider: draft.provider, operation: draft.operation },
+        onlyIfAwaitingReply: true,
+      });
+    } catch (error) {
+      if (error instanceof ConversationNotAwaitingReplyError) {
+        return context.json({ error: { code: "already_answered", message: "Son mesaj zaten yanıtlanmış; AI yanıtı gönderilmedi" } }, 409);
+      }
+      throw error;
+    }
+    publishMessageCreated(context, conversationPublicId, message);
+    const delivery = await queueOutboundDelivery(context, db, message, {
+      idempotencyPrefix: "ai",
+      legacyContract: { source: "server.js POST /api/ai-agent/yanit-ve-gonder", legacy_event: "ai_reply_send" },
     });
+    return context.json({ ...serializeMessage(message), delivery }, 201);
   });
 
   routes.post("/sms/send", async (context) => {

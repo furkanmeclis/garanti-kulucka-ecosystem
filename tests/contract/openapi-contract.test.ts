@@ -50,6 +50,7 @@ const expectedOperations = new Map<string, string[]>([
   ["/api/conversations/{conversation_public_id}/state", ["patch"]],
   ["/api/conversations/{conversation_public_id}/notes", ["patch"]],
   ["/api/conversations/{conversation_public_id}/customer-notes", ["patch"]],
+  ["/api/conversations/{conversation_public_id}/ai-reply", ["post"]],
   ["/api/message-shortcuts", ["get", "post"]],
   ["/api/message-shortcuts/{shortcut_public_id}", ["delete", "patch"]],
   ["/api/ai/reply-suggestion", ["post"]],
