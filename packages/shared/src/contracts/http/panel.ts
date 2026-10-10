@@ -84,6 +84,22 @@ export interface ConversationCustomerRef {
   username?: string | null;
 }
 
+/** GET /api/conversations/:public_id adds the customer's note and default address. */
+export interface ConversationDetail extends ConversationSummary {
+  customer?: (ConversationCustomerRef & { notes?: string | null; default_address?: Omit<CustomerAddress, "public_id"> & { public_id?: string } | null }) | null;
+}
+
+/** Inbox-wide counters that ride along with GET /api/conversations (`meta.counts`). */
+export interface ConversationListCounts {
+  total_count: number;
+  unread_conversation_count: number;
+  unread_message_count: number;
+  pool_count: number;
+  human_agent_count: number;
+  channel_counts: Record<string, number>;
+  status_counts: Record<string, number>;
+}
+
 export interface ConversationSummary {
   public_id: string;
   channel: string;
@@ -102,7 +118,10 @@ export interface ConversationSummary {
 
 export interface ConversationSummaryStats {
   total_count: number;
+  /** Sum of unread customer messages. */
   unread_count: number;
+  /** Conversations with unread customer messages. */
+  unread_conversation_count?: number;
   pool_count: number;
   human_agent_count: number;
   channel_counts: Record<string, number>;

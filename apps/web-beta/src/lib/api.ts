@@ -6,6 +6,8 @@ import type {
   DashboardAnalytics,
   InvoiceAnalytics,
   TimeseriesAnalytics,
+  ConversationDetail,
+  ConversationListCounts,
   ConversationSummary,
   ConversationSummaryStats,
   CustomerDetail,
@@ -213,7 +215,15 @@ export interface ConversationListQuery {
   limit?: number;
   /** Server-side search on customer name / phone / username or the last message text. */
   search?: string;
+  /** Only conversations with unread customer messages (filtered in SQL, not in the loaded batch). */
+  unread?: boolean;
   offset?: number;
+}
+
+/** GET /api/conversations: the page plus inbox-wide counters (unread / pool / per channel). */
+export interface ConversationListResponse {
+  data: ConversationSummary[];
+  meta?: { counts?: ConversationListCounts };
 }
 
 /** One day of `GET /api/orders/summary` `daily` (last 7 days in Europe/Istanbul, oldest first, zero-filled). */
@@ -336,7 +346,8 @@ export function createApiClient(options: ApiClientOptions) {
     listOrders: (query: OrderListQuery = {}) => request<ListEnvelope<OrderSummary>>("/api/orders", { query: { ...query } }),
     listShipments: (query: ShipmentListQuery = {}) => request<ListEnvelope<ShipmentSummary>>("/api/shipments", { query: { ...query } }),
     listConversations: (query: ConversationListQuery = {}) =>
-      request<ListEnvelope<ConversationSummary>>("/api/conversations", { query: { ...query } }),
+      request<ConversationListResponse>("/api/conversations", { query: { ...query, ...(query.unread ? { unread: "true" } : { unread: undefined }) } }),
+    getConversation: (publicId: string) => request<ConversationDetail>(`/api/conversations/${encodeURIComponent(publicId)}`),
     listCustomers: (limit = 200) => request<ListEnvelope<CustomerSummary>>("/api/customers", { query: { limit } }),
     getCustomer: (publicId: string) => request<CustomerDetail>(`/api/customers/${encodeURIComponent(publicId)}`),
     updateCustomer: (publicId: string, input: UpdateCustomerRequest) =>

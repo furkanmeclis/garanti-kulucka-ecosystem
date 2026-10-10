@@ -15,6 +15,7 @@ import {
   type ListOrdersFilter,
   type ListShipmentsFilter,
   serializeConversation,
+  serializeConversationDetail,
   serializeConversationSummary,
   serializeCustomer,
   serializeCustomerDetail,
@@ -414,17 +415,21 @@ export function createDomainRoutes() {
       ? channel.split(",").map((item) => item.trim()).filter(Boolean)
       : undefined;
     const search = context.req.query("search")?.trim();
+    const unread = context.req.query("unread");
     const offset = Number.parseInt(context.req.query("offset") ?? "0", 10);
-    const conversations = await new DomainRepository(db).listConversations({
+    const repository = new DomainRepository(db);
+    const conversations = await repository.listConversations({
       limit: limitSchema.parse(context.req.query("limit")),
       ...(search ? { search: search.slice(0, 100) } : {}),
+      ...(unread === "true" || unread === "1" ? { unreadOnly: true } : {}),
       ...(Number.isFinite(offset) && offset > 0 ? { offset: Math.min(offset, 100_000) } : {}),
       ...(assigned === "unassigned" ? { assignedUserId: null } : {}),
       ...(channels ? { channels } : channel ? { channel } : {}),
       ...(status ? { status } : {}),
     });
 
-    return context.json({ data: conversations.map(serializeConversation) });
+    // Inbox-wide counters (unread / pool / per channel) ride along so the list needs no separate summary poll.
+    return context.json({ data: conversations.map(serializeConversation), meta: { counts: await repository.getConversationCounts() } });
   });
 
   routes.post("/conversations/mark-all-read", async (context) => {
@@ -455,6 +460,24 @@ export function createDomainRoutes() {
 
     const summary = await new DomainRepository(db).getConversationSummary();
     return context.json(serializeConversationSummary(summary));
+  });
+
+  // Single conversation (deep links, the order panel's customer note / default address) — no batch scanning.
+  routes.get("/conversations/:conversation_public_id", async (context) => {
+    if (!canReadConversations(context.get("auth")?.role)) {
+      return context.json({ error: { code: "forbidden", message: "Conversation access is not allowed" } }, 403);
+    }
+
+    const db = context.get("db");
+    if (!db) {
+      return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
+    }
+
+    const detail = await new DomainRepository(db).getConversationDetail(context.req.param("conversation_public_id"));
+    if (!detail) {
+      return context.json({ error: { code: "not_found", message: "Konuşma bulunamadı" } }, 404);
+    }
+    return context.json(serializeConversationDetail(detail));
   });
 
   routes.get("/comments/moderation-summary", async (context) => {

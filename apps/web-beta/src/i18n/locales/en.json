@@ -2442,7 +2442,8 @@
     "agentOfflineConfirm": "Set {{name}} offline? The agent cannot see the conversation list until they go online again.",
     "agentOfflineConfirmLabel": "Set offline",
     "agentOfflineDone": "{{name}} is now offline",
-    "aiAlreadyAnswered": "The last message is already answered; no AI reply was sent"
+    "aiAlreadyAnswered": "The last message is already answered; no AI reply was sent",
+    "deepLinkMissing": "The linked conversation was not found"
   },
   "statusHint": {
     "draft": "Saved as a draft, not processed yet",

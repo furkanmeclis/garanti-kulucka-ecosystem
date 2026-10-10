@@ -199,6 +199,19 @@
             "description": "Customer name/phone/username or last message text (ILIKE)"
           },
           {
+            "name": "unread",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "1",
+                "false"
+              ]
+            },
+            "description": "Only conversations with unread customer messages (SQL filter, legacy Okunmamış)."
+          },
+          {
             "name": "offset",
             "in": "query",
             "schema": {
@@ -8619,6 +8632,42 @@
           }
         }
       }
+    },
+    "/api/conversations/{conversation_public_id}": {
+      "get": {
+        "operationId": "getConversation",
+        "parameters": [
+          {
+            "name": "conversation_public_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One conversation with its customer's id, note and default address",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationDetail"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -8970,6 +9019,19 @@
         "allOf": [
           {
             "$ref": "#/components/schemas/DataEnvelope"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "meta": {
+                "type": "object",
+                "properties": {
+                  "counts": {
+                    "$ref": "#/components/schemas/ConversationListCounts"
+                  }
+                }
+              }
+            }
           }
         ]
       },
@@ -8981,7 +9043,8 @@
           "pool_count",
           "human_agent_count",
           "channel_counts",
-          "status_counts"
+          "status_counts",
+          "unread_conversation_count"
         ],
         "properties": {
           "total_count": {
@@ -8990,7 +9053,8 @@
           },
           "unread_count": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "description": "Sum of unread customer messages."
           },
           "pool_count": {
             "type": "integer",
@@ -9003,6 +9067,7 @@
           "channel_counts": {
             "type": "object",
             "required": [
+              "whatsapp",
               "instagram",
               "facebook"
             ],
@@ -9012,6 +9077,10 @@
                 "minimum": 0
               },
               "facebook": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "whatsapp": {
                 "type": "integer",
                 "minimum": 0
               }
@@ -9033,6 +9102,11 @@
                 "minimum": 0
               }
             }
+          },
+          "unread_conversation_count": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Conversations with unread customer messages."
           }
         }
       },
@@ -9532,6 +9606,15 @@
                 "type": "string"
               },
               "phone": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "public_id": {
+                "type": "string"
+              },
+              "username": {
                 "type": [
                   "string",
                   "null"
@@ -19170,6 +19253,169 @@
             "description": "Only setting an agent offline is a manager action."
           }
         }
+      },
+      "ConversationListCounts": {
+        "type": "object",
+        "description": "Inbox-wide counters over every conversation (not the returned page).",
+        "required": [
+          "total_count",
+          "unread_conversation_count",
+          "unread_message_count",
+          "pool_count",
+          "human_agent_count",
+          "channel_counts",
+          "status_counts"
+        ],
+        "properties": {
+          "total_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "unread_conversation_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "unread_message_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "pool_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "human_agent_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "channel_counts": {
+            "type": "object",
+            "required": [
+              "whatsapp",
+              "instagram",
+              "facebook"
+            ],
+            "properties": {
+              "whatsapp": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "instagram": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "facebook": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Includes stored messenger rows."
+              }
+            }
+          },
+          "status_counts": {
+            "type": "object",
+            "required": [
+              "open",
+              "closed"
+            ],
+            "properties": {
+              "open": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "closed": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          }
+        }
+      },
+      "ConversationDetail": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Conversation"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "customer": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "public_id": {
+                    "type": "string"
+                  },
+                  "full_name": {
+                    "type": "string"
+                  },
+                  "phone": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "username": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "notes": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "default_address": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "public_id": {
+                        "type": "string"
+                      },
+                      "label": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "address_line": {
+                        "type": "string"
+                      },
+                      "city": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "district": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "country": {
+                        "type": "string"
+                      },
+                      "postal_code": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "is_default": {
+                        "type": "boolean"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
       }
     }
   }

@@ -26,6 +26,7 @@ const expectedOperations = new Map<string, string[]>([
   ["/api/conversations", ["get"]],
   ["/api/conversations/mark-all-read", ["post"]],
   ["/api/conversations/summary", ["get"]],
+  ["/api/conversations/{conversation_public_id}", ["get"]],
   ["/api/comments/moderation-summary", ["get"]],
   ["/api/comments", ["get"]],
   ["/api/comments/stats", ["get"]],

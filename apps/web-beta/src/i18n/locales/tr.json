@@ -2442,7 +2442,8 @@
     "agentOfflineConfirm": "{{name}} çevrimdışı yapılsın mı? Temsilci tekrar çevrimiçi olana kadar konuşma listesini göremez.",
     "agentOfflineConfirmLabel": "Çevrimdışı yap",
     "agentOfflineDone": "{{name}} çevrimdışı yapıldı",
-    "aiAlreadyAnswered": "Son mesaj zaten yanıtlanmış; AI yanıtı gönderilmedi"
+    "aiAlreadyAnswered": "Son mesaj zaten yanıtlanmış; AI yanıtı gönderilmedi",
+    "deepLinkMissing": "Bağlantıdaki konuşma bulunamadı"
   },
   "statusHint": {
     "draft": "Sipariş taslak olarak kaydedildi, henüz işleme alınmadı",

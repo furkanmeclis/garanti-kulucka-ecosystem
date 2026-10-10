@@ -642,12 +642,16 @@ test("inbox: order query screen lists the customer's orders and opens the cargo 
   const { route } = routes();
   const state = await mockBackend(page, mockUser("admin"), {
     extra: (request, backend) => {
-      if (request.path === "/api/orders/customer-lookup") return { status: 200, body: { customer: { public_id: "cus_1", full_name: "Konuşma Müşterisi 1", phone: "05550000001" }, default_address: { address_line: "Atatürk Cd. 1", city: "Adana", district: "Seyhan", country: "TR" } } };
+      // The conversation detail carries the customer id, note and default address (no phone lookup).
+      if (request.path === "/api/conversations/cnv_1" && request.method === "GET") {
+        const row = backend.conversations[0]!;
+        return { status: 200, body: { ...row, notes: null, customer: { ...row.customer, public_id: "cus_1", username: null, notes: "Ödeme kapıda", default_address: { address_line: "Atatürk Cd. 1", city: "Adana", district: "Seyhan", country: "TR", is_default: true } } } };
+      }
       if (request.path === "/api/customers/cus_1") {
         return {
           status: 200,
           body: {
-            customer: { public_id: "cus_1", full_name: "Konuşma Müşterisi 1", phone: "05550000001", notes: "Ödeme kapıda", updated_at: now },
+            customer: { public_id: "cus_1", full_name: "Konuşma Müşterisi 1", phone: "05550000001", notes: null, updated_at: now },
             addresses: [],
             orders: [{ public_id: "ord_9", order_number: "GK-9009", status: "shipped", source: "conversation", cargo_provider: "ptt", total_amount: "3500.00", currency: "TRY", created_at: now, shipment: { public_id: "shp_9", provider: "ptt", status: "in_transit", tracking_number: "KP123" } }],
             conversations: [],
@@ -678,6 +682,7 @@ test("inbox: order query screen lists the customer's orders and opens the cargo 
   await expect(panel.getByTestId("order-detail")).toContainText("Dağıtıma çıktı");
   await panel.getByTestId("order-detail-cargo").click();
   await expect(page.getByTestId("cargo-dialog")).toContainText("Transfer merkezinde");
+  expect(state.requests.some((request) => request.path === "/api/orders/customer-lookup")).toBe(false);
 });
 
 test("inbox: quick replies manage shortcuts and export them as JSON", async ({ page }) => {
@@ -715,6 +720,10 @@ test("inbox: older messages, load more conversations and mark all read", async (
     state.conversations.push({ ...base, public_id: `cnv_${index}`, channel: index % 2 === 0 ? "instagram" : "facebook", unread_count: index % 3, customer: { full_name: `Konuşma Müşterisi ${index}`, phone: `0555000${String(index).padStart(4, "0")}` } });
   }
   await page.reload();
+  // "Okunmamış" (on by default) is filtered on the server, so the first page only holds unread rows.
+  await expect(page.getByTestId("conversation-row")).toHaveCount(85);
+  expect(state.requests.some((request) => request.path === "/api/conversations" && request.search === "?limit=100&unread=true")).toBe(true);
+  await expect(page.getByTestId("filter-unread")).toContainText("85");
   await page.getByTestId("filter-unread").click();
   await expect(page.getByTestId("conversation-row")).toHaveCount(100);
   await page.getByTestId("conversations-load-more").click();

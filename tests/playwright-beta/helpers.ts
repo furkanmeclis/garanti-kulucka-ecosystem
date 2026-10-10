@@ -215,15 +215,37 @@ export async function mockBackend(page: Page, user: MockUser, options: { orderCo
     if (url.pathname === "/api/conversations") {
       const channel = url.searchParams.get("channel");
       const status = url.searchParams.get("status");
+      const unread = url.searchParams.get("unread") === "true";
       const channels = channel?.split(",").filter(Boolean);
-      return page_(
-        state.conversations.filter(
-          (row) =>
-            (!channels?.length || channels.includes(row.channel)) &&
-            (!status || row.status === status) &&
-            (!search || [row.customer?.full_name, row.customer?.phone, row.last_message_text].some((value) => value?.toLocaleLowerCase("tr-TR").includes(search))),
-        ),
+      const rows = state.conversations.filter(
+        (row) =>
+          (!channels?.length || channels.includes(row.channel)) &&
+          (!status || row.status === status) &&
+          (!unread || row.unread_count > 0) &&
+          (!search || [row.customer?.full_name, row.customer?.phone, row.last_message_text].some((value) => value?.toLocaleLowerCase("tr-TR").includes(search))),
       );
+      // Inbox-wide counters ride along with every page (apps/api getConversationCounts).
+      const all = state.conversations;
+      const counts = {
+        total_count: all.length,
+        unread_conversation_count: all.filter((row) => row.unread_count > 0).length,
+        unread_message_count: all.reduce((sum, row) => sum + row.unread_count, 0),
+        pool_count: all.filter((row) => row.is_in_pool).length,
+        human_agent_count: all.filter((row) => row.human_agent_enabled).length,
+        channel_counts: {
+          whatsapp: all.filter((row) => row.channel === "whatsapp").length,
+          instagram: all.filter((row) => row.channel === "instagram").length,
+          facebook: all.filter((row) => row.channel === "facebook" || row.channel === "messenger").length,
+        },
+        status_counts: { open: all.filter((row) => row.status === "open").length, closed: all.filter((row) => row.status === "closed").length },
+      };
+      return json(200, { data: rows.slice(offset, offset + limit), meta: { counts } });
+    }
+    const conversationMatch = /^\/api\/conversations\/(cnv_[^/]+)$/.exec(url.pathname);
+    if (conversationMatch && method === "GET") {
+      const row = state.conversations.find((item) => item.public_id === conversationMatch[1]);
+      if (!row) return json(404, { error: { code: "not_found", message: "Konuşma bulunamadı" } });
+      return json(200, { ...row, notes: null, customer: row.customer ? { ...row.customer, public_id: `cus_${row.public_id.slice(4)}`, username: null, notes: null, default_address: null } : null });
     }
     if (url.pathname === "/api/customers") {
       if (state.user.role === "kargo_operatoru") return json(403, { error: { code: "forbidden", message: "Forbidden" } });
