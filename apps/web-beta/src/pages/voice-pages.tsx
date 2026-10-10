@@ -356,7 +356,7 @@ export function VoiceMessagesPage() {
             <span className="text-sm font-medium">{t("voiceMessages.contentLabel")}</span>
             <div className="flex gap-2">
               {(["text", "audio"] as const).map((value) => (
-                <Button key={value} type="button" variant={mode === value ? "default" : "outline"} className="min-h-11 flex-1" aria-pressed={mode === value} onClick={() => setMode(value)} data-testid={`voice-mode-${value}`}>
+                <Button key={value} type="button" variant={mode === value ? "default" : "outline"} className="h-auto min-h-11 min-w-0 flex-1 py-2 whitespace-normal" aria-pressed={mode === value} onClick={() => setMode(value)} data-testid={`voice-mode-${value}`}>
                   {value === "text" ? <Type className="size-4" aria-hidden="true" /> : <FileAudio className="size-4" aria-hidden="true" />}
                   {t(value === "text" ? "voiceMessages.contentText" : "voiceMessages.contentAudio")}
                 </Button>
