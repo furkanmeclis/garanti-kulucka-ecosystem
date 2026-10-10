@@ -181,4 +181,16 @@ describe("cargo pipeline engine", () => {
     await runCargoPipelineTick({ store: failing, publish: vi.fn(), now });
     expect(failing.update).toHaveBeenCalledWith(1, { status: "hata", error_message: "db down" });
   });
+
+  it("re-queues claims abandoned by a stopped worker before claiming new rows", async () => {
+    const order: string[] = [];
+    const fake = store({
+      releaseStale: vi.fn(async () => (order.push("release"), 2)),
+      claimDue: vi.fn(async () => (order.push("claim"), [])),
+    });
+    const result = await runCargoPipelineTick({ store: fake, publish: vi.fn(), now });
+    expect(fake.releaseStale).toHaveBeenCalledWith(now, 30 * 60 * 1000);
+    expect(order).toEqual(["release", "claim"]);
+    expect(result).toMatchObject({ released: 2 });
+  });
 });

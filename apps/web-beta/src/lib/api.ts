@@ -6,6 +6,8 @@ import type {
   DashboardAnalytics,
   InvoiceAnalytics,
   TimeseriesAnalytics,
+  ConversationDetail,
+  ConversationListCounts,
   ConversationSummary,
   ConversationSummaryStats,
   CustomerDetail,
@@ -119,6 +121,8 @@ export class ApiError extends Error {
     readonly status: number,
     readonly code: string | null,
     message: string,
+    /** The backend `error` object as sent (extra fields such as a dry-run `suggestion`). */
+    readonly details: Record<string, unknown> | null = null,
   ) {
     super(message);
     this.name = "ApiError";
@@ -211,7 +215,26 @@ export interface ConversationListQuery {
   limit?: number;
   /** Server-side search on customer name / phone / username or the last message text. */
   search?: string;
+  /** Only conversations with unread customer messages (filtered in SQL, not in the loaded batch). */
+  unread?: boolean;
   offset?: number;
+}
+
+export interface SuratCoverageDecision {
+  status: "covered" | "not_covered" | "partial" | "unknown";
+  source: "provider" | "keyword_fallback";
+  warning: boolean;
+  message: string | null;
+  uncovered_areas: string[];
+  checked_at: string | null;
+  live_enabled: boolean;
+  queued: boolean;
+}
+
+/** GET /api/conversations: the page plus inbox-wide counters (unread / pool / per channel). */
+export interface ConversationListResponse {
+  data: ConversationSummary[];
+  meta?: { counts?: ConversationListCounts };
 }
 
 /** One day of `GET /api/orders/summary` `daily` (last 7 days in Europe/Istanbul, oldest first, zero-filled). */
@@ -288,7 +311,7 @@ export function createApiClient(options: ApiClientOptions) {
       } catch {
         body = null;
       }
-      throw new ApiError(response.status, body?.error?.code ?? null, body?.error?.message ?? `HTTP ${response.status}`);
+      throw new ApiError(response.status, body?.error?.code ?? null, body?.error?.message ?? `HTTP ${response.status}`, (body?.error as Record<string, unknown> | undefined) ?? null);
     }
     if (response.status === 204) return undefined as T;
     return (await response.json()) as T;
@@ -334,7 +357,8 @@ export function createApiClient(options: ApiClientOptions) {
     listOrders: (query: OrderListQuery = {}) => request<ListEnvelope<OrderSummary>>("/api/orders", { query: { ...query } }),
     listShipments: (query: ShipmentListQuery = {}) => request<ListEnvelope<ShipmentSummary>>("/api/shipments", { query: { ...query } }),
     listConversations: (query: ConversationListQuery = {}) =>
-      request<ListEnvelope<ConversationSummary>>("/api/conversations", { query: { ...query } }),
+      request<ConversationListResponse>("/api/conversations", { query: { ...query, ...(query.unread ? { unread: "true" } : { unread: undefined }) } }),
+    getConversation: (publicId: string) => request<ConversationDetail>(`/api/conversations/${encodeURIComponent(publicId)}`),
     listCustomers: (limit = 200) => request<ListEnvelope<CustomerSummary>>("/api/customers", { query: { limit } }),
     getCustomer: (publicId: string) => request<CustomerDetail>(`/api/customers/${encodeURIComponent(publicId)}`),
     updateCustomer: (publicId: string, input: UpdateCustomerRequest) =>
@@ -450,6 +474,12 @@ export function createApiClient(options: ApiClientOptions) {
       request<{ operation: string; request_id: string }>("/api/webphone/test-call", { method: "POST", body: input }),
     createOrder: (input: CreateOrderInput) => request<OrderSummary>("/api/orders", { method: "POST", body: input }),
     orderProductOptions: () => request<{ data: ProductOption[] }>("/api/orders/product-options", { query: { limit: 100 } }),
+    /** Sürat AT (adrese teslim) precheck; also queues the carrier lookup when providers.surat.live_mode is on. */
+    suratCoverage: (input: { city: string; district: string; address_line?: string | null }) =>
+      request<SuratCoverageDecision>("/api/orders/surat-coverage", { method: "POST", body: input }),
+    /** Legacy mükerrer row icons for a page of orders: only orders with duplicates are returned. */
+    orderDuplicateCheck: (orderPublicIds: string[]) =>
+      request<{ data: Record<string, { phone_matches: string[]; name_matches: string[] }> }>("/api/orders/duplicate-check", { method: "POST", body: { order_public_ids: orderPublicIds } }),
     lookupCustomerByPhone: (phone: string) => request<CustomerLookup>("/api/orders/customer-lookup", { query: { phone } }),
     getOrderActionDetail: (publicId: string) => request<{ order: OrderActionDetail; steps: OrderProviderStep[] }>(`/api/orders/${encodeURIComponent(publicId)}/actions`),
     syncOrderProviderSteps: (publicId: string) => request<{ advanced_count: number }>(`/api/orders/${encodeURIComponent(publicId)}/provider-sync`, { method: "POST" }),
@@ -510,6 +540,12 @@ export function createApiClient(options: ApiClientOptions) {
       request<{ public_id: string; notes: string | null }>(`/api/conversations/${encodeURIComponent(conversationPublicId)}/customer-notes`, { method: "PATCH", body: { notes } }),
     aiReplySuggestion: (conversationPublicId: string) =>
       request<{ suggestion: string; dry_run: boolean }>("/api/ai/reply-suggestion", { method: "POST", body: { conversation_public_id: conversationPublicId } }),
+    /**
+     * Legacy "AI üret ve gönder": the server drafts and sends the reply as an AI message. 409 `ai_live_disabled`
+     * (draft in `details.suggestion`, never sent) or `already_answered` when the customer is not waiting.
+     */
+    aiReplyAndSend: (conversationPublicId: string) =>
+      request<ThreadMessage>(`/api/conversations/${encodeURIComponent(conversationPublicId)}/ai-reply`, { method: "POST" }),
     listShortcuts: () => request<{ data: MessageShortcut[] }>("/api/message-shortcuts"),
     createShortcut: (input: { code: string; message: string | null; attachments: Array<{ file_public_id: string; attachment_type: string }> }) =>
       request<MessageShortcut>("/api/message-shortcuts", { method: "POST", body: { ...input, type: "custom" } }),
@@ -552,6 +588,8 @@ export function createApiClient(options: ApiClientOptions) {
     listUsers: () => request<{ data: ManagedUser[]; roles: ManagedRole[] }>("/admin/users"),
     createUser: (input: CreateManagedUserInput) => request<{ user: ManagedUser }>("/admin/users", { method: "POST", body: input }),
     updateUser: (publicId: string, input: UpdateManagedUserInput) => request<{ user: ManagedUser }>(`/admin/users/${encodeURIComponent(publicId)}`, { method: "PATCH", body: input }),
+    /** Manager action (legacy aktif temsilci chip): sets another agent offline; audit logged server-side. */
+    setUserOffline: (publicId: string) => request<{ user: ManagedUser }>(`/admin/users/${encodeURIComponent(publicId)}/presence`, { method: "PATCH", body: { online: false } }),
     deactivateUser: (publicId: string) => request<{ user: ManagedUser; deactivated: boolean }>(`/admin/users/${encodeURIComponent(publicId)}`, { method: "DELETE" }),
     listAdminLogs: (limit = 100) => request<{ data: AdminLogEntry[] }>("/admin/logs", { query: { limit } }),
     aiStatus: () => request<{ ai_enabled: boolean }>("/api/app-settings/ai-status"),

@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Tip } from "@/components/ui/tooltip";
-import { ApiError } from "@/lib/api";
+import { ApiError, type SuratCoverageDecision } from "@/lib/api";
 import { defaultProduct, emptyLine, lineFor, orderTotal, validateOrder, type OrderDraft, type OrderLine, type OrderValidationError } from "@/lib/chat";
 import { parseMoney, type ProductOption } from "@/lib/orders";
 import { districtsOf, provinces } from "@/lib/turkiye";
@@ -85,6 +85,26 @@ export function OrderCreateForm({
   const [atBypassed, setAtBypassed] = useState(false);
   const [atWarning, setAtWarning] = useState<{ message: string; city: string; district: string; address: string } | null>(null);
   const lock = useRef(false);
+  const [coverage, setCoverage] = useState<SuratCoverageDecision | null>(null);
+
+  // Sürat AT precheck (legacy at-durum-kontrol): warn before submit; the server re-checks on create anyway.
+  const coverageAddress = draft.cargo === "surat" && draft.city && draft.district ? `${draft.city}|${draft.district}|${draft.address.trim()}` : "";
+  useEffect(() => {
+    setCoverage(null);
+    if (!coverageAddress) return;
+    const [city = "", district = "", address = ""] = coverageAddress.split("|");
+    let active = true;
+    const timer = window.setTimeout(() => {
+      api
+        .suratCoverage({ city, district, address_line: address || null })
+        .then((decision) => active && setCoverage(decision))
+        .catch(() => undefined);
+    }, 400);
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [api, coverageAddress]);
 
   // A newly opened conversation fills the customer fields; the picked products stay (legacy).
   useEffect(() => {
@@ -351,6 +371,12 @@ export function OrderCreateForm({
             </ToggleGroupItem>
           ))}
         </ToggleGroup>
+        {coverage?.warning && (
+          <p className="mt-1 flex items-start gap-1 text-xs text-red-600 dark:text-red-400" role="status" data-testid="order-surat-coverage">
+            <AlertCircle className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+            {coverage.uncovered_areas.length > 0 ? t("chat.atPrecheckAreas", { areas: coverage.uncovered_areas.slice(0, 5).join(", ") }) : t("chat.atPrecheck")}
+          </p>
+        )}
       </div>
       <div className={stickySubmit ? "sticky bottom-0 z-10 -mx-3 border-t border-msg-border bg-msg-raised px-3 pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))]" : "pt-1"} data-testid="order-submit-bar">
         <button

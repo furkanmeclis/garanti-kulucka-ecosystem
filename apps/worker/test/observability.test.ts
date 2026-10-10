@@ -145,3 +145,15 @@ describe("worker health and metrics endpoints", () => {
     expect((await publicNoToken("GET", "/metrics", undefined)).status).toBe(404);
   });
 });
+
+describe("dead-letter accounting", () => {
+  it("counts a terminal (UnrecoverableError) failure as dead-lettered on its first attempt", async () => {
+    const { createWorkerMetrics, recordJobFailure } = await import("../src/observability.js");
+    const metrics = createWorkerMetrics();
+    const job = { attemptsMade: 1, opts: { attempts: 5 } } as Parameters<typeof recordJobFailure>[2];
+    recordJobFailure(metrics, "provider-delivery", job, Object.assign(new Error("400"), { name: "UnrecoverableError" }));
+    recordJobFailure(metrics, "provider-delivery", job, new Error("503"));
+    const text = await metrics.registry.render();
+    expect(text).toMatch(/queue_job_dead_letters_total\{queue="provider-delivery",service="worker"\} 1/);
+  });
+});

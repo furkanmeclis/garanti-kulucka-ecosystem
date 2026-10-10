@@ -7,6 +7,7 @@ import { jobEnvelopeSchema, planOutboundDelivery, providerDeliveryJobPayloadSche
 import type { AppBindings } from "./types.js";
 import { authenticate, requireDatabase } from "./middleware.js";
 import {
+  ConversationNotAwaitingReplyError,
   DomainRepository,
   DuplicateProductSkuError,
   InsufficientStockError,
@@ -14,6 +15,7 @@ import {
   type ListOrdersFilter,
   type ListShipmentsFilter,
   serializeConversation,
+  serializeConversationDetail,
   serializeConversationSummary,
   serializeCustomer,
   serializeCustomerDetail,
@@ -28,6 +30,8 @@ import {
   serializeStockMovement,
 } from "../domain/repository.js";
 import { calculateVatInclusiveOrder, moneyToCents } from "../domain/order-totals.js";
+import { draftConversationReply } from "../ai/reply.js";
+import { SuratCoverageService, suratAtKeywordWarning, type SuratCoverageAddress, type SuratCoverageDecision } from "../cargo/surat-coverage.js";
 
 
 const limitSchema = z.coerce.number().int().min(1).max(200).default(50);
@@ -317,6 +321,7 @@ async function queueOutboundDelivery(
   context: Context<AppBindings>,
   db: AppDatabase,
   message: { public_id: string; body: string | null; attachments: Array<{ file_public_id: string; original_name?: string | null }> },
+  options: { idempotencyPrefix?: string; legacyContract?: { source: string; legacy_event: string } } = {},
 ) {
   const target = await new DomainRepository(db).getConversationDeliveryTarget(context.req.param("conversation_public_id") ?? "");
   if (!target) return null;
@@ -326,6 +331,8 @@ async function queueOutboundDelivery(
     body: message.body,
     attachments: message.attachments.map((attachment) => ({ file_public_id: attachment.file_public_id, original_name: attachment.original_name })),
     requestId: context.get("requestId"),
+    ...(options.idempotencyPrefix ? { idempotencyPrefix: options.idempotencyPrefix } : {}),
+    ...(options.legacyContract ? { legacyContract: options.legacyContract } : {}),
   });
   if ("reason" in plan) {
     return { provider: plan.provider, queued: false, job_ids: [], skipped_reason: plan.reason, skipped_attachments: 0, live_gate: plan.provider ? `providers.${plan.provider}.live_mode` : null };
@@ -344,6 +351,22 @@ async function queueOutboundDelivery(
     skipped_attachments: plan.skipped_attachments,
     live_gate: `providers.${plan.provider}.live_mode`,
   };
+}
+
+function publishMessageCreated(context: Context<AppBindings>, conversationPublicId: string, message: { public_id: string; sender_type: string }) {
+  const envelope = {
+    event: "message.created",
+    id: `evt_${message.public_id}`,
+    occurred_at: new Date().toISOString(),
+    payload: {
+      message_public_id: message.public_id,
+      conversation_public_id: conversationPublicId,
+      sender_type: message.sender_type,
+    },
+  } as const;
+  const realtimePublisher = context.get("realtimePublisher");
+  realtimePublisher.publishToConversation(conversationPublicId, envelope);
+  realtimePublisher.broadcast(envelope);
 }
 
 function jobIdFromIdempotencyKey(key: string) {
@@ -365,10 +388,37 @@ function normalizePhoneTail(value: string) {
   return value.replace(/\D/g, "").slice(-10);
 }
 
-function isSuratAtWarningAddress(payload: { cargo_provider: string; address: { city: string; district: string; address_line: string } }) {
-  if (payload.cargo_provider !== "surat") return false;
-  const addressText = `${payload.address.city} ${payload.address.district} ${payload.address.address_line}`.toLocaleLowerCase("tr-TR");
-  return addressText.includes("at dışı") || addressText.includes("at disi") || addressText.includes("teslimat yok");
+const suratCoverageSchema = z.object({
+  city: z.string().trim().min(1).max(100),
+  district: z.string().trim().min(1).max(100),
+  address_line: z.string().trim().max(1000).nullable().optional(),
+}).strict();
+
+const duplicateCheckSchema = z.object({
+  order_public_ids: z.array(z.string().min(1).max(64)).min(1).max(200),
+}).strict();
+
+/**
+ * Sürat AT coverage for an address: the carrier's ATDurumListesi answer when one is cached for today, else the
+ * legacy keyword check. A lookup failure must never block order creation, so it degrades to the keyword check.
+ */
+async function suratCoverage(context: Context<AppBindings>, db: AppDatabase, address: SuratCoverageAddress): Promise<SuratCoverageDecision> {
+  try {
+    return await new SuratCoverageService(db, context.get("providerDeliveryQueuePublisher")).check(address, { requestId: context.get("requestId") });
+  } catch {
+    const warning = suratAtKeywordWarning(address);
+    return {
+      status: warning ? "not_covered" : "unknown",
+      source: "keyword_fallback",
+      warning,
+      message: warning ? "Bu adrese sürat kargo teslimat yapmamaktadır" : null,
+      uncovered_areas: [],
+      checked_at: null,
+      live_gate: "providers.surat.live_mode",
+      live_enabled: false,
+      queued: false,
+    };
+  }
 }
 
 export function createDomainRoutes() {
@@ -393,17 +443,21 @@ export function createDomainRoutes() {
       ? channel.split(",").map((item) => item.trim()).filter(Boolean)
       : undefined;
     const search = context.req.query("search")?.trim();
+    const unread = context.req.query("unread");
     const offset = Number.parseInt(context.req.query("offset") ?? "0", 10);
-    const conversations = await new DomainRepository(db).listConversations({
+    const repository = new DomainRepository(db);
+    const conversations = await repository.listConversations({
       limit: limitSchema.parse(context.req.query("limit")),
       ...(search ? { search: search.slice(0, 100) } : {}),
+      ...(unread === "true" || unread === "1" ? { unreadOnly: true } : {}),
       ...(Number.isFinite(offset) && offset > 0 ? { offset: Math.min(offset, 100_000) } : {}),
       ...(assigned === "unassigned" ? { assignedUserId: null } : {}),
       ...(channels ? { channels } : channel ? { channel } : {}),
       ...(status ? { status } : {}),
     });
 
-    return context.json({ data: conversations.map(serializeConversation) });
+    // Inbox-wide counters (unread / pool / per channel) ride along so the list needs no separate summary poll.
+    return context.json({ data: conversations.map(serializeConversation), meta: { counts: await repository.getConversationCounts() } });
   });
 
   routes.post("/conversations/mark-all-read", async (context) => {
@@ -434,6 +488,24 @@ export function createDomainRoutes() {
 
     const summary = await new DomainRepository(db).getConversationSummary();
     return context.json(serializeConversationSummary(summary));
+  });
+
+  // Single conversation (deep links, the order panel's customer note / default address) — no batch scanning.
+  routes.get("/conversations/:conversation_public_id", async (context) => {
+    if (!canReadConversations(context.get("auth")?.role)) {
+      return context.json({ error: { code: "forbidden", message: "Conversation access is not allowed" } }, 403);
+    }
+
+    const db = context.get("db");
+    if (!db) {
+      return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
+    }
+
+    const detail = await new DomainRepository(db).getConversationDetail(context.req.param("conversation_public_id"));
+    if (!detail) {
+      return context.json({ error: { code: "not_found", message: "Konuşma bulunamadı" } }, 404);
+    }
+    return context.json(serializeConversationDetail(detail));
   });
 
   routes.get("/comments/moderation-summary", async (context) => {
@@ -687,19 +759,7 @@ export function createDomainRoutes() {
         attachmentType: attachment.attachment_type,
       })),
     });
-    const messageCreatedEnvelope = {
-      event: "message.created",
-      id: `evt_${message.public_id}`,
-      occurred_at: new Date().toISOString(),
-      payload: {
-        message_public_id: message.public_id,
-        conversation_public_id: context.req.param("conversation_public_id"),
-        sender_type: message.sender_type,
-      },
-    } as const;
-    const realtimePublisher = context.get("realtimePublisher");
-    realtimePublisher.publishToConversation(context.req.param("conversation_public_id"), messageCreatedEnvelope);
-    realtimePublisher.broadcast(messageCreatedEnvelope);
+    publishMessageCreated(context, context.req.param("conversation_public_id"), message);
 
     const delivery = message.sender_type === "user" ? await queueOutboundDelivery(context, db, message) : null;
     return context.json({ ...serializeMessage(message), delivery }, 201);
@@ -836,14 +896,69 @@ export function createDomainRoutes() {
       return context.json({ error: { code: "invalid_request", message: "Invalid AI reply suggestion payload" } }, 400);
     }
 
-    return context.json({
-      provider: "openai",
-      operation: "messages.reply_suggestion",
-      dry_run: true,
-      live_call_permitted: false,
-      conversation_public_id: payload.data.conversation_public_id,
-      suggestion: "AI yanıt önerisi backend dry-run sınırında tutuldu.",
+    const draft = await draftConversationReply({ conversationPublicId: payload.data.conversation_public_id });
+    return context.json({ ...draft, conversation_public_id: payload.data.conversation_public_id });
+  });
+
+  /**
+   * Legacy `/api/ai-agent/yanit-ve-gonder`: draft a reply server-side and send it as an AI message. Never sends a
+   * dry-run draft (409 ai_live_disabled carries it as a suggestion) and never answers twice (409 already_answered).
+   */
+  routes.post("/conversations/:conversation_public_id/ai-reply", async (context) => {
+    if (!canManageMessages(context.get("auth")?.role)) {
+      return context.json({ error: { code: "forbidden", message: "AI reply sending is not allowed" } }, 403);
+    }
+
+    const db = context.get("db");
+    if (!db) {
+      return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
+    }
+
+    const conversationPublicId = context.req.param("conversation_public_id");
+    const repository = new DomainRepository(db);
+    const conversation = await repository.getConversation(conversationPublicId);
+    if (!conversation) {
+      return context.json({ error: { code: "not_found", message: "Konuşma bulunamadı" } }, 404);
+    }
+    if (conversation.last_message_sender_type !== "customer") {
+      return context.json({ error: { code: "already_answered", message: "Son mesaj zaten yanıtlanmış; AI yanıtı gönderilmedi" } }, 409);
+    }
+
+    const draft = await draftConversationReply({ conversationPublicId });
+    const suggestion = draft.suggestion.trim();
+    if (draft.dry_run || !draft.live_call_permitted) {
+      return context.json(
+        { error: { code: "ai_live_disabled", message: "Canlı AI kapalı; yanıt müşteriye gönderilmedi", suggestion, dry_run: true } },
+        409,
+      );
+    }
+    if (!suggestion) {
+      return context.json({ error: { code: "ai_empty", message: "AI boş yanıt üretti" } }, 422);
+    }
+
+    let message;
+    try {
+      message = await repository.createMessage({
+        conversationPublicId,
+        senderType: "ai",
+        senderName: null,
+        body: suggestion,
+        externalMessageId: null,
+        rawPayload: { source: "ai_reply", provider: draft.provider, operation: draft.operation },
+        onlyIfAwaitingReply: true,
+      });
+    } catch (error) {
+      if (error instanceof ConversationNotAwaitingReplyError) {
+        return context.json({ error: { code: "already_answered", message: "Son mesaj zaten yanıtlanmış; AI yanıtı gönderilmedi" } }, 409);
+      }
+      throw error;
+    }
+    publishMessageCreated(context, conversationPublicId, message);
+    const delivery = await queueOutboundDelivery(context, db, message, {
+      idempotencyPrefix: "ai",
+      legacyContract: { source: "server.js POST /api/ai-agent/yanit-ve-gonder", legacy_event: "ai_reply_send" },
     });
+    return context.json({ ...serializeMessage(message), delivery }, 201);
   });
 
   routes.post("/sms/send", async (context) => {
@@ -1257,16 +1372,20 @@ export function createDomainRoutes() {
         409,
       );
     }
-    if (!payload.data.force_surat_at && isSuratAtWarningAddress(payload.data)) {
-      return context.json(
-        {
-          error: {
-            code: "surat_at_warning",
-            message: "Bu adrese sürat kargo teslimat yapmamaktadır",
+    if (!payload.data.force_surat_at && payload.data.cargo_provider === "surat") {
+      const coverage = await suratCoverage(context, db, payload.data.address);
+      if (coverage.warning) {
+        return context.json(
+          {
+            error: {
+              code: "surat_at_warning",
+              message: coverage.message ?? "Bu adrese sürat kargo teslimat yapmamaktadır",
+              coverage,
+            },
           },
-        },
-        409,
-      );
+          409,
+        );
+      }
     }
 
     const calculatedOrder = calculateVatInclusiveOrder(payload.data.items);
@@ -1304,6 +1423,43 @@ export function createDomainRoutes() {
     });
 
     return context.json(serializeOrder(order), 201);
+  });
+
+  // Legacy `/api/surat-kargo/at-durum-kontrol`: the order form asks before submit (and warms the cache).
+  routes.post("/orders/surat-coverage", async (context) => {
+    if (!canUseOrderCreateForm(context.get("auth")?.role)) {
+      return context.json({ error: { code: "forbidden", message: "Order form access is not allowed" } }, 403);
+    }
+    const payload = suratCoverageSchema.safeParse(await readJsonBody(context.req.raw));
+    if (!payload.success) {
+      return context.json({ error: { code: "invalid_request", message: "İl ve ilçe gerekli" } }, 400);
+    }
+    const db = context.get("db");
+    if (!db) {
+      return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
+    }
+    return context.json(await suratCoverage(context, db, payload.data));
+  });
+
+  // Legacy mükerrer sipariş row icons: one call for the visible page (red = same phone, yellow = same name).
+  routes.post("/orders/duplicate-check", async (context) => {
+    if (!canReadOrders(context.get("auth")?.role)) {
+      return context.json({ error: { code: "forbidden", message: "Order access is not allowed" } }, 403);
+    }
+    const payload = duplicateCheckSchema.safeParse(await readJsonBody(context.req.raw));
+    if (!payload.success) {
+      return context.json({ error: { code: "invalid_request", message: "1-200 sipariş kimliği gerekli" } }, 400);
+    }
+    const db = context.get("db");
+    if (!db) {
+      return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
+    }
+    const matches = await new DomainRepository(db).findDuplicateOrdersFor([...new Set(payload.data.order_public_ids)]);
+    return context.json({
+      data: Object.fromEntries(
+        [...matches].map(([publicId, match]) => [publicId, { phone_matches: match.phoneMatches, name_matches: match.nameMatches }]),
+      ),
+    });
   });
 
   routes.patch("/orders/:order_public_id/status", async (context) => {

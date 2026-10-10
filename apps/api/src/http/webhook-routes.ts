@@ -351,6 +351,10 @@ export function createWebhookRoutes(options: CreateWebhookRoutesOptions = {}) {
               accountId: resolution.accountId,
               provider: callback.provider,
             });
+        if (!policy.secret && policy.mode === "enforce") {
+          // Explicit enforce without a secret used to accept everything unsigned (fail open).
+          return context.json({ error: { code: "webhook_signature_invalid", message: "Webhook signature cannot be verified: no secret is configured" } }, 401);
+        }
         if (!policy.secret) {
           logSignatureWarning({
             context,
@@ -417,6 +421,21 @@ export function createWebhookRoutes(options: CreateWebhookRoutesOptions = {}) {
               externalEventId,
             });
             if (existing) {
+              // Stored but never queued (the publish failed after the insert): queue it now. The job id is derived
+              // from the event, so a job that is still waiting is not queued twice.
+              if (existing.status === "received") {
+                await queuePublisher.publish(
+                  buildWebhookJob({
+                    eventPublicId: existing.public_id,
+                    provider: callback.provider,
+                    accountPublicId: existing.account_public_id,
+                    payloadHash: existing.payload_hash,
+                    eventType: existing.event_type,
+                    externalEventId,
+                    requestId: context.get("requestId"),
+                  }),
+                );
+              }
               const replayed = responseFromStoredEvent(existing);
               if (replayKey) {
                 replayCache.set(replayKey, now, replayWindowMs, replayed);

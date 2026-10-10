@@ -10,8 +10,9 @@ export async function bindProviderConfigInvalidation(
   repository: ProviderAccountConfigRepository | undefined,
   subscriber: SettingsChangeSubscriber | undefined,
 ): Promise<void> {
-  await repository?.hydrate?.();
+  // Subscribe first: a failed warm-up (database still starting) must not leave the cache without invalidation.
   await subscriber?.subscribeSettingsChanged(() => {
     repository?.invalidate?.();
   });
+  await repository?.hydrate?.();
 }

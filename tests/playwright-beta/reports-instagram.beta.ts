@@ -85,8 +85,14 @@ test("reports: legacy KPIs, presets, filters and breakdowns", async ({ page }) =
   await page.getByTestId("reports-personnel-performance-view-table").click();
   await expect(page.getByTestId("reports-personnel-table")).toContainText("Ayşe Yılmaz");
 
+  await expect(page.getByTestId("reports-refresh")).toBeEnabled();
   await page.getByTestId("reports-preset-last7").click();
+  await expect.poll(() => new URL(page.url()).searchParams.get("range")).toBe("last7");
+  // Let the preset's reload settle first: a select opened while it lands closes again and the pick is lost.
+  await expect(page.getByTestId("reports-refresh")).toBeEnabled();
   await chooseOption(page.getByTestId("reports-provider"), "ptt");
+  await expect.poll(() => new URL(page.url()).searchParams.get("cargo")).toBe("ptt");
+  await expect(page.getByTestId("reports-refresh")).toBeEnabled();
   await chooseOption(page.getByTestId("reports-personnel"), "usr_1");
   await expect(page.getByTestId("reports-legacy-total-value")).toHaveText("60");
   const filtered = () =>

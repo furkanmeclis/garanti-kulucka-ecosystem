@@ -309,7 +309,9 @@
     "trackingNoEvents": "Henüz hareket yok",
     "trackingFailed": "Takip bilgisi alınamadı",
     "close": "Kapat",
-    "cargoRequired": "Kargo firması seçimi zorunlu (PTT veya Sürat)"
+    "cargoRequired": "Kargo firması seçimi zorunlu (PTT veya Sürat)",
+    "duplicatePhone": "Aynı telefonla başka sipariş: {{orders}}",
+    "duplicateName": "Aynı isimle başka aktif sipariş: {{orders}}"
   },
   "messages": {
     "title": "Mesajlar",
@@ -2248,7 +2250,7 @@
     "fallbackOther": "Müşteri (…{{last4}})",
     "unknown": "Bilinmeyen",
     "dailySales": "Günlük Satış",
-    "dailySalesHint": "Bugün oluşturulan sipariş sayısı",
+    "dailySalesHint": "Bugün satılan ürün adedi (iptal/iade hariç)",
     "currentStock": "Güncel Stok",
     "onlineAgents": "Çevrimiçi temsilciler",
     "online": "Çevrimiçi",
@@ -2436,7 +2438,16 @@
     "shipmentStatusHint": "Kargo durumu: {{status}}",
     "channelHint": "Kanal: {{channel}}",
     "channelPanel": "Panel",
-    "carrierHint": "Kargo firması: {{carrier}}"
+    "carrierHint": "Kargo firması: {{carrier}}",
+    "agentOfflineHint": "Çevrimdışı yapmak için tıklayın",
+    "agentOfflineAction": "{{name}} adlı temsilciyi çevrimdışı yap",
+    "agentOfflineConfirm": "{{name}} çevrimdışı yapılsın mı? Temsilci tekrar çevrimiçi olana kadar konuşma listesini göremez.",
+    "agentOfflineConfirmLabel": "Çevrimdışı yap",
+    "agentOfflineDone": "{{name}} çevrimdışı yapıldı",
+    "aiAlreadyAnswered": "Son mesaj zaten yanıtlanmış; AI yanıtı gönderilmedi",
+    "deepLinkMissing": "Bağlantıdaki konuşma bulunamadı",
+    "atPrecheck": "Sürat bu adrese teslimat yapmıyor olabilir (AT dışı)",
+    "atPrecheckAreas": "Sürat bu mahallelere teslimat yapmıyor (AT dışı): {{areas}}"
   },
   "statusHint": {
     "draft": "Sipariş taslak olarak kaydedildi, henüz işleme alınmadı",

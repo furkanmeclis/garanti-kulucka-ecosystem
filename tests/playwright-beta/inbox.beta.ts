@@ -28,7 +28,7 @@ function routes(options: InboxOptions = {}) {
     { public_id: "msc_1", code: "kargo", message: "Kargonuz yola çıktı.", type: "custom", is_active: true, sort_order: 0, attachments: [], updated_at: now },
     { public_id: "msc_2", code: "2", message: "Siparişiniz alındı, toplam {{fiyat}}. Yardımcı olabileceğim başka bir şey var mı?", type: "default", is_active: true, sort_order: 1, attachments: [], updated_at: now },
   ];
-  const extras = { suggestion: "Siparişiniz bugün kargoya verildi.", dryRun: false, orderResponses: [...(options.orderResponses ?? [])], aiEnabled: true };
+  const extras = { suggestion: "Siparişiniz bugün kargoya verildi.", dryRun: false, orderResponses: [...(options.orderResponses ?? [])], aiEnabled: true, offline: new Set<string>(), answered: false };
   const route: ExtraRoute = ({ method, path, url, body }, backend) => {
     if (path === "/api/conversations/cnv_1/messages" && method === "GET") {
       if (url.searchParams.get("before")) return { status: 200, body: { data: older, has_more: false } };
@@ -73,18 +73,32 @@ function routes(options: InboxOptions = {}) {
     }
     if (path === "/api/conversations/cnv_1/notes") return { status: 200, body: { ...backend.conversations[0], notes: (body as { notes: string }).notes } };
     if (path === "/api/conversations/cnv_1/customer-notes") return { status: 200, body: { public_id: "cus_1", notes: (body as { notes: string }).notes } };
+    if (path === "/api/conversations/cnv_1/ai-reply" && method === "POST") {
+      if (extras.answered) return { status: 409, body: { error: { code: "already_answered", message: "Son mesaj zaten yanıtlanmış" } } };
+      if (extras.dryRun) return { status: 409, body: { error: { code: "ai_live_disabled", message: "Canlı AI kapalı", suggestion: extras.suggestion, dry_run: true } } };
+      if (!extras.suggestion.trim()) return { status: 422, body: { error: { code: "ai_empty", message: "AI boş yanıt üretti" } } };
+      const message = { public_id: `msg_ai${messages.length + 1}`, sender_type: "ai", sender_name: null, body: extras.suggestion.trim(), is_read: true, sent_at: now, attachments: [] };
+      messages.push(message);
+      extras.answered = true;
+      return { status: 201, body: { ...message, delivery: { provider: "messenger", queued: true } } };
+    }
     if (path === "/api/ai/reply-suggestion") return { status: 200, body: { suggestion: extras.suggestion, dry_run: extras.dryRun } };
     if (path === "/api/app-settings/ai-status") return { status: 200, body: { ai_enabled: extras.aiEnabled } };
     if (path === "/admin/settings/ai.auto_reply_enabled" && method === "PUT") {
       extras.aiEnabled = (body as { value: boolean }).value;
       return { status: 200, body: { key: "ai.auto_reply_enabled", value: extras.aiEnabled } };
     }
+    const presenceMatch = /^\/admin\/users\/(usr_\w+)\/presence$/.exec(path);
+    if (presenceMatch && method === "PATCH") {
+      extras.offline.add(presenceMatch[1]!);
+      return { status: 200, body: { user: { public_id: presenceMatch[1], is_online: false } } };
+    }
     if (path === "/admin/users") {
       return {
         status: 200,
         body: {
           data: [
-            { public_id: "usr_a", email: "a@example.com", first_name: "Elif", last_name: "Kaya", phone: null, role: "calisan", is_active: true, is_online: true, last_seen_at: now, sip_username: null, sip_password_configured: false, created_at: now },
+            { public_id: "usr_a", email: "a@example.com", first_name: "Elif", last_name: "Kaya", phone: null, role: "calisan", is_active: true, is_online: !extras.offline.has("usr_a"), last_seen_at: now, sip_username: null, sip_password_configured: false, created_at: now },
             { public_id: "usr_b", email: "b@example.com", first_name: "Can", last_name: "Er", phone: null, role: "calisan", is_active: true, is_online: false, last_seen_at: now, sip_username: null, sip_password_configured: false, created_at: now },
           ],
           roles: [],
@@ -183,11 +197,23 @@ test("inbox: three-column layout at 1440px matches the legacy proportions", asyn
   await expect(page.getByTestId("order-cargo-ptt").locator("[data-brand=ptt] img")).toBeVisible();
   await expect(page.getByTestId("order-cargo-surat").locator("[data-brand=surat] img")).toBeVisible();
 
-  // Manager extras in the top strip: today's orders, stock, online agents.
-  await expect(page.getByTestId("daily-sales")).toContainText("7");
+  // Manager extras in the top strip: units sold today (not the order count, 7), stock, online agents.
+  await expect(page.getByTestId("daily-sales")).toContainText("11");
   await expect(page.getByTestId("current-stock")).toContainText("12");
   await expect(page.getByTestId("online-agents")).toHaveText(/Elif/);
   await expect(page.getByTestId("online-agents")).not.toContainText("Can");
+});
+
+test("inbox: a manager sets an online agent offline from the top strip", async ({ page }) => {
+  const { state } = await openInbox(page, { viewport: { width: 1440, height: 900 } });
+  const chip = page.getByTestId("online-agent-usr_a");
+  await expect(chip).toHaveText(/Elif/);
+  await chip.click();
+  await expect(page.getByTestId("confirm-dialog")).toContainText("Elif Kaya");
+  await page.getByTestId("confirm-dialog-action").click();
+  await expect(toast(page, "Elif Kaya çevrimdışı yapıldı")).toBeVisible();
+  await expect(page.getByTestId("online-agents")).toHaveCount(0);
+  expect(state.bodies.filter((entry) => entry.path === "/admin/users/usr_a/presence")).toEqual([{ method: "PATCH", path: "/admin/users/usr_a/presence", body: { online: false } }]);
 });
 
 test("inbox: the order panel only shows from 1280px", async ({ page }) => {
@@ -275,7 +301,7 @@ for (const viewport of [viewports.phone390, viewports.phone360]) {
     await page.getByTestId("composer-ai").click();
     await page.getByTestId("composer-ai-menu-send").click();
     await expect(toast(page, "AI yanıt gönderildi")).toBeVisible();
-    await expect.poll(() => posts(state, "/api/conversations/cnv_1/messages")).toHaveLength(1);
+    expect(posts(state, "/api/conversations/cnv_1/ai-reply")).toHaveLength(1);
 
     // Header ⋮ carries the TEMSİLCİ / GPT switches.
     await page.getByTestId("chat-header-menu-trigger").click();
@@ -442,7 +468,13 @@ test("inbox: AI generate & send, and the empty-suggestion guard", async ({ page 
   await page.getByTestId("composer-ai-send").click();
   await expect(toast(page, "AI yanıt gönderildi")).toBeVisible();
   await expect(page.getByTestId("thread-message").last()).toContainText("Siparişiniz bugün kargoya verildi.");
-  expect(posts(state, "/api/ai/reply-suggestion")).toEqual([{ conversation_public_id: "cnv_1" }]);
+  // The server drafts and sends; the panel never posts the AI text itself.
+  expect(posts(state, "/api/conversations/cnv_1/ai-reply")).toEqual([undefined]);
+  expect(posts(state, "/api/ai/reply-suggestion")).toEqual([]);
+  // The customer is no longer waiting: the server refuses a second answer.
+  await page.getByTestId("composer-ai-send").click();
+  await expect(toast(page, "Son mesaj zaten yanıtlanmış; AI yanıtı gönderilmedi")).toBeVisible();
+  extras.answered = false;
   extras.suggestion = "  ";
   await page.getByTestId("composer-ai-send").click();
   await expect(toast(page, "AI yanıt üretemedi; mesaj gönderilmedi")).toBeVisible();
@@ -452,7 +484,9 @@ test("inbox: AI generate & send, and the empty-suggestion guard", async ({ page 
   await page.getByTestId("composer-ai-send").click();
   await expect(toast(page, "Canlı AI kapalı olduğu için yanıt gönderilmedi; öneri olarak gösterildi")).toBeVisible();
   await expect(page.getByTestId("ai-suggestion")).toContainText("Kuru çalıştırma");
-  expect(posts(state, "/api/conversations/cnv_1/messages")).toHaveLength(1);
+  await expect(page.getByTestId("ai-suggestion")).toContainText("dry-run sınırında");
+  expect(posts(state, "/api/conversations/cnv_1/messages")).toHaveLength(0);
+  expect(posts(state, "/api/conversations/cnv_1/ai-reply")).toHaveLength(4);
 });
 
 test("inbox: top strip toggles, menu actions and notes", async ({ page }) => {
@@ -594,6 +628,9 @@ test("inbox: Sürat AT warning asks before creating", async ({ page }) => {
   await page.getByTestId("order-district-input").press("Enter");
   await panel.getByTestId("order-address").fill("Köy yolu, AT dışı");
   await panel.getByTestId("order-cargo-surat").click();
+  // The precheck warns before submit (keyword fallback while the Sürat live gate is closed).
+  await expect(panel.getByTestId("order-surat-coverage")).toContainText("AT dışı");
+  expect(posts(state, "/api/orders/surat-coverage").at(-1)).toEqual({ city: "Van", district: "Başkale", address_line: "Köy yolu, AT dışı" });
   await panel.getByTestId("order-submit").click();
   const dialog = page.getByTestId("at-warning");
   await expect(dialog).toContainText("Sürat Kargo Teslimat Yapılmıyor");
@@ -608,12 +645,16 @@ test("inbox: order query screen lists the customer's orders and opens the cargo 
   const { route } = routes();
   const state = await mockBackend(page, mockUser("admin"), {
     extra: (request, backend) => {
-      if (request.path === "/api/orders/customer-lookup") return { status: 200, body: { customer: { public_id: "cus_1", full_name: "Konuşma Müşterisi 1", phone: "05550000001" }, default_address: { address_line: "Atatürk Cd. 1", city: "Adana", district: "Seyhan", country: "TR" } } };
+      // The conversation detail carries the customer id, note and default address (no phone lookup).
+      if (request.path === "/api/conversations/cnv_1" && request.method === "GET") {
+        const row = backend.conversations[0]!;
+        return { status: 200, body: { ...row, notes: null, customer: { ...row.customer, public_id: "cus_1", username: null, notes: "Ödeme kapıda", default_address: { address_line: "Atatürk Cd. 1", city: "Adana", district: "Seyhan", country: "TR", is_default: true } } } };
+      }
       if (request.path === "/api/customers/cus_1") {
         return {
           status: 200,
           body: {
-            customer: { public_id: "cus_1", full_name: "Konuşma Müşterisi 1", phone: "05550000001", notes: "Ödeme kapıda", updated_at: now },
+            customer: { public_id: "cus_1", full_name: "Konuşma Müşterisi 1", phone: "05550000001", notes: null, updated_at: now },
             addresses: [],
             orders: [{ public_id: "ord_9", order_number: "GK-9009", status: "shipped", source: "conversation", cargo_provider: "ptt", total_amount: "3500.00", currency: "TRY", created_at: now, shipment: { public_id: "shp_9", provider: "ptt", status: "in_transit", tracking_number: "KP123" } }],
             conversations: [],
@@ -644,6 +685,7 @@ test("inbox: order query screen lists the customer's orders and opens the cargo 
   await expect(panel.getByTestId("order-detail")).toContainText("Dağıtıma çıktı");
   await panel.getByTestId("order-detail-cargo").click();
   await expect(page.getByTestId("cargo-dialog")).toContainText("Transfer merkezinde");
+  expect(state.requests.some((request) => request.path === "/api/orders/customer-lookup")).toBe(false);
 });
 
 test("inbox: quick replies manage shortcuts and export them as JSON", async ({ page }) => {
@@ -681,6 +723,10 @@ test("inbox: older messages, load more conversations and mark all read", async (
     state.conversations.push({ ...base, public_id: `cnv_${index}`, channel: index % 2 === 0 ? "instagram" : "facebook", unread_count: index % 3, customer: { full_name: `Konuşma Müşterisi ${index}`, phone: `0555000${String(index).padStart(4, "0")}` } });
   }
   await page.reload();
+  // "Okunmamış" (on by default) is filtered on the server, so the first page only holds unread rows.
+  await expect(page.getByTestId("conversation-row")).toHaveCount(85);
+  expect(state.requests.some((request) => request.path === "/api/conversations" && request.search === "?limit=100&unread=true")).toBe(true);
+  await expect(page.getByTestId("filter-unread")).toContainText("85");
   await page.getByTestId("filter-unread").click();
   await expect(page.getByTestId("conversation-row")).toHaveCount(100);
   await page.getByTestId("conversations-load-more").click();

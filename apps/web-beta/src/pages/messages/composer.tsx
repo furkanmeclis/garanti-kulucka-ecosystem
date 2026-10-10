@@ -3,7 +3,8 @@ import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type 
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/app/auth";
 import { expandShortcut, matchShortcuts } from "@/lib/chat";
-import { attachmentTypeOf, type AttachmentType, type MessageShortcut } from "@/lib/inbox";
+import { ApiError } from "@/lib/api";
+import { attachmentTypeOf, type AttachmentType, type MessageShortcut, type ThreadMessage } from "@/lib/inbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
 import { Tip } from "@/components/ui/tooltip";
@@ -53,6 +54,8 @@ export interface ComposerProps {
   onSend: (text: string, media: ComposerMedia[]) => void;
   /** Enter on an empty composer jumps to the next conversation (legacy sonrakiKonusmayaGec). */
   onNext: () => void;
+  /** "AI üret ve gönder" stored and queued an AI message server-side. */
+  onAiSent: (message: ThreadMessage) => void;
 }
 
 const squareButton = "flex size-10 shrink-0 items-center justify-center rounded-lg max-lg:size-11";
@@ -83,7 +86,7 @@ const roundButton =
   "group flex size-10 shrink-0 items-center justify-center rounded-xl transition-all hover:scale-105 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100 max-lg:size-11";
 
 /** Legacy composer: image/video, PDF, ⚡ quick replies, 42px input with inline shortcut suggestions, AI öner, AI üret & gönder, send. */
-export function Composer({ conversationId, shortcuts, onShortcutsChanged, onSend, onNext }: ComposerProps) {
+export function Composer({ conversationId, shortcuts, onShortcutsChanged, onSend, onNext, onAiSent }: ComposerProps) {
   const { t } = useTranslation();
   const { api } = useAuth();
   const toast = useChatToast();
@@ -243,24 +246,27 @@ export function Composer({ conversationId, shortcuts, onShortcutsChanged, onSend
     }
   }
 
-  /** TODO(backend): legacy `/api/ai-agent/yanit-ve-gonder` generated and sent server-side as an AI message; the beta API only has the suggestion, so the panel sends it as the agent. */
+  /** Legacy `/api/ai-agent/yanit-ve-gonder`: the server drafts and sends; a dry-run draft only comes back as a suggestion. */
   async function suggestAndSend() {
     if (aiBusy) return;
     setAiBusy(true);
     setAiSuggestion(null);
     try {
-      const response = await api.aiReplySuggestion(conversationId);
-      const reply = response.suggestion?.trim() ?? "";
-      if (!reply) return toast.error(t("chat.aiEmpty"));
-      // Live AI off: the text is a placeholder, never send it to the customer — show it as a suggestion instead.
-      if (response.dry_run) {
-        setAiSuggestion({ text: reply, dryRun: true });
-        return toast.error(t("chat.aiDryRunNotSent"));
-      }
-      onSend(reply, []);
+      onAiSent(await api.aiReplyAndSend(conversationId));
       toast.success(t("chat.aiSent"));
     } catch (error) {
-      toast.error(t("chat.aiFailed", { error: errorText(error) }));
+      if (error instanceof ApiError && error.code === "ai_live_disabled") {
+        // Live AI off: nothing reached the customer — show the draft as a suggestion instead.
+        const draft = typeof error.details?.suggestion === "string" ? error.details.suggestion.trim() : "";
+        if (draft) setAiSuggestion({ text: draft, dryRun: true });
+        toast.error(t("chat.aiDryRunNotSent"));
+      } else if (error instanceof ApiError && error.code === "already_answered") {
+        toast.error(t("chat.aiAlreadyAnswered"));
+      } else if (error instanceof ApiError && error.code === "ai_empty") {
+        toast.error(t("chat.aiEmpty"));
+      } else {
+        toast.error(t("chat.aiFailed", { error: errorText(error) }));
+      }
     } finally {
       setAiBusy(false);
     }

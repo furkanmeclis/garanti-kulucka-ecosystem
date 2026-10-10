@@ -318,3 +318,57 @@ describe("webhook ingestion", () => {
     });
   });
 });
+
+describe("webhook external event ids", () => {
+  it("never falls back to the constant entry (WABA / page) id", async () => {
+    const { inferExternalEventId } = await import("../src/webhooks/payload.js");
+    const status = (id: string, state: string) => ({ object: "whatsapp_business_account", entry: [{ id: "WABA_1", changes: [{ value: { statuses: [{ id, status: state }] } }] }] });
+    expect(inferExternalEventId(status("wamid.A", "sent"))).toBe("status:wamid.A:sent");
+    expect(inferExternalEventId(status("wamid.A", "delivered"))).toBe("status:wamid.A:delivered");
+    expect(inferExternalEventId({ object: "instagram", entry: [{ id: "IG_1", changes: [{ field: "comments", value: { id: "c1" } }] }] })).toBe("comment:c1");
+    expect(inferExternalEventId({ object: "page", entry: [{ id: "PAGE_1", messaging: [{ sender: { id: "u" }, read: { watermark: 1 } }] }] })).toBeNull();
+    expect(inferExternalEventId({ object: "instagram", entry: [{ id: "IG_1", messaging: [{ message: { mid: "m1" } }] }] })).toBe("m1");
+  });
+});
+
+describe("webhook ingestion recovery", () => {
+  class StoredOnceRepository extends FakeWebhookRepository {
+    constructor(private readonly storedStatus: string) {
+      super();
+    }
+
+    override async storeReceivedEvent(): Promise<StoredWebhookEvent> {
+      throw Object.assign(new Error("duplicate key value violates unique constraint"), { code: "23505" });
+    }
+
+    override async findReceivedEventByExternalId(input: { provider: ProviderName; externalEventId: string }): Promise<StoredWebhookEvent | null> {
+      return { id: 9, public_id: "wev_lost", provider_key: input.provider, account_public_id: null, event_type: "message", external_event_id: input.externalEventId, payload_hash: "hash", status: this.storedStatus };
+    }
+  }
+
+  const body = JSON.stringify({ object: "instagram", entry: [{ id: "IG_1", messaging: [{ message: { mid: "m_lost" } }] }] });
+
+  it("re-queues an event that was stored but never queued when the provider retries", async () => {
+    const jobs: JobEnvelope[] = [];
+    const response = await createTestApp({ repository: new StoredOnceRepository("received"), jobs }).request("/webhooks/instagram", { method: "POST", headers: { "content-type": "application/json" }, body });
+    expect(response.status).toBe(202);
+    expect(jobs).toMatchObject([{ job_id: "job_webhook_wev_lost", name: "provider.webhook.received", payload: { webhook_event_public_id: "wev_lost" } }]);
+  });
+
+  it("does not re-queue an event the worker already processed", async () => {
+    const jobs: JobEnvelope[] = [];
+    await createTestApp({ repository: new StoredOnceRepository("processed"), jobs }).request("/webhooks/instagram", { method: "POST", headers: { "content-type": "application/json" }, body });
+    expect(jobs).toHaveLength(0);
+  });
+
+  it("rejects unsigned callbacks when enforce is configured without a secret (no fail-open)", async () => {
+    const jobs: JobEnvelope[] = [];
+    const response = await createTestApp({ repository: new FakeWebhookRepository(), jobs, policy: { mode: "enforce", secret: null } }).request("/webhooks/instagram", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body,
+    });
+    expect(response.status).toBe(401);
+    expect(jobs).toHaveLength(0);
+  });
+});

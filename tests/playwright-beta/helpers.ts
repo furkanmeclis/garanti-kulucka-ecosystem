@@ -187,7 +187,7 @@ export async function mockBackend(page: Page, user: MockUser, options: { orderCo
       return json(200, invoicesFixture(url));
     }
     if (url.pathname === "/api/orders/summary") {
-      return json(200, { total_count: state.orders.length, active_count: 12, delivered_count: 15, pending_confirmation_count: 7, total_revenue: 154230.5, currency: "TRY", daily: weeklyOrders });
+      return json(200, { total_count: state.orders.length, active_count: 12, delivered_count: 15, pending_confirmation_count: 7, total_revenue: 154230.5, currency: "TRY", daily: weeklyOrders, today_sold_units: 11 });
     }
     if (url.pathname === "/api/conversations/summary") {
       return json(200, { total_count: 27, unread_count: 5, pool_count: 9, human_agent_count: 13, channel_counts: { instagram: 14, facebook: 13 }, status_counts: { open: 20, closed: 7 } });
@@ -198,6 +198,19 @@ export async function mockBackend(page: Page, user: MockUser, options: { orderCo
     }
     if (url.pathname === "/api/shipments/summary") {
       return json(200, { total_count: 33, active_count: 17, delivered_count: 16, recipient_phone_count: 33, provider_counts: { ptt: 16, surat: 17, other: 0 }, exception_counts: { ptt_not_delivered: 8, surat_not_delivered: 9, tracking_missing: 6 } });
+    }
+    if (url.pathname === "/api/orders/duplicate-check" && method === "POST") {
+      // ord_1 shares a phone with ord_4, ord_2 a name with ord_5 (legacy mükerrer red / yellow).
+      const ids = new Set((parsedBody as { order_public_ids?: string[] } | undefined)?.order_public_ids ?? []);
+      const data: Record<string, { phone_matches: string[]; name_matches: string[] }> = {};
+      if (ids.has("ord_1")) data.ord_1 = { phone_matches: ["GK-1004"], name_matches: [] };
+      if (ids.has("ord_2")) data.ord_2 = { phone_matches: [], name_matches: ["GK-1005"] };
+      return json(200, { data });
+    }
+    if (url.pathname === "/api/orders/surat-coverage" && method === "POST") {
+      const input = parsedBody as { city: string; district: string; address_line?: string | null };
+      const keyword = /at dışı|at disi|teslimat yok/i.test(`${input.city} ${input.district} ${input.address_line ?? ""}`);
+      return json(200, { status: keyword ? "not_covered" : "unknown", source: "keyword_fallback", warning: keyword, message: keyword ? "Bu adrese sürat kargo teslimat yapmamaktadır" : null, uncovered_areas: [], checked_at: null, live_gate: "providers.surat.live_mode", live_enabled: false, queued: false });
     }
     if (url.pathname === "/api/orders") {
       const status = url.searchParams.get("status");
@@ -215,15 +228,37 @@ export async function mockBackend(page: Page, user: MockUser, options: { orderCo
     if (url.pathname === "/api/conversations") {
       const channel = url.searchParams.get("channel");
       const status = url.searchParams.get("status");
+      const unread = url.searchParams.get("unread") === "true";
       const channels = channel?.split(",").filter(Boolean);
-      return page_(
-        state.conversations.filter(
-          (row) =>
-            (!channels?.length || channels.includes(row.channel)) &&
-            (!status || row.status === status) &&
-            (!search || [row.customer?.full_name, row.customer?.phone, row.last_message_text].some((value) => value?.toLocaleLowerCase("tr-TR").includes(search))),
-        ),
+      const rows = state.conversations.filter(
+        (row) =>
+          (!channels?.length || channels.includes(row.channel)) &&
+          (!status || row.status === status) &&
+          (!unread || row.unread_count > 0) &&
+          (!search || [row.customer?.full_name, row.customer?.phone, row.last_message_text].some((value) => value?.toLocaleLowerCase("tr-TR").includes(search))),
       );
+      // Inbox-wide counters ride along with every page (apps/api getConversationCounts).
+      const all = state.conversations;
+      const counts = {
+        total_count: all.length,
+        unread_conversation_count: all.filter((row) => row.unread_count > 0).length,
+        unread_message_count: all.reduce((sum, row) => sum + row.unread_count, 0),
+        pool_count: all.filter((row) => row.is_in_pool).length,
+        human_agent_count: all.filter((row) => row.human_agent_enabled).length,
+        channel_counts: {
+          whatsapp: all.filter((row) => row.channel === "whatsapp").length,
+          instagram: all.filter((row) => row.channel === "instagram").length,
+          facebook: all.filter((row) => row.channel === "facebook" || row.channel === "messenger").length,
+        },
+        status_counts: { open: all.filter((row) => row.status === "open").length, closed: all.filter((row) => row.status === "closed").length },
+      };
+      return json(200, { data: rows.slice(offset, offset + limit), meta: { counts } });
+    }
+    const conversationMatch = /^\/api\/conversations\/(cnv_[^/]+)$/.exec(url.pathname);
+    if (conversationMatch && method === "GET") {
+      const row = state.conversations.find((item) => item.public_id === conversationMatch[1]);
+      if (!row) return json(404, { error: { code: "not_found", message: "Konuşma bulunamadı" } });
+      return json(200, { ...row, notes: null, customer: row.customer ? { ...row.customer, public_id: `cus_${row.public_id.slice(4)}`, username: null, notes: null, default_address: null } : null });
     }
     if (url.pathname === "/api/customers") {
       if (state.user.role === "kargo_operatoru") return json(403, { error: { code: "forbidden", message: "Forbidden" } });

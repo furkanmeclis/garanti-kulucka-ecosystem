@@ -309,7 +309,9 @@
     "trackingNoEvents": "No events yet",
     "trackingFailed": "Tracking information could not be loaded",
     "close": "Close",
-    "cargoRequired": "Selecting a cargo company is required (PTT or Sürat)"
+    "cargoRequired": "Selecting a cargo company is required (PTT or Sürat)",
+    "duplicatePhone": "Another order with the same phone: {{orders}}",
+    "duplicateName": "Another active order with the same name: {{orders}}"
   },
   "messages": {
     "title": "Messages",
@@ -2248,7 +2250,7 @@
     "fallbackOther": "Customer (…{{last4}})",
     "unknown": "Unknown",
     "dailySales": "Daily Sales",
-    "dailySalesHint": "Orders created today",
+    "dailySalesHint": "Units sold today (excluding cancellations/returns)",
     "currentStock": "Current Stock",
     "onlineAgents": "Online agents",
     "online": "Online",
@@ -2436,7 +2438,16 @@
     "shipmentStatusHint": "Shipment status: {{status}}",
     "channelHint": "Channel: {{channel}}",
     "channelPanel": "Panel",
-    "carrierHint": "Carrier: {{carrier}}"
+    "carrierHint": "Carrier: {{carrier}}",
+    "agentOfflineHint": "Click to set offline",
+    "agentOfflineAction": "Set {{name}} offline",
+    "agentOfflineConfirm": "Set {{name}} offline? The agent cannot see the conversation list until they go online again.",
+    "agentOfflineConfirmLabel": "Set offline",
+    "agentOfflineDone": "{{name}} is now offline",
+    "aiAlreadyAnswered": "The last message is already answered; no AI reply was sent",
+    "deepLinkMissing": "The linked conversation was not found",
+    "atPrecheck": "Sürat may not deliver to this address (outside the AT area)",
+    "atPrecheckAreas": "Sürat does not deliver to these neighbourhoods (outside AT): {{areas}}"
   },
   "statusHint": {
     "draft": "Saved as a draft, not processed yet",

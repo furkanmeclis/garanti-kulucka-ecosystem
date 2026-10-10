@@ -1,10 +1,13 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import type { ProviderAttempt, ProviderRequestEnvelope } from "@garanti-kulucka/shared";
 import { createWorkerProcessorRegistry } from "../src/processors.js";
 import type { ProviderAccountConfigRepository } from "../src/providers/account-config.js";
 import type { ProviderAttemptRepository } from "../src/providers/attempts.js";
 import {
+  parseSuratCoverageResponse,
   sendSuratLiveRequest,
+  suratCoverageFlag,
   type SuratFetchTransport,
   type SuratTransportRequest,
   type SuratTransportResponse,
@@ -481,5 +484,159 @@ describe("Sürat live REST adapter", () => {
       expect(JSON.stringify(persisted[0]?.request_metadata), `case ${index}`).not.toContain("cash-secret");
       expect(JSON.stringify(persisted[0]?.request_metadata), `case ${index}`).not.toContain("cash-user");
     }
+  });
+});
+
+describe("Sürat ATDurumListesi (address.coverage)", () => {
+  const fixture = (name: string) => readFileSync(new URL(`../../../contracts/providers/surat/fixtures/responses/${name}`, import.meta.url), "utf8");
+
+  function coverageEnvelope(): ProviderRequestEnvelope {
+    return {
+      request_id: "req_surat_coverage",
+      provider: "surat",
+      operation: "address.coverage",
+      direction: "outbound",
+      channel: "cargo",
+      account_public_id: "iac_surat_live",
+      occurred_at: now,
+      payload: { il: "Konya", ilce: "Selçuklu", idempotency_key: "surat_coverage_konya_selcuklu_20260101" },
+    };
+  }
+
+  it("sends a SOAP ATDurumListesi request with redacted credentials and parses per-area AT flags", async () => {
+    const captured: SuratTransportRequest[] = [];
+    const result = await sendSuratLiveRequest(
+      liveAdapterInput(transportReturning(captured, { status: 200, headers: { "content-type": "text/xml" }, body: fixture("at_durum_listesi_mixed.xml") }), coverageEnvelope()),
+    );
+
+    expect(captured).toHaveLength(1);
+    expect(captured[0]).toMatchObject({
+      method: "POST",
+      url: "https://webservices.suratkargo.com.tr/services.asmx",
+      surat_endpoint: "ATDurumListesi",
+      headers: { "Content-Type": "text/xml; charset=utf-8", SOAPAction: '"http://tempuri.org/ATDurumListesi"' },
+    });
+    expect(captured[0]!.body).toContain("<Il>Konya</Il><Ilce>Selçuklu</Ilce>");
+    expect(captured[0]!.body).toContain("<KullaniciAdi>cash-user</KullaniciAdi>");
+    expect(result.response_payload).toMatchObject({
+      success: true,
+      data: {
+        il: "Konya",
+        ilce: "Selçuklu",
+        at_ici: 2,
+        at_disi: 1,
+        records: [
+          { mahalle: "BOSNA HERSEK", at: true },
+          { mahalle: "SARAYKÖY", at: false, durum: "AT DIŞI" },
+          { mahalle: "YAZIR", at: true },
+        ],
+      },
+    });
+    const serialized = JSON.stringify(result.attempt);
+    expect(serialized).not.toContain("cash-secret");
+    expect(serialized).toContain("<Sifre>[redacted]</Sifre>");
+  });
+
+  it("treats a SOAP fault as a malformed (non-retryable) response", async () => {
+    const captured: SuratTransportRequest[] = [];
+    await expect(
+      sendSuratLiveRequest(liveAdapterInput(transportReturning(captured, { status: 200, headers: {}, body: fixture("at_durum_listesi_fault.xml") }), coverageEnvelope())),
+    ).rejects.toMatchObject({ attempt: { error: { code: "malformed_response" } } });
+  });
+
+  it("maps legacy status words and bare single-district answers", () => {
+    expect(["AT İÇİ", "Var", "EVET", "true"].map(suratCoverageFlag)).toEqual([true, true, true, true]);
+    expect(["AT DIŞI", "at disi", "Yok", "Hayır", "0"].map(suratCoverageFlag)).toEqual([false, false, false, false, false]);
+    expect(suratCoverageFlag("bilinmiyor")).toBeNull();
+    expect(
+      parseSuratCoverageResponse("<s:Envelope><s:Body><ATDurumListesiResponse><ATDurumListesiResult><Il>VAN</Il><Ilce>BAHÇESARAY</Ilce><ATDurumu>AT DIŞI</ATDurumu></ATDurumListesiResult></ATDurumListesiResponse></s:Body></s:Envelope>"),
+    ).toMatchObject({ data: { at_disi: 1, records: [{ il: "VAN", ilce: "BAHÇESARAY", at: false }] } });
+  });
+
+  it("stays a dry-run fixture attempt unless providers.surat.live_mode is explicitly on", async () => {
+    const persisted: ProviderAttempt[] = [];
+    const captured: SuratTransportRequest[] = [];
+    const registry = createWorkerProcessorRegistry({
+      providerAttemptRepository: attemptRepository(persisted),
+      providerAccountConfigRepository: accountConfig({ "providers.surat.live_mode": false }),
+      suratTransport: transportReturning(captured, { status: 200, headers: {}, body: fixture("at_durum_listesi_mixed.xml") }),
+    });
+    await registry.dispatch("provider-delivery", deliveryJob(coverageEnvelope()));
+    expect(captured).toHaveLength(0);
+    expect(persisted[0]).toMatchObject({ operation: "address.coverage", status: "success", response_metadata: { live_call_performed: false } });
+
+    const livePersisted: ProviderAttempt[] = [];
+    const live = createWorkerProcessorRegistry({
+      providerAttemptRepository: attemptRepository(livePersisted),
+      providerAccountConfigRepository: accountConfig(),
+      suratTransport: transportReturning(captured, { status: 200, headers: {}, body: fixture("at_durum_listesi_mixed.xml") }),
+    });
+    await live.dispatch("provider-delivery", deliveryJob(coverageEnvelope()));
+    expect(captured).toHaveLength(1);
+    // The API reads the area list back from the persisted attempt.
+    expect(livePersisted[0]).toMatchObject({ status: "success", response_metadata: { live_call_performed: true, result: { data: { at_disi: 1 } } } });
+  });
+});
+
+describe("provider-delivery replay guard", () => {
+  it("never repeats a live carrier call whose idempotency key already succeeded (BullMQ retry / re-queue)", async () => {
+    const persisted: ProviderAttempt[] = [];
+    const captured: SuratTransportRequest[] = [];
+    const base = attemptRepository(persisted);
+    let succeeded = false;
+    const repository: ProviderAttemptRepository = {
+      persist: async (attempt) => {
+        if (attempt.status === "success" && attempt.response_metadata.live_call_performed === true) succeeded = true;
+        return base.persist(attempt);
+      },
+      findLiveSuccess: async (_provider, key) =>
+        succeeded && key === "shipment-create-surat-1" ? ({ public_id: "pat_1" } as Awaited<ReturnType<ProviderAttemptRepository["persist"]>>) : null,
+    };
+    const registry = createWorkerProcessorRegistry({
+      providerAttemptRepository: repository,
+      providerAccountConfigRepository: accountConfig(),
+      suratTransport: transportReturningSequence(captured, [
+        { status: 200, headers: {}, body: createStage1Response },
+        { status: 200, headers: {}, body: createStage2Response },
+      ]),
+    });
+
+    await registry.dispatch("provider-delivery", deliveryJob(createEnvelope()));
+    expect(captured).toHaveLength(2);
+    const replay = await registry.dispatch("provider-delivery", deliveryJob(createEnvelope()));
+    expect(replay).toMatchObject({ status: "replayed", live_call_performed: false });
+    expect(captured).toHaveLength(2);
+    expect(persisted.filter((attempt) => attempt.request_id === "req_surat_create")).toHaveLength(1);
+  });
+});
+
+describe("provider-delivery retries under BullMQ", () => {
+  async function failingDispatch(status: number, attemptsMade: number) {
+    const persisted: ProviderAttempt[] = [];
+    const registry = createWorkerProcessorRegistry({
+      providerAttemptRepository: attemptRepository(persisted),
+      providerAccountConfigRepository: accountConfig(),
+      suratTransport: transportReturning([], { status, headers: {}, body: "{}" }),
+    });
+    const job = { ...deliveryJob(trackEnvelope({ hesapTipi: "cash", idempotency_key: "track-1" }), 5), attemptsMade };
+    const error = await registry.dispatch("provider-delivery", job).then(() => null, (reason: unknown) => reason);
+    return { error, attempt: persisted[0] };
+  }
+
+  it("passes the real attempt number to the live adapter and dead-letters the last attempt", async () => {
+    const early = await failingDispatch(503, 0);
+    expect(early.attempt).toMatchObject({ retry_decision: "retry" });
+    expect((early.error as Error).name).not.toBe("UnrecoverableError");
+
+    // Before the fix every attempt was computed as 1 of 3, so the 5th BullMQ attempt still said "retry".
+    const last = await failingDispatch(503, 4);
+    expect(last.attempt).toMatchObject({ retry_decision: "dead_letter", status: "terminal_failure" });
+    expect((last.error as Error).name).toBe("UnrecoverableError");
+  });
+
+  it("stops BullMQ retries at once for terminal carrier answers", async () => {
+    const terminal = await failingDispatch(400, 0);
+    expect(terminal.attempt).toMatchObject({ retry_decision: "dead_letter" });
+    expect((terminal.error as Error).name).toBe("UnrecoverableError");
   });
 });

@@ -91,6 +91,37 @@ const routeMocks = vi.hoisted(() => {
     domainRepository: {
       listMessagesPage: vi.fn(async () => ({ messages: [], hasMore: true })),
       listConversations: vi.fn(async () => [conversation]),
+      getConversationCounts: vi.fn(async () => ({
+        total_count: 3,
+        unread_conversation_count: 2,
+        unread_message_count: 5,
+        pool_count: 1,
+        human_agent_count: 1,
+        channel_counts: { whatsapp: 1, instagram: 1, facebook: 1 },
+        status_counts: { open: 3, closed: 0 },
+      })),
+      getConversationDetail: vi.fn(async (publicId: string): Promise<Record<string, unknown> | null> =>
+        publicId === "cnv_media"
+          ? {
+              conversation: { ...conversation, customer_public_id: "cus_media", customer_username: "slice.musteri" },
+              customerNotes: "VIP",
+              defaultAddress: {
+                id: 3,
+                public_id: "adr_media",
+                customer_id: 2,
+                label: null,
+                address_line: "Atatürk Cd. 1",
+                city: "Konya",
+                district: "Selçuklu",
+                country: "Türkiye",
+                postal_code: null,
+                is_default: true,
+                created_at: now,
+                updated_at: now,
+              },
+            }
+          : null,
+      ),
       markAllConversationsRead: vi.fn(async () => 4),
       getConversationDeliveryTarget: vi.fn(async (): Promise<{ public_id: string; channel: string; external_thread_id: string | null; customer_phone: string | null } | null> => ({
         public_id: "cnv_media",
@@ -413,6 +444,38 @@ describe("messages slice 2 routes", () => {
     const response = await app().request("/api/conversations?search=%20ay%C5%9Fe%20&offset=50&limit=50", { headers: { authorization: `Bearer ${await accessToken()}` } });
     expect(response.status).toBe(200);
     expect(routeMocks.domainRepository.listConversations).toHaveBeenCalledWith({ limit: 50, search: "ayşe", offset: 50 });
+  });
+
+  it("filters unread conversations on the server and returns inbox-wide counters", async () => {
+    const response = await app().request("/api/conversations?unread=true&channel=facebook,messenger&limit=100", { headers: { authorization: `Bearer ${await accessToken()}` } });
+    expect(response.status).toBe(200);
+    expect(routeMocks.domainRepository.listConversations).toHaveBeenCalledWith({ limit: 100, unreadOnly: true, channels: ["facebook", "messenger"] });
+    await expect(response.json()).resolves.toMatchObject({
+      data: [{ public_id: "cnv_media" }],
+      meta: { counts: { unread_conversation_count: 2, unread_message_count: 5, pool_count: 1, channel_counts: { whatsapp: 1, instagram: 1, facebook: 1 } } },
+    });
+
+    await app().request("/api/conversations?unread=false", { headers: { authorization: `Bearer ${await accessToken()}` } });
+    expect(routeMocks.domainRepository.listConversations).toHaveBeenLastCalledWith({ limit: 50 });
+  });
+
+  it("returns one conversation with its customer id, note and default address", async () => {
+    const token = await accessToken();
+    const response = await app().request("/api/conversations/cnv_media", { headers: { authorization: `Bearer ${token}` } });
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      public_id: "cnv_media",
+      customer: {
+        public_id: "cus_media",
+        full_name: "Slice Müşteri",
+        username: "slice.musteri",
+        notes: "VIP",
+        default_address: { address_line: "Atatürk Cd. 1", city: "Konya", district: "Selçuklu" },
+      },
+    });
+
+    const missing = await app().request("/api/conversations/cnv_missing", { headers: { authorization: `Bearer ${token}` } });
+    expect(missing.status).toBe(404);
   });
 
   it("marks every conversation read, optionally for one channel", async () => {

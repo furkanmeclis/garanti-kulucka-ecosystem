@@ -57,6 +57,8 @@ function buildBody(envelope: ProviderRequestEnvelope): Record<string, unknown> {
         ...pick(payload, ["order_public_id", "idempotency_key"]),
         recipient: pick(payload, ["recipient_name", "recipient_phone"]),
       };
+    case "address.coverage":
+      return pick(payload, ["il", "ilce", "idempotency_key"]);
     case "shipment.track":
       return pick(payload, ["tracking_number"]);
     case "invoice.create":

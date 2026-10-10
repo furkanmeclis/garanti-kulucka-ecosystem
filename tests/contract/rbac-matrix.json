@@ -202,5 +202,10 @@
   "POST /api/netgsm/sesli-mesaj": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "deny", "admin": "allow" },
   "GET /api/netgsm/sesli-mesaj/{publicId}": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "deny", "admin": "allow" },
   "POST /api/netgsm/sesli-mesaj/{publicId}/rapor": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "deny", "admin": "allow" },
-  "GET /api/netgsm/rehber": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "deny", "admin": "allow" }
+  "GET /api/netgsm/rehber": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "deny", "admin": "allow" },
+  "PATCH /admin/users/{user_public_id}/presence": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "deny", "admin": "allow" },
+  "POST /api/conversations/{conversation_public_id}/ai-reply": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "allow", "admin": "allow" },
+  "GET /api/conversations/{conversation_public_id}": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "allow", "admin": "allow" },
+  "POST /api/orders/surat-coverage": { "anonymous": "deny", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" },
+  "POST /api/orders/duplicate-check": { "anonymous": "deny", "kargo_operatoru": "allow", "calisan": "allow", "admin": "allow" }
 }

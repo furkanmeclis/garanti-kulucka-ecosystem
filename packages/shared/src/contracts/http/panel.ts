@@ -73,6 +73,8 @@ export interface OrderSummaryStats {
   pending_confirmation_count: number;
   total_revenue: number;
   currency: string;
+  /** Units sold today (Europe/Istanbul) over live orders; an order without items counts as one. */
+  today_sold_units?: number;
 }
 
 export interface ConversationCustomerRef {
@@ -80,6 +82,22 @@ export interface ConversationCustomerRef {
   full_name?: string | null;
   phone?: string | null;
   username?: string | null;
+}
+
+/** GET /api/conversations/:public_id adds the customer's note and default address. */
+export interface ConversationDetail extends ConversationSummary {
+  customer?: (ConversationCustomerRef & { notes?: string | null; default_address?: Omit<CustomerAddress, "public_id"> & { public_id?: string } | null }) | null;
+}
+
+/** Inbox-wide counters that ride along with GET /api/conversations (`meta.counts`). */
+export interface ConversationListCounts {
+  total_count: number;
+  unread_conversation_count: number;
+  unread_message_count: number;
+  pool_count: number;
+  human_agent_count: number;
+  channel_counts: Record<string, number>;
+  status_counts: Record<string, number>;
 }
 
 export interface ConversationSummary {
@@ -100,7 +118,10 @@ export interface ConversationSummary {
 
 export interface ConversationSummaryStats {
   total_count: number;
+  /** Sum of unread customer messages. */
   unread_count: number;
+  /** Conversations with unread customer messages. */
+  unread_conversation_count?: number;
   pool_count: number;
   human_agent_count: number;
   channel_counts: Record<string, number>;

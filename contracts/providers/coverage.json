@@ -29,6 +29,13 @@
       "fixture_file": "surat/fixtures/shipment_track_minimal.json"
     },
     {
+      "provider": "surat",
+      "operation": "address.coverage",
+      "direction": "outbound",
+      "status": "covered",
+      "fixture_file": "surat/fixtures/address_coverage_minimal.json"
+    },
+    {
       "provider": "kolaybi",
       "operation": "invoice.create",
       "direction": "outbound",

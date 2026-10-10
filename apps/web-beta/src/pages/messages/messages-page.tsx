@@ -1,4 +1,4 @@
-import { panelRoleOf, type ConversationSummary, type ConversationSummaryStats, type OrderSummary } from "@garanti-kulucka/shared";
+import { panelRoleOf, type ConversationListCounts, type ConversationSummary, type OrderSummary } from "@garanti-kulucka/shared";
 import { Settings } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -91,14 +91,18 @@ function MessagesWorkspace() {
   const [loading, setLoading] = useState(true);
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [summary, setSummary] = useState<ConversationSummaryStats | null>(null);
+  /** Inbox-wide counters (unread / pool / per channel) that ride along with every list response. */
+  const [counts, setCounts] = useState<ConversationListCounts | null>(null);
   const listKey = useRef(0);
+  // The "Okunmamış" filter runs on the server, so every batch (and "load more") is already unread-only.
+  const listQuery = useMemo(() => ({ ...channelQuery(channel), ...(unreadOnly ? { unread: true } : {}) }), [channel, unreadOnly]);
 
   const fetchFirstBatch = useCallback(
     async (reset: boolean) => {
       const key = listKey.current;
       try {
-        const batch = await api.listConversations({ limit: conversationBatchSize, ...channelQuery(channel) });
+        const batch = await api.listConversations({ limit: conversationBatchSize, ...listQuery });
+        if (batch.meta?.counts) setCounts(batch.meta.counts);
         if (key !== listKey.current) return;
         setRows((prev) => (reset ? batch.data : mergeConversations(prev, batch.data)));
         if (reset) setHasMore(batch.data.length >= conversationBatchSize);
@@ -108,15 +112,9 @@ function MessagesWorkspace() {
         if (key === listKey.current) setLoading(false);
       }
     },
-    [api, channel, t, toast],
+    [api, listQuery, t, toast],
   );
-
-  const refreshSummary = useCallback(() => {
-    api
-      .conversationSummary()
-      .then(setSummary)
-      .catch(() => undefined);
-  }, [api]);
+  const refreshCounts = useCallback(() => void fetchFirstBatch(false), [fetchFirstBatch]);
 
   useEffect(() => {
     listKey.current += 1;
@@ -124,18 +122,14 @@ function MessagesWorkspace() {
     setRows([]);
     void fetchFirstBatch(true);
   }, [fetchFirstBatch]);
-  useEffect(() => refreshSummary(), [refreshSummary]);
-  usePolling(() => {
-    void fetchFirstBatch(false);
-    refreshSummary();
-  }, listPollMs);
+  usePolling(() => void fetchFirstBatch(false), listPollMs);
 
   async function loadMore() {
     if (loadingMore) return;
     const key = listKey.current;
     setLoadingMore(true);
     try {
-      const batch = await api.listConversations({ limit: conversationBatchSize, offset: rows.length, ...channelQuery(channel) });
+      const batch = await api.listConversations({ limit: conversationBatchSize, offset: rows.length, ...listQuery });
       if (key !== listKey.current) return;
       setRows((prev) => {
         const seen = new Set(prev.map((row) => row.public_id));
@@ -283,8 +277,8 @@ function MessagesWorkspace() {
     }
   }
 
-  // `?konusma=<public_id>` deep link (kargo pipeline, notifications): open it once the list is in.
-  // TODO(backend): there is no GET /api/conversations/:id, so it is looked up in up to five batches.
+  // `?konusma=<public_id>` deep link (kargo pipeline, notifications): open it once the list is in; a conversation
+  // outside the loaded batch is fetched on its own.
   const deepLink = useRef(searchParams.get("konusma"));
   const autoOpened = useRef(false);
   useEffect(() => {
@@ -294,14 +288,10 @@ function MessagesWorkspace() {
       autoOpened.current = true;
       const found = rows.find((row) => row.public_id === wanted);
       if (found) return select(found);
-      void (async () => {
-        for (let batch = 1; batch <= 5; batch += 1) {
-          const response = await api.listConversations({ limit: conversationBatchSize, offset: batch * conversationBatchSize }).catch(() => ({ data: [] as ConversationSummary[] }));
-          const match = response.data.find((row) => row.public_id === wanted);
-          if (match) return select(match);
-          if (response.data.length < conversationBatchSize) return;
-        }
-      })();
+      api
+        .getConversation(wanted)
+        .then((match) => select(match))
+        .catch(() => toast.error(t("chat.deepLinkMissing")));
       return;
     }
     if (readAutoOpen() && !selectedId && visible[0]) {
@@ -310,7 +300,7 @@ function MessagesWorkspace() {
     } else if (rows.length > 0) {
       autoOpened.current = true;
     }
-  }, [loading, rows, visible, selectedId, select, api]);
+  }, [loading, rows, visible, selectedId, select, api, t, toast]);
 
   /* ------------------------------------------------------------ sending */
   async function send(text: string, media: ComposerMedia[]) {
@@ -354,6 +344,14 @@ function MessagesWorkspace() {
     }
   }
 
+  /** "AI üret ve gönder" already stored the AI message server-side; show it without waiting for the poll. */
+  function aiSent(message: ChatMessage) {
+    const publicId = selectedId;
+    if (!publicId) return;
+    if (threadFor.current === publicId) setMessages((prev) => (prev ?? []).some((item) => item.public_id === message.public_id) ? prev : [...(prev ?? []), message]);
+    patchConversation(publicId, (row) => ({ ...row, last_message_text: message.body, last_message_at: message.sent_at, last_message_sender_type: "ai", unread_count: 0 }));
+  }
+
   function goNext() {
     const next = nextConversation(visible, selectedId);
     if (next) select(next);
@@ -382,10 +380,10 @@ function MessagesWorkspace() {
   const [dailySales, setDailySales] = useState<number | null>(null);
   const loadDailySales = useCallback(() => {
     if (!isManager) return;
-    // TODO(backend): legacy counted sold units today; the summary only has today's order count.
+    // Legacy GÜNLÜK SATIŞ: units sold today (Europe/Istanbul), not cancelled/returned; an order without items is 1.
     api
       .orderSummary()
-      .then((stats) => setDailySales(stats.daily.at(-1)?.order_count ?? 0))
+      .then((stats) => setDailySales(stats.today_sold_units ?? 0))
       .catch(() => setDailySales(null));
   }, [api, isManager]);
   useEffect(() => loadDailySales(), [loadDailySales]);
@@ -400,6 +398,18 @@ function MessagesWorkspace() {
   }, [api, isManager]);
   useEffect(() => loadAgents(), [loadAgents]);
   usePolling(loadAgents, agentsPollMs, isManager);
+
+  async function setAgentOffline(agent: OnlineAgent) {
+    const name = `${agent.first_name} ${agent.last_name}`.trim();
+    if (!(await confirm(t("chat.agentOfflineConfirm", { name }), { confirmLabel: t("chat.agentOfflineConfirmLabel") }))) return;
+    try {
+      await api.setUserOffline(agent.public_id);
+      setAgents((prev) => prev.filter((item) => item.public_id !== agent.public_id));
+      toast.success(t("chat.agentOfflineDone", { name }));
+    } catch (error) {
+      toast.error(t("chat.actionFailed", { error: errorText(error) }));
+    }
+  }
 
   /* ------------------------------------------------------------ toggles + menu actions */
   const [agentBusy, setAgentBusy] = useState(false);
@@ -445,7 +455,7 @@ function MessagesWorkspace() {
     }
   }
 
-  const unreadTotal = summary?.unread_count ?? rows.filter((row) => row.unread_count > 0).length;
+  const unreadTotal = counts?.unread_conversation_count ?? rows.filter((row) => row.unread_count > 0).length;
   const [marking, setMarking] = useState(false);
   async function markAllRead() {
     const scoped = channel === "all" ? unreadTotal : rows.filter((row) => channelKey(row.channel) === channel && row.unread_count > 0).length;
@@ -458,7 +468,7 @@ function MessagesWorkspace() {
       setRows((prev) => prev.map(touch));
       setExtra((prev) => prev.map(touch));
       setSnapshot((prev) => (prev ? touch(prev) : prev));
-      refreshSummary();
+      refreshCounts();
       toast.success(t("chat.markAllReadSuccess", { count: result.updated }));
     } catch (error) {
       toast.error(t("chat.actionFailed", { error: errorText(error) }));
@@ -474,7 +484,7 @@ function MessagesWorkspace() {
     setStateBusy(true);
     try {
       patchConversation(publicId, await api.updateConversationState(publicId, input));
-      if (input.unread_count === 0) refreshSummary();
+      if (input.unread_count === 0) refreshCounts();
     } catch (error) {
       toast.error(t("chat.actionFailed", { error: errorText(error) }));
     } finally {
@@ -501,34 +511,31 @@ function MessagesWorkspace() {
   const [customer, setCustomer] = useState<CustomerInfo | null>(null);
   const [ordersVersion, setOrdersVersion] = useState(0);
   const selectedPhone = realPhone(selected?.customer?.phone);
+  // The conversation detail carries the customer's id, note and default address (no phone lookup).
   useEffect(() => {
     if (!selectedId) return;
     const base: CustomerInfo = { conversationId: selectedId, customerPublicId: null, notes: "", city: "", district: "", address: "" };
     setCustomer(base);
-    if (!selectedPhone) return;
     let active = true;
-    void (async () => {
-      try {
-        const lookup = await api.lookupCustomerByPhone(selectedPhone);
-        const customerPublicId = lookup.customer?.public_id ?? null;
-        const detail = customerPublicId ? await api.getCustomer(customerPublicId).catch(() => null) : null;
+    api
+      .getConversation(selectedId)
+      .then((detail) => {
         if (!active) return;
+        const address = detail.customer?.default_address ?? null;
         setCustomer({
           ...base,
-          customerPublicId,
-          notes: detail?.customer.notes ?? "",
-          city: lookup.default_address?.city ?? "",
-          district: lookup.default_address?.district ?? "",
-          address: lookup.default_address?.address_line ?? "",
+          customerPublicId: detail.customer?.public_id ?? null,
+          notes: detail.customer?.notes ?? "",
+          city: address?.city ?? "",
+          district: address?.district ?? "",
+          address: address?.address_line ?? "",
         });
-      } catch {
-        // No customer record: the form keeps the conversation's name and phone only.
-      }
-    })();
+      })
+      .catch(() => undefined); // No customer record: the form keeps the conversation's name and phone only.
     return () => {
       active = false;
     };
-  }, [api, selectedId, selectedPhone]);
+  }, [api, selectedId]);
 
   const info = customer?.conversationId === selectedId ? customer : null;
   const realName = selected ? (nameOf(selected) === (selected.customer?.full_name ?? "").trim() ? selected.customer?.full_name ?? "" : "") : "";
@@ -588,6 +595,7 @@ function MessagesWorkspace() {
     dailySales,
     stocks,
     onlineAgents: agents,
+    onAgentOffline: (agent) => void setAgentOffline(agent),
     agent: { enabled: Boolean(selected && isSocialChannel(selected.channel)), value: Boolean(selected && isSocialChannel(selected.channel) && selected.human_agent_enabled), busy: agentBusy, onToggle: () => void toggleHumanAgent() },
     ai: { value: aiEnabled, busy: aiBusy, canToggle: isManager, onToggle: () => void toggleAi() },
     unreadTotal,
@@ -622,12 +630,13 @@ function MessagesWorkspace() {
     : null;
 
   /* ------------------------------------------------------------ layout */
-  const counts = summary?.channel_counts ?? {};
+  const byChannel = counts?.channel_counts ?? {};
   const channelCounts: Record<ChannelFilter, number> = {
-    all: summary?.total_count ?? rows.length,
-    whatsapp: counts.whatsapp ?? 0,
-    instagram: counts.instagram ?? 0,
-    messenger: (counts.facebook ?? 0) + (counts.messenger ?? 0),
+    all: counts?.total_count ?? rows.length,
+    whatsapp: byChannel.whatsapp ?? 0,
+    instagram: byChannel.instagram ?? 0,
+    // `facebook` already includes stored `messenger` rows.
+    messenger: byChannel.facebook ?? 0,
   };
 
   return (
@@ -643,7 +652,7 @@ function MessagesWorkspace() {
         unreadOnly={unreadOnly}
         onToggleUnread={() => setUnreadOnly((value) => !value)}
         unreadTotal={unreadTotal}
-        poolCount={!isManager && !offline ? (summary?.pool_count ?? null) : null}
+        poolCount={!isManager && !offline ? (counts?.pool_count ?? null) : null}
         channel={channel}
         onChannel={setChannel}
         channelCounts={channelCounts}
@@ -678,7 +687,7 @@ function MessagesWorkspace() {
               onSaveCustomerNote={saveCustomerNote}
               menu={topBarProps}
               onOpenOrder={() => setOrderSheetOpen(true)}
-              composer={<Composer key={selected.public_id} conversationId={selected.public_id} shortcuts={shortcuts} onShortcutsChanged={loadShortcuts} onSend={(text, media) => void send(text, media)} onNext={goNext} />}
+              composer={<Composer key={selected.public_id} conversationId={selected.public_id} shortcuts={shortcuts} onShortcutsChanged={loadShortcuts} onSend={(text, media) => void send(text, media)} onNext={goNext} onAiSent={aiSent} />}
             />
           ) : (
             <EmptyChat />

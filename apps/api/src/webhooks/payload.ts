@@ -62,13 +62,22 @@ export function inferExternalEventId(body: unknown): string | null {
     return `${type}:${callId}`;
   }
 
+  const change = ["entry", "0", "changes", "0", "value"];
+  const statusId = pickFirstString(readPath(body, [...change, "statuses", "0", "id"]));
+  const statusValue = pickFirstString(readPath(body, [...change, "statuses", "0", "status"])) ?? "status";
+  const isComment = readPath(body, ["entry", "0", "changes", "0", "field"]) === "comments" || readPath(body, [...change, "item"]) === "comment";
+  const commentId = isComment ? pickFirstString(readPath(body, [...change, "id"]), readPath(body, [...change, "comment_id"])) : null;
+
+  // Status receipts and comments use their own ids. Never the entry id: that is the WABA / page / IG account id,
+  // identical for every event, so it turned every later receipt or comment into a "replay" that was dropped.
   return pickFirstString(
     readPath(body, ["event_id"]),
     readPath(body, ["id"]),
     readPath(body, ["message", "id"]),
     readPath(body, ["message", "mid"]),
     readPath(body, ["entry", "0", "messaging", "0", "message", "mid"]),
-    readPath(body, ["entry", "0", "changes", "0", "value", "messages", "0", "id"]),
-    readPath(body, ["entry", "0", "id"]),
+    readPath(body, [...change, "messages", "0", "id"]),
+    statusId ? `status:${statusId}:${statusValue}` : null,
+    commentId ? `comment:${commentId}` : null,
   );
 }

@@ -83,12 +83,17 @@ export class MetricsProviderAttemptRepository implements ProviderAttemptReposito
     }
     return undefined as unknown as StoredProviderAttempt;
   }
+
+  async findLiveSuccess(provider: ProviderAttempt["provider"], idempotencyKey: string): Promise<StoredProviderAttempt | null> {
+    return this.inner?.findLiveSuccess ? this.inner.findLiveSuccess(provider, idempotencyKey) : null;
+  }
 }
 
-export function recordJobFailure(metrics: WorkerMetrics, queue: QueueName, job: Job<JobEnvelope> | undefined): void {
+export function recordJobFailure(metrics: WorkerMetrics, queue: QueueName, job: Job<JobEnvelope> | undefined, error?: Error): void {
   const maxAttempts = Math.max(1, Number(job?.opts?.attempts ?? 1));
   const attemptsMade = job?.attemptsMade ?? maxAttempts;
-  if (attemptsMade >= maxAttempts) {
+  // A terminal provider answer is final for BullMQ before the attempts run out.
+  if (attemptsMade >= maxAttempts || error?.name === "UnrecoverableError") {
     metrics.queueDeadLetters.inc({ queue });
   } else {
     metrics.queueRetries.inc({ queue });

@@ -28,7 +28,7 @@ export const providerAdapters: ProviderAdapterDefinition[] = [
     display_name: "Surat Kargo",
     channels: ["cargo"],
     webhook_operations: [],
-    delivery_operations: ["shipment.create", "shipment.track"],
+    delivery_operations: ["shipment.create", "shipment.track", "address.coverage"],
     live_calls_enabled: true,
   },
   {

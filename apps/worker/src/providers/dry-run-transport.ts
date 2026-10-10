@@ -27,6 +27,8 @@ function providerPath(envelope: ProviderRequestEnvelope): string {
       return "/surat/shipments";
     case "surat:shipment.track":
       return "/surat/shipments/track";
+    case "surat:address.coverage":
+      return "/surat/at-durum";
     case "kolaybi:invoice.create":
       return "/kolaybi/invoices";
     case "kolaybi:invoice.get":

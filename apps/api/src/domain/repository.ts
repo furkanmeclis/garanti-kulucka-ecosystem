@@ -25,7 +25,31 @@ export type ConversationRecord = Selectable<ConversationsTable> & {
   customer_full_name: string | null;
   customer_phone: string | null;
   assigned_user_email: string | null;
+  /** Optional so records built elsewhere (tests, inbound processing) stay valid. */
+  customer_public_id?: string | null;
+  customer_username?: string | null;
 };
+
+/** GET /api/conversations/:public_id: the conversation plus its customer's note and default address. */
+export interface ConversationDetailRecord {
+  conversation: ConversationRecord;
+  customerNotes: string | null;
+  defaultAddress: CustomerAddressRecord | null;
+}
+
+/** Inbox-wide counters (SQL aggregates over every conversation, not a loaded batch). */
+export interface ConversationCountsRecord {
+  total_count: number;
+  /** Conversations with at least one unread customer message. */
+  unread_conversation_count: number;
+  /** Sum of unread customer messages. */
+  unread_message_count: number;
+  pool_count: number;
+  human_agent_count: number;
+  /** Raw channel names; `facebook` also covers stored `messenger` rows (legacy kanal filtresi). */
+  channel_counts: { whatsapp: number; instagram: number; facebook: number };
+  status_counts: { open: number; closed: number };
+}
 
 export type CustomerRecord = Selectable<CustomersTable>;
 export type CustomerAddressRecord = Selectable<CustomerAddressesTable>;
@@ -161,6 +185,8 @@ export interface ListConversationsFilter {
   customerPublicId?: string;
   /** Legacy Mesajlar arama: customer name / phone / username or the last message text. */
   search?: string;
+  /** Legacy "Okunmamış" filter: only conversations with unread customer messages. */
+  unreadOnly?: boolean;
   offset?: number;
   limit: number;
 }
@@ -173,6 +199,19 @@ export interface CreateMessageInput {
   externalMessageId: string | null;
   rawPayload: unknown | null;
   attachments?: MessageAttachmentInput[];
+  /**
+   * Only insert while the conversation still waits on the customer (last message from them). The row is locked,
+   * so two concurrent "AI üret ve gönder" clicks cannot both answer the same customer message.
+   */
+  onlyIfAwaitingReply?: boolean;
+}
+
+/** The conversation's last message is not from the customer any more (already answered, or empty). */
+export class ConversationNotAwaitingReplyError extends Error {
+  constructor(readonly lastSenderType: string | null) {
+    super("Son mesaj zaten yanıtlanmış");
+    this.name = "ConversationNotAwaitingReplyError";
+  }
 }
 
 export interface MessageAttachmentInput {
@@ -238,10 +277,14 @@ export interface UpdateMessageShortcutInput {
 
 export interface ConversationSummaryRecord {
   total_count: number;
+  /** Sum of unread customer messages (header bell). */
   unread_count: number;
+  /** Conversations with unread customer messages (Mesajlar "Okunmamış" badge). */
+  unread_conversation_count: number;
   pool_count: number;
   human_agent_count: number;
   channel_counts: {
+    whatsapp: number;
     instagram: number;
     facebook: number;
   };
@@ -393,6 +436,11 @@ export interface OrderSummaryRecord {
   currency: string;
   /** Legacy dashboard "haftalık satış" chart: the last 7 days (Europe/Istanbul), oldest first, zero-filled. */
   daily: OrderDailyStatRecord[];
+  /**
+   * Legacy Mesajlar "GÜNLÜK SATIŞ": units sold today (Europe/Istanbul) over live orders — not cancelled/returned,
+   * not deleted — counting each order's item quantities, and an order without items as 1.
+   */
+  today_sold_units: number;
 }
 
 export interface ProductSummaryRecord {
@@ -594,6 +642,10 @@ export class DomainRepository {
       .execute();
   }
 
+  async getConversation(conversationPublicId: string): Promise<ConversationRecord | null> {
+    return this.getConversationByPublicId(this.db, conversationPublicId);
+  }
+
   private async getConversationByPublicId(db: AppDatabase, conversationPublicId: string): Promise<ConversationRecord | null> {
     const conversation = await db
       .selectFrom("conversations")
@@ -603,6 +655,8 @@ export class DomainRepository {
       .select([
         "customers.full_name as customer_full_name",
         "customers.phone as customer_phone",
+        "customers.public_id as customer_public_id",
+        "customers.username as customer_username",
         "users.email as assigned_user_email",
       ])
       .where("conversations.public_id", "=", conversationPublicId)
@@ -668,6 +722,8 @@ export class DomainRepository {
       .select([
         "customers.full_name as customer_full_name",
         "customers.phone as customer_phone",
+        "customers.public_id as customer_public_id",
+        "customers.username as customer_username",
         "users.email as assigned_user_email",
       ])
       .$if(Boolean(filter.channels?.length), (builder) =>
@@ -675,6 +731,7 @@ export class DomainRepository {
       )
       .$if(Boolean(filter.channel), (builder) => builder.where("conversations.channel", "=", filter.channel as string))
       .$if(Boolean(filter.status), (builder) => builder.where("conversations.status", "=", filter.status as string))
+      .$if(Boolean(filter.unreadOnly), (builder) => builder.where("conversations.unread_count", ">", 0))
       .$if(Boolean(filter.customerPublicId), (builder) =>
         builder.where("customers.public_id", "=", filter.customerPublicId as string),
       )
@@ -727,36 +784,66 @@ export class DomainRepository {
     });
   }
 
+  async getConversationCounts(): Promise<ConversationCountsRecord> {
+    const row = await this.db
+      .selectFrom("conversations")
+      .select([
+        sql<number>`count(*)`.as("total_count"),
+        sql<number>`count(*) filter (where unread_count > 0)`.as("unread_conversation_count"),
+        sql<number>`coalesce(sum(unread_count), 0)`.as("unread_message_count"),
+        sql<number>`count(*) filter (where is_in_pool)`.as("pool_count"),
+        sql<number>`count(*) filter (where human_agent_enabled)`.as("human_agent_count"),
+        sql<number>`count(*) filter (where lower(channel) = 'whatsapp')`.as("whatsapp_count"),
+        sql<number>`count(*) filter (where lower(channel) = 'instagram')`.as("instagram_count"),
+        sql<number>`count(*) filter (where lower(channel) in ('facebook', 'messenger'))`.as("facebook_count"),
+        sql<number>`count(*) filter (where status = 'open')`.as("open_count"),
+        sql<number>`count(*) filter (where status = 'closed')`.as("closed_count"),
+      ])
+      .executeTakeFirst();
+    return {
+      total_count: Number(row?.total_count ?? 0),
+      unread_conversation_count: Number(row?.unread_conversation_count ?? 0),
+      unread_message_count: Number(row?.unread_message_count ?? 0),
+      pool_count: Number(row?.pool_count ?? 0),
+      human_agent_count: Number(row?.human_agent_count ?? 0),
+      channel_counts: {
+        whatsapp: Number(row?.whatsapp_count ?? 0),
+        instagram: Number(row?.instagram_count ?? 0),
+        facebook: Number(row?.facebook_count ?? 0),
+      },
+      status_counts: { open: Number(row?.open_count ?? 0), closed: Number(row?.closed_count ?? 0) },
+    };
+  }
+
+  /** Inbox summary over every conversation (it used to aggregate only the newest 200 rows). */
   async getConversationSummary(): Promise<ConversationSummaryRecord> {
-    const conversations = await this.listConversations({ limit: 200 });
-    return conversations.reduce<ConversationSummaryRecord>(
-      (summary, conversation) => {
-        const channel = conversation.channel.toLocaleLowerCase("tr-TR");
-        summary.total_count += 1;
-        summary.unread_count += Number(conversation.unread_count);
-        if (conversation.is_in_pool) summary.pool_count += 1;
-        if (conversation.human_agent_enabled) summary.human_agent_count += 1;
-        if (channel === "instagram") summary.channel_counts.instagram += 1;
-        if (channel === "facebook" || channel === "messenger") summary.channel_counts.facebook += 1;
-        if (conversation.status === "open") summary.status_counts.open += 1;
-        if (conversation.status === "closed") summary.status_counts.closed += 1;
-        return summary;
-      },
-      {
-        total_count: 0,
-        unread_count: 0,
-        pool_count: 0,
-        human_agent_count: 0,
-        channel_counts: {
-          instagram: 0,
-          facebook: 0,
-        },
-        status_counts: {
-          open: 0,
-          closed: 0,
-        },
-      },
-    );
+    const counts = await this.getConversationCounts();
+    return {
+      total_count: counts.total_count,
+      unread_count: counts.unread_message_count,
+      unread_conversation_count: counts.unread_conversation_count,
+      pool_count: counts.pool_count,
+      human_agent_count: counts.human_agent_count,
+      channel_counts: counts.channel_counts,
+      status_counts: counts.status_counts,
+    };
+  }
+
+  async getConversationDetail(conversationPublicId: string): Promise<ConversationDetailRecord | null> {
+    const conversation = await this.getConversationByPublicId(this.db, conversationPublicId);
+    if (!conversation) return null;
+    if (!conversation.customer_id) return { conversation, customerNotes: null, defaultAddress: null };
+    const [customer, defaultAddress] = await Promise.all([
+      this.db.selectFrom("customers").select("notes").where("id", "=", conversation.customer_id).executeTakeFirst(),
+      this.db
+        .selectFrom("customer_addresses")
+        .selectAll()
+        .where("customer_id", "=", conversation.customer_id)
+        .orderBy("is_default", "desc")
+        .orderBy("updated_at", "desc")
+        .executeTakeFirst(),
+    ]);
+    return { conversation, customerNotes: customer?.notes ?? null, defaultAddress: defaultAddress ?? null };
   }
 
   /**
@@ -915,6 +1002,42 @@ export class DomainRepository {
     return { phoneMatches, nameMatches };
   }
 
+  /**
+   * Legacy mükerrer sipariş check for many list rows at once (SQL, one round trip): other live orders with the same
+   * phone (last 10 digits; not cancelled/returned/deleted) or the same customer name (≥ 4 chars; also not delivered),
+   * mirroring findDuplicateActiveOrders. Rows without duplicates are omitted.
+   */
+  async findDuplicateOrdersFor(orderPublicIds: string[]): Promise<Map<string, { phoneMatches: string[]; nameMatches: string[] }>> {
+    const result = new Map<string, { phoneMatches: string[]; nameMatches: string[] }>();
+    if (orderPublicIds.length === 0) return result;
+    const phoneTail = (alias: string) => sql.raw(`right(regexp_replace(coalesce(${alias}.phone, ''), '\\D', '', 'g'), 10)`);
+    const nameKey = (alias: string) => sql.raw(`lower(btrim(coalesce(${alias}.full_name, '')))`);
+    const rows = await sql<{ public_id: string; phone_matches: string[] | null; name_matches: string[] | null }>`
+      with targets as (
+        select o.id, o.public_id, ${phoneTail("c")} as phone_tail, ${nameKey("c")} as name_key
+        from orders o left join customers c on c.id = o.customer_id
+        where o.public_id in (${sql.join(orderPublicIds)})
+      ), candidates as (
+        select o.id, o.order_number, o.status, ${phoneTail("c")} as phone_tail, ${nameKey("c")} as name_key
+        from orders o join customers c on c.id = o.customer_id
+        where o.deleted_at is null and o.status not in ('cancelled', 'returned')
+      )
+      select t.public_id,
+        array_agg(distinct cand.order_number) filter (where length(t.phone_tail) = 10 and cand.phone_tail = t.phone_tail) as phone_matches,
+        array_agg(distinct cand.order_number) filter (where length(t.name_key) >= 4 and cand.name_key = t.name_key and cand.status <> 'delivered') as name_matches
+      from targets t
+      join candidates cand on cand.id <> t.id
+        and ((length(t.phone_tail) = 10 and cand.phone_tail = t.phone_tail) or (length(t.name_key) >= 4 and cand.name_key = t.name_key))
+      group by t.public_id
+    `.execute(this.db);
+    for (const row of rows.rows) {
+      const phoneMatches = row.phone_matches ?? [];
+      const nameMatches = row.name_matches ?? [];
+      if (phoneMatches.length > 0 || nameMatches.length > 0) result.set(row.public_id, { phoneMatches, nameMatches });
+    }
+    return result;
+  }
+
   async getCustomerSummary(): Promise<CustomerSummaryRecord> {
     const summary = await this.db
       .selectFrom("customers")
@@ -938,12 +1061,16 @@ export class DomainRepository {
     return this.db.transaction().execute(async (transaction) => {
       const conversation = await transaction
         .selectFrom("conversations")
-        .select("id")
+        .select(["id", "last_message_sender_type"])
         .where("public_id", "=", input.conversationPublicId)
+        .$if(Boolean(input.onlyIfAwaitingReply), (builder) => builder.forUpdate())
         .executeTakeFirst();
 
       if (!conversation) {
         throw new Error(`Unknown conversation: ${input.conversationPublicId}`);
+      }
+      if (input.onlyIfAwaitingReply && conversation.last_message_sender_type !== "customer") {
+        throw new ConversationNotAwaitingReplyError(conversation.last_message_sender_type);
       }
 
       const attachmentInputs = input.attachments ?? [];
@@ -1429,8 +1556,23 @@ export class DomainRepository {
       .execute();
   }
 
+  async getTodaySoldUnits(): Promise<number> {
+    const row = await this.db
+      .selectFrom("orders")
+      .select(
+        sql<string | number | null>`coalesce(sum(coalesce((select sum(order_items.quantity) from order_items where order_items.order_id = orders.id), 1)), 0)`.as(
+          "units",
+        ),
+      )
+      .where("orders.deleted_at", "is", null)
+      .where("orders.status", "not in", ["cancelled", "returned"])
+      .where(sql<boolean>`orders.created_at >= date_trunc('day', now() at time zone 'Europe/Istanbul') at time zone 'Europe/Istanbul'`)
+      .executeTakeFirst();
+    return Number(row?.units ?? 0) || 0;
+  }
+
   async getOrderSummary(): Promise<OrderSummaryRecord> {
-    const [orders, dailyRows] = await Promise.all([
+    const [orders, dailyRows, todaySoldUnits] = await Promise.all([
       this.listOrders({ limit: 200 }),
       this.db
         .selectFrom("orders")
@@ -1443,6 +1585,7 @@ export class DomainRepository {
         .where(sql<boolean>`orders.created_at >= (date_trunc('day', now() at time zone 'Europe/Istanbul') - interval '6 days') at time zone 'Europe/Istanbul'`)
         .groupBy(sql`1`)
         .execute(),
+      this.getTodaySoldUnits(),
     ]);
     const byDate = new Map(dailyRows.map((row) => [row.date, row]));
     const todayIstanbul = new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Istanbul" }));
@@ -1455,6 +1598,7 @@ export class DomainRepository {
     });
     return {
       daily,
+      today_sold_units: todaySoldUnits,
       total_count: orders.length,
       active_count: orders.filter((order) => !["cancelled", "returned", "delivered"].includes(order.status)).length,
       delivered_count: orders.filter((order) => order.status === "delivered").length,
@@ -2303,13 +2447,29 @@ export function serializeConversation(conversation: ConversationRecord) {
     last_message_at: conversation.last_message_at,
     customer: conversation.customer_full_name
       ? {
+          ...(conversation.customer_public_id ? { public_id: conversation.customer_public_id } : {}),
           full_name: conversation.customer_full_name,
           phone: conversation.customer_phone,
+          ...(conversation.customer_username !== undefined ? { username: conversation.customer_username } : {}),
         }
       : null,
     assigned_user_email: conversation.assigned_user_email,
     notes: conversation.notes,
     updated_at: conversation.updated_at,
+  };
+}
+
+export function serializeConversationDetail(detail: ConversationDetailRecord) {
+  const base = serializeConversation(detail.conversation);
+  return {
+    ...base,
+    customer: base.customer
+      ? {
+          ...base.customer,
+          notes: detail.customerNotes,
+          default_address: detail.defaultAddress ? serializeCustomerAddress(detail.defaultAddress) : null,
+        }
+      : null,
   };
 }
 

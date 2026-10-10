@@ -77,7 +77,15 @@ export interface CargoPipelineStore {
   createVapiCall: (input: { item: CargoPipelineItem; phone: string; idempotencyKey: string; requestId: string }) => Promise<{ id: number; public_id: string }>;
   markVapiCallQueued: (callId: number, jobId: string | null) => Promise<void>;
   openVapiItems: () => Promise<OpenVapiPipelineItem[]>;
+  /**
+   * Puts rows a crashed / killed worker left in `isleniyor` (no VAPI call to wait for) back to `bekliyor`.
+   * Optional so in-memory stores in tests can omit it.
+   */
+  releaseStale?: (now: Date, staleAfterMs: number) => Promise<number>;
 }
+
+/** A claimed row normally finishes within seconds; after this long its worker is gone. */
+export const cargoPipelineStaleClaimMs = 30 * 60 * 1000;
 
 export type JobPublisher = (job: JobEnvelope) => Promise<string | null>;
 
@@ -294,13 +302,15 @@ export interface CargoPipelineTickResult {
   enqueued: number;
   processed: number;
   followed_up: number;
+  released: number;
 }
 
 /** One legacy kargoPipelineCron pass. */
 export async function runCargoPipelineTick(input: { store: CargoPipelineStore; publish: JobPublisher; now?: Date; batchSize?: number }): Promise<CargoPipelineTickResult> {
   const now = input.now ?? new Date();
   const config = await input.store.loadConfig();
-  const result: CargoPipelineTickResult = { active: config.aktif, enqueued: 0, processed: 0, followed_up: 0 };
+  const result: CargoPipelineTickResult = { active: config.aktif, enqueued: 0, processed: 0, followed_up: 0, released: 0 };
+  result.released = (await input.store.releaseStale?.(now, cargoPipelineStaleClaimMs)) ?? 0;
 
   for (const entry of await input.store.openVapiItems()) {
     const patch = vapiFollowUpPatch(entry, config, now);
@@ -475,8 +485,29 @@ export class DatabaseCargoPipelineStore implements CargoPipelineStore {
     };
   }
 
+  /**
+   * Only rows still being processed: an admin action (iptal, sil, sıfırla) taken while the worker held the row wins
+   * instead of being overwritten by the worker's result — which used to resurrect a cancelled item.
+   */
   async update(id: number, patch: CargoPipelinePatch) {
-    await this.db.updateTable("cargo_pipeline_items").set({ ...patch, updated_at: new Date() }).where("id", "=", id).execute();
+    await this.db
+      .updateTable("cargo_pipeline_items")
+      .set({ ...patch, updated_at: new Date() })
+      .where("id", "=", id)
+      .where("status", "=", "isleniyor")
+      .execute();
+  }
+
+  async releaseStale(now: Date, staleAfterMs: number) {
+    const released = await this.db
+      .updateTable("cargo_pipeline_items")
+      .set({ status: "bekliyor", next_run_at: now, error_message: "İşlem yarıda kaldı (worker durdu); yeniden kuyruğa alındı", updated_at: now })
+      .where("status", "=", "isleniyor")
+      .where("vapi_call_id", "is", null)
+      .where("updated_at", "<", new Date(now.getTime() - staleAfterMs))
+      .returning("id")
+      .execute();
+    return released.length;
   }
 
   async recordConversationMessage(conversationPublicId: string, body: string) {

@@ -233,6 +233,36 @@ export class AdminUsersRepository {
     return updated;
   }
 
+  /**
+   * Legacy Mesajlar "aktif temsilci" chip: a manager sets another agent offline. Same column change as the agent's
+   * own `PATCH /auth/presence` (no pool/assignment side effects), plus an audit row naming the actor.
+   */
+  async setOffline(input: { userPublicId: string; actorUserId: number | null }): Promise<AdminUserRecord> {
+    const current = await this.findByPublicId(input.userPublicId);
+    if (!current) throw new ManagedUserNotFoundError();
+    await this.db.transaction().execute(async (transaction) => {
+      await transaction
+        .updateTable("users")
+        .set({ is_online: false, updated_at: new Date() })
+        .where("id", "=", current.id)
+        .execute();
+      await transaction
+        .insertInto("audit_logs")
+        .values({
+          actor_user_id: input.actorUserId,
+          action: "presence_offline",
+          entity_type: "users",
+          entity_id: current.public_id,
+          old_value: { is_online: current.is_online },
+          new_value: { is_online: false },
+          ip_address: null,
+          user_agent: null,
+        })
+        .execute();
+    });
+    return { ...current, is_online: false };
+  }
+
   async updateOwnProfile(userId: number, firstName: string, lastName: string): Promise<void> {
     await this.db
       .updateTable("users")

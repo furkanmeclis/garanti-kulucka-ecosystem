@@ -58,6 +58,7 @@ const routeMocks = vi.hoisted(() => {
       list: vi.fn(async () => [managedUser]),
       create: vi.fn(async () => managedUser),
       update: vi.fn(async () => managedUser),
+      setOffline: vi.fn(async () => ({ ...managedUser, is_online: false })),
       updateOwnProfile: vi.fn(async () => undefined),
       updateOwnPassword: vi.fn(async () => undefined),
       listLogs: vi.fn(async () => [
@@ -126,8 +127,19 @@ async function token(role = "admin") {
   return signAccessToken({ user_public_id: "usr_test", session_public_id: "ses_test", role }, config);
 }
 
+const realtimeEvents: Array<{ target: string; envelope: unknown }> = [];
+
 function app() {
-  return createApp({ config, db: {} as AppDatabase });
+  return createApp({
+    config,
+    db: {} as AppDatabase,
+    realtimePublisher: {
+      publish: () => undefined,
+      publishToUser: (userPublicId, envelope) => realtimeEvents.push({ target: `user:${userPublicId}`, envelope }),
+      publishToConversation: () => undefined,
+      broadcast: (envelope) => realtimeEvents.push({ target: "broadcast", envelope }),
+    },
+  });
 }
 
 function jsonRequest(method: string, accessToken: string, body?: unknown): RequestInit {
@@ -206,6 +218,32 @@ describe("ayarlar admin routes", () => {
     expect(routeMocks.usersRepository.update).toHaveBeenLastCalledWith(
       expect.objectContaining({ userPublicId: "usr_staff", isActive: false }),
     );
+  });
+
+  it("lets a manager set another agent offline with an audit row and a presence event", async () => {
+    realtimeEvents.length = 0;
+    const accessToken = await token();
+    const response = await app().request("/admin/users/usr_staff/presence", jsonRequest("PATCH", accessToken, { online: false }));
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({ user: { public_id: "usr_staff", is_online: false } });
+    expect(routeMocks.usersRepository.setOffline).toHaveBeenCalledWith({ userPublicId: "usr_staff", actorUserId: 10 });
+    expect(realtimeEvents.map((event) => event.target)).toEqual(["user:usr_staff", "broadcast"]);
+    expect(realtimeEvents[0]?.envelope).toMatchObject({ event: "presence.updated", payload: { user_public_id: "usr_staff", status: "offline" } });
+
+    // Only "set offline" is a manager action; going online stays the agent's own PATCH /auth/presence.
+    const online = await app().request("/admin/users/usr_staff/presence", jsonRequest("PATCH", accessToken, { online: true }));
+    expect(online.status).toBe(400);
+
+    const { ManagedUserNotFoundError } = await import("../src/admin/users-repository.js");
+    routeMocks.usersRepository.setOffline.mockRejectedValueOnce(new ManagedUserNotFoundError());
+    const missing = await app().request("/admin/users/usr_missing/presence", jsonRequest("PATCH", accessToken, { online: false }));
+    expect(missing.status).toBe(404);
+
+    for (const role of ["calisan", "kargo_operatoru"]) {
+      const denied = await app().request("/admin/users/usr_staff/presence", jsonRequest("PATCH", await token(role), { online: false }));
+      expect(denied.status).toBe(403);
+    }
+    expect(routeMocks.usersRepository.setOffline).toHaveBeenCalledTimes(2);
   });
 
   it("returns işlem logları with actor names for admin", async () => {

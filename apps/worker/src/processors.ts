@@ -34,6 +34,7 @@ import { instagramAnalyticsFrom, type InstagramAnalyticsRepository } from "./ins
 import { kolaybiProductsFrom, type KolaybiProductRepository } from "./kolaybi-products.js";
 import { dataRetentionPolicyFromEnv, runDataRetention, type DataRetentionStore } from "./data-retention.js";
 import type { StorageOrphanReconciliationResult } from "./storage-orphans.js";
+import { processInboundWebhook, type InboundMessageStore } from "./inbound-messages.js";
 
 export type WorkerLifecycleEventName = "started" | "completed" | "failed";
 
@@ -68,6 +69,16 @@ export interface ShipmentTrackingProcessorResult {
     transport_policy: ReturnType<typeof providerTransportPolicyFor>;
     dry_run_request: ReturnType<typeof buildProviderDryRunRequest>;
   };
+}
+
+/** A provider-delivery job whose idempotency key already succeeded live: nothing is sent or persisted again. */
+export interface ProviderDeliveryReplayResult {
+  provider: ProviderRequestEnvelope["provider"];
+  request_id: string;
+  queue: "provider-delivery";
+  status: "replayed";
+  live_call_performed: false;
+  previous_attempt_public_id: string;
 }
 
 export interface MigrationReportProcessorResult {
@@ -130,6 +141,7 @@ export interface WorkerProcessorRegistryOptions {
   instagramAnalyticsRepository?: InstagramAnalyticsRepository;
   kolaybiProductRepository?: KolaybiProductRepository;
   dataRetentionStore?: DataRetentionStore;
+  inboundMessageStore?: InboundMessageStore;
 }
 
 export const workerQueueNames: QueueName[] = [
@@ -212,6 +224,11 @@ function providerFailureInputFromJob(job: WorkerJob): {
   };
 }
 
+function liveAttemptOptionsFromJob(job: WorkerJob): { attemptNumber: number; maxAttempts: number } {
+  const input = providerFailureInputFromJob(job);
+  return { attemptNumber: input.attempt_number, maxAttempts: input.max_attempts };
+}
+
 async function persistProviderFailureAttempt(
   providerAttemptRepository: ProviderAttemptRepository | undefined,
   envelope: ProviderRequestEnvelope,
@@ -235,9 +252,22 @@ async function persistProviderFailureAttempt(
 
 function createProviderWebhookProcessor(
   providerAttemptRepository?: ProviderAttemptRepository,
+  inboundMessageStore?: InboundMessageStore,
 ): QueueProcessor {
   return async (job) => {
     const envelope = assertJobMatchesQueue("provider-webhooks", job);
+    // The API's webhook ingestion queues the stored event id (not a provider envelope): turn it into
+    // conversations / messages / comments. Before this, every such job failed name validation and dead-lettered.
+    if (envelope.name === "provider.webhook.received") {
+      const eventPublicId = (envelope.payload as { webhook_event_public_id?: unknown }).webhook_event_public_id;
+      if (typeof eventPublicId !== "string" || !eventPublicId) {
+        throw new Error("Webhook job payload is missing webhook_event_public_id");
+      }
+      if (!inboundMessageStore) {
+        throw new Error("Inbound webhook processing requires a database-backed store");
+      }
+      return processInboundWebhook(inboundMessageStore, eventPublicId);
+    }
     assertProviderJobName(envelope);
     const requestEnvelope = providerRequestEnvelopeSchema.parse(
       (envelope.payload as { envelope?: unknown }).envelope,
@@ -285,6 +315,21 @@ function createProviderDeliveryProcessor(
     const requestEnvelope = providerRequestEnvelopeSchema.parse(
       (envelope.payload as { envelope?: unknown }).envelope,
     );
+    // Replay guard: a retried / re-queued job whose key already went through live never calls the carrier again.
+    const idempotencyKey = typeof requestEnvelope.payload.idempotency_key === "string" ? requestEnvelope.payload.idempotency_key : null;
+    if (idempotencyKey && providerAttemptRepository?.findLiveSuccess) {
+      const previous = await providerAttemptRepository.findLiveSuccess(requestEnvelope.provider, idempotencyKey);
+      if (previous) {
+        return {
+          provider: requestEnvelope.provider,
+          request_id: requestEnvelope.request_id,
+          queue: "provider-delivery",
+          status: "replayed",
+          live_call_performed: false,
+          previous_attempt_public_id: previous.public_id,
+        } satisfies ProviderDeliveryReplayResult;
+      }
+    }
     let result;
     try {
       if (providerAccountConfigRepository) {
@@ -300,14 +345,21 @@ function createProviderDeliveryProcessor(
           ...(vapiTransport ? { vapiTransport } : {}),
           ...(extras.instagramGraphTransport ? { instagramGraphTransport: extras.instagramGraphTransport } : {}),
           ...(extras.mediaFileResolver ? { mediaFileResolver: extras.mediaFileResolver } : {}),
-          ...providerFailureInputFromJob(job),
+          // The handler reads camelCase; spreading attempt_number/max_attempts made every retry look like attempt 1.
+          ...liveAttemptOptionsFromJob(job),
         });
       } else {
         result = handleProviderDeliveryJob(envelope);
       }
     } catch (error) {
-      if (providerAttemptRepository && isProviderLiveTransportError(error)) {
-        await providerAttemptRepository.persist(error.attempt);
+      if (isProviderLiveTransportError(error)) {
+        await providerAttemptRepository?.persist(error.attempt);
+        // Terminal carrier answers (4xx, a non-idempotent send without a key, exhausted attempts) must not be
+        // retried by BullMQ: a retry could re-send an SMS / message the carrier may already have accepted.
+        // BullMQ treats an error named "UnrecoverableError" as final; the transport error class is kept for callers.
+        if (error.attempt.retry_decision === "dead_letter") {
+          error.name = "UnrecoverableError";
+        }
       } else {
         await persistProviderFailureAttempt(
           providerAttemptRepository,
@@ -614,8 +666,9 @@ export function createWorkerProcessorRegistry(
   const kolaybiProductRepository = typeof options === "function" ? undefined : options.kolaybiProductRepository;
   const dataRetentionStore =
     typeof options === "function" ? undefined : options.dataRetentionStore;
+  const inboundMessageStore = typeof options === "function" ? undefined : options.inboundMessageStore;
   const processors = new Map<QueueName, QueueProcessor>([
-    ["provider-webhooks", createProviderWebhookProcessor(providerAttemptRepository)],
+    ["provider-webhooks", createProviderWebhookProcessor(providerAttemptRepository, inboundMessageStore)],
     [
       "provider-delivery",
       createProviderDeliveryProcessor(

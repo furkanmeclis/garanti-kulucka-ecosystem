@@ -133,12 +133,13 @@ export function ReportsView() {
   const query = toAnalyticsQuery(state);
   const queryKey = new URLSearchParams(Object.entries(query).filter(([, value]) => value !== undefined) as Array<[string, string]>).toString();
 
+  // Merge into the URL as it is now (history updates synchronously), not a render's snapshot: a pick made while a
+  // previous change had not re-rendered yet (preset, then provider) silently dropped that previous change.
   const update = useCallback(
     (next: Partial<ReportFilterState>) => {
-      const merged = { ...state, ...next };
-      setParams(serializeReportFilters(merged), { replace: true });
+      setParams(serializeReportFilters({ ...parseReportFilters(new URLSearchParams(window.location.search)), ...next }), { replace: true });
     },
-    [setParams, state],
+    [setParams],
   );
 
   const timeseries = useQuery(`reports-ts:${queryKey}`, () => api.reportTimeseries(query));
