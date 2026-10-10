@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { Queue, type JobsOptions } from "bullmq";
 import { Redis } from "ioredis";
 import type { JobEnvelope } from "@garanti-kulucka/shared";
@@ -122,7 +121,8 @@ export function buildWebhookJob(input: {
   requestId?: string;
 }): JobEnvelope {
   return jobEnvelopeSchema.parse({
-    job_id: `job_${randomUUID().replaceAll("-", "")}`,
+    // One job per stored event: re-queueing an event that never got processed cannot run it twice in parallel.
+    job_id: `job_webhook_${input.eventPublicId}`,
     queue: "provider-webhooks",
     name: "provider.webhook.received",
     payload: {
