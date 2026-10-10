@@ -1,5 +1,5 @@
 import type { OrderSummary } from "@garanti-kulucka/shared";
-import { Download, FileSpreadsheet, Filter, ListChecks, Loader2, MessageSquare, PenLine, Phone, Plus, Sparkles, Store, X } from "lucide-react";
+import { AlertTriangle, Download, FileSpreadsheet, Filter, ListChecks, Loader2, MessageSquare, PenLine, Phone, Plus, Sparkles, Store, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/app/auth";
@@ -142,6 +142,30 @@ function downloadExcel(
   anchor.download = `siparisler-${format}-${new Date().toISOString().slice(0, 10)}.xls`;
   anchor.click();
   URL.revokeObjectURL(url);
+}
+
+/** Legacy mükerrer sipariş marks next to the customer: red when the phone, yellow when the name repeats. */
+function DuplicateMarks({ name, match, orderId }: { name: string; match: { phone_matches: string[]; name_matches: string[] } | undefined; orderId: string }) {
+  const { t } = useTranslation();
+  return (
+    <span className="inline-flex items-center gap-1">
+      {name}
+      {match && match.phone_matches.length > 0 && (
+        <Hint content={[t("orders.duplicatePhone", { orders: match.phone_matches.slice(0, 5).join(", ") })]}>
+          <span tabIndex={0} className="inline-flex" aria-label={t("orders.duplicatePhone", { orders: match.phone_matches.slice(0, 5).join(", ") })} data-testid={`order-duplicate-phone-${orderId}`}>
+            <AlertTriangle className="size-4 text-red-600 dark:text-red-400" aria-hidden="true" />
+          </span>
+        </Hint>
+      )}
+      {match && match.name_matches.length > 0 && (
+        <Hint content={[t("orders.duplicateName", { orders: match.name_matches.slice(0, 5).join(", ") })]}>
+          <span tabIndex={0} className="inline-flex" aria-label={t("orders.duplicateName", { orders: match.name_matches.slice(0, 5).join(", ") })} data-testid={`order-duplicate-name-${orderId}`}>
+            <AlertTriangle className="size-4 text-amber-500 dark:text-amber-400" aria-hidden="true" />
+          </span>
+        </Hint>
+      )}
+    </span>
+  );
 }
 
 /** Legacy SiparislerPage row badges: Teyit (+ call count), KolayBi / e-Fatura and the latest shipment. */
@@ -371,6 +395,21 @@ export function OrdersPage() {
   );
   const rows: OrderRow[] = data?.data ?? [];
   const total = data?.meta?.total_count ?? rows.length;
+  // Legacy mükerrer icons: one bulk check per loaded page (red = same phone, yellow = same name).
+  const [duplicates, setDuplicates] = useState<Record<string, { phone_matches: string[]; name_matches: string[] }>>({});
+  const rowIds = rows.map((row) => row.public_id).join(",");
+  useEffect(() => {
+    setDuplicates({});
+    if (!rowIds) return;
+    let active = true;
+    api
+      .orderDuplicateCheck(rowIds.split(","))
+      .then((response) => active && setDuplicates(response.data))
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [api, rowIds]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [detail, setDetail] = useState<string | null>(null);
   const [quickMessage, setQuickMessage] = useState<string | null>(null);
@@ -513,7 +552,7 @@ export function OrdersPage() {
     {
       key: "customer",
       header: t("orders.customer"),
-      cell: (row) => row.customer_full_name ?? t("common.none"),
+      cell: (row) => <DuplicateMarks name={row.customer_full_name ?? t("common.none")} match={duplicates[row.public_id]} orderId={row.public_id} />,
     },
     {
       key: "status",

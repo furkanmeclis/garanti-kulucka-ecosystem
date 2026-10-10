@@ -220,6 +220,17 @@ export interface ConversationListQuery {
   offset?: number;
 }
 
+export interface SuratCoverageDecision {
+  status: "covered" | "not_covered" | "partial" | "unknown";
+  source: "provider" | "keyword_fallback";
+  warning: boolean;
+  message: string | null;
+  uncovered_areas: string[];
+  checked_at: string | null;
+  live_enabled: boolean;
+  queued: boolean;
+}
+
 /** GET /api/conversations: the page plus inbox-wide counters (unread / pool / per channel). */
 export interface ConversationListResponse {
   data: ConversationSummary[];
@@ -463,6 +474,12 @@ export function createApiClient(options: ApiClientOptions) {
       request<{ operation: string; request_id: string }>("/api/webphone/test-call", { method: "POST", body: input }),
     createOrder: (input: CreateOrderInput) => request<OrderSummary>("/api/orders", { method: "POST", body: input }),
     orderProductOptions: () => request<{ data: ProductOption[] }>("/api/orders/product-options", { query: { limit: 100 } }),
+    /** Sürat AT (adrese teslim) precheck; also queues the carrier lookup when providers.surat.live_mode is on. */
+    suratCoverage: (input: { city: string; district: string; address_line?: string | null }) =>
+      request<SuratCoverageDecision>("/api/orders/surat-coverage", { method: "POST", body: input }),
+    /** Legacy mükerrer row icons for a page of orders: only orders with duplicates are returned. */
+    orderDuplicateCheck: (orderPublicIds: string[]) =>
+      request<{ data: Record<string, { phone_matches: string[]; name_matches: string[] }> }>("/api/orders/duplicate-check", { method: "POST", body: { order_public_ids: orderPublicIds } }),
     lookupCustomerByPhone: (phone: string) => request<CustomerLookup>("/api/orders/customer-lookup", { query: { phone } }),
     getOrderActionDetail: (publicId: string) => request<{ order: OrderActionDetail; steps: OrderProviderStep[] }>(`/api/orders/${encodeURIComponent(publicId)}/actions`),
     syncOrderProviderSteps: (publicId: string) => request<{ advanced_count: number }>(`/api/orders/${encodeURIComponent(publicId)}/provider-sync`, { method: "POST" }),

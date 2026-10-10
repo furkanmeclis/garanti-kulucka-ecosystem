@@ -19,7 +19,7 @@ export interface SuratTransportRequest {
   headers: Record<string, string>;
   body: string;
   timeout_ms: number;
-  surat_endpoint: "OrtakBarkodOlustur" | "KargoTakipHareketDetayi";
+  surat_endpoint: "OrtakBarkodOlustur" | "KargoTakipHareketDetayi" | "ATDurumListesi";
   account_type: SuratAccountType;
 }
 
@@ -59,6 +59,9 @@ interface SuratCallRecord {
 }
 
 const defaultSuratApiUrl = "https://api01.suratkargo.com.tr/api";
+/** Legacy routes/suratKargoRouter.js `at-durum-kontrol`: ATDurumListesi lives on the SOAP web service, not the REST API. */
+const defaultSuratSoapUrl = "https://webservices.suratkargo.com.tr/services.asmx";
+const coverageRecordLimit = 300;
 const accountTypes = new Set(["cash", "cod"]);
 const waitingMessages = ["Veri aktarımı sağlanmış olup kargo kabul bekleniyor"];
 
@@ -279,6 +282,105 @@ function trackingRequest(
   };
 }
 
+function xmlEscape(value: string): string {
+  return value.replace(/[<>&'"]/g, (char) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", "'": "&apos;", '"': "&quot;" })[char] ?? char);
+}
+
+function coverageRequest(
+  envelope: ProviderRequestEnvelope,
+  accountConfig: ProviderAccountConfig,
+  policy: LiveProviderTransportPolicy,
+  accountType: SuratAccountType,
+): SuratTransportRequest {
+  const credentials = accountCredentials(accountConfig, accountType);
+  const il = payloadString(envelope.payload, ["il", "city"]);
+  const ilce = payloadString(envelope.payload, ["ilce", "district"]);
+  const field = (name: string, value: string) => `<${name}>${xmlEscape(value)}</${name}>`;
+  return {
+    method: "POST",
+    url: stringSetting(accountConfig.settings, ["soap_url", "surat.soap_url", "SURAT_SOAP_URL"], defaultSuratSoapUrl),
+    headers: {
+      "Content-Type": "text/xml; charset=utf-8",
+      SOAPAction: '"http://tempuri.org/ATDurumListesi"',
+    },
+    body:
+      '<?xml version="1.0" encoding="utf-8"?>' +
+      '<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body>' +
+      `<ATDurumListesi xmlns="http://tempuri.org/">${field("KullaniciAdi", credentials.user)}${field("Sifre", credentials.pass)}${field("Il", il)}${field("Ilce", ilce)}</ATDurumListesi>` +
+      "</soap:Body></soap:Envelope>",
+    timeout_ms: policy.timeout_ms,
+    surat_endpoint: "ATDurumListesi",
+    account_type: accountType,
+  };
+}
+
+function xmlText(value: string): string {
+  return value
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, "&")
+    .trim();
+}
+
+/** Leaf `<Tag>value</Tag>` pairs of one XML fragment (namespace prefixes dropped). */
+function xmlLeaves(fragment: string): Record<string, string> {
+  const leaves: Record<string, string> = {};
+  for (const match of fragment.matchAll(/<(?:[\w-]+:)?([\w-]+)(?:\s[^>]*)?>([^<]*)<\/(?:[\w-]+:)?\1>/g)) {
+    leaves[match[1]!] = xmlText(match[2]!);
+  }
+  return leaves;
+}
+
+const coverageStatusKeys = ["ATDurumu", "ATDurum", "AtDurumu", "Durum", "AdreseTeslim", "AdresTeslim"];
+const coverageAreaKeys = ["Mahalle", "MahalleAdi", "Semt", "Koy", "Bolge"];
+
+/** "AT İÇİ" / "Var" / "Evet" / true → covered; "AT DIŞI" / "Yok" / "Hayır" / false → not covered. */
+export function suratCoverageFlag(raw: string): boolean | null {
+  const value = raw.toLocaleLowerCase("tr-TR").replace(/\s+/g, " ").trim();
+  if (!value) return null;
+  if (/dışı|disi|yok|hayır|hayir|false|^0$|kapalı|kapali/.test(value)) return false;
+  if (/içi|ici|var|evet|true|^1$|açık|acik/.test(value)) return true;
+  return null;
+}
+
+/** ATDurumListesi SOAP response → per-area AT (adrese teslim) flags. Unknown shapes come back as `null`. */
+export function parseSuratCoverageResponse(body: string): Record<string, unknown> | null {
+  const fault = /<(?:[\w-]+:)?Fault[\s>]/.test(body);
+  const resultMatch = /<(?:[\w-]+:)?ATDurumListesiResult(?:\s[^>]*)?>([\s\S]*?)<\/(?:[\w-]+:)?ATDurumListesiResult>/.exec(body);
+  if (fault || !resultMatch) return null;
+  let result = resultMatch[1]!;
+  // Some ASMX services return the list as an escaped XML string.
+  if (!result.includes("<") && result.includes("&lt;")) result = xmlText(result);
+  // Record elements are the ones whose children are all leaves (`<ATDurum><Il>…</Il><ATDurumu>…</ATDurumu></ATDurum>`).
+  const blocks = [...result.matchAll(/<(?:[\w-]+:)?([\w-]+)(?:\s[^>]*)?>((?:\s*<(?:[\w-]+:)?[\w-]+(?:\s[^>]*)?>[^<]*<\/(?:[\w-]+:)?[\w-]+>)+\s*)<\/(?:[\w-]+:)?\1>/g)]
+    .map((match) => xmlLeaves(match[2]!))
+    .filter((leaves) => coverageStatusKeys.some((key) => key in leaves));
+  const records = blocks.slice(0, coverageRecordLimit).map((leaves) => {
+    const status = coverageStatusKeys.map((key) => leaves[key]).find((value) => value !== undefined) ?? "";
+    const area = coverageAreaKeys.map((key) => leaves[key]).find((value) => value !== undefined) ?? "";
+    return { il: leaves.Il ?? leaves.IlAdi ?? "", ilce: leaves.Ilce ?? leaves.IlceAdi ?? "", mahalle: area, at: suratCoverageFlag(status), durum: status };
+  });
+  if (records.length === 0) {
+    // A bare status (single district answer) instead of a list.
+    const single = xmlLeaves(result);
+    const status = coverageStatusKeys.map((key) => single[key]).find((value) => value !== undefined);
+    if (status === undefined) return null;
+    records.push({ il: single.Il ?? "", ilce: single.Ilce ?? "", mahalle: "", at: suratCoverageFlag(status), durum: status });
+  }
+  return {
+    success: true,
+    data: {
+      records,
+      at_ici: records.filter((record) => record.at === true).length,
+      at_disi: records.filter((record) => record.at === false).length,
+      truncated: blocks.length > coverageRecordLimit,
+    },
+  };
+}
+
 function parseJson(body: string): Record<string, unknown> | null {
   if (!body) return {};
   try {
@@ -469,6 +571,9 @@ function redactUrl(urlValue: string): { origin: string; path: string; query: Rec
 
 function redactRequestBody(body: string): unknown {
   if (!body) return "";
+  if (body.startsWith("<?xml")) {
+    return body.replace(/<(KullaniciAdi|Sifre)>[\s\S]*?<\/\1>/g, "<$1>[redacted]</$1>").slice(0, 800);
+  }
   const parsed = parseJson(body);
   if (!parsed) return "[unparseable-json]";
   return {
@@ -716,6 +821,37 @@ export async function sendSuratLiveRequest(input: SuratLiveAdapterInput): Promis
         request: secondRequest,
         requests,
         response: responseMetadata(secondResponse, calls),
+        error: null,
+      }),
+    };
+  }
+
+  if (input.envelope.operation === "address.coverage") {
+    const [accountType = "cash"] = trackingAccountTypes(input.envelope, input.accountConfig);
+    const request = coverageRequest(input.envelope, input.accountConfig, input.policy, accountType);
+    const response = await performRequest(input, request, calls, requests);
+    if (response.status === 429 || response.status >= 500) throwHttpError(input, request, requests, calls, response);
+    const payload = parseSuratCoverageResponse(response.body);
+    if (!payload) throwMalformed(input, request, requests, calls, response);
+    const data = payload.data as Record<string, unknown>;
+    data.il = payloadString(input.envelope.payload, ["il", "city"]);
+    data.ilce = payloadString(input.envelope.payload, ["ilce", "district"]);
+    data.hesapTipi = accountType;
+    const endedAt = input.now ? new Date(input.now) : new Date();
+    return {
+      response_payload: payload,
+      attempt: createAttempt({
+        envelope: input.envelope,
+        job: input.job,
+        startedAt,
+        endedAt,
+        statusCode: response.status,
+        status: "success",
+        retryDecision: "none",
+        nextRetryAt: null,
+        request,
+        requests,
+        response: responseMetadata(response, calls),
         error: null,
       }),
     };

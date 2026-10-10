@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <soap:Body>
+    <ATDurumListesiResponse xmlns="http://tempuri.org/">
+      <ATDurumListesiResult>
+        <ATDurum><Il>KONYA</Il><Ilce>SELÇUKLU</Ilce><Mahalle>BOSNA HERSEK</Mahalle><ATDurumu>AT İÇİ</ATDurumu></ATDurum>
+        <ATDurum><Il>KONYA</Il><Ilce>SELÇUKLU</Ilce><Mahalle>SARAYKÖY</Mahalle><ATDurumu>AT DIŞI</ATDurumu></ATDurum>
+        <ATDurum><Il>KONYA</Il><Ilce>SELÇUKLU</Ilce><Mahalle>YAZIR</Mahalle><ATDurumu>AT İÇİ</ATDurumu></ATDurum>
+      </ATDurumListesiResult>
+    </ATDurumListesiResponse>
+  </soap:Body>
+</soap:Envelope>

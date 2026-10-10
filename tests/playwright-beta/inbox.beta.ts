@@ -628,6 +628,9 @@ test("inbox: Sürat AT warning asks before creating", async ({ page }) => {
   await page.getByTestId("order-district-input").press("Enter");
   await panel.getByTestId("order-address").fill("Köy yolu, AT dışı");
   await panel.getByTestId("order-cargo-surat").click();
+  // The precheck warns before submit (keyword fallback while the Sürat live gate is closed).
+  await expect(panel.getByTestId("order-surat-coverage")).toContainText("AT dışı");
+  expect(posts(state, "/api/orders/surat-coverage").at(-1)).toEqual({ city: "Van", district: "Başkale", address_line: "Köy yolu, AT dışı" });
   await panel.getByTestId("order-submit").click();
   const dialog = page.getByTestId("at-warning");
   await expect(dialog).toContainText("Sürat Kargo Teslimat Yapılmıyor");

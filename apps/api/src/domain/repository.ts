@@ -1002,6 +1002,42 @@ export class DomainRepository {
     return { phoneMatches, nameMatches };
   }
 
+  /**
+   * Legacy mükerrer sipariş check for many list rows at once (SQL, one round trip): other live orders with the same
+   * phone (last 10 digits; not cancelled/returned/deleted) or the same customer name (≥ 4 chars; also not delivered),
+   * mirroring findDuplicateActiveOrders. Rows without duplicates are omitted.
+   */
+  async findDuplicateOrdersFor(orderPublicIds: string[]): Promise<Map<string, { phoneMatches: string[]; nameMatches: string[] }>> {
+    const result = new Map<string, { phoneMatches: string[]; nameMatches: string[] }>();
+    if (orderPublicIds.length === 0) return result;
+    const phoneTail = (alias: string) => sql.raw(`right(regexp_replace(coalesce(${alias}.phone, ''), '\\D', '', 'g'), 10)`);
+    const nameKey = (alias: string) => sql.raw(`lower(btrim(coalesce(${alias}.full_name, '')))`);
+    const rows = await sql<{ public_id: string; phone_matches: string[] | null; name_matches: string[] | null }>`
+      with targets as (
+        select o.id, o.public_id, ${phoneTail("c")} as phone_tail, ${nameKey("c")} as name_key
+        from orders o left join customers c on c.id = o.customer_id
+        where o.public_id in (${sql.join(orderPublicIds)})
+      ), candidates as (
+        select o.id, o.order_number, o.status, ${phoneTail("c")} as phone_tail, ${nameKey("c")} as name_key
+        from orders o join customers c on c.id = o.customer_id
+        where o.deleted_at is null and o.status not in ('cancelled', 'returned')
+      )
+      select t.public_id,
+        array_agg(distinct cand.order_number) filter (where length(t.phone_tail) = 10 and cand.phone_tail = t.phone_tail) as phone_matches,
+        array_agg(distinct cand.order_number) filter (where length(t.name_key) >= 4 and cand.name_key = t.name_key and cand.status <> 'delivered') as name_matches
+      from targets t
+      join candidates cand on cand.id <> t.id
+        and ((length(t.phone_tail) = 10 and cand.phone_tail = t.phone_tail) or (length(t.name_key) >= 4 and cand.name_key = t.name_key))
+      group by t.public_id
+    `.execute(this.db);
+    for (const row of rows.rows) {
+      const phoneMatches = row.phone_matches ?? [];
+      const nameMatches = row.name_matches ?? [];
+      if (phoneMatches.length > 0 || nameMatches.length > 0) result.set(row.public_id, { phoneMatches, nameMatches });
+    }
+    return result;
+  }
+
   async getCustomerSummary(): Promise<CustomerSummaryRecord> {
     const summary = await this.db
       .selectFrom("customers")

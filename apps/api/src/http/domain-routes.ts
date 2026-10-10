@@ -31,6 +31,7 @@ import {
 } from "../domain/repository.js";
 import { calculateVatInclusiveOrder, moneyToCents } from "../domain/order-totals.js";
 import { draftConversationReply } from "../ai/reply.js";
+import { SuratCoverageService, suratAtKeywordWarning, type SuratCoverageAddress, type SuratCoverageDecision } from "../cargo/surat-coverage.js";
 
 
 const limitSchema = z.coerce.number().int().min(1).max(200).default(50);
@@ -387,10 +388,37 @@ function normalizePhoneTail(value: string) {
   return value.replace(/\D/g, "").slice(-10);
 }
 
-function isSuratAtWarningAddress(payload: { cargo_provider: string; address: { city: string; district: string; address_line: string } }) {
-  if (payload.cargo_provider !== "surat") return false;
-  const addressText = `${payload.address.city} ${payload.address.district} ${payload.address.address_line}`.toLocaleLowerCase("tr-TR");
-  return addressText.includes("at dışı") || addressText.includes("at disi") || addressText.includes("teslimat yok");
+const suratCoverageSchema = z.object({
+  city: z.string().trim().min(1).max(100),
+  district: z.string().trim().min(1).max(100),
+  address_line: z.string().trim().max(1000).nullable().optional(),
+}).strict();
+
+const duplicateCheckSchema = z.object({
+  order_public_ids: z.array(z.string().min(1).max(64)).min(1).max(200),
+}).strict();
+
+/**
+ * Sürat AT coverage for an address: the carrier's ATDurumListesi answer when one is cached for today, else the
+ * legacy keyword check. A lookup failure must never block order creation, so it degrades to the keyword check.
+ */
+async function suratCoverage(context: Context<AppBindings>, db: AppDatabase, address: SuratCoverageAddress): Promise<SuratCoverageDecision> {
+  try {
+    return await new SuratCoverageService(db, context.get("providerDeliveryQueuePublisher")).check(address, { requestId: context.get("requestId") });
+  } catch {
+    const warning = suratAtKeywordWarning(address);
+    return {
+      status: warning ? "not_covered" : "unknown",
+      source: "keyword_fallback",
+      warning,
+      message: warning ? "Bu adrese sürat kargo teslimat yapmamaktadır" : null,
+      uncovered_areas: [],
+      checked_at: null,
+      live_gate: "providers.surat.live_mode",
+      live_enabled: false,
+      queued: false,
+    };
+  }
 }
 
 export function createDomainRoutes() {
@@ -1344,16 +1372,20 @@ export function createDomainRoutes() {
         409,
       );
     }
-    if (!payload.data.force_surat_at && isSuratAtWarningAddress(payload.data)) {
-      return context.json(
-        {
-          error: {
-            code: "surat_at_warning",
-            message: "Bu adrese sürat kargo teslimat yapmamaktadır",
+    if (!payload.data.force_surat_at && payload.data.cargo_provider === "surat") {
+      const coverage = await suratCoverage(context, db, payload.data.address);
+      if (coverage.warning) {
+        return context.json(
+          {
+            error: {
+              code: "surat_at_warning",
+              message: coverage.message ?? "Bu adrese sürat kargo teslimat yapmamaktadır",
+              coverage,
+            },
           },
-        },
-        409,
-      );
+          409,
+        );
+      }
     }
 
     const calculatedOrder = calculateVatInclusiveOrder(payload.data.items);
@@ -1391,6 +1423,43 @@ export function createDomainRoutes() {
     });
 
     return context.json(serializeOrder(order), 201);
+  });
+
+  // Legacy `/api/surat-kargo/at-durum-kontrol`: the order form asks before submit (and warms the cache).
+  routes.post("/orders/surat-coverage", async (context) => {
+    if (!canUseOrderCreateForm(context.get("auth")?.role)) {
+      return context.json({ error: { code: "forbidden", message: "Order form access is not allowed" } }, 403);
+    }
+    const payload = suratCoverageSchema.safeParse(await readJsonBody(context.req.raw));
+    if (!payload.success) {
+      return context.json({ error: { code: "invalid_request", message: "İl ve ilçe gerekli" } }, 400);
+    }
+    const db = context.get("db");
+    if (!db) {
+      return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
+    }
+    return context.json(await suratCoverage(context, db, payload.data));
+  });
+
+  // Legacy mükerrer sipariş row icons: one call for the visible page (red = same phone, yellow = same name).
+  routes.post("/orders/duplicate-check", async (context) => {
+    if (!canReadOrders(context.get("auth")?.role)) {
+      return context.json({ error: { code: "forbidden", message: "Order access is not allowed" } }, 403);
+    }
+    const payload = duplicateCheckSchema.safeParse(await readJsonBody(context.req.raw));
+    if (!payload.success) {
+      return context.json({ error: { code: "invalid_request", message: "1-200 sipariş kimliği gerekli" } }, 400);
+    }
+    const db = context.get("db");
+    if (!db) {
+      return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
+    }
+    const matches = await new DomainRepository(db).findDuplicateOrdersFor([...new Set(payload.data.order_public_ids)]);
+    return context.json({
+      data: Object.fromEntries(
+        [...matches].map(([publicId, match]) => [publicId, { phone_matches: match.phoneMatches, name_matches: match.nameMatches }]),
+      ),
+    });
   });
 
   routes.patch("/orders/:order_public_id/status", async (context) => {

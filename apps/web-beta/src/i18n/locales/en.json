@@ -309,7 +309,9 @@
     "trackingNoEvents": "No events yet",
     "trackingFailed": "Tracking information could not be loaded",
     "close": "Close",
-    "cargoRequired": "Selecting a cargo company is required (PTT or Sürat)"
+    "cargoRequired": "Selecting a cargo company is required (PTT or Sürat)",
+    "duplicatePhone": "Another order with the same phone: {{orders}}",
+    "duplicateName": "Another active order with the same name: {{orders}}"
   },
   "messages": {
     "title": "Messages",
@@ -2443,7 +2445,9 @@
     "agentOfflineConfirmLabel": "Set offline",
     "agentOfflineDone": "{{name}} is now offline",
     "aiAlreadyAnswered": "The last message is already answered; no AI reply was sent",
-    "deepLinkMissing": "The linked conversation was not found"
+    "deepLinkMissing": "The linked conversation was not found",
+    "atPrecheck": "Sürat may not deliver to this address (outside the AT area)",
+    "atPrecheckAreas": "Sürat does not deliver to these neighbourhoods (outside AT): {{areas}}"
   },
   "statusHint": {
     "draft": "Saved as a draft, not processed yet",

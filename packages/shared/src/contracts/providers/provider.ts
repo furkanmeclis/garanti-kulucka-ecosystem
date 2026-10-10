@@ -17,6 +17,8 @@ export const providerNameSchema = z.enum([
 export const providerOperationSchema = z.enum([
   "shipment.create",
   "shipment.track",
+  /** Sürat ATDurumListesi: is the il/ilçe inside the carrier's address-delivery (AT) area? */
+  "address.coverage",
   "invoice.create",
   "invoice.get",
   "invoice.e_document.create",

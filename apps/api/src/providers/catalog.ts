@@ -28,7 +28,7 @@ function catalogItem(
 
 export const apiProviderCatalog: ApiProviderCatalogItem[] = [
   catalogItem("ptt", ["cargo"], ["shipment.create", "shipment.track"]),
-  catalogItem("surat", ["cargo"], ["shipment.create", "shipment.track"]),
+  catalogItem("surat", ["cargo"], ["shipment.create", "shipment.track", "address.coverage"]),
   catalogItem("kolaybi", ["accounting"], [
     "invoice.create",
     "invoice.get",

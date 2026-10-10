@@ -199,6 +199,19 @@ export async function mockBackend(page: Page, user: MockUser, options: { orderCo
     if (url.pathname === "/api/shipments/summary") {
       return json(200, { total_count: 33, active_count: 17, delivered_count: 16, recipient_phone_count: 33, provider_counts: { ptt: 16, surat: 17, other: 0 }, exception_counts: { ptt_not_delivered: 8, surat_not_delivered: 9, tracking_missing: 6 } });
     }
+    if (url.pathname === "/api/orders/duplicate-check" && method === "POST") {
+      // ord_1 shares a phone with ord_4, ord_2 a name with ord_5 (legacy mükerrer red / yellow).
+      const ids = new Set((parsedBody as { order_public_ids?: string[] } | undefined)?.order_public_ids ?? []);
+      const data: Record<string, { phone_matches: string[]; name_matches: string[] }> = {};
+      if (ids.has("ord_1")) data.ord_1 = { phone_matches: ["GK-1004"], name_matches: [] };
+      if (ids.has("ord_2")) data.ord_2 = { phone_matches: [], name_matches: ["GK-1005"] };
+      return json(200, { data });
+    }
+    if (url.pathname === "/api/orders/surat-coverage" && method === "POST") {
+      const input = parsedBody as { city: string; district: string; address_line?: string | null };
+      const keyword = /at dışı|at disi|teslimat yok/i.test(`${input.city} ${input.district} ${input.address_line ?? ""}`);
+      return json(200, { status: keyword ? "not_covered" : "unknown", source: "keyword_fallback", warning: keyword, message: keyword ? "Bu adrese sürat kargo teslimat yapmamaktadır" : null, uncovered_areas: [], checked_at: null, live_gate: "providers.surat.live_mode", live_enabled: false, queued: false });
+    }
     if (url.pathname === "/api/orders") {
       const status = url.searchParams.get("status");
       const provider = url.searchParams.get("cargo_provider");

@@ -97,6 +97,7 @@ const explicitOptInOperations = new Set<ProviderOperation>([
   "call.report",
   "voice.message.send",
   "voice.message.report",
+  "address.coverage",
 ]);
 
 function liveModeEnabledFor(
@@ -468,6 +469,8 @@ export async function handleProviderDeliveryJobWithTransport(
 }
 
 const resultPersistingOperations = new Set<string>([
+  // Sürat AT coverage: the API reads the area list back from the attempt (order create AT warning).
+  "address.coverage",
   "contact.find",
   "contact.create",
   "contact.update",

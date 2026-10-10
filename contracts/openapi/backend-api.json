@@ -8668,6 +8668,78 @@
           }
         }
       }
+    },
+    "/api/orders/surat-coverage": {
+      "post": {
+        "operationId": "checkSuratCoverage",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SuratCoverageRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sürat AT (adrese teslim) coverage: today's live ATDurumListesi answer, else the legacy keyword check; queues a coverage job when live.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuratCoverageDecision"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/orders/duplicate-check": {
+      "post": {
+        "operationId": "checkOrderDuplicates",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrderDuplicateCheckRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Legacy mükerrer sipariş row icons for up to 200 orders in one call",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderDuplicateCheckResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -19416,6 +19488,140 @@
             }
           }
         ]
+      },
+      "SuratCoverageRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "city",
+          "district"
+        ],
+        "properties": {
+          "city": {
+            "type": "string",
+            "minLength": 1
+          },
+          "district": {
+            "type": "string",
+            "minLength": 1
+          },
+          "address_line": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "SuratCoverageDecision": {
+        "type": "object",
+        "required": [
+          "status",
+          "source",
+          "warning",
+          "live_gate",
+          "live_enabled",
+          "queued"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "covered",
+              "not_covered",
+              "partial",
+              "unknown"
+            ]
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "provider",
+              "keyword_fallback"
+            ]
+          },
+          "warning": {
+            "type": "boolean"
+          },
+          "message": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "uncovered_areas": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "checked_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "live_gate": {
+            "const": "providers.surat.live_mode"
+          },
+          "live_enabled": {
+            "type": "boolean"
+          },
+          "queued": {
+            "type": "boolean"
+          }
+        }
+      },
+      "OrderDuplicateCheckRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "order_public_ids"
+        ],
+        "properties": {
+          "order_public_ids": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 200,
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "OrderDuplicateCheckResponse": {
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "type": "object",
+            "description": "Only orders with duplicates; red = phone, yellow = name.",
+            "additionalProperties": {
+              "type": "object",
+              "required": [
+                "phone_matches",
+                "name_matches"
+              ],
+              "properties": {
+                "phone_matches": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "name_matches": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     }
   }

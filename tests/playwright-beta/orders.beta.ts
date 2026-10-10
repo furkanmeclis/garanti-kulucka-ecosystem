@@ -190,3 +190,15 @@ test("orders: source and date filters reach the API; mobile cards stay touch fri
   await expect(page.getByTestId("orders-cards")).toBeVisible();
   await expectResponsiveLayout(page, { checkTouchTargets: true });
 });
+
+test("orders: one bulk duplicate check marks rows red (phone) and yellow (name)", async ({ page }) => {
+  const state = await signIn(page);
+  const table = page.getByTestId("orders-table");
+  await expect(table.getByTestId("order-duplicate-phone-ord_1")).toBeVisible();
+  await expect(table.getByTestId("order-duplicate-name-ord_2")).toBeVisible();
+  await expect(table.getByTestId("order-duplicate-phone-ord_2")).toHaveCount(0);
+  await expect(table.getByTestId("order-duplicate-phone-ord_1")).toHaveAttribute("aria-label", "Aynı telefonla başka sipariş: GK-1004");
+  const checks = state.bodies.filter((entry) => entry.path === "/api/orders/duplicate-check");
+  expect(checks).toHaveLength(1);
+  expect((checks[0]!.body as { order_public_ids: string[] }).order_public_ids).toHaveLength(20);
+});
