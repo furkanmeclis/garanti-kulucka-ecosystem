@@ -25,12 +25,17 @@ export interface StorageOrphanReconciliationResult {
   };
 }
 
+/** An available upload not attached for a week is an orphan; younger ones may still be in a composer. */
+const availableGraceMs = 7 * 24 * 60 * 60 * 1000;
+
 export class StorageOrphanReconciler {
   private readonly client: S3Client;
 
   constructor(
     private readonly db: AppDatabase,
     private readonly env: NodeJS.ProcessEnv = process.env,
+    /** Test seam; defaults to an S3 DeleteObject. */
+    private readonly deleteObject?: (bucket: string, key: string) => Promise<void>,
   ) {
     const clientConfig: S3ClientConfig = {
       region: env.S3_REGION ?? "garage",
@@ -50,23 +55,31 @@ export class StorageOrphanReconciler {
 
   async reconcile(input: StorageOrphanReconciliationInput): Promise<StorageOrphanReconciliationResult> {
     const limit = Math.max(1, Math.min(100, input.limit));
+    const now = Date.now();
+    // Every table that references files (shortcut media, Instagram publications — not only message attachments),
+    // and a grace period for fresh uploads that are about to be attached.
     const candidates = await this.db
       .selectFrom("files")
-      .leftJoin("message_attachments", "message_attachments.file_id", "files.id")
       .select([
+        "files.id",
         "files.public_id",
         "files.bucket",
         "files.object_key",
         "files.upload_status",
       ])
-      .where("message_attachments.id", "is", null)
+      .where((expression) => expression.not(expression.exists(expression.selectFrom("message_attachments").select("message_attachments.id").whereRef("message_attachments.file_id", "=", "files.id"))))
+      .where((expression) => expression.not(expression.exists(expression.selectFrom("message_shortcut_attachments").select("message_shortcut_attachments.id").whereRef("message_shortcut_attachments.file_id", "=", "files.id"))))
+      .where((expression) => expression.not(expression.exists(expression.selectFrom("instagram_publications").select("instagram_publications.id").whereRef("instagram_publications.file_id", "=", "files.id"))))
       .where((expression) =>
         expression.or([
-          expression("files.upload_status", "=", "available"),
+          expression.and([
+            expression("files.upload_status", "=", "available"),
+            expression("files.created_at", "<", new Date(now - availableGraceMs)),
+          ]),
           expression("files.upload_status", "=", "abandoned"),
           expression.and([
             expression("files.upload_status", "=", "pending"),
-            expression("files.created_at", "<", new Date(Date.now() - 24 * 60 * 60 * 1000)),
+            expression("files.created_at", "<", new Date(now - 24 * 60 * 60 * 1000)),
           ]),
         ]),
       )
@@ -79,14 +92,23 @@ export class StorageOrphanReconciler {
     let deletedCount = 0;
 
     for (const candidate of candidates) {
+      let deleted = false;
       if (apply) {
-        await this.client.send(
-          new DeleteObjectCommand({
-            Bucket: candidate.bucket,
-            Key: candidate.object_key,
-          }),
-        );
-        deletedCount += 1;
+        // Row first: the ON DELETE RESTRICT foreign keys refuse it if the file got attached meanwhile, and a deleted
+        // row is not selected again (the object used to be deleted while the row was re-picked every run).
+        const removed = await this.db
+          .deleteFrom("files")
+          .where("id", "=", candidate.id)
+          .returning("id")
+          .executeTakeFirst()
+          .catch(() => undefined);
+        if (removed) {
+          await (this.deleteObject
+            ? this.deleteObject(candidate.bucket, candidate.object_key)
+            : this.client.send(new DeleteObjectCommand({ Bucket: candidate.bucket, Key: candidate.object_key })).then(() => undefined));
+          deleted = true;
+          deletedCount += 1;
+        }
       }
 
       results.push({
@@ -95,7 +117,7 @@ export class StorageOrphanReconciler {
         object_key: candidate.object_key,
         upload_status: candidate.upload_status,
         action: apply ? "delete_object" as const : "report_only" as const,
-        deleted: apply,
+        deleted,
       });
     }
 
