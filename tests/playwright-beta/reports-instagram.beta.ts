@@ -73,8 +73,8 @@ async function signIn(page: Page, role: string, viewport: { width: number; heigh
 
 test("reports: KPIs, presets, filters and breakdowns", async ({ page }) => {
   const state = await signIn(page, "admin");
-  await page.getByTestId("desktop-more-trigger").click();
-  await page.getByTestId("more-reports").click();
+  await page.getByTestId("nav-group-trigger-accounting").click();
+  await page.getByTestId("nav-item-reports").click();
   await expect.poll(() => pathOf(page)).toBe("/raporlar");
   await expect(page.getByTestId("reports-kpi-total")).toContainText("120");
   await expect(page.getByTestId("reports-kpi-revenue")).toContainText("245.000");

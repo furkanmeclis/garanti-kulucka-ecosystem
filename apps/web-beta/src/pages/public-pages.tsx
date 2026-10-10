@@ -7,7 +7,7 @@ import { useAuth } from "@/app/auth";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { LanguageMenu, ThemeMenu } from "@/layout/header-menus";
+import { LanguageMenu, ThemeToggle } from "@/layout/header-menus";
 import { formatDateTime } from "@/lib/format";
 import type { DataDeletionStatusLookup } from "@/lib/privacy";
 import { errorText, Field } from "./accounting-shared";
@@ -27,7 +27,7 @@ export function PublicLayout({ title, subtitle, icon, children, testId }: { titl
           </Button>
           <div className="flex gap-1">
             <LanguageMenu />
-            <ThemeMenu />
+            <ThemeToggle />
           </div>
         </div>
         <div className="flex items-center gap-3">

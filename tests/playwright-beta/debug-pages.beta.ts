@@ -104,8 +104,8 @@ test("whatsapp debug: config, stats, logs, dry-run test send and webhook verific
     verifyUrls.push(url.search);
     await route.fulfill({ status: 200, headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "Authorization, Content-Type, Accept", "Content-Type": "text/plain" }, body: url.searchParams.get("hub.challenge") ?? "" });
   });
-  await page.getByTestId("desktop-more-trigger").click();
-  await page.getByTestId("more-whatsappDebug").click();
+  await page.getByTestId("desktop-settings-link").click();
+  await page.getByTestId("settings-nav-item-whatsappDebug").click();
   await expect.poll(() => pathOf(page)).toBe("/ayarlar/whatsapp-debug");
   await expect(page.getByRole("heading", { name: "WhatsApp Debug" })).toBeVisible();
   const config = page.getByTestId("whatsapp-debug-config");
@@ -245,8 +245,8 @@ test("sürat debug: server-side clear confirms, deletes every Sürat attempt and
 
 test("cron debug: carrier cards, dry-run triggers with idempotency keys and filters", async ({ page }) => {
   const state = await open(page);
-  await page.getByTestId("desktop-more-trigger").click();
-  await page.getByTestId("more-cronDebug").click();
+  await page.getByTestId("desktop-settings-link").click();
+  await page.getByTestId("settings-nav-item-cronDebug").click();
   await expect.poll(() => pathOf(page)).toBe("/kargolar/cron-debug");
   await expect(page.getByRole("heading", { name: "Kargo Takip Cron Debug" })).toBeVisible();
   // Only shipment.track attempts count: 1 PTT run, 2 Sürat runs (one failed).
@@ -292,10 +292,11 @@ test("cron debug: carrier cards, dry-run triggers with idempotency keys and filt
 
 test("debug pages are manager-only", async ({ page }) => {
   await open(page, "calisan");
-  await page.getByTestId("desktop-more-trigger").click();
-  await expect(page.getByTestId("desktop-more-menu")).toBeVisible();
-  for (const key of ["suratDebug", "cronDebug", "whatsappDebug", "instagramDebug", "aiDebug", "aiTraining"]) await expect(page.getByTestId(`more-${key}`)).toHaveCount(0);
-  await page.keyboard.press("Escape");
+  await page.getByTestId("desktop-settings-link").click();
+  await expect(page.getByTestId("settings-nav")).toBeVisible();
+  await expect(page.getByTestId("settings-nav-item-settings")).toHaveAttribute("aria-current", "page");
+  await expect(page.getByTestId("settings-nav-developer")).toHaveCount(0);
+  for (const key of ["suratDebug", "cronDebug", "whatsappDebug", "instagramDebug", "aiDebug", "aiTraining"]) await expect(page.getByTestId(`settings-nav-item-${key}`)).toHaveCount(0);
   for (const path of ["/ayarlar/whatsapp-debug", "/ayarlar/instagram-debug", "/ayarlar/ai-debug", "/ayarlar/ai-egitim", "/kargolar/surat-debug", "/kargo/cron-debug"]) {
     await page.goto(path);
     await expect.poll(() => pathOf(page)).toBe("/");
@@ -329,6 +330,6 @@ test("debug pages: English labels and phone layout", async ({ page }) => {
 
   await page.setViewportSize(viewports.phone390);
   await page.getByTestId("mobile-menu-trigger").click();
-  const more = page.getByTestId("mobile-menu-more");
-  for (const label of ["Sürat Debug", "Cron Debug", "WhatsApp Debug", "Instagram Debug", "AI Debug", "AI Training"]) await expect(more.getByRole("link", { name: label, exact: true })).toBeVisible();
+  const settings = page.getByTestId("mobile-menu-settings");
+  for (const label of ["Sürat Debug", "Cron Debug", "WhatsApp Debug", "Instagram Debug", "AI Debug", "AI Training"]) await expect(settings.getByRole("link", { name: label, exact: true })).toBeVisible();
 });

@@ -111,8 +111,8 @@ async function signIn(page: Page, viewport: { width: number; height: number } = 
 
 test("invoices: totals, KolayBi panel, detail with PDF, payment and cancel", async ({ page }) => {
   const state = await signIn(page);
-  await page.getByTestId("desktop-more-trigger").click();
-  await page.getByTestId("more-invoices").click();
+  await page.getByTestId("nav-group-trigger-accounting").click();
+  await page.getByTestId("nav-item-invoices").click();
   await expect.poll(() => pathOf(page)).toBe("/faturalar");
   await expect(page.getByTestId("invoice-totals")).toContainText("1.800");
   await expect(page.getByTestId("kolaybi-live")).toHaveText("Canlı KolayBi kapalı — istekler kuru çalıştırılır");
@@ -225,8 +225,10 @@ test("accounting pages: phone layout, English and staff without access", async (
 
 test("staff cannot open accounting pages", async ({ page }) => {
   await signIn(page, viewports.desktop, "calisan");
-  await page.getByTestId("desktop-more-trigger").click();
-  await expect(page.getByTestId("more-invoices")).toHaveCount(0);
+  // Staff keep the Muhasebe group for their balance page only.
+  await page.getByTestId("nav-group-trigger-accounting").click();
+  await expect(page.getByTestId("nav-item-balances")).toBeVisible();
+  for (const key of ["invoices", "accounts", "reports"]) await expect(page.getByTestId(`nav-item-${key}`)).toHaveCount(0);
   await page.keyboard.press("Escape");
   await page.goto("/faturalar");
   await expect.poll(() => pathOf(page)).toBe("/");

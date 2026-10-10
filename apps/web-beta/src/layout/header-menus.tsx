@@ -1,11 +1,11 @@
-import { Bell, Download, Languages, LogOut, Monitor, Moon, Sun, User, Wifi, WifiOff } from "lucide-react";
+import { Bell, Download, Languages, LogOut, Moon, Sun, User, Wifi, WifiOff } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { displayName, initialsOf, useAuth } from "@/app/auth";
 import { navigationFor } from "@/app/navigation";
 import { useInstallPrompt } from "@/app/pwa-hooks";
-import { useTheme, type ThemePreference } from "@/app/theme";
+import { useTheme } from "@/app/theme";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -50,34 +50,24 @@ export function LanguageMenu() {
   );
 }
 
-const themeIcons = { light: Sun, dark: Moon, system: Monitor } as const;
-
-export function ThemeMenu() {
+/** One-click light/dark switch; "system" stays available on the settings page. */
+export function ThemeToggle() {
   const { t } = useTranslation();
-  const { theme, resolved, setTheme } = useTheme();
-  const Icon = resolved === "dark" ? Moon : Sun;
+  const { resolved, setTheme } = useTheme();
+  const dark = resolved === "dark";
+  const Icon = dark ? Moon : Sun;
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" aria-label={t("header.theme")} data-testid="theme-menu-trigger">
-          <Icon />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="min-w-40">
-        <DropdownMenuLabel>{t("header.theme")}</DropdownMenuLabel>
-        <DropdownMenuRadioGroup value={theme} onValueChange={(value) => setTheme(value as ThemePreference)}>
-          {(["light", "dark", "system"] as const).map((option) => {
-            const OptionIcon = themeIcons[option];
-            return (
-              <DropdownMenuRadioItem key={option} value={option} data-testid={`theme-option-${option}`}>
-                <OptionIcon />
-                {t(option === "light" ? "header.themeLight" : option === "dark" ? "header.themeDark" : "header.themeSystem")}
-              </DropdownMenuRadioItem>
-            );
-          })}
-        </DropdownMenuRadioGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <Button
+      variant="ghost"
+      size="icon"
+      aria-label={t("header.theme")}
+      aria-pressed={dark}
+      title={t(dark ? "header.themeLight" : "header.themeDark")}
+      onClick={() => setTheme(dark ? "light" : "dark")}
+      data-testid="theme-toggle"
+    >
+      <Icon />
+    </Button>
   );
 }
 

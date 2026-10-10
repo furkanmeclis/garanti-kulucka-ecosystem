@@ -3,6 +3,7 @@ import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { useAuth } from "@/app/auth";
 import { canAccessPath, homePathFor } from "@/app/navigation";
 import { AppShell } from "@/layout/app-shell";
+import { SettingsLayout } from "@/layout/settings-layout";
 import { OfflineScreen, SplashScreen } from "@/layout/status-screens";
 import { LoginPage, redirectTarget } from "@/pages/login-page";
 import { AccountsPage } from "@/pages/accounts-page";
@@ -68,15 +69,8 @@ export function App() {
       <Route path="/kargolar" element={<Protected><ShipmentsPage /></Protected>} />
       <Route path="/kargolar/pipeline" element={<Protected><CargoPipelinePage /></Protected>} />
       <Route path="/kargo/pipeline" element={<Navigate to="/kargolar/pipeline" replace />} />
-      <Route path="/kargolar/surat-debug" element={<Protected><SuratDebugPage /></Protected>} />
-      <Route path="/kargolar/cron-debug" element={<Protected><CronDebugPage /></Protected>} />
       <Route path="/kargo/surat-debug" element={<Navigate to="/kargolar/surat-debug" replace />} />
       <Route path="/kargo/cron-debug" element={<Navigate to="/kargolar/cron-debug" replace />} />
-      <Route path="/ayarlar" element={<Protected><SettingsPage /></Protected>} />
-      <Route path="/ayarlar/whatsapp-debug" element={<Protected><WhatsappDebugPage /></Protected>} />
-      <Route path="/ayarlar/instagram-debug" element={<Protected><InstagramDebugPage /></Protected>} />
-      <Route path="/ayarlar/ai-debug" element={<Protected><AiDebugPage /></Protected>} />
-      <Route path="/ayarlar/ai-egitim" element={<Protected><AiTrainingPage /></Protected>} />
       <Route path="/iptaller" element={<Protected><CancellationsPage /></Protected>} />
       <Route path="/stok" element={<Protected><InventoryPage /></Protected>} />
       <Route path="/bakiye" element={<Protected><BalancesPage /></Protected>} />
@@ -91,9 +85,19 @@ export function App() {
       <Route path="/sesli-asistan/sesli-mesajlar" element={<Protected><VoiceMessagesPage /></Protected>} />
       <Route path="/sesli-asistan/vapi" element={<Protected><VapiPage /></Protected>} />
       <Route path="/sesli-asistan/rehber" element={<Protected><PhonebookPage /></Protected>} />
-      <Route path="/kullanicilar" element={<Protected><UsersPage /></Protected>} />
-      <Route path="/islem-loglari" element={<Protected><ActivityLogsPage /></Protected>} />
-      <Route path="/veri-silme-talepleri" element={<Protected><DataDeletionRequestsPage /></Protected>} />
+      {/* Settings area: the pages keep their URLs and share the settings sub-nav layout. */}
+      <Route element={<Protected><SettingsLayout /></Protected>}>
+        <Route path="/ayarlar" element={<SettingsPage />} />
+        <Route path="/kullanicilar" element={<UsersPage />} />
+        <Route path="/islem-loglari" element={<ActivityLogsPage />} />
+        <Route path="/veri-silme-talepleri" element={<DataDeletionRequestsPage />} />
+        <Route path="/kargolar/surat-debug" element={<SuratDebugPage />} />
+        <Route path="/kargolar/cron-debug" element={<CronDebugPage />} />
+        <Route path="/ayarlar/whatsapp-debug" element={<WhatsappDebugPage />} />
+        <Route path="/ayarlar/instagram-debug" element={<InstagramDebugPage />} />
+        <Route path="/ayarlar/ai-debug" element={<AiDebugPage />} />
+        <Route path="/ayarlar/ai-egitim" element={<AiTrainingPage />} />
+      </Route>
       {/* Legacy and web use /kargo; the beta list lives at /kargolar. */}
       <Route path="/kargo" element={<Navigate to="/kargolar" replace />} />
       <Route path="*" element={<Protected><Navigate to="/" replace /></Protected>} />

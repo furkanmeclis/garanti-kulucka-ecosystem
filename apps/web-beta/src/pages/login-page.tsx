@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { LanguageMenu, ThemeMenu } from "@/layout/header-menus";
+import { LanguageMenu, ThemeToggle } from "@/layout/header-menus";
 import { ApiError, isNetworkError } from "@/lib/api";
 
 export function redirectTarget(state: unknown) {
@@ -66,7 +66,7 @@ export function LoginPage() {
     <main className="relative grid min-h-dvh place-items-center bg-muted/40 p-4">
       <div className="absolute top-[max(0.5rem,env(safe-area-inset-top))] right-2 flex gap-1">
         <LanguageMenu />
-        <ThemeMenu />
+        <ThemeToggle />
       </div>
       <Card className="w-full max-w-sm">
         <CardHeader className="items-center text-center">

@@ -68,8 +68,8 @@ async function signIn(page: Page, viewport: { width: number; height: number } = 
 
 test("desktop More menu opens İptaller; filter, search and inline note", async ({ page }) => {
   const state = await signIn(page);
-  await page.getByTestId("desktop-more-trigger").click();
-  await page.getByTestId("more-cancellations").click();
+  await page.getByTestId("nav-group-trigger-operations").click();
+  await page.getByTestId("nav-item-cancellations").click();
   await expect.poll(() => pathOf(page)).toBe("/iptaller");
   const table = page.getByTestId("cancellations-table");
   await expect(table.getByTestId("cancellations-row")).toHaveCount(3);
@@ -123,7 +123,7 @@ test("mobile cards, dismissed confirmation, English and the cargo operator is re
   const state = await signIn(page, viewports.phone360);
   page.on("dialog", (dialog) => void dialog.dismiss());
   await page.getByTestId("mobile-menu-trigger").click();
-  await page.getByTestId("mobile-menu-more").getByRole("link", { name: "İptaller" }).click();
+  await page.getByTestId("mobile-menu-operations").getByRole("link", { name: "İptaller" }).click();
   await expect.poll(() => pathOf(page)).toBe("/iptaller");
   const cards = page.getByTestId("cancellations-cards");
   await expect(cards.getByTestId("cancellations-card")).toHaveCount(3);
@@ -140,8 +140,9 @@ test("mobile cards, dismissed confirmation, English and the cargo operator is re
 
 test("cargo operator has no İptaller page", async ({ page }) => {
   await signIn(page, viewports.desktop, "kargo_operatoru");
-  await page.getByTestId("desktop-more-trigger").click();
-  await expect(page.getByTestId("more-cancellations")).toHaveCount(0);
+  await page.getByTestId("nav-group-trigger-operations").click();
+  await expect(page.getByTestId("nav-group-menu-operations")).toBeVisible();
+  await expect(page.getByTestId("nav-item-cancellations")).toHaveCount(0);
   await page.keyboard.press("Escape");
   await page.goto("/iptaller");
   await expect.poll(() => pathOf(page)).toBe("/siparisler");

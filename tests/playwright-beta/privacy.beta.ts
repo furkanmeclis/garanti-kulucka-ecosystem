@@ -81,8 +81,8 @@ test("veri silme: Meta callback reference status, English and mobile", async ({ 
 test("data deletion requests: managers review and close requests", async ({ page }) => {
   const state = await open(page, "/giris");
   await login(page, state);
-  await page.getByTestId("desktop-more-trigger").click();
-  await page.getByTestId("more-dataDeletionRequests").click();
+  await page.getByTestId("desktop-settings-link").click();
+  await page.getByTestId("settings-nav-item-dataDeletionRequests").click();
   await expect.poll(() => pathOf(page)).toBe("/veri-silme-talepleri");
   const table = page.getByTestId("deletion-requests-table");
   await expect(table).toContainText("PSID 1234567890");

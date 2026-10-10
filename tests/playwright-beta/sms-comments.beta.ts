@@ -92,8 +92,8 @@ async function signIn(page: Page, role: string, viewport: { width: number; heigh
 
 test("sms: template + variables guard, send, history filter and automatic sweep", async ({ page }) => {
   const state = await signIn(page, "calisan");
-  await page.getByTestId("desktop-more-trigger").click();
-  await page.getByTestId("more-sms").click();
+  await page.getByTestId("nav-group-trigger-operations").click();
+  await page.getByTestId("nav-item-sms").click();
   await expect.poll(() => pathOf(page)).toBe("/sms");
   await page.getByTestId("sms-phones").fill("0555 111 22 33\n05559998877, abc");
   await page.getByTestId("sms-template").selectOption("tpl_1");

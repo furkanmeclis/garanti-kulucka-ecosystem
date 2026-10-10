@@ -106,8 +106,8 @@ async function signIn(page: Page, role: string, viewport: { width: number; heigh
 
 test("stock: categories, critical warning, stock in/out, edit, history and delete", async ({ page }) => {
   const state = await signIn(page, "calisan");
-  await page.getByTestId("desktop-more-trigger").click();
-  await page.getByTestId("more-inventory").click();
+  await page.getByTestId("nav-group-trigger-operations").click();
+  await page.getByTestId("nav-item-inventory").click();
   await expect.poll(() => pathOf(page)).toBe("/stok");
   await expect(page.getByTestId("inventory-critical")).toContainText("2 ürün kritik seviyede");
   await expect(page.getByTestId("inventory-category-incubator")).toContainText("2 Ürün");

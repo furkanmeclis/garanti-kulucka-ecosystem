@@ -21,7 +21,10 @@
     "customers": "Müşteriler",
     "shipments": "Kargolar",
     "settings": "Ayarlar",
-    "more": "Daha fazla",
+    "operations": "Operasyon",
+    "accounting": "Muhasebe",
+    "instagram": "Instagram",
+    "voice": "Sesli Asistan",
     "cancellations": "İptaller",
     "invoices": "Faturalar",
     "accounts": "Cari Hesaplar",
@@ -45,7 +48,12 @@
     "whatsappDebug": "WhatsApp Debug",
     "instagramDebug": "Instagram Debug",
     "aiDebug": "AI Debug",
-    "aiTraining": "AI Eğitim"
+    "aiTraining": "AI Eğitim",
+    "settingsNav": "Ayarlar menüsü",
+    "settingsDescription": "Hesabınızı, ekibinizi, entegrasyonları ve geliştirici araçlarını yönetin.",
+    "settingsGeneral": "Genel",
+    "settingsManagement": "Yönetim",
+    "settingsDeveloper": "Geliştirici"
   },
   "header": {
     "search": "Ara",

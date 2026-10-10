@@ -51,8 +51,8 @@ async function open(page: Page, role = "admin", viewport: { width: number; heigh
 
 test("kargo pipeline: managers filter, act on rows and delete from the More menu page", async ({ page }) => {
   const state = await open(page);
-  await page.getByTestId("desktop-more-trigger").click();
-  await page.getByTestId("more-cargoPipeline").click();
+  await page.getByTestId("nav-group-trigger-operations").click();
+  await page.getByTestId("nav-item-cargoPipeline").click();
   await expect.poll(() => pathOf(page)).toBe("/kargolar/pipeline");
   const table = page.getByTestId("pipeline-table");
   const row = table.getByRole("row").filter({ has: page.getByTestId("pipeline-row-cpl_1") });
