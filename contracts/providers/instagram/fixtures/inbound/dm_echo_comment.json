@@ -1,0 +1,17 @@
+{
+  "object": "instagram",
+  "entry": [
+    {
+      "id": "IG_BUSINESS_FIXTURE_ID",
+      "time": 1791648100,
+      "messaging": [
+        { "sender": { "id": "IGSID_FIXTURE_CUSTOMER" }, "recipient": { "id": "IG_BUSINESS_FIXTURE_ID" }, "timestamp": 1791648100000, "message": { "mid": "aWdfZAG1fixture_dm_1", "text": "Kargom ne zaman gelir?" } },
+        { "sender": { "id": "IG_BUSINESS_FIXTURE_ID" }, "recipient": { "id": "IGSID_FIXTURE_CUSTOMER" }, "timestamp": 1791648110000, "message": { "mid": "aWdfZAG1fixture_echo_1", "text": "Yarın teslim edilecek.", "is_echo": true } },
+        { "sender": { "id": "IGSID_FIXTURE_CUSTOMER" }, "recipient": { "id": "IG_BUSINESS_FIXTURE_ID" }, "timestamp": 1791648120000, "read": { "mid": "aWdfZAG1fixture_echo_1" } }
+      ],
+      "changes": [
+        { "field": "comments", "value": { "id": "17900000000000001", "text": "Fiyat nedir?", "from": { "id": "IGSID_FIXTURE_COMMENTER", "username": "fixture.kullanici" }, "media": { "id": "17800000000000001", "media_product_type": "FEED" } } }
+      ]
+    }
+  ]
+}

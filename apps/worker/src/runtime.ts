@@ -17,6 +17,7 @@ import {
 } from "./processors.js";
 import { DatabaseShipmentWritebackRepository } from "./shipment-writeback.js";
 import { DatabaseDataRetentionStore } from "./data-retention.js";
+import { DatabaseInboundMessageStore } from "./inbound-messages.js";
 import { DatabaseInstagramAnalyticsRepository, enqueueInstagramInsights, instagramInsightsIntervalMs } from "./instagram-insights.js";
 import { StorageOrphanReconciler } from "./storage-orphans.js";
 import { DatabaseKolaybiProductRepository } from "./kolaybi-products.js";
@@ -113,6 +114,7 @@ export function createWorkerRuntime(options: WorkerRuntimeOptions): WorkerRuntim
   const instagramAnalyticsRepository = db ? new DatabaseInstagramAnalyticsRepository(db) : undefined;
   const kolaybiProductRepository = db ? new DatabaseKolaybiProductRepository(db) : undefined;
   const dataRetentionStore = db ? new DatabaseDataRetentionStore(db) : undefined;
+  const inboundMessageStore = db ? new DatabaseInboundMessageStore(db) : undefined;
   const mediaFileResolver =
     options.mediaFileResolver ?? (db ? new S3ProviderMediaFileResolver(db) : undefined);
   const settingsChangeSubscriber =
@@ -143,6 +145,7 @@ export function createWorkerRuntime(options: WorkerRuntimeOptions): WorkerRuntim
     ...(instagramAnalyticsRepository ? { instagramAnalyticsRepository } : {}),
     ...(kolaybiProductRepository ? { kolaybiProductRepository } : {}),
     ...(dataRetentionStore ? { dataRetentionStore } : {}),
+    ...(inboundMessageStore ? { inboundMessageStore } : {}),
   });
 
   const workers = new Map<QueueName, Worker<JobEnvelope>>();

@@ -1,0 +1,25 @@
+{
+  "object": "whatsapp_business_account",
+  "entry": [
+    {
+      "id": "WABA_FIXTURE_ID",
+      "changes": [
+        {
+          "field": "messages",
+          "value": {
+            "messaging_product": "whatsapp",
+            "metadata": { "display_phone_number": "908500000000", "phone_number_id": "PHONE_NUMBER_FIXTURE_ID" },
+            "contacts": [{ "profile": { "name": "Fixture Müşteri" }, "wa_id": "905551112233" }],
+            "messages": [
+              { "from": "905551112233", "id": "wamid.FIXTURE_TEXT_1", "timestamp": "1791648000", "type": "text", "text": { "body": "Merhaba, kuluçka makinesi fiyatı nedir?" } },
+              { "from": "905551112233", "id": "wamid.FIXTURE_IMAGE_1", "timestamp": "1791648060", "type": "image", "image": { "id": "MEDIA_FIXTURE_ID", "mime_type": "image/jpeg", "caption": "Bu model" } }
+            ],
+            "statuses": [
+              { "id": "wamid.FIXTURE_OUTBOUND_1", "status": "delivered", "timestamp": "1791648030", "recipient_id": "905551112233" }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

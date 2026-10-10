@@ -34,6 +34,7 @@ import { instagramAnalyticsFrom, type InstagramAnalyticsRepository } from "./ins
 import { kolaybiProductsFrom, type KolaybiProductRepository } from "./kolaybi-products.js";
 import { dataRetentionPolicyFromEnv, runDataRetention, type DataRetentionStore } from "./data-retention.js";
 import type { StorageOrphanReconciliationResult } from "./storage-orphans.js";
+import { processInboundWebhook, type InboundMessageStore } from "./inbound-messages.js";
 
 export type WorkerLifecycleEventName = "started" | "completed" | "failed";
 
@@ -140,6 +141,7 @@ export interface WorkerProcessorRegistryOptions {
   instagramAnalyticsRepository?: InstagramAnalyticsRepository;
   kolaybiProductRepository?: KolaybiProductRepository;
   dataRetentionStore?: DataRetentionStore;
+  inboundMessageStore?: InboundMessageStore;
 }
 
 export const workerQueueNames: QueueName[] = [
@@ -245,9 +247,22 @@ async function persistProviderFailureAttempt(
 
 function createProviderWebhookProcessor(
   providerAttemptRepository?: ProviderAttemptRepository,
+  inboundMessageStore?: InboundMessageStore,
 ): QueueProcessor {
   return async (job) => {
     const envelope = assertJobMatchesQueue("provider-webhooks", job);
+    // The API's webhook ingestion queues the stored event id (not a provider envelope): turn it into
+    // conversations / messages / comments. Before this, every such job failed name validation and dead-lettered.
+    if (envelope.name === "provider.webhook.received") {
+      const eventPublicId = (envelope.payload as { webhook_event_public_id?: unknown }).webhook_event_public_id;
+      if (typeof eventPublicId !== "string" || !eventPublicId) {
+        throw new Error("Webhook job payload is missing webhook_event_public_id");
+      }
+      if (!inboundMessageStore) {
+        throw new Error("Inbound webhook processing requires a database-backed store");
+      }
+      return processInboundWebhook(inboundMessageStore, eventPublicId);
+    }
     assertProviderJobName(envelope);
     const requestEnvelope = providerRequestEnvelopeSchema.parse(
       (envelope.payload as { envelope?: unknown }).envelope,
@@ -639,8 +654,9 @@ export function createWorkerProcessorRegistry(
   const kolaybiProductRepository = typeof options === "function" ? undefined : options.kolaybiProductRepository;
   const dataRetentionStore =
     typeof options === "function" ? undefined : options.dataRetentionStore;
+  const inboundMessageStore = typeof options === "function" ? undefined : options.inboundMessageStore;
   const processors = new Map<QueueName, QueueProcessor>([
-    ["provider-webhooks", createProviderWebhookProcessor(providerAttemptRepository)],
+    ["provider-webhooks", createProviderWebhookProcessor(providerAttemptRepository, inboundMessageStore)],
     [
       "provider-delivery",
       createProviderDeliveryProcessor(
