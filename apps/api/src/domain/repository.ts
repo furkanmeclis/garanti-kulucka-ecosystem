@@ -1557,17 +1557,18 @@ export class DomainRepository {
   }
 
   async getTodaySoldUnits(): Promise<number> {
-    const result = await sql<{ units: string | number | null }>`
-      select coalesce(sum(coalesce(items.units, 1)), 0) as units
-      from orders
-      left join lateral (
-        select sum(order_items.quantity) as units from order_items where order_items.order_id = orders.id
-      ) items on true
-      where orders.deleted_at is null
-        and orders.status not in ('cancelled', 'returned')
-        and orders.created_at >= date_trunc('day', now() at time zone 'Europe/Istanbul') at time zone 'Europe/Istanbul'
-    `.execute(this.db);
-    return Number(result.rows[0]?.units ?? 0);
+    const row = await this.db
+      .selectFrom("orders")
+      .select(
+        sql<string | number | null>`coalesce(sum(coalesce((select sum(order_items.quantity) from order_items where order_items.order_id = orders.id), 1)), 0)`.as(
+          "units",
+        ),
+      )
+      .where("orders.deleted_at", "is", null)
+      .where("orders.status", "not in", ["cancelled", "returned"])
+      .where(sql<boolean>`orders.created_at >= date_trunc('day', now() at time zone 'Europe/Istanbul') at time zone 'Europe/Istanbul'`)
+      .executeTakeFirst();
+    return Number(row?.units ?? 0) || 0;
   }
 
   async getOrderSummary(): Promise<OrderSummaryRecord> {

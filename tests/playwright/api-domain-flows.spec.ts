@@ -376,6 +376,8 @@ class FixtureQuery {
   private readonly whereValues = new Map<string, unknown>();
   private readonly whereOperators = new Map<string, string>();
   private readonly aggregateCounts = new Map<string, string | "*">();
+  /** Raw SQL aggregate aliases (`count(*) filter (...) as x`), answered from the fixture rows by alias name. */
+  private readonly rawAggregates: string[] = [];
 
   constructor(private readonly table: string) {}
 
@@ -392,6 +394,13 @@ class FixtureQuery {
   }
 
   select(selection?: unknown) {
+    if (Array.isArray(selection)) {
+      for (const item of selection) {
+        const alias = item && typeof item === "object" && "alias" in item ? (item as { alias: unknown }).alias : null;
+        if (typeof alias === "string") this.rawAggregates.push(alias);
+      }
+      return this;
+    }
     if (typeof selection !== "function") {
       return this;
     }
@@ -536,6 +545,23 @@ class FixtureQuery {
   }
 
   async executeTakeFirst() {
+    // DomainRepository.getConversationCounts: one aggregate row over every conversation.
+    if (this.table === "conversations" && this.rawAggregates.includes("total_count")) {
+      const rows = [conversation];
+      const channel = (row: typeof conversation) => row.channel.toLowerCase();
+      return {
+        total_count: rows.length,
+        unread_conversation_count: rows.filter((row) => row.unread_count > 0).length,
+        unread_message_count: rows.reduce((sum, row) => sum + row.unread_count, 0),
+        pool_count: rows.filter((row) => row.is_in_pool).length,
+        human_agent_count: rows.filter((row) => row.human_agent_enabled).length,
+        whatsapp_count: rows.filter((row) => channel(row) === "whatsapp").length,
+        instagram_count: rows.filter((row) => channel(row) === "instagram").length,
+        facebook_count: rows.filter((row) => ["facebook", "messenger"].includes(channel(row))).length,
+        open_count: rows.filter((row) => row.status === "open").length,
+        closed_count: rows.filter((row) => row.status === "closed").length,
+      };
+    }
     if (this.aggregateCounts.size > 0) {
       const rows = await this.execute() as Array<Record<string, unknown>>;
       return Object.fromEntries(
