@@ -39,11 +39,19 @@ class FakeSelectBuilder {
   private readonly clauses: Array<{ column: string; value: unknown }> = [];
 
   constructor(
-    private readonly table: "integration_providers" | "integration_accounts",
+    private readonly table: "integration_providers" | "integration_accounts" | "provider_attempts",
     private readonly state: FakeDatabaseState,
   ) {}
 
   select(_columns: readonly string[]): this {
+    return this;
+  }
+
+  selectAll(): this {
+    return this;
+  }
+
+  forUpdate(): this {
     return this;
   }
 
@@ -53,6 +61,8 @@ class FakeSelectBuilder {
   }
 
   async executeTakeFirst() {
+    // No earlier successful attempt for the idempotency key in these fixtures.
+    if (this.table === "provider_attempts") return undefined;
     if (this.table === "integration_providers") {
       const providerKey = this.clauses.find((clause) => clause.column === "key")?.value;
       return providerKey === this.state.provider.key && this.state.provider.is_active
@@ -116,7 +126,7 @@ interface FakeDatabaseState {
 
 function createFakeDatabase(state: FakeDatabaseState): AppDatabase {
   const transaction = {
-    selectFrom: (table: "integration_providers" | "integration_accounts") =>
+    selectFrom: (table: "integration_providers" | "integration_accounts" | "provider_attempts") =>
       new FakeSelectBuilder(table, state),
     insertInto: (table: "provider_attempts") => {
       expect(table).toBe("provider_attempts");

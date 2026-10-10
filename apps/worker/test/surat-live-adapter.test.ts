@@ -577,3 +577,35 @@ describe("Sürat ATDurumListesi (address.coverage)", () => {
     expect(livePersisted[0]).toMatchObject({ status: "success", response_metadata: { live_call_performed: true, result: { data: { at_disi: 1 } } } });
   });
 });
+
+describe("provider-delivery replay guard", () => {
+  it("never repeats a live carrier call whose idempotency key already succeeded (BullMQ retry / re-queue)", async () => {
+    const persisted: ProviderAttempt[] = [];
+    const captured: SuratTransportRequest[] = [];
+    const base = attemptRepository(persisted);
+    let succeeded = false;
+    const repository: ProviderAttemptRepository = {
+      persist: async (attempt) => {
+        if (attempt.status === "success" && attempt.response_metadata.live_call_performed === true) succeeded = true;
+        return base.persist(attempt);
+      },
+      findLiveSuccess: async (_provider, key) =>
+        succeeded && key === "shipment-create-surat-1" ? ({ public_id: "pat_1" } as Awaited<ReturnType<ProviderAttemptRepository["persist"]>>) : null,
+    };
+    const registry = createWorkerProcessorRegistry({
+      providerAttemptRepository: repository,
+      providerAccountConfigRepository: accountConfig(),
+      suratTransport: transportReturningSequence(captured, [
+        { status: 200, headers: {}, body: createStage1Response },
+        { status: 200, headers: {}, body: createStage2Response },
+      ]),
+    });
+
+    await registry.dispatch("provider-delivery", deliveryJob(createEnvelope()));
+    expect(captured).toHaveLength(2);
+    const replay = await registry.dispatch("provider-delivery", deliveryJob(createEnvelope()));
+    expect(replay).toMatchObject({ status: "replayed", live_call_performed: false });
+    expect(captured).toHaveLength(2);
+    expect(persisted.filter((attempt) => attempt.request_id === "req_surat_create")).toHaveLength(1);
+  });
+});

@@ -70,6 +70,16 @@ export interface ShipmentTrackingProcessorResult {
   };
 }
 
+/** A provider-delivery job whose idempotency key already succeeded live: nothing is sent or persisted again. */
+export interface ProviderDeliveryReplayResult {
+  provider: ProviderRequestEnvelope["provider"];
+  request_id: string;
+  queue: "provider-delivery";
+  status: "replayed";
+  live_call_performed: false;
+  previous_attempt_public_id: string;
+}
+
 export interface MigrationReportProcessorResult {
   queue: "migration-reports";
   status: "accepted_report";
@@ -285,6 +295,21 @@ function createProviderDeliveryProcessor(
     const requestEnvelope = providerRequestEnvelopeSchema.parse(
       (envelope.payload as { envelope?: unknown }).envelope,
     );
+    // Replay guard: a retried / re-queued job whose key already went through live never calls the carrier again.
+    const idempotencyKey = typeof requestEnvelope.payload.idempotency_key === "string" ? requestEnvelope.payload.idempotency_key : null;
+    if (idempotencyKey && providerAttemptRepository?.findLiveSuccess) {
+      const previous = await providerAttemptRepository.findLiveSuccess(requestEnvelope.provider, idempotencyKey);
+      if (previous) {
+        return {
+          provider: requestEnvelope.provider,
+          request_id: requestEnvelope.request_id,
+          queue: "provider-delivery",
+          status: "replayed",
+          live_call_performed: false,
+          previous_attempt_public_id: previous.public_id,
+        } satisfies ProviderDeliveryReplayResult;
+      }
+    }
     let result;
     try {
       if (providerAccountConfigRepository) {

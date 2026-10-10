@@ -83,6 +83,10 @@ export class MetricsProviderAttemptRepository implements ProviderAttemptReposito
     }
     return undefined as unknown as StoredProviderAttempt;
   }
+
+  async findLiveSuccess(provider: ProviderAttempt["provider"], idempotencyKey: string): Promise<StoredProviderAttempt | null> {
+    return this.inner?.findLiveSuccess ? this.inner.findLiveSuccess(provider, idempotencyKey) : null;
+  }
 }
 
 export function recordJobFailure(metrics: WorkerMetrics, queue: QueueName, job: Job<JobEnvelope> | undefined): void {

@@ -8,6 +8,19 @@ export type NewProviderAttempt = Insertable<ProviderAttemptsTable>;
 
 export interface ProviderAttemptRepository {
   persist: (attempt: ProviderAttempt) => Promise<StoredProviderAttempt>;
+  /**
+   * The successful live attempt already recorded for this idempotency key, if any. Provider-delivery uses it as a
+   * replay guard so a retried or re-queued job never repeats a carrier call that went through.
+   */
+  findLiveSuccess?: (provider: ProviderAttempt["provider"], idempotencyKey: string) => Promise<StoredProviderAttempt | null>;
+}
+
+function isUniqueViolation(error: unknown) {
+  return Boolean(error && typeof error === "object" && (error as { code?: unknown }).code === "23505");
+}
+
+function isLiveResponse(metadata: unknown) {
+  return Boolean(metadata && typeof metadata === "object" && (metadata as { live_call_performed?: unknown }).live_call_performed === true);
 }
 
 export interface ProviderAttemptResolvedReferences {
@@ -89,20 +102,56 @@ export class DatabaseProviderAttemptRepository implements ProviderAttemptReposit
         );
       }
 
-      return transaction
-        .insertInto("provider_attempts")
-        .values(
-          mapProviderAttemptToInsert(
-            attempt,
-            {
-              providerId: provider.id,
-              accountId: account?.id ?? null,
-            },
-            this.createPublicId(),
-          ),
-        )
-        .returningAll()
-        .executeTakeFirstOrThrow();
+      const row = mapProviderAttemptToInsert(
+        attempt,
+        {
+          providerId: provider.id,
+          accountId: account?.id ?? null,
+        },
+        this.createPublicId(),
+      );
+
+      // A key succeeds at most once (provider_attempts_idempotency_success_idx). A live success replaces an
+      // earlier dry-run success of the same key; a second live success (two workers raced) keeps the first row.
+      if (attempt.status === "success" && attempt.idempotency_key) {
+        const existing = await transaction
+          .selectFrom("provider_attempts")
+          .selectAll()
+          .where("provider_id", "=", provider.id)
+          .where("idempotency_key", "=", attempt.idempotency_key)
+          .where("status", "=", "success")
+          .forUpdate()
+          .executeTakeFirst();
+        if (existing) {
+          if (isLiveResponse(existing.response_metadata) || !isLiveResponse(attempt.response_metadata)) return existing;
+          await transaction.deleteFrom("provider_attempts").where("id", "=", existing.id).execute();
+        }
+      }
+
+      return transaction.insertInto("provider_attempts").values(row).returningAll().executeTakeFirstOrThrow();
+    }).catch(async (error: unknown) => {
+      // Lost an insert race for the same successful key: the other worker's row stands.
+      if (!isUniqueViolation(error) || attempt.status !== "success" || !attempt.idempotency_key) throw error;
+      const winner = await this.findSuccess(attempt.provider, attempt.idempotency_key);
+      if (!winner) throw error;
+      return winner;
     });
+  }
+
+  private async findSuccess(provider: string, idempotencyKey: string) {
+    const row = await this.db
+      .selectFrom("provider_attempts")
+      .innerJoin("integration_providers", "integration_providers.id", "provider_attempts.provider_id")
+      .selectAll("provider_attempts")
+      .where("integration_providers.key", "=", provider)
+      .where("provider_attempts.idempotency_key", "=", idempotencyKey)
+      .where("provider_attempts.status", "=", "success")
+      .executeTakeFirst();
+    return row ?? null;
+  }
+
+  async findLiveSuccess(provider: ProviderAttempt["provider"], idempotencyKey: string): Promise<StoredProviderAttempt | null> {
+    const row = await this.findSuccess(provider, idempotencyKey);
+    return row && isLiveResponse(row.response_metadata) ? row : null;
   }
 }
