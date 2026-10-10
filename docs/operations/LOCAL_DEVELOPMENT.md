@@ -59,6 +59,16 @@ docker compose --profile tools run --rm migrator migrate --apply --report-file /
 
 `MIGRATION_APPLY_ENABLED=true` yoksa veya `MIGRATION_BACKUP_EVIDENCE` okunabilir ve guncel bir backup manifest dosyasina isaret etmiyorsa komut veritabanina baglanmadan fail-closed cikar. Ayrintili operasyon adimlari icin `docs/operations/MIGRATION_APPLY_RUNBOOK.md` dosyasini kullanin.
 
+## Real-Postgres Tests (optional)
+
+Repository/SQL tests named `*.pg.test.ts` and `tests/integration/inbound-webhook-pipeline.test.ts` run only when
+`TEST_DATABASE_URL` points at a migrated database; otherwise they are skipped. They roll back or clean up their rows.
+
+```bash
+TEST_DATABASE_URL=postgres://garanti:garanti@localhost:5432/garanti npm run test:unit
+TEST_DATABASE_URL=postgres://garanti:garanti@localhost:5432/garanti npx vitest run tests/integration
+```
+
 ## First Admin
 
 Run this after database migrations. The command is manual by design and is not exposed as an API feature.
