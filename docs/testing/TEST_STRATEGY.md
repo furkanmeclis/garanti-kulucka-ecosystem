@@ -48,6 +48,11 @@ Playwright scenarios should run against local compose services:
 - Webphone config retrieval and call-log persistence
 - Migrator dry-run and verify flow
 
+### Meta App Review kayıtları (tests/meta-review)
+`*.review.ts` senaryoları test değil kanıt üretir: web-beta'yı İngilizce, 1440×900, altyazılı ve videolu koşturur.
+CI'da çalışmaz; `npm run review:videos` elle çalıştırılır. Taklit veri `tests/meta-review/fixtures.ts`, helpers paylaşımı
+`tests/playwright-beta/helpers.ts` üzerinden.
+
 ## CI Rule
 
 `npm run check` is the minimum gate and now runs:
