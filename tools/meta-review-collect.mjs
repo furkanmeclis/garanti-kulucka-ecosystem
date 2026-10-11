@@ -2,7 +2,7 @@
 import { execFileSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { delimiter, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const EXPECTED_PERMISSIONS = [
@@ -36,10 +36,17 @@ export function findManifests(root) {
   return found.sort((a, b) => a.permission.localeCompare(b.permission));
 }
 
-/** Playwright ships its own ffmpeg; use it for the optional mp4 so nothing else needs installing. */
+/**
+ * ffmpeg for the optional mp4: PLAYWRIGHT_FFMPEG, then a full ffmpeg on PATH (H.264 capable), then
+ * Playwright's own build as a last resort (WebM/PNG only, still enough for frame checks).
+ */
 export function findPlaywrightFfmpeg(home, env) {
   // An explicit override wins; a broken path only costs the mp4 (collect catches the ffmpeg failure).
   if (env.PLAYWRIGHT_FFMPEG) return env.PLAYWRIGHT_FFMPEG;
+  for (const dir of (env.PATH ?? "").split(delimiter).filter(Boolean)) {
+    const full = join(dir, process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg");
+    if (existsSync(full)) return full;
+  }
   const cache = join(home, "Library", "Caches", "ms-playwright");
   if (!existsSync(cache)) return null;
   for (const entry of readdirSync(cache).filter((name) => name.startsWith("ffmpeg-")).sort().reverse()) {

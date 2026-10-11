@@ -36,4 +36,15 @@ describe("meta-review-collect", () => {
     expect(findPlaywrightFfmpeg(root, {})).toContain("ffmpeg-1011/ffmpeg-mac");
     expect(findPlaywrightFfmpeg(mkdtempSync(join(tmpdir(), "empty-")), {})).toBeNull();
   });
+
+  it("prefers a full ffmpeg on PATH over the WebM-only Playwright build", () => {
+    const root = mkdtempSync(join(tmpdir(), "pw-"));
+    mkdirSync(join(root, "Library/Caches/ms-playwright/ffmpeg-1011"), { recursive: true });
+    writeFileSync(join(root, "Library/Caches/ms-playwright/ffmpeg-1011/ffmpeg-mac"), "");
+    const bin = join(root, "bin");
+    mkdirSync(bin);
+    writeFileSync(join(bin, "ffmpeg"), "", { mode: 0o755 });
+    expect(findPlaywrightFfmpeg(root, { PATH: `/nonexistent:${bin}` })).toBe(join(bin, "ffmpeg"));
+    expect(findPlaywrightFfmpeg(root, { PATH: bin, PLAYWRIGHT_FFMPEG: "/custom/ffmpeg" })).toBe("/custom/ffmpeg");
+  });
 });
