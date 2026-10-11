@@ -126,6 +126,9 @@ describe("PostgreSQL migrator dry-run E2E", () => {
         providerTimeEvents: 1,
         firstSeenEvents: 0,
         unresolvedShipments: 0,
+        sourceRows: 1,
+        supersededInsertTimeRows: 0,
+        undatedRows: 0,
       });
       expect(result.sourceManifest.rowContentChecksums).toHaveLength(8);
       expect(result.sourceManifest.rowContentChecksums).toEqual(

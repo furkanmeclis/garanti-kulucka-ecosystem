@@ -5,7 +5,7 @@ import type { VerifiedIntegrationAccount } from "../src/customer-mapping.js";
 import { migrationApplyDisabledMessage } from "../src/errors.js";
 import { calculateSourcePayloadChecksum } from "../src/legacy-source.js";
 import { createLegacyMappingCatalog, legacyMappingCatalog } from "../src/mapping-catalog.js";
-import { runMigration } from "../src/orchestrator.js";
+import { assertShipmentTrackingEventRowAccounting, runMigration } from "../src/orchestrator.js";
 import type {
   BatchReadOptions,
   CanonicalRecord,
@@ -25,6 +25,7 @@ import type {
   MigrationRunRegistration,
   MigrationRunState,
   SourceManifest,
+  ShipmentTrackingEventSourceRowAccounting,
   SourceTableSnapshot,
 } from "../src/types.js";
 
@@ -735,6 +736,20 @@ class LegacyTableSource implements LegacySource {
   async describeTables(entities: readonly MigrationEntity[]): Promise<SourceTableSnapshot[]> {
     this.operations.push("describe");
     return entities.map(legacySnapshotFor);
+  }
+}
+
+class AccountedTrackingSource extends LegacyTableSource {
+  constructor(
+    records: Partial<Record<MigrationEntity, LegacyRecord[]>>,
+    private readonly accounting: ShipmentTrackingEventSourceRowAccounting,
+  ) {
+    super(records);
+  }
+
+  async describeShipmentTrackingEventSourceRows(): Promise<ShipmentTrackingEventSourceRowAccounting> {
+    this.operations.push("describe:shipment_tracking_event_rows");
+    return this.accounting;
   }
 }
 
@@ -1559,6 +1574,51 @@ describe("shipment dry-run validation", () => {
       firstSeenEvents: 1,
       unresolvedShipments: 1,
     });
+  });
+
+  it("accounts for every raw tracking row when the source exposes row accounting", async () => {
+    const source = new AccountedTrackingSource(
+      { customers: legacyCustomerRows, shipments: legacyShipmentRows, shipment_tracking_events: legacyShipmentTrackingEventRows },
+      { sourceRows: 13, supersededInsertTimeRows: 4, undatedRows: 1 },
+    );
+
+    const result = await shipmentDryRun(source, ["customers", "shipments", "shipment_tracking_events"]);
+
+    expect(source.operations.at(-1)).toBe("describe:shipment_tracking_event_rows");
+    expect(result.dryRunReport?.shipmentTrackingEventTransform).toEqual({
+      transformedRows: 8,
+      uniqueEvents: 5,
+      duplicateRows: 2,
+      futureDatedRows: 1,
+      providerTimeEvents: 4,
+      firstSeenEvents: 1,
+      unresolvedShipments: 1,
+      sourceRows: 13,
+      supersededInsertTimeRows: 4,
+      undatedRows: 1,
+    });
+  });
+
+  it("fails closed when raw tracking rows are not fully accounted for", async () => {
+    const source = new AccountedTrackingSource(
+      { customers: legacyCustomerRows, shipments: legacyShipmentRows, shipment_tracking_events: legacyShipmentTrackingEventRows },
+      { sourceRows: 14, supersededInsertTimeRows: 4, undatedRows: 1 },
+    );
+
+    await expect(shipmentDryRun(source, ["customers", "shipments", "shipment_tracking_events"])).rejects.toThrow(
+      "Shipment tracking event row accounting mismatch: source rows 14, accounted 13 " +
+        "(transformed 8, superseded insert-time 4, undated 1)",
+    );
+    expect(() => assertShipmentTrackingEventRowAccounting(8, {
+      sourceRows: 12,
+      supersededInsertTimeRows: 4,
+      undatedRows: 1,
+    })).toThrow("source rows 12, accounted 13");
+    expect(() => assertShipmentTrackingEventRowAccounting(8, {
+      sourceRows: 13,
+      supersededInsertTimeRows: 4,
+      undatedRows: 1,
+    })).not.toThrow();
   });
 
   it("rejects shipments without customers before source access", async () => {

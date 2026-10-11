@@ -47,6 +47,7 @@ export async function executePostgresMigration(
           sourceSystem: input.sourceSystem,
           tables: canonicalSourceTableMap(legacyMappingCatalog),
           mappingCatalog: legacyMappingCatalog,
+          repeatableReadSnapshot: true,
         });
 
         return runMigration({
@@ -82,6 +83,7 @@ export async function executePostgresMigration(
       sourceSystem: input.sourceSystem,
       tables: canonicalSourceTableMap(legacyMappingCatalog),
       mappingCatalog: legacyMappingCatalog,
+      repeatableReadSnapshot: true,
     });
 
     return runMigration({

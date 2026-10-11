@@ -72,6 +72,7 @@ import type {
   OrderItemTransformSummary,
   OrderTransformSummary,
   ProductTransformSummary,
+  ShipmentTrackingEventSourceRowAccounting,
   ShipmentTrackingEventTransformSummary,
   ShipmentTransformSummary,
   SourceDatabaseIdentity,
@@ -361,6 +362,9 @@ function trackSourceRowContent(
   return {
     count: (entity) => source.count(entity),
     describeTables: (entities) => source.describeTables(entities),
+    ...(source.describeShipmentTrackingEventSourceRows
+      ? { describeShipmentTrackingEventSourceRows: () => source.describeShipmentTrackingEventSourceRows!() }
+      : {}),
     readBatch: async (entity, options) => {
       const records = await source.readBatch(entity, options);
       recordsByEntity.get(entity)?.push(...records);
@@ -1040,6 +1044,10 @@ async function validateShipmentTrackingEventBatches(
       duplicateRows += Math.max(0, rawRowCount - 1);
     }
   }
+  const accounting = source.describeShipmentTrackingEventSourceRows
+    ? await source.describeShipmentTrackingEventSourceRows()
+    : undefined;
+  if (accounting) assertShipmentTrackingEventRowAccounting(transformedRows, accounting);
   return Object.freeze({
     transformedRows,
     uniqueEvents,
@@ -1048,7 +1056,33 @@ async function validateShipmentTrackingEventBatches(
     providerTimeEvents,
     firstSeenEvents,
     unresolvedShipments,
+    ...(accounting
+      ? {
+        sourceRows: accounting.sourceRows,
+        supersededInsertTimeRows: accounting.supersededInsertTimeRows,
+        undatedRows: accounting.undatedRows,
+      }
+      : {}),
   });
+}
+
+/**
+ * Every raw legacy tracking row must be accounted for exactly once: carried by an event or future marker
+ * (`transformedRows`), superseded by a provider-time row of the same group, or undated. A mismatch means the
+ * aggregate dropped or double-counted rows, so the dry-run fails closed.
+ */
+export function assertShipmentTrackingEventRowAccounting(
+  transformedRows: number,
+  accounting: ShipmentTrackingEventSourceRowAccounting,
+): void {
+  const accounted = transformedRows + accounting.supersededInsertTimeRows + accounting.undatedRows;
+  if (accounted !== accounting.sourceRows) {
+    throw new Error(
+      `Shipment tracking event row accounting mismatch: source rows ${accounting.sourceRows}, accounted ${accounted} ` +
+        `(transformed ${transformedRows}, superseded insert-time ${accounting.supersededInsertTimeRows}, ` +
+        `undated ${accounting.undatedRows})`,
+    );
+  }
 }
 
 function ownSourceTableSnapshots(snapshots: readonly SourceTableSnapshot[]): SourceTableSnapshot[] {

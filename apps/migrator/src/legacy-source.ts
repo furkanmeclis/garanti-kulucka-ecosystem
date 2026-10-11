@@ -4,6 +4,7 @@ import type {
   LegacyRecord,
   LegacySource,
   MigrationEntity,
+  ShipmentTrackingEventSourceRowAccounting,
   SourceColumnSnapshot,
   SourceTableSnapshot,
 } from "./types.js";
@@ -43,6 +44,14 @@ export interface CreateLegacyDatabaseSourceInput {
   readonly tables: LegacySourceTableMap;
   readonly defaultIdColumn?: string;
   readonly mappingCatalog?: LegacyMappingCatalog;
+  /**
+   * Set only when `db` is a single connection inside an open REPEATABLE READ transaction (the runtime source
+   * transaction). Every read then sees the same snapshot, which makes two optimisations exact:
+   * - plain tables continue a sequential offset scan with keyset (`id > last id`) instead of OFFSET;
+   * - the shipment tracking event aggregate is computed once into a SCROLL cursor instead of once per batch.
+   * The cursor lives in the transaction and needs no write access, so the source stays read-only.
+   */
+  readonly repeatableReadSnapshot?: boolean;
 }
 
 interface ResolvedLegacyTable {
@@ -57,9 +66,13 @@ export class LegacyDatabaseSource implements LegacySource {
   private readonly sourceSystem: string;
   private readonly db: LegacyQueryDatabase;
   private readonly mappingsByTable: ReadonlyMap<string, LegacyTableMapping>;
+  private readonly repeatableReadSnapshot: boolean;
+  private readonly keysetContinuations = new Map<MigrationEntity, KeysetContinuation>();
+  private trackingEventCursor: Promise<TrackingEventCursorState> | undefined;
 
   constructor(input: CreateLegacyDatabaseSourceInput) {
     this.db = input.db;
+    this.repeatableReadSnapshot = input.repeatableReadSnapshot === true;
     this.sourceSystem = input.sourceSystem;
     this.tables = resolveTableMap(input.tables, input.defaultIdColumn ?? defaultSourceIdColumn);
     if (input.mappingCatalog) {
@@ -73,6 +86,9 @@ export class LegacyDatabaseSource implements LegacySource {
 
   async count(entity: MigrationEntity): Promise<number> {
     const table = this.resolveTable(entity);
+    if (entity === "shipment_tracking_events" && this.repeatableReadSnapshot) {
+      return (await this.openTrackingEventCursor(table)).eventRows;
+    }
     const result = await this.db.query<{ count: string | number | bigint }>(
       entity === "shipment_tracking_events"
         ? shipmentTrackingEventAggregateCountSql(table)
@@ -101,6 +117,15 @@ export class LegacyDatabaseSource implements LegacySource {
 
     const table = this.resolveTable(entity);
     if (entity === "shipment_tracking_events") {
+      if (options.afterSourceId !== undefined) {
+        throw new Error("Shipment tracking event aggregate reads are offset based");
+      }
+      if (this.repeatableReadSnapshot) {
+        const cursor = await this.openTrackingEventCursor(table);
+        await this.db.query(`move absolute ${options.offset ?? 0} in ${cursor.name}`);
+        const result = await this.db.query(`fetch forward ${options.limit} from ${cursor.name}`);
+        return result.rows.map((row) => this.toLegacyRecord(table, withoutCursorAccountingColumns(row)));
+      }
       const result = await this.db.query(
         shipmentTrackingEventAggregateReadSql(table),
         [options.limit, options.offset ?? 0],
@@ -110,22 +135,82 @@ export class LegacyDatabaseSource implements LegacySource {
 
     const tableName = quoteQualifiedIdentifier(table.tableName);
     const idColumn = quoteIdentifier(table.idColumn);
+    const offset = options.offset ?? 0;
+    // A sequential offset scan continues from the previous batch's last id: the same rows as OFFSET in a stable
+    // snapshot, but an index range scan instead of re-reading every earlier row. Any other offset (first batch
+    // after a resume, re-reads, out-of-order reads) falls back to OFFSET.
+    const continuation = options.afterSourceId === undefined && offset > 0 && this.repeatableReadSnapshot
+      ? this.keysetContinuations.get(entity)
+      : undefined;
+    const keysetAfter = options.afterSourceId !== undefined
+      ? options.afterSourceId
+      : continuation !== undefined && continuation.nextOffset === offset
+        ? continuation.lastId
+        : undefined;
     const parameters: unknown[] = [options.limit];
-    const cursorPredicate = options.afterSourceId ? ` where ${idColumn}::text > $2` : "";
-    const offsetClause = options.offset !== undefined && options.offset > 0 ? " offset $2" : "";
-
-    if (options.afterSourceId) {
-      parameters.push(options.afterSourceId);
-    } else if (options.offset !== undefined && options.offset > 0) {
-      parameters.push(options.offset);
+    let predicate = "";
+    let offsetClause = "";
+    if (keysetAfter !== undefined) {
+      predicate = ` where ${idColumn} > $2`;
+      parameters.push(keysetAfter);
+    } else if (offset > 0) {
+      offsetClause = " offset $2";
+      parameters.push(offset);
     }
 
     const result = await this.db.query(
-      `select * from ${tableName}${cursorPredicate} order by ${idColumn} asc limit $1${offsetClause}`,
+      `select * from ${tableName}${predicate} order by ${idColumn} asc limit $1${offsetClause}`,
       parameters,
     );
 
+    if (this.repeatableReadSnapshot && options.afterSourceId === undefined) {
+      this.rememberKeysetContinuation(entity, table, offset, result.rows);
+    }
+
     return result.rows.map((row) => this.toLegacyRecord(table, row));
+  }
+
+  async describeShipmentTrackingEventSourceRows(): Promise<ShipmentTrackingEventSourceRowAccounting> {
+    const table = this.resolveTable("shipment_tracking_events");
+    if (this.repeatableReadSnapshot) {
+      const cursor = await this.openTrackingEventCursor(table);
+      if (cursor.accounting !== null) return cursor.accounting;
+    }
+    const result = await this.db.query(shipmentTrackingEventAccountingSql(table));
+    const row = result.rows[0];
+    if (!row) throw new Error("Legacy source returned no shipment tracking event row accounting");
+    return parseTrackingEventAccounting(row, "");
+  }
+
+  private rememberKeysetContinuation(
+    entity: MigrationEntity,
+    table: ResolvedLegacyTable,
+    offset: number,
+    rows: readonly Record<string, unknown>[],
+  ): void {
+    const lastId = rows.length > 0 ? rows[rows.length - 1]?.[table.idColumn] : undefined;
+    if (typeof lastId === "string" || typeof lastId === "number" || typeof lastId === "bigint") {
+      this.keysetContinuations.set(entity, { nextOffset: offset + rows.length, lastId });
+    } else {
+      this.keysetContinuations.delete(entity);
+    }
+  }
+
+  private openTrackingEventCursor(table: ResolvedLegacyTable): Promise<TrackingEventCursorState> {
+    this.trackingEventCursor ??= this.declareTrackingEventCursor(table);
+    return this.trackingEventCursor;
+  }
+
+  private async declareTrackingEventCursor(table: ResolvedLegacyTable): Promise<TrackingEventCursorState> {
+    const name = trackingEventCursorName;
+    // SCROLL keeps the sorted aggregate in the cursor's tuplestore, so count, every batch and re-reads
+    // (apply checksum pass, then apply) are served from one aggregation over the raw table.
+    await this.db.query(`declare ${name} scroll cursor without hold for ${shipmentTrackingEventCursorSql(table)}`);
+    const first = await this.db.query(`fetch absolute 1 from ${name}`);
+    const row = first.rows[0];
+    if (!row) return { name, eventRows: 0, accounting: null };
+    const eventRows = parseNonNegativeInteger(row[cursorAccountingColumns.eventRows], "tracking event aggregate rows");
+    return { name, eventRows, accounting: parseTrackingEventAccounting(row, cursorAccountingPrefix) };
   }
 
   async describeTables(entities: readonly MigrationEntity[]): Promise<SourceTableSnapshot[]> {
@@ -295,6 +380,58 @@ function quoteIdentifier(identifier: string): string {
   return `"${identifier.replaceAll('"', '""')}"`;
 }
 
+interface KeysetContinuation {
+  readonly nextOffset: number;
+  readonly lastId: string | number | bigint;
+}
+
+interface TrackingEventCursorState {
+  readonly name: string;
+  readonly eventRows: number;
+  readonly accounting: ShipmentTrackingEventSourceRowAccounting | null;
+}
+
+const trackingEventCursorName = "migrator_shipment_tracking_events";
+const cursorAccountingPrefix = "__migrator_";
+const cursorAccountingColumns = {
+  eventRows: `${cursorAccountingPrefix}event_rows`,
+  sourceRows: `${cursorAccountingPrefix}source_rows`,
+  supersededInsertTimeRows: `${cursorAccountingPrefix}superseded_insert_time_rows`,
+  undatedRows: `${cursorAccountingPrefix}undated_rows`,
+} as const;
+
+function withoutCursorAccountingColumns(row: Record<string, unknown>): Record<string, unknown> {
+  const stripped: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(row)) {
+    if (!key.startsWith(cursorAccountingPrefix)) stripped[key] = value;
+  }
+  return stripped;
+}
+
+function parseTrackingEventAccounting(
+  row: Record<string, unknown>,
+  prefix: string,
+): ShipmentTrackingEventSourceRowAccounting {
+  return {
+    sourceRows: parseNonNegativeInteger(row[`${prefix}source_rows`], "tracking source rows"),
+    supersededInsertTimeRows: parseNonNegativeInteger(
+      row[`${prefix}superseded_insert_time_rows`],
+      "tracking superseded insert-time rows",
+    ),
+    undatedRows: parseNonNegativeInteger(row[`${prefix}undated_rows`], "tracking undated rows"),
+  };
+}
+
+function parseNonNegativeInteger(value: unknown, label: string): number {
+  const text = typeof value === "number" || typeof value === "bigint" ? String(value) : value;
+  if (typeof text !== "string" || !/^\d+$/.test(text)) {
+    throw new Error(`Legacy source returned invalid ${label}`);
+  }
+  const parsed = Number(text);
+  if (!Number.isSafeInteger(parsed)) throw new Error(`Legacy source returned invalid ${label}`);
+  return parsed;
+}
+
 function shipmentTrackingEventAggregateCountSql(table: ResolvedLegacyTable): string {
   return `select count(*) as count from (${shipmentTrackingEventAggregateSql(table)}) shipment_tracking_event_groups`;
 }
@@ -304,6 +441,56 @@ function shipmentTrackingEventAggregateReadSql(table: ResolvedLegacyTable): stri
 }
 
 function shipmentTrackingEventAggregateSql(table: ResolvedLegacyTable): string {
+  return `${shipmentTrackingEventCtes(table)}
+${shipmentTrackingEventSelect}`;
+}
+
+/**
+ * The same aggregate rows in the order the OFFSET reader uses, plus per-run accounting columns (stripped before
+ * payloads are built) so one aggregation also answers the plan count and the raw-row accounting.
+ */
+function shipmentTrackingEventCursorSql(table: ResolvedLegacyTable): string {
+  return `${shipmentTrackingEventCtes(table)},
+events as (
+${shipmentTrackingEventSelect}
+),
+accounting as (
+${shipmentTrackingEventAccountingSelect}
+)
+select
+  events.*,
+  count(*) over () as ${cursorAccountingColumns.eventRows},
+  accounting.source_rows as ${cursorAccountingColumns.sourceRows},
+  accounting.superseded_insert_time_rows as ${cursorAccountingColumns.supersededInsertTimeRows},
+  accounting.undated_rows as ${cursorAccountingColumns.undatedRows}
+from events
+cross join accounting
+order by events.id asc`;
+}
+
+function shipmentTrackingEventAccountingSql(table: ResolvedLegacyTable): string {
+  return `${shipmentTrackingEventCtes(table)}
+${shipmentTrackingEventAccountingSelect}`;
+}
+
+// Every raw row is in exactly one bucket: an event's raw_row_count (provider second, first_seen group, future
+// row), an insert-time copy of a group that also has a provider-time row (superseded), or undated (null tarih).
+const shipmentTrackingEventAccountingSelect = `select
+  (select count(*) from source_rows) as source_rows,
+  (select coalesce(sum(insert_time_row_count), 0) from group_rollup where has_real_provider_time)
+    as superseded_insert_time_rows,
+  (select count(*) from source_rows where tarih is null) as undated_rows`;
+
+const shipmentTrackingEventSelect = `select *
+from provider_events
+union all
+select *
+from first_seen_events
+union all
+select *
+from future_rows`;
+
+function shipmentTrackingEventCtes(table: ResolvedLegacyTable): string {
   const tableName = quoteQualifiedIdentifier(table.tableName);
   return `
 with source_rows as (
@@ -350,6 +537,7 @@ group_rollup as (
     min(tarih) as first_seen_at,
     min(id::text) as representative_source_id,
     count(*)::int as raw_row_count,
+    count(*) filter (where not is_real_provider_time) as insert_time_row_count,
     bool_or(is_real_provider_time) as has_real_provider_time
   from valid_rows
   group by kargo_id, durum, lokasyon, aciklama
@@ -385,15 +573,7 @@ future_rows as (
     true as is_future
   from source_rows
   where is_future
-)
-select *
-from provider_events
-union all
-select *
-from first_seen_events
-union all
-select *
-from future_rows`;
+)`;
 }
 
 function assertIdentifierPath(identifier: string): void {
