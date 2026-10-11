@@ -64,7 +64,7 @@ export async function collect({ root, outDir, ffmpeg }) {
     if (ffmpeg) {
       mp4 = join(outDir, `${permission}.mp4`);
       try {
-        execFileSync(ffmpeg, ["-y", "-loglevel", "error", "-i", webm, "-c:v", "libx264", "-pix_fmt", "yuv420p", "-movflags", "+faststart", mp4], { stdio: "inherit" });
+        execFileSync(ffmpeg, ["-y", "-loglevel", "error", "-i", webm, "-c:v", "libx264", "-pix_fmt", "yuv420p", "-movflags", "+faststart", mp4], { stdio: "pipe" });
       } catch {
         mp4 = null;
       }
@@ -79,6 +79,8 @@ async function main() {
   const ffmpeg = findPlaywrightFfmpeg(homedir(), process.env);
   if (!ffmpeg) console.log("mp4 skipped: no ffmpeg found (set PLAYWRIGHT_FFMPEG to enable)");
   const rows = await collect({ root, outDir, ffmpeg });
+  // Playwright's bundled ffmpeg is a VP8/WebM-only build, so H.264 fails there; say so once.
+  if (ffmpeg && rows.some((row) => row.webm && !row.mp4)) console.log(`mp4 skipped: ${ffmpeg} cannot encode H.264/MP4 (set PLAYWRIGHT_FFMPEG to a full ffmpeg)`);
   console.log("\nMeta App Review videos");
   for (const row of rows) console.log(`${row.webm ? "OK     " : "MISSING"}  ${row.permission.padEnd(40)}  ${row.webm ?? "-"}  ${row.mp4 ?? ""}`);
   const missing = rows.filter((row) => !row.webm);
