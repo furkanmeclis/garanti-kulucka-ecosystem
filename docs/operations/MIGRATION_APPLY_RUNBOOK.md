@@ -42,6 +42,8 @@ garanti-migrator migrate --dry-run --report-file /secure/migration/dry-run-repor
 
 Review the dry-run report before continuing.
 
+`MIGRATION_CONVERSATION_ACCOUNTS_FILE` is the single integration account snapshot for both conversations and customer external identities. Its `instagram` and `messenger` entries are also the accounts that customer `ig_`/`fb_` identities resolve to (one active account per provider; `whatsapp` entries are not customer identities). The dry-run fails closed, exactly like apply, when any customer external identity has no active account for its provider; the error lists only the provider names and the unresolved count. A passed dry-run therefore always reports `customerTransform.unresolvedIdentities = 0`. Customers carrying `woocommerce_id` or `kolaybi_id` cannot be resolved through this file yet.
+
 The report includes the full secret-free migration result. Confirm inline media counts/decoded byte totals, bridge `s3://` media counts per MIME (and zero `invalid_legacy_media_uri` blocked rows), customer resolution paths, shipment linkage counts, duplicate product warnings, and order total adjustment warnings before apply.
 
 ## 3. Apply
@@ -83,6 +85,8 @@ MIGRATION_CONVERSATION_ACCOUNTS_FILE=/secure/migration/conversation-accounts.jso
 MIGRATION_USER_PUBLIC_IDS_FILE=/secure/migration/user-public-ids.json \
 garanti-migrator migrate --apply --report-file /secure/migration/apply-report.json
 ```
+
+Pass the same `MIGRATION_CONVERSATION_ACCOUNTS_FILE` used for the dry-run; without it apply stops at the first customer batch that carries an external identity.
 
 The apply command registers the run manifest, applies batches in dependency order, resumes completed batches by persisted state, runs deferred reconciliation, runs verification, and writes a secret-free operation report.
 

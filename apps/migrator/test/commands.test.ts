@@ -66,6 +66,7 @@ describe("migrator commands", () => {
     const accounts = [
       { publicId: "iac_whatsapp_main", providerKey: "whatsapp", status: "active", externalAccountId: null },
       { publicId: "iac_instagram_main", providerKey: "instagram", status: "active", externalAccountId: "ig-17841" },
+      { publicId: "iac_messenger_old", providerKey: "messenger", status: "inactive", externalAccountId: null },
     ];
     const executeMigration = vi.fn().mockResolvedValue(undefined);
 
@@ -90,6 +91,11 @@ describe("migrator commands", () => {
         sourceSystem: "legacy_postgres",
         batchSize: 500,
         conversationAccounts: accounts,
+        // Customer identity accounts come from the same file: instagram/messenger only, status kept.
+        integrationAccounts: [
+          { publicId: "iac_instagram_main", providerKey: "instagram", status: "active" },
+          { publicId: "iac_messenger_old", providerKey: "messenger", status: "inactive" },
+        ],
         userPublicIds: new Map([["7b98c4c9-ac91-4e3a-9f83-d8c2ba6e3870", "usr_agent_1"]]),
       });
     } finally {
@@ -340,6 +346,7 @@ describe("migrator commands", () => {
           backupEvidenceCreatedAt: expect.any(String),
         }),
       }));
+      expect(executeMigration.mock.calls[0]![0]).not.toHaveProperty("integrationAccounts");
       expect(verifyTarget).toHaveBeenCalledWith(
         "postgres://target-secret:pass@db.example/canonical",
         "legacy-import-2026-10",
@@ -350,6 +357,56 @@ describe("migrator commands", () => {
       expect(report).not.toContain("source-secret");
       expect(report).not.toContain("target-secret");
       expect(report).not.toContain("postgres://");
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("derives customer identity accounts for apply from the conversation account snapshot", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "migrator-apply-accounts-"));
+    const evidenceFile = join(directory, "backup.json");
+    const accountsFile = join(directory, "accounts.json");
+    const accounts = [
+      { publicId: "iac_whatsapp_main", providerKey: "whatsapp", status: "active", externalAccountId: null },
+      { publicId: "iac_messenger_main", providerKey: "messenger", status: "active", externalAccountId: null },
+      { publicId: "iac_instagram_main", providerKey: "instagram", status: "active", externalAccountId: "ig-17841" },
+    ];
+    const executeMigration = vi.fn().mockResolvedValue({ mode: "apply", batches: [] });
+    const verifyTarget = vi.fn().mockResolvedValue({
+      status: "passed",
+      checks: [],
+      totals: { passed: 0, failed: 0 },
+      generatedAt: "2026-10-05T00:00:00.000Z",
+    });
+
+    try {
+      await writeFile(accountsFile, JSON.stringify(accounts));
+      await writeFile(evidenceFile, JSON.stringify({
+        targetDatabaseIdentity: { host: "db.example", port: "5432", database: "canonical" },
+        createdAt: new Date().toISOString(),
+      }));
+      await runMigratorCommand(
+        "migrate:apply",
+        {
+          SOURCE_DATABASE_URL: "postgres://db.example/legacy",
+          TARGET_DATABASE_URL: "postgres://db.example/canonical",
+          MIGRATION_RUN_ID: "legacy-import-2026-10",
+          MIGRATION_APPLY_ENABLED: "true",
+          MIGRATION_BACKUP_EVIDENCE: evidenceFile,
+          MIGRATION_CONVERSATION_ACCOUNTS_FILE: accountsFile,
+        },
+        {},
+        { executeMigration, verifyTarget, publishReport: null },
+      );
+
+      expect(executeMigration).toHaveBeenCalledWith(expect.objectContaining({
+        mode: "apply",
+        conversationAccounts: accounts,
+        integrationAccounts: [
+          { publicId: "iac_messenger_main", providerKey: "messenger", status: "active" },
+          { publicId: "iac_instagram_main", providerKey: "instagram", status: "active" },
+        ],
+      }));
     } finally {
       await rm(directory, { recursive: true, force: true });
     }

@@ -538,6 +538,7 @@ async function validateCustomerBatches(
   let resolvedIdentities = 0;
   let unresolvedIdentities = 0;
   let nameFallbackWarnings = 0;
+  const unresolvedProviders = new Set<string>();
   const publicIds = new Map<string, string>();
   const publicIdsByPhone = new Map<string, string[]>();
 
@@ -563,6 +564,18 @@ async function validateCustomerBatches(
     const resolution = resolveCustomerExternalIdentities(candidates, accounts);
     resolvedIdentities += resolution.resolved.length;
     unresolvedIdentities += resolution.unresolved.length;
+    for (const identity of resolution.unresolved) unresolvedProviders.add(identity.providerKey);
+  }
+
+  // Apply refuses any customer whose external identity has no active account for its provider, so the
+  // dry-run fails closed the same way instead of only counting them (dry-run and apply must agree).
+  if (unresolvedProviders.size > 0) {
+    const providers = [...unresolvedProviders].sort();
+    throw new Error(
+      `Customer external identity dry-run requires resolved integration accounts for providers: ${providers.join(", ")} `
+        + `(${unresolvedIdentities} unresolved identities; supply one active account per provider, `
+        + "instagram and messenger accounts come from MIGRATION_CONVERSATION_ACCOUNTS_FILE)",
+    );
   }
 
   return {

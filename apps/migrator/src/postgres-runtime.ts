@@ -62,6 +62,7 @@ export async function executePostgresMigration(
           sourceDatabaseIdentity: normalizePostgresDatabaseIdentity(input.sourceDatabaseUrl),
           entities: dryRunMigrationEntities(legacyMappingCatalog),
           ...(input.conversationAccounts ? { conversationAccounts: input.conversationAccounts } : {}),
+          ...(input.integrationAccounts ? { integrationAccounts: input.integrationAccounts } : {}),
           ...(input.userPublicIds ? { userPublicIds: input.userPublicIds } : {}),
           ...(mediaStorage ? { mediaStorage } : {}),
           legacyMediaBucket: legacyMediaBucketFromEnv(),
@@ -95,6 +96,7 @@ export async function executePostgresMigration(
       sourceDatabaseIdentity: normalizePostgresDatabaseIdentity(input.sourceDatabaseUrl),
       entities: dryRunMigrationEntities(legacyMappingCatalog),
       ...(input.conversationAccounts ? { conversationAccounts: input.conversationAccounts } : {}),
+      ...(input.integrationAccounts ? { integrationAccounts: input.integrationAccounts } : {}),
       ...(input.userPublicIds ? { userPublicIds: input.userPublicIds } : {}),
       legacyMediaBucket: legacyMediaBucketFromEnv(),
     });

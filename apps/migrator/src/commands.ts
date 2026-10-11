@@ -4,6 +4,10 @@ import { dirname } from "node:path";
 import { Client } from "pg";
 import { createMigrationApplyApproval, type MigrationApplyApproval } from "./apply-approval.js";
 import { assertVerifiedConversationAccounts, type VerifiedConversationAccount } from "./conversation-mapping.js";
+import {
+  customerIdentityAccountsFromConversationAccounts,
+  type VerifiedIntegrationAccount,
+} from "./customer-mapping.js";
 import { normalizePostgresDatabaseIdentity } from "./database-identity.js";
 import { migrationApplyDisabledMessage, toSafeMigratorError } from "./errors.js";
 import { canonicalMigrationEntities } from "./plan.js";
@@ -42,6 +46,8 @@ export interface ExecutePostgresDryRunInput {
   readonly sourceSystem: string;
   readonly batchSize: number;
   readonly conversationAccounts?: readonly VerifiedConversationAccount[];
+  /** Customer external identity accounts; the CLI derives them from MIGRATION_CONVERSATION_ACCOUNTS_FILE. */
+  readonly integrationAccounts?: readonly VerifiedIntegrationAccount[];
   readonly userPublicIds?: ReadonlyMap<string, string>;
 }
 
@@ -54,6 +60,8 @@ export interface ExecutePostgresApplyInput {
   readonly batchSize: number;
   readonly applyApproval?: MigrationApplyApproval;
   readonly conversationAccounts?: readonly VerifiedConversationAccount[];
+  /** Customer external identity accounts; the CLI derives them from MIGRATION_CONVERSATION_ACCOUNTS_FILE. */
+  readonly integrationAccounts?: readonly VerifiedIntegrationAccount[];
   readonly userPublicIds?: ReadonlyMap<string, string>;
 }
 
@@ -145,6 +153,9 @@ export async function runMigratorCommand(
     const conversationAccounts = conversationAccountsFile
       ? await readConversationAccountsFile(conversationAccountsFile)
       : undefined;
+    const integrationAccounts = conversationAccounts
+      ? customerIdentityAccountsFromConversationAccounts(conversationAccounts)
+      : undefined;
     const userPublicIds = userPublicIdsFile ? await readUserPublicIdsFile(userPublicIdsFile) : undefined;
 
     if (command === "migrate:apply") {
@@ -160,6 +171,7 @@ export async function runMigratorCommand(
         batchSize,
         applyApproval,
         ...(conversationAccounts ? { conversationAccounts } : {}),
+        ...(integrationAccounts ? { integrationAccounts } : {}),
         ...(userPublicIds ? { userPublicIds } : {}),
       });
       commandReconciliation = extractDeferredReconciliation(commandMigration);
@@ -184,6 +196,7 @@ export async function runMigratorCommand(
       sourceSystem,
       batchSize,
       ...(conversationAccounts ? { conversationAccounts } : {}),
+      ...(integrationAccounts ? { integrationAccounts } : {}),
       ...(userPublicIds ? { userPublicIds } : {}),
     });
     await reportCommand(

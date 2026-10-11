@@ -113,6 +113,121 @@ describe("PostgreSQL full command apply E2E", () => {
   }, 180_000);
 });
 
+describe("PostgreSQL command customer identity accounts E2E", () => {
+  it("fails the dry-run like apply without accounts, then resolves social identities from the conversation account file", async () => {
+    const container = `gk-identity-accounts-${randomUUID().slice(0, 8)}`;
+    const tempDir = await mkdtemp(join(tmpdir(), "gk-identity-accounts-"));
+    docker([
+      "run",
+      "--detach",
+      "--rm",
+      "--name",
+      container,
+      "--publish",
+      "127.0.0.1::5432",
+      "--env",
+      "POSTGRES_PASSWORD=postgres",
+      "--env",
+      "POSTGRES_DB=legacy_source",
+      "postgres:18-alpine",
+    ]);
+
+    try {
+      await waitForPostgres(container, "legacy_source");
+      executeSql(container, "legacy_source", legacySchemaSql());
+      executeSql(container, "legacy_source", `
+        insert into public.musteriler (
+          id, ad, soyad, email, telefon, adres, il, ilce, posta_kodu, notlar,
+          woocommerce_id, kolaybi_id, olusturma_tarihi, guncelleme_tarihi, username
+        ) values
+          ('${socialCustomerIds[0]}', 'Ayşe', null, null, 'ig_17841400000000001', null, null, null, null, null,
+           null, null, '2024-01-02T03:04:05+03:00', null, null),
+          ('${socialCustomerIds[1]}', 'Çağrı', null, null, 'fb_2468013579', null, null, null, null, null,
+           null, null, '2024-01-02T03:04:05+03:00', null, null);
+      `);
+      executeSql(container, "postgres", "create database canonical_target");
+      for (const migration of await allCanonicalMigrations()) {
+        executeSql(container, "canonical_target", await migrationSection(migration, "up"));
+      }
+      executeSql(container, "canonical_target", `
+        insert into integration_accounts (public_id, provider_id, display_name, external_account_id, status)
+        select account.public_id, providers.id, account.public_id, account.external_account_id, 'active'
+        from (values
+          ('iac_whatsapp_main', 'whatsapp', null),
+          ('iac_messenger_main', 'messenger', null),
+          ('iac_instagram_main', 'instagram', '17841400000000000')
+        ) as account(public_id, provider_key, external_account_id)
+        join integration_providers providers on providers.key = account.provider_key;
+      `);
+
+      const targetUrl = postgresUrl(container, "canonical_target");
+      const evidenceFile = join(tempDir, "backup-evidence.json");
+      const accountsFile = join(tempDir, "conversation-accounts.json");
+      const dryRunReportFile = join(tempDir, "dry-run-report.json");
+      await writeFile(evidenceFile, JSON.stringify({
+        targetDatabaseIdentity: { host: "127.0.0.1", port: new URL(targetUrl).port, database: "canonical_target" },
+        createdAt: new Date().toISOString(),
+      }));
+      await writeFile(accountsFile, JSON.stringify([
+        { publicId: "iac_whatsapp_main", providerKey: "whatsapp", status: "active", externalAccountId: null },
+        { publicId: "iac_messenger_main", providerKey: "messenger", status: "active", externalAccountId: null },
+        { publicId: "iac_instagram_main", providerKey: "instagram", status: "active", externalAccountId: "17841400000000000" },
+      ]));
+      const sourceEnv = {
+        SOURCE_DATABASE_URL: postgresUrl(container, "legacy_source"),
+        MIGRATION_BATCH_SIZE: "1",
+      };
+      const applyEnv = {
+        ...sourceEnv,
+        TARGET_DATABASE_URL: targetUrl,
+        MIGRATION_RUN_ID: "identity_accounts_apply",
+        MIGRATION_APPLY_ENABLED: "true",
+        MIGRATION_BACKUP_EVIDENCE: evidenceFile,
+      };
+
+      await expect(runMigratorCommand("migrate:dry-run", sourceEnv)).rejects.toThrow(
+        "Customer external identity dry-run requires resolved integration accounts for providers: instagram, messenger",
+      );
+      await expect(runMigratorCommand("migrate:apply", applyEnv)).rejects.toThrow(
+        "Customer external identity apply requires resolved integration accounts for providers: instagram",
+      );
+      expect(query(container, "canonical_target", "select count(*) from customers")).toBe("0");
+
+      await expect(runMigratorCommand(
+        "migrate:dry-run",
+        { ...sourceEnv, MIGRATION_CONVERSATION_ACCOUNTS_FILE: accountsFile },
+        { reportFile: dryRunReportFile },
+      )).resolves.toBeUndefined();
+      const dryRunReport = JSON.parse(await readFile(dryRunReportFile, "utf8")) as {
+        migration: { dryRunReport: { customerTransform: Record<string, number> } };
+      };
+      expect(dryRunReport.migration.dryRunReport.customerTransform).toMatchObject({
+        transformedRows: 2,
+        resolvedIdentities: 2,
+        unresolvedIdentities: 0,
+      });
+
+      await expect(runMigratorCommand(
+        "migrate:apply",
+        { ...applyEnv, MIGRATION_CONVERSATION_ACCOUNTS_FILE: accountsFile },
+      )).resolves.toBeUndefined();
+      expect(query(container, "canonical_target", `
+        select string_agg(concat_ws(':', accounts.public_id, identities.external_id), ',' order by accounts.public_id)
+        from customer_external_identities identities
+        join integration_accounts accounts on accounts.id = identities.integration_account_id
+      `)).toBe("iac_instagram_main:17841400000000001,iac_messenger_main:2468013579");
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+      docker(["rm", "--force", container], true);
+    }
+  }, 180_000);
+});
+
+const socialCustomerIds = [
+  "5a000000-0000-4000-8000-000000000001",
+  "5a000000-0000-4000-8000-000000000002",
+] as const;
+
 async function migrationSection(filename: string, section: "up" | "down"): Promise<string> {
   const sql = await readFile(`${migrationsDirectory}/${filename}`, "utf8");
   const marker = "-- Down Migration";

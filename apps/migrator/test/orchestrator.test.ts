@@ -595,6 +595,8 @@ const legacyCustomerRows: LegacyRecord[] = [
 const verifiedAccounts: VerifiedIntegrationAccount[] = [
   { publicId: "iac_woo_main", providerKey: "woocommerce", status: "active" },
   { publicId: "iac_kolaybi_old", providerKey: "kolaybi", status: "inactive" },
+  { publicId: "iac_kolaybi_main", providerKey: "kolaybi", status: "active" },
+  { publicId: "iac_instagram_main", providerKey: "instagram", status: "active" },
 ];
 
 function customerDryRun(source: LegacySource, integrationAccounts?: VerifiedIntegrationAccount[]) {
@@ -625,8 +627,8 @@ describe("customer dry-run validation", () => {
     expect(result.dryRunReport?.customerTransform).toEqual({
       transformedRows: 3,
       addressDrafts: 2,
-      resolvedIdentities: 2,
-      unresolvedIdentities: 2,
+      resolvedIdentities: 4,
+      unresolvedIdentities: 0,
       nameFallbackWarnings: 1,
     });
     expect(result.sourceManifest.rowContentChecksums).toEqual([{
@@ -660,13 +662,33 @@ describe("customer dry-run validation", () => {
     expect(changed.sourceManifest.sourceManifestHash).not.toBe(unchanged.sourceManifest.sourceManifestHash);
   });
 
-  it("leaves every identity candidate unresolved when no accounts are supplied", async () => {
-    const result = await customerDryRun(new LegacyCustomerSource(legacyCustomerRows));
+  it("fails the dry-run closed, like apply, when identity candidates have no account", async () => {
+    const source = new LegacyCustomerSource(legacyCustomerRows);
+
+    await expect(customerDryRun(source)).rejects.toThrow(
+      "Customer external identity dry-run requires resolved integration accounts for providers: "
+        + "instagram, kolaybi, woocommerce (4 unresolved identities;",
+    );
+    expect(source.reads).toHaveLength(2);
+  });
+
+  it("names only the providers that still lack an active account", async () => {
+    await expect(customerDryRun(new LegacyCustomerSource(legacyCustomerRows), [
+      { publicId: "iac_woo_main", providerKey: "woocommerce", status: "active" },
+      { publicId: "iac_kolaybi_old", providerKey: "kolaybi", status: "inactive" },
+    ])).rejects.toThrow(
+      "Customer external identity dry-run requires resolved integration accounts for providers: instagram, kolaybi "
+        + "(2 unresolved identities;",
+    );
+  });
+
+  it("passes without accounts when no customer carries an external identity", async () => {
+    const result = await customerDryRun(new LegacyCustomerSource([legacyCustomerRows[1]!]));
 
     expect(result.dryRunReport?.customerTransform).toMatchObject({
-      transformedRows: 3,
+      transformedRows: 1,
       resolvedIdentities: 0,
-      unresolvedIdentities: 4,
+      unresolvedIdentities: 0,
     });
   });
 
@@ -711,7 +733,7 @@ describe("customer dry-run validation", () => {
 
     const result = await customerDryRun(source, accounts);
 
-    expect(result.dryRunReport?.customerTransform?.resolvedIdentities).toBe(2);
+    expect(result.dryRunReport?.customerTransform?.resolvedIdentities).toBe(4);
   });
 });
 
@@ -853,6 +875,7 @@ function conversationDryRun(source: LegacySource, entities: MigrationEntity[]) {
     now: new Date("2026-09-30T00:00:00.000Z"),
     sourceSystem: "legacy_postgres",
     sourceDatabaseIdentity: sourceIdentity,
+    integrationAccounts: verifiedAccounts,
     conversationAccounts: verifiedConversationAccounts,
     userPublicIds: new Map([[assignedUserId, "usr_agent_1"]]),
   });
@@ -1445,6 +1468,7 @@ function orderDryRun(source: LegacySource) {
     now: new Date("2026-09-30T00:00:00.000Z"),
     sourceSystem: "legacy_postgres",
     sourceDatabaseIdentity: sourceIdentity,
+    integrationAccounts: verifiedAccounts,
     userPublicIds: new Map([[assignedUserId, "usr_agent_1"]]),
   });
 }
@@ -1459,6 +1483,7 @@ function orderItemDryRun(source: LegacySource, entities: MigrationEntity[] = ["o
     now: new Date("2026-09-30T00:00:00.000Z"),
     sourceSystem: "legacy_postgres",
     sourceDatabaseIdentity: sourceIdentity,
+    integrationAccounts: verifiedAccounts,
     userPublicIds: new Map([[assignedUserId, "usr_agent_1"]]),
   });
 }
@@ -1473,6 +1498,7 @@ function shipmentDryRun(source: LegacySource, entities: MigrationEntity[] = ["sh
     now: new Date("2026-09-30T00:00:00.000Z"),
     sourceSystem: "legacy_postgres",
     sourceDatabaseIdentity: sourceIdentity,
+    integrationAccounts: verifiedAccounts,
   });
 }
 
