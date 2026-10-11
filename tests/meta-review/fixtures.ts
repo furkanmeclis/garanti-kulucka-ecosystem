@@ -75,16 +75,29 @@ export function inboxRoutes() {
     const sender = conversationId === "cnv_wa" ? "Emma Clarke" : conversationId === "cnv_ig" ? "Liam Walker" : "Olivia Bennett";
     (messages[conversationId] ??= []).push({ public_id: `msg_in_${counter}`, sender_type: "customer", sender_name: sender, body: text, is_read: false, sent_at: new Date().toISOString(), attachments: [] });
   };
+  /** Mirrors the newest message onto the inbox row, as the webhook pipeline would. */
+  const sync = (state: BackendState, id: string, opened: boolean) => {
+    const rows = messages[id] ?? [];
+    const row = state.conversations.find((item) => item.public_id === id);
+    const last = rows.at(-1);
+    if (!row || !last) return;
+    row.last_message_text = last.body ?? "";
+    row.last_message_sender_type = last.sender_type;
+    row.last_message_at = last.sent_at;
+    const unread = rows.filter((m) => m.sender_type === "customer" && !m.is_read).length;
+    // A list poll only ever raises the badge; opening the thread reads everything.
+    row.unread_count = opened ? unread : Math.max(row.unread_count, unread);
+  };
   const route: ExtraRoute = ({ method, path, body }, state) => {
+    if (path === "/api/conversations" && method === "GET") {
+      for (const id of Object.keys(messages)) sync(state, id, false);
+      return undefined;
+    }
     const thread = /^\/api\/conversations\/(cnv_\w+)\/messages$/.exec(path);
     if (thread && method === "GET") {
-      const rows = messages[thread[1]!] ?? [];
-      const row = state.conversations.find((item) => item.public_id === thread[1]);
-      if (row) {
-        const last = rows.at(-1);
-        if (last) { row.last_message_text = last.body ?? ""; row.last_message_sender_type = last.sender_type; row.unread_count = rows.filter((m) => m.sender_type === "customer" && !m.is_read).length; }
-      }
-      return { status: 200, body: { data: [...rows], has_more: false } };
+      for (const message of messages[thread[1]!] ?? []) message.is_read = true;
+      sync(state, thread[1]!, true);
+      return { status: 200, body: { data: [...(messages[thread[1]!] ?? [])], has_more: false } };
     }
     if (thread && method === "POST") {
       counter += 1;
