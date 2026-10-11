@@ -16,6 +16,8 @@ test("whatsapp_business_messaging", async ({ page }, testInfo) => {
   await s.caption("Opening Messages and filtering the inbox by WhatsApp");
   await page.goto("/mesajlar");
   await expect(page.getByTestId("page-messages")).toBeVisible();
+  await page.getByTestId("filter-unread").click();
+  await expect(page.getByTestId("filter-unread")).toHaveAttribute("aria-pressed", "false");
   await page.getByTestId("channel-filter").click();
   await page.getByTestId("channel-filter-whatsapp").click();
   await expect(row(page, "cnv_wa")).toBeVisible();

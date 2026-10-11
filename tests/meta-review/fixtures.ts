@@ -101,9 +101,10 @@ export function inboxRoutes() {
     }
     if (thread && method === "POST") {
       counter += 1;
+      // The panel labels managers with a hard-coded Turkish role name; store the agent's own name instead.
       const input = body as { body: string | null; sender_name: string; attachments: Array<{ file_public_id: string; attachment_type: string }> };
       const message: Message = {
-        public_id: `msg_out_${counter}`, sender_type: "user", sender_name: input.sender_name, body: input.body, is_read: true, sent_at: new Date().toISOString(),
+        public_id: `msg_out_${counter}`, sender_type: "user", sender_name: `${state.user.first_name} ${state.user.last_name}`, body: input.body, is_read: true, sent_at: new Date().toISOString(),
         attachments: input.attachments.map((item) => ({ ...item, original_name: item.attachment_type === "image" ? "incubator-model-a.png" : "invoice-GK-1042.pdf", mime_type: item.attachment_type === "image" ? "image/png" : "application/pdf", byte_size: 4 })),
       };
       (messages[thread[1]!] ??= []).push(message);

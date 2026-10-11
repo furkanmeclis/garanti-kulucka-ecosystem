@@ -56,7 +56,7 @@ export async function startScenario(page: Page, testInfo: TestInfo, options: Sce
   const pause = (ms = 1500) => page.waitForTimeout(ms);
 
   await page.goto("/giris");
-  await caption(`${options.title} — permission: ${options.permission}`, 2500);
+  await caption(`${options.title} — permission: ${options.permission}`, 4000);
   await caption("Signing in to the Garanti Kuluçka support panel as a support agent");
   await login(page, state);
   await expect(page.getByTestId("topbar")).toBeVisible();

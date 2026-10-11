@@ -28,6 +28,8 @@ test("pages_messaging + pages_show_list + pages_manage_metadata + Human Agent", 
 
   await s.caption("Messages: a customer writes to the Page on Messenger…");
   await page.goto("/mesajlar");
+  await page.getByTestId("filter-unread").click();
+  await expect(page.getByTestId("filter-unread")).toHaveAttribute("aria-pressed", "false");
   await page.getByTestId("channel-filter").click();
   await page.getByTestId("channel-filter-messenger").click();
   inbox.addIncoming("cnv_fb", "Hello! Do you deliver to Edinburgh?");

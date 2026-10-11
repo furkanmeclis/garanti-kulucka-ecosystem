@@ -15,6 +15,8 @@ test("instagram_business_manage_messages + Human Agent", async ({ page }, testIn
   await s.caption("Opening Messages and filtering by Instagram");
   await page.goto("/mesajlar");
   await expect(page.getByTestId("page-messages")).toBeVisible();
+  await page.getByTestId("filter-unread").click();
+  await expect(page.getByTestId("filter-unread")).toHaveAttribute("aria-pressed", "false");
   await page.getByTestId("channel-filter").click();
   await page.getByTestId("channel-filter-instagram").click();
   await expect(row(page, "cnv_ig")).toBeVisible();
