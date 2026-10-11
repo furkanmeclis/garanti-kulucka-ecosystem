@@ -55,6 +55,60 @@ describe("migration verification", () => {
     }));
   });
 
+  it("accounts for merged-away conversations: source rows = primary targets + merged-away rows", () => {
+    const conversationMap = (sourceId: string, mappingRole: string, targetId: string) => ({
+      run_id: "run_merge",
+      source_system: "legacy_postgres",
+      source_table: "legacy.conversations",
+      source_id: sourceId,
+      target_table: "conversations",
+      mapping_role: mappingRole,
+      target_id: targetId,
+    });
+    const report = (maps: ReturnType<typeof conversationMap>[]) => createMigrationVerificationReport({
+      runId: "run_merge",
+      sourceManifest: manifest({ conversations: 3 }),
+      targetPublicIds: targetPublicIds({ conversations: ["conv_a", "conv_b"] }),
+      customers: [],
+      customerExternalIdentities: [],
+      conversations: [],
+      messages: [],
+      orders: [],
+      orderItems: [],
+      shipments: [],
+      legacyIdMaps: maps,
+    });
+    const check = (checks: { name: string }[], name: string) => checks.find((entry) => entry.name === name);
+
+    const merged = report([
+      conversationMap("1", "primary", "conv_a"),
+      conversationMap("2", "primary", "conv_b"),
+      conversationMap("3", "merged_into", "conv_a"),
+    ]);
+    expect(check(merged.checks, "legacy_id_map.source_coverage.conversations"))
+      .toMatchObject({ status: "passed", expected: 3, actual: 3 });
+    expect(check(merged.checks, "legacy_id_map.target_coverage.conversations"))
+      .toMatchObject({ status: "passed", expected: 2, actual: 2 });
+    expect(check(merged.checks, "legacy_id_map.merged_conversations")).toMatchObject({ status: "passed", actual: 0 });
+    expect(check(merged.checks, "legacy_id_map.foundation_rules")).toMatchObject({ status: "passed" });
+
+    const broken = report([
+      conversationMap("1", "primary", "conv_a"),
+      conversationMap("2", "primary", "conv_b"),
+      conversationMap("2", "merged_into", "conv_a"),
+      conversationMap("3", "merged_into", "conv_missing"),
+    ]);
+    expect(check(broken.checks, "legacy_id_map.merged_conversations")).toMatchObject({ status: "failed", actual: 2 });
+    expect(check(broken.checks, "legacy_id_map.target_references")).toMatchObject({ status: "failed", actual: 1 });
+
+    const lost = report([
+      conversationMap("1", "primary", "conv_a"),
+      conversationMap("2", "primary", "conv_b"),
+    ]);
+    expect(check(lost.checks, "legacy_id_map.source_coverage.conversations"))
+      .toMatchObject({ status: "failed", expected: 3, actual: 2 });
+  });
+
   it("detects message ordering regressions inside a conversation", () => {
     expect(
       verifyMessageOrdering([

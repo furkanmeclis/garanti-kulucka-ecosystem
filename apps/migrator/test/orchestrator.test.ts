@@ -922,6 +922,53 @@ describe("conversation dry-run validation", () => {
     expect(result.batches).toEqual([]);
   });
 
+  it("reports and simulates the merge of split legacy threads without blocking the dry-run", async () => {
+    const customer = "0a32ce63-4c3b-4fd4-917d-726d540a7216";
+    const older = "3d65f196-7f6e-4b07-8c50-a59f873d0541";
+    const newer = "3d65f196-7f6e-4b07-8c50-a59f873d0542";
+    const source = new LegacyTableSource({
+      customers: legacyCustomerRows,
+      conversations: [
+        legacyConversationRow(older, {
+          musteri_id: customer,
+          kanal_konusma_id: "wa-split",
+          son_mesaj_tarihi: "2024-03-02T00:00:00Z",
+        }),
+        legacyConversationRow(newer, {
+          musteri_id: customer,
+          kanal_konusma_id: "wa-split",
+          son_mesaj_tarihi: "2024-03-08T00:00:00Z",
+        }),
+        legacyConversationRows[1]!,
+      ],
+      messages: [
+        legacyMessageRow("6a000000-0000-4000-8000-000000000011", { konusma_id: older }),
+        legacyMessageRow("6a000000-0000-4000-8000-000000000012", { konusma_id: older }),
+        legacyMessageRow("6a000000-0000-4000-8000-000000000013", { konusma_id: newer }),
+        legacyMessageRow("6a000000-0000-4000-8000-000000000014", {
+          konusma_id: "4e76a2a7-8a7f-4c18-9d61-b6a0984e165a",
+        }),
+      ],
+    });
+
+    const result = await conversationDryRun(source, ["messages", "conversations", "customers"]);
+
+    expect(result.dryRunReport?.conversationMerge).toEqual({
+      groups: 1,
+      memberRows: 2,
+      mergedAwayRows: 1,
+      largestGroup: 2,
+      groupsWithMultipleCustomers: 0,
+      byChannel: { whatsapp: { groups: 1, memberRows: 2, mergedAwayRows: 1 } },
+      messagesInMergedGroups: 3,
+      messagesReassigned: 2,
+    });
+    expect(result.dryRunReport?.conversationTransform).toMatchObject({ transformedRows: 3 });
+    expect(result.dryRunReport?.messageTransform).toMatchObject({ transformedRows: 4 });
+    expect(result.dryRunReport?.totals.blockedRows).toBe(0);
+    expect(result.dryRunReport?.warnings).toEqual([]);
+  });
+
   it("rejects conversations without customers and messages without conversations before source access", async () => {
     const source = new LegacyTableSource({ conversations: legacyConversationRows, messages: legacyMessageRows });
 

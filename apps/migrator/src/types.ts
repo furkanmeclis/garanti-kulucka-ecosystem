@@ -1,3 +1,4 @@
+import type { ConversationMergeSummary } from "./conversation-merge.js";
 export type MigrationMode = "dry-run" | "apply";
 
 export type MigrationEntity =
@@ -493,6 +494,8 @@ export interface DryRunReport {
   readonly warnings: MigrationWarning[];
   readonly customerTransform?: CustomerTransformSummary;
   readonly conversationTransform?: ConversationTransformSummary;
+  /** Legacy conversations collapsed into one target conversation per thread key (see conversation-merge.ts). */
+  readonly conversationMerge?: ConversationMergeReport;
   readonly messageTransform?: MessageTransformSummary;
   readonly productTransform?: ProductTransformSummary;
   readonly orderTransform?: OrderTransformSummary;
@@ -500,6 +503,13 @@ export interface DryRunReport {
   readonly shipmentTransform?: ShipmentTransformSummary;
   readonly shipmentTrackingEventTransform?: ShipmentTrackingEventTransformSummary;
   readonly generatedAt: string;
+}
+
+export interface ConversationMergeReport extends ConversationMergeSummary {
+  /** Messages whose legacy conversation is a member of a merged group (winner included). */
+  readonly messagesInMergedGroups?: number;
+  /** Messages whose legacy conversation was merged away and that move to the winner. */
+  readonly messagesReassigned?: number;
 }
 
 export interface CustomerTransformSummary {

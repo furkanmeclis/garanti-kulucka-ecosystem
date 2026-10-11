@@ -20,12 +20,20 @@ import {
 import { assertMigrationApplyApproval, type MigrationApplyApproval } from "./apply-approval.js";
 import {
   assertVerifiedConversationAccounts,
+  legacyConversationMergeCandidate,
   legacyConversationTable,
   legacyMessageTable,
   transformLegacyConversation,
   transformLegacyMessage,
+  type ConversationMergeCandidate,
   type VerifiedConversationAccount,
 } from "./conversation-mapping.js";
+import {
+  buildConversationMergePlan,
+  emptyConversationMergePlan,
+  type ConversationMergePlan,
+  type ConversationMergeSummary,
+} from "./conversation-merge.js";
 import {
   assertVerifiedIntegrationAccounts,
   legacyCustomerTable,
@@ -120,6 +128,8 @@ export interface MigrationRunResult {
   readonly dryRunReport?: DryRunReport;
   readonly batches: MigrationBatchApplyResult[];
   readonly deferredReconciliation?: DeferredReconciliationResult;
+  /** Apply only: the conversation merge plan the run applied (the dry-run reports it in dryRunReport). */
+  readonly conversationMerge?: ConversationMergeSummary;
 }
 
 export async function runMigration(input: RunMigrationInput): Promise<MigrationRunResult> {
@@ -191,6 +201,7 @@ export async function runMigration(input: RunMigrationInput): Promise<MigrationR
         plan,
         requireDependencyPublicIds(conversations, "Message", "conversations"),
         input.legacyMediaBucket ?? defaultLegacyMediaBucket,
+        conversations?.mergePlan ?? emptyConversationMergePlan,
       )
       : undefined;
     const productTransform = validateProductRows
@@ -244,6 +255,14 @@ export async function runMigration(input: RunMigrationInput): Promise<MigrationR
         plan,
         ...(customers ? { customerTransform: customers.summary } : {}),
         ...(conversations ? { conversationTransform: conversations.summary } : {}),
+        ...(conversations
+          ? {
+            conversationMerge: Object.freeze({
+              ...conversations.mergePlan.summary,
+              ...(messageTransform ? messageTransform.mergeCounts : {}),
+            }),
+          }
+          : {}),
         ...(messageTransform ? { messageTransform: messageTransform.summary } : {}),
         ...(messageTransform && messageTransform.warnings.length > 0 ? { warnings: [...messageTransform.warnings] } : {}),
         ...(productTransform ? { productTransform: productTransform.summary } : {}),
@@ -265,6 +284,11 @@ export async function runMigration(input: RunMigrationInput): Promise<MigrationR
     mappingCatalogVersion: catalog.version,
     rowContentChecksums: await createApplyRowContentChecksums(source, plan, entities, rowContentRecords),
   });
+  // The checksum pre-pass read every planned conversation row of this snapshot, so the merge plan is
+  // built from exactly the rows the batches will apply; it is deterministic, so resumed runs agree.
+  const conversationMergePlan = entities.includes("conversations")
+    ? createConversationMergePlan(dedupeLegacyRecords(rowContentRecords.get("conversations") ?? []), conversationAccounts)
+    : emptyConversationMergePlan;
   await registerMigrationRun(input.target, input.runId, sourceManifest);
 
   const batches: MigrationBatchApplyResult[] = [];
@@ -276,6 +300,7 @@ export async function runMigration(input: RunMigrationInput): Promise<MigrationR
       batch,
       integrationAccounts,
       conversationAccounts,
+      conversationMergePlan,
       userPublicIds,
       ...(input.mediaStorage ? { mediaStorage: input.mediaStorage } : {}),
       ...(input.legacyMediaBucket ? { legacyMediaBucket: input.legacyMediaBucket } : {}),
@@ -290,7 +315,15 @@ export async function runMigration(input: RunMigrationInput): Promise<MigrationR
     sourceManifest,
     batches,
     deferredReconciliation,
+    ...(entities.includes("conversations") ? { conversationMerge: conversationMergePlan.summary } : {}),
   };
+}
+
+function createConversationMergePlan(
+  records: readonly LegacyRecord[],
+  accounts: readonly VerifiedConversationAccount[],
+): ConversationMergePlan {
+  return buildConversationMergePlan(records.map((record) => legacyConversationMergeCandidate(record, accounts)));
 }
 
 async function createApplyRowContentChecksums(
@@ -310,6 +343,7 @@ async function applyPlannedBatch(input:
   & {
     readonly integrationAccounts: readonly VerifiedIntegrationAccount[];
     readonly conversationAccounts: readonly VerifiedConversationAccount[];
+    readonly conversationMergePlan: ConversationMergePlan;
     readonly userPublicIds: ReadonlyMap<string, string>;
     readonly mediaStorage?: MigratorMediaStorage;
     readonly legacyMediaBucket?: string;
@@ -326,6 +360,7 @@ async function applyPlannedBatch(input:
         ...input,
         integrationAccounts: input.conversationAccounts,
         userPublicIds: input.userPublicIds,
+        conversationMergePlan: input.conversationMergePlan,
       } satisfies ApplyConversationMigrationBatchInput);
     case "messages":
       return applyMessageMigrationBatchWithState(input satisfies ApplyMessageMigrationBatchInput);
@@ -601,11 +636,12 @@ async function validateConversationBatches(
     readonly userPublicIds: ReadonlyMap<string, string>;
     readonly accounts: readonly VerifiedConversationAccount[];
   },
-): Promise<ValidatedBatches<ConversationTransformSummary>> {
+): Promise<ValidatedConversationBatches> {
   let transformedRows = 0;
   let unresolvedAssignedUsers = 0;
   let resolvedInstagramAccounts = 0;
   const publicIds = new Map<string, string>();
+  const mergeCandidates: ConversationMergeCandidate[] = [];
 
   for (const batch of plan.batches) {
     if (batch.entity !== "conversations") continue;
@@ -613,6 +649,7 @@ async function validateConversationBatches(
 
     for (const row of rows) {
       const result = transformLegacyConversation(row, context);
+      mergeCandidates.push(legacyConversationMergeCandidate(row, context.accounts));
       transformedRows += 1;
       publicIds.set(row.sourceId.toLowerCase(), result.conversation.publicId);
       unresolvedAssignedUsers += result.reconciliation
@@ -623,10 +660,21 @@ async function validateConversationBatches(
     }
   }
 
+  // Simulate the apply merge: merged-away conversations resolve to their winner for messages and orders.
+  const mergePlan = buildConversationMergePlan(mergeCandidates);
+  for (const [sourceId, winnerPublicId] of mergePlan.winnerPublicIdByMergedSourceId) {
+    publicIds.set(sourceId, winnerPublicId);
+  }
+
   return {
     summary: Object.freeze({ transformedRows, unresolvedAssignedUsers, resolvedInstagramAccounts }),
     publicIds,
+    mergePlan,
   };
+}
+
+interface ValidatedConversationBatches extends ValidatedBatches<ConversationTransformSummary> {
+  readonly mergePlan: ConversationMergePlan;
 }
 
 async function validateMessageBatches(
@@ -634,8 +682,15 @@ async function validateMessageBatches(
   plan: MigrationPlan,
   conversationPublicIds: ReadonlyMap<string, string>,
   legacyMediaBucket: string,
-): Promise<{ readonly summary: MessageTransformSummary; readonly warnings: readonly MigrationWarning[] }> {
+  mergePlan: ConversationMergePlan,
+): Promise<{
+  readonly summary: MessageTransformSummary;
+  readonly warnings: readonly MigrationWarning[];
+  readonly mergeCounts: { readonly messagesInMergedGroups: number; readonly messagesReassigned: number };
+}> {
   let transformedRows = 0;
+  let messagesInMergedGroups = 0;
+  let messagesReassigned = 0;
   let mediaPayloads = 0;
   let inlineMediaPayloads = 0;
   let legacyObjectMediaPayloads = 0;
@@ -658,6 +713,9 @@ async function validateMessageBatches(
       }
       previousSourceId = sourceId;
       transformedRows += 1;
+      const legacyConversationId = typeof row.payload.konusma_id === "string" ? row.payload.konusma_id.toLowerCase() : "";
+      if (mergePlan.groupBySourceId.has(legacyConversationId)) messagesInMergedGroups += 1;
+      if (mergePlan.winnerPublicIdByMergedSourceId.has(legacyConversationId)) messagesReassigned += 1;
       mediaFieldConflicts += result.warnings.filter((warning) => warning.code === "media_field_conflict").length;
       const rawPayload = result.message.rawPayload;
       const mediaUrl = typeof rawPayload?.media_url === "string" ? rawPayload.media_url : null;
@@ -713,6 +771,7 @@ async function validateMessageBatches(
       ...(mediaFieldConflicts > 0 ? { mediaFieldConflicts } : {}),
     }),
     warnings: Object.freeze(warnings),
+    mergeCounts: Object.freeze({ messagesInMergedGroups, messagesReassigned }),
   });
 }
 
