@@ -24,6 +24,20 @@ Kapsam: `apps/worker` (BullMQ işçileri, kargo pipeline tick'i, zamanlanmış i
 | 14 | Orta | Gelen webhook'lar hiç `processed_at` almadığı için veri saklama işi ham (kişisel veri içeren) payload'ları hiç silmiyordu. | Gelen-mesaj hattı `processed_at` yazar. |
 | 15 | Orta | `/api/conversations/summary` yalnız en yeni 200 konuşmayı topluyordu; WhatsApp kanal sayısı hep 0'dı. | SQL aggregate; `unread_conversation_count` ve `channel_counts.whatsapp` eklendi. |
 
+### İkinci tur (2026-10-11, PR #4 incelemesi)
+
+| # | Önem | Bulgu | Düzeltme |
+|---|------|-------|----------|
+| 16 | Yüksek | Sürat AT yanıtı `tr-TR` ile küçültülünce ASCII "AT DISI" → "at dısı" oluyordu; hiçbir kalıba uymadığı için adres "bilinmiyor" sayılıp uyarı verilmiyordu. | Türkçe harfler ASCII'ye katlanıp eşleştirilir. |
+| 17 | Yüksek | API, `providers.surat.live_mode` değerini yalnız JSON `true` ise açık sayıyordu; worker `"true"` metnini de kabul ediyor. | API worker ile aynı okumayı yapar. |
+| 18 | Yüksek | Depolama temizliği önce satırı siliyordu; S3 silmesi başarısız olursa nesne kalıcı yetim kalıyor ve hata tüm partiyi durduruyordu. Tüm DB hataları yutuluyordu. | Satır ve nesne tek transaction'da: nesne silinemezse satır geri gelir, sonraki çalışmada tekrar denenir. Yalnız FK ihlali (dosya bu arada eklenmiş) yutulur; hata dosya bazında raporlanır (`failed_count`). |
+| 19 | Yüksek | Deneme hakkını tüketip `failed` kümesinde kalan webhook işi, Meta yeniden gönderdiğinde aynı iş id'si yüzünden hiç çalışmıyordu. Yeniden kuyruğa koyma hatası 500 dönüyordu. | Başarısız iş sıfırlanmış deneme sayısıyla yeniden denenir; kuyruk hatası loglanır (`webhook.requeue_failed`), yanıt 202 kalır. |
+| 20 | Orta | Sayfanın / IG hesabının kendi yorum yanıtları müşteri yorumu gibi moderasyon kuyruğuna düşüyordu. | `from.id === entry.id` olan yorumlar atlanır. |
+| 21 | Orta | Sürat kapsama işinin id'si ilçe+gün bazında sabitti; başarısız ya da dry-run kalan kontrol o gün bir daha çalışmıyordu. | İş id'sine UTC saat eklenir (idempotency anahtarı yine günlük); en geç bir saat sonra yeniden denenir. |
+| 22 | Orta | Teslim edilmiş gönderiye gecikmeli gelen takip yanıtı durumu korusa da `last_event_text`'i eziyordu. | Teslim edilmiş gönderide son hareket metni yalnız teslim/iade yanıtıyla güncellenir. |
+| 23 | Orta | Mükerrer sipariş kontrolü her sayfa açılışında tüm canlı siparişlerde regex çalıştırıp OR ile eşleştiriyordu. | İki eşitlik join'i + migration 028 ifade indeksleri (`customers_phone_tail_idx`, `customers_name_key_idx`). |
+| 24 | Düşük | Konuşma listesi her "daha fazla yükle" isteğinde de tüm tablo sayaçlarını hesaplıyordu; eski bir yanıtın sayaçları filtre değişince uygulanıyordu. | Sayaçlar yalnız ilk sayfada döner; panel sayaçları liste anahtarı kontrolünden sonra uygular. |
+
 Kontrol edilip sorunsuz bulunanlar: çalışma saatleri `Europe/Istanbul` ile hesaplanıyor; `claimDue`
 `FOR UPDATE SKIP LOCKED` kullanıyor; aday eklemede `ON CONFLICT DO NOTHING` var; repeatable işler anahtarla
 replikalar arasında tekilleşiyor; `drainWorkers` BullMQ'yu doğru kapatıyor.

@@ -339,10 +339,17 @@ const coverageAreaKeys = ["Mahalle", "MahalleAdi", "Semt", "Koy", "Bolge"];
 
 /** "AT İÇİ" / "Var" / "Evet" / true → covered; "AT DIŞI" / "Yok" / "Hayır" / false → not covered. */
 export function suratCoverageFlag(raw: string): boolean | null {
-  const value = raw.toLocaleLowerCase("tr-TR").replace(/\s+/g, " ").trim();
+  // Fold Turkish letters to ASCII: tr-TR lowercases an ASCII "I" to dotless "ı", so "AT DISI" would become "at dısı".
+  const value = raw
+    .toLocaleLowerCase("tr-TR")
+    .replace(/ı/g, "i")
+    .replace(/ş/g, "s")
+    .replace(/ç/g, "c")
+    .replace(/\s+/g, " ")
+    .trim();
   if (!value) return null;
-  if (/dışı|disi|yok|hayır|hayir|false|^0$|kapalı|kapali/.test(value)) return false;
-  if (/içi|ici|var|evet|true|^1$|açık|acik/.test(value)) return true;
+  if (/disi|yok|hayir|false|^0$|kapali/.test(value)) return false;
+  if (/ici|var|evet|true|^1$|acik/.test(value)) return true;
   return null;
 }
 

@@ -75,6 +75,7 @@ function createTestApp(input: {
   jobs?: JobEnvelope[];
   policy?: WebhookSignaturePolicy;
   warnings?: unknown[];
+  failPublish?: boolean;
 }) {
   const app = new Hono<AppBindings>();
   app.use("*", async (context, next) => {
@@ -105,6 +106,7 @@ function createTestApp(input: {
       repository: input.repository,
       queuePublisher: {
         publish: async (job) => {
+          if (input.failPublish) throw new Error("redis unavailable");
           input.jobs?.push(job);
           return "job_test";
         },
@@ -353,6 +355,17 @@ describe("webhook ingestion recovery", () => {
     const response = await createTestApp({ repository: new StoredOnceRepository("received"), jobs }).request("/webhooks/instagram", { method: "POST", headers: { "content-type": "application/json" }, body });
     expect(response.status).toBe(202);
     expect(jobs).toMatchObject([{ job_id: "job_webhook_wev_lost", name: "provider.webhook.received", payload: { webhook_event_public_id: "wev_lost" } }]);
+  });
+
+  it("answers the provider's redelivery even when re-queueing fails", async () => {
+    const warnings: unknown[] = [];
+    const response = await createTestApp({ repository: new StoredOnceRepository("received"), failPublish: true, warnings }).request("/webhooks/instagram", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body,
+    });
+    expect(response.status).toBe(202);
+    expect(JSON.stringify(warnings)).toContain("webhook.requeue_failed");
   });
 
   it("does not re-queue an event the worker already processed", async () => {

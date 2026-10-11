@@ -155,11 +155,13 @@ export function parseInboundWebhook(body: unknown): ParsedInboundWebhook {
         const field = text(change.field);
         const commentId = text(value.id) ?? text(value.comment_id);
         const isComment = field === "comments" || (field === "feed" && text(value.item) === "comment" && text(value.verb) === "add");
-        if (!isComment || !commentId) {
+        const from = record(value.from);
+        // The page's / IG business account's own replies come back as comments from the entry's id.
+        const ownComment = Boolean(text(from.id)) && text(from.id) === text(entry.id);
+        if (!isComment || !commentId || ownComment) {
           result.skipped += 1;
           continue;
         }
-        const from = record(value.from);
         result.comments.push({
           platform: object === "instagram" ? "instagram" : "facebook",
           externalCommentId: commentId,

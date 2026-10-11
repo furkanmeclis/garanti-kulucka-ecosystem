@@ -63,6 +63,16 @@ describe("inbound Meta webhook parsing", () => {
     expect(parsed.skipped).toBe(2);
   });
 
+  it("skips the page's and IG account's own comment replies", () => {
+    const comment = (object: string, entryId: string, field: string, value: Record<string, unknown>) => ({ object, entry: [{ id: entryId, changes: [{ field, value }] }] });
+    const ownIg = comment("instagram", "IG_1", "comments", { id: "c_own", text: "Teşekkürler", from: { id: "IG_1", username: "garantikulucka" } });
+    const ownPage = comment("page", "PAGE_1", "feed", { item: "comment", verb: "add", comment_id: "c_page", message: "DM attık", from: { id: "PAGE_1", name: "Garanti" } });
+    const customer = comment("page", "PAGE_1", "feed", { item: "comment", verb: "add", comment_id: "c_cust", message: "Fiyat?", from: { id: "USER_1", name: "Müşteri" } });
+    expect(parseInboundWebhook(ownIg)).toMatchObject({ comments: [], skipped: 1 });
+    expect(parseInboundWebhook(ownPage)).toMatchObject({ comments: [], skipped: 1 });
+    expect(parseInboundWebhook(customer).comments).toMatchObject([{ platform: "facebook", externalCommentId: "c_cust", username: "Müşteri" }]);
+  });
+
   it("labels Messenger attachments and skips delivery events", () => {
     const parsed = parseInboundWebhook(fixture("messenger", "dm_attachment_delivery.json"));
     expect(parsed.messages).toMatchObject([{ channel: "messenger", threadId: "PSID_FIXTURE_CUSTOMER", externalMessageId: "m_fixture_messenger_1", text: "[Görsel]" }]);

@@ -102,8 +102,8 @@ function MessagesWorkspace() {
       const key = listKey.current;
       try {
         const batch = await api.listConversations({ limit: conversationBatchSize, ...listQuery });
-        if (batch.meta?.counts) setCounts(batch.meta.counts);
         if (key !== listKey.current) return;
+        if (batch.meta?.counts) setCounts(batch.meta.counts);
         setRows((prev) => (reset ? batch.data : mergeConversations(prev, batch.data)));
         if (reset) setHasMore(batch.data.length >= conversationBatchSize);
       } catch {

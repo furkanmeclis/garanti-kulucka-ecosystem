@@ -444,6 +444,9 @@ describe("messages slice 2 routes", () => {
     const response = await app().request("/api/conversations?search=%20ay%C5%9Fe%20&offset=50&limit=50", { headers: { authorization: `Bearer ${await accessToken()}` } });
     expect(response.status).toBe(200);
     expect(routeMocks.domainRepository.listConversations).toHaveBeenCalledWith({ limit: 50, search: "ayşe", offset: 50 });
+    // "Load more" pages skip the inbox-wide aggregate; the first page carries it.
+    expect(((await response.json()) as { meta?: unknown }).meta).toBeUndefined();
+    expect(routeMocks.domainRepository.getConversationCounts).not.toHaveBeenCalled();
   });
 
   it("filters unread conversations on the server and returns inbox-wide counters", async () => {

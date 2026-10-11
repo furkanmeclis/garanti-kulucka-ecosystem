@@ -547,6 +547,8 @@ describe("Sürat ATDurumListesi (address.coverage)", () => {
   it("maps legacy status words and bare single-district answers", () => {
     expect(["AT İÇİ", "Var", "EVET", "true"].map(suratCoverageFlag)).toEqual([true, true, true, true]);
     expect(["AT DIŞI", "at disi", "Yok", "Hayır", "0"].map(suratCoverageFlag)).toEqual([false, false, false, false, false]);
+    // ASCII-only uppercase answers (tr-TR lowercases "I" to "ı").
+    expect(["AT DISI", "AT ICI", "ACIK", "KAPALI", "HAYIR"].map(suratCoverageFlag)).toEqual([false, true, true, false, false]);
     expect(suratCoverageFlag("bilinmiyor")).toBeNull();
     expect(
       parseSuratCoverageResponse("<s:Envelope><s:Body><ATDurumListesiResponse><ATDurumListesiResult><Il>VAN</Il><Ilce>BAHÇESARAY</Ilce><ATDurumu>AT DIŞI</ATDurumu></ATDurumListesiResult></ATDurumListesiResponse></s:Body></s:Envelope>"),

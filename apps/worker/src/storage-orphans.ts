@@ -1,5 +1,5 @@
 import { DeleteObjectCommand, S3Client, type S3ClientConfig } from "@aws-sdk/client-s3";
-import type { AppDatabase } from "@garanti-kulucka/database";
+import { sql, type AppDatabase } from "@garanti-kulucka/database";
 
 export interface StorageOrphanReconciliationInput {
   mode: "dry_run" | "apply";
@@ -18,15 +18,23 @@ export interface StorageOrphanReconciliationResult {
     upload_status: string;
     action: "report_only" | "delete_object";
     deleted: boolean;
+    error?: string;
   }>;
   summary: {
     candidate_count: number;
     deleted_count: number;
+    failed_count: number;
   };
 }
 
 /** An available upload not attached for a week is an orphan; younger ones may still be in a composer. */
 const availableGraceMs = 7 * 24 * 60 * 60 * 1000;
+
+class FileStillReferenced extends Error {}
+
+function isForeignKeyViolation(error: unknown) {
+  return typeof error === "object" && error !== null && (error as { code?: unknown }).code === "23503";
+}
 
 export class StorageOrphanReconciler {
   private readonly client: S3Client;
@@ -90,25 +98,38 @@ export class StorageOrphanReconciler {
     const apply = input.mode === "apply" && input.deleteEnabled;
     const results = [];
     let deletedCount = 0;
+    let failedCount = 0;
 
     for (const candidate of candidates) {
       let deleted = false;
+      let error: string | undefined;
       if (apply) {
-        // Row first: the ON DELETE RESTRICT foreign keys refuse it if the file got attached meanwhile, and a deleted
-        // row is not selected again (the object used to be deleted while the row was re-picked every run).
-        const removed = await this.db
-          .deleteFrom("files")
-          .where("id", "=", candidate.id)
-          .returning("id")
-          .executeTakeFirst()
-          .catch(() => undefined);
-        if (removed) {
-          await (this.deleteObject
-            ? this.deleteObject(candidate.bucket, candidate.object_key)
-            : this.client.send(new DeleteObjectCommand({ Bucket: candidate.bucket, Key: candidate.object_key })).then(() => undefined));
-          deleted = true;
-          deletedCount += 1;
+        try {
+          // Row and object go together: the ON DELETE RESTRICT foreign keys refuse the row if the file got attached
+          // meanwhile, and a failed object delete rolls the row back so the next run picks the file up again.
+          deleted = await this.inTransaction(async (db) => {
+            const removed = await db
+              .deleteFrom("files")
+              .where("id", "=", candidate.id)
+              .returning("id")
+              .executeTakeFirst()
+              .catch((deleteError: unknown) => {
+                throw isForeignKeyViolation(deleteError) ? new FileStillReferenced() : deleteError;
+              });
+            if (!removed) return false;
+            await (this.deleteObject
+              ? this.deleteObject(candidate.bucket, candidate.object_key)
+              : this.client.send(new DeleteObjectCommand({ Bucket: candidate.bucket, Key: candidate.object_key })).then(() => undefined));
+            return true;
+          });
+        } catch (deleteError) {
+          // One failing object must not stop the batch; the row is still there, so the next run retries it.
+          if (!(deleteError instanceof FileStillReferenced)) {
+            error = deleteError instanceof Error ? deleteError.message : String(deleteError);
+            failedCount += 1;
+          }
         }
+        if (deleted) deletedCount += 1;
       }
 
       results.push({
@@ -118,6 +139,7 @@ export class StorageOrphanReconciler {
         upload_status: candidate.upload_status,
         action: apply ? "delete_object" as const : "report_only" as const,
         deleted,
+        ...(error ? { error } : {}),
       });
     }
 
@@ -129,7 +151,24 @@ export class StorageOrphanReconciler {
       summary: {
         candidate_count: candidates.length,
         deleted_count: deletedCount,
+        failed_count: failedCount,
       },
     };
+  }
+
+  /** A transaction, or a savepoint when the reconciler already runs inside one (Kysely cannot nest transactions). */
+  private async inTransaction<T>(run: (db: AppDatabase) => Promise<T>): Promise<T> {
+    if (!this.db.isTransaction) {
+      return this.db.transaction().execute(async (transaction) => run(transaction as unknown as AppDatabase));
+    }
+    await sql`savepoint storage_orphan_delete`.execute(this.db);
+    try {
+      const result = await run(this.db);
+      await sql`release savepoint storage_orphan_delete`.execute(this.db);
+      return result;
+    } catch (error) {
+      await sql`rollback to savepoint storage_orphan_delete`.execute(this.db);
+      throw error;
+    }
   }
 }

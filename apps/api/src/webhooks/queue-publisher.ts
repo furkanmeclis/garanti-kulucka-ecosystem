@@ -68,6 +68,12 @@ export function createBullMqWebhookQueuePublisher(redisUrl: string): WebhookQueu
     },
   });
   const publisher = createWebhookQueuePublisher(async (job, options) => {
+    // A redelivered event whose job already exhausted its attempts: add() would return the failed job untouched.
+    const existing = options?.jobId ? await queue.getJob(options.jobId) : undefined;
+    if (existing && (await existing.isFailed())) {
+      await existing.retry("failed", { resetAttemptsMade: true, resetAttemptsStarted: true });
+      return existing.id ?? job.job_id;
+    }
     const queued = await queue.add(job.name, job, options);
     return queued.id ?? job.job_id;
   });

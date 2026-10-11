@@ -114,7 +114,15 @@ export class DatabaseShipmentWritebackRepository implements ShipmentWritebackRep
                   : sql<string>`case when status = 'delivered' then status else ${update.status} end`,
             }
           : {}),
-        ...(update.lastEventText ? { last_event_text: update.lastEventText } : {}),
+        // The same stale answer must not relabel a delivered shipment's last event either.
+        ...(update.lastEventText
+          ? {
+              last_event_text:
+                update.status === "delivered" || update.status === "returned"
+                  ? update.lastEventText
+                  : sql<string>`case when status = 'delivered' then last_event_text else ${update.lastEventText} end`,
+            }
+          : {}),
         ...(update.status === "delivered" ? { delivered_at: eb.fn.coalesce("delivered_at", eb.val(now)) } : {}),
         ...(update.status && update.status !== "created" && update.status !== "preparing" ? { shipped_at: eb.fn.coalesce("shipped_at", eb.val(now)) } : {}),
         updated_at: now,

@@ -421,20 +421,39 @@ export function createWebhookRoutes(options: CreateWebhookRoutesOptions = {}) {
               externalEventId,
             });
             if (existing) {
-              // Stored but never queued (the publish failed after the insert): queue it now. The job id is derived
-              // from the event, so a job that is still waiting is not queued twice.
+              // Stored but never processed (the publish failed after the insert, or the job exhausted its attempts):
+              // queue it again. The job id is derived from the event, so a job that is still waiting is not queued
+              // twice. A queue outage must not turn the provider's redelivery into a 500.
               if (existing.status === "received") {
-                await queuePublisher.publish(
-                  buildWebhookJob({
-                    eventPublicId: existing.public_id,
-                    provider: callback.provider,
-                    accountPublicId: existing.account_public_id,
-                    payloadHash: existing.payload_hash,
-                    eventType: existing.event_type,
-                    externalEventId,
-                    requestId: context.get("requestId"),
-                  }),
-                );
+                try {
+                  await queuePublisher.publish(
+                    buildWebhookJob({
+                      eventPublicId: existing.public_id,
+                      provider: callback.provider,
+                      accountPublicId: existing.account_public_id,
+                      payloadHash: existing.payload_hash,
+                      eventType: existing.event_type,
+                      externalEventId,
+                      requestId: context.get("requestId"),
+                    }),
+                  );
+                } catch (error) {
+                  context.get("logger").warn(
+                    createStructuredLog({
+                      level: "warn",
+                      service: "api",
+                      event: "webhook.requeue_failed",
+                      request_id: context.get("requestId"),
+                      msg: "Stored webhook event could not be re-queued",
+                      context: {
+                        provider: callback.provider,
+                        webhook_event_public_id: existing.public_id,
+                        error: error instanceof Error ? error.message : String(error),
+                      },
+                    }),
+                    "Stored webhook event could not be re-queued",
+                  );
+                }
               }
               const replayed = responseFromStoredEvent(existing);
               if (replayKey) {

@@ -1,5 +1,5 @@
 import type { AppDatabase } from "@garanti-kulucka/database";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import type { ApiConfig } from "../src/config.js";
 
 const routeMocks = vi.hoisted(() => {
@@ -496,6 +496,12 @@ describe("Instagram publish and analytics routes", () => {
   });
 
   it("serves legacy account insights for the selected days from the backend snapshot", async () => {
+    // The day window is relative to the wall clock; pin it to the fixture's snapshot date.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-06T09:00:00.000Z"));
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
     const response = await call("GET", "/api/instagram/insights/account?days=7", "calisan");
     expect(response.status).toBe(200);
     const body = (await response.json()) as {
