@@ -110,7 +110,8 @@ export class SuratCoverageService {
       .where("scope", "=", "global")
       .where("key", "=", "providers.surat.live_mode")
       .executeTakeFirst();
-    return row?.value === true;
+    // Same reading as the worker's account config: a JSON boolean or the string "true".
+    return row?.value === true || (typeof row?.value === "string" && row.value.toLowerCase() === "true");
   }
 
   /** Today's live ATDurumListesi answer for the district, read back from the worker's provider attempt. */
@@ -134,13 +135,16 @@ export class SuratCoverageService {
     return { records: records.map(asRecord) as SuratCoverageRecord[], checkedAt: startedAt instanceof Date ? startedAt.toISOString() : String(startedAt) };
   }
 
-  /** Idempotent per district and Istanbul day: BullMQ ignores a job id it already holds. */
+  /**
+   * One carrier answer per district and Istanbul day (idempotency key); the job id adds the UTC hour so a failed or
+   * dry-run check is retried within the hour instead of BullMQ ignoring the id it still holds for the rest of the day.
+   */
   async requestCheck(address: SuratCoverageAddress, key: string, requestId: string | undefined) {
     const day = istanbulDay(this.now());
     const idempotencyKey = `surat_coverage_${key}_${day}`;
     const occurredAt = this.now().toISOString();
     const job = jobEnvelopeSchema.parse({
-      job_id: `job_${idempotencyKey}`,
+      job_id: `job_${idempotencyKey}_h${this.now().getUTCHours()}`,
       queue: "provider-delivery",
       name: "surat.address.coverage",
       payload: providerDeliveryJobPayloadSchema.parse({

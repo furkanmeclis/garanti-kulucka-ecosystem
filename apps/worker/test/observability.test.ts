@@ -72,7 +72,7 @@ describe("worker metrics", () => {
       mode: "dry_run",
       status: "reported",
       candidates: [{ bucket: "media", deleted: false }, { bucket: "media", deleted: false }],
-      summary: { candidate_count: 2, deleted_count: 0 },
+      summary: { candidate_count: 2, deleted_count: 0, failed_count: 0 },
     });
 
     expect(metrics.migrationRows.get({ run_id: "run_1", report_type: "dry-run", entity: "customers", state: "planned" })).toBe(42);

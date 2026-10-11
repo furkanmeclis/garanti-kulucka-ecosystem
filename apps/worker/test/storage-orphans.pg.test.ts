@@ -34,4 +34,26 @@ describePg("storage orphan reconciliation against Postgres", () => {
       expect(again.candidates.some((candidate) => candidate.public_id === "fil_orphan_orphan")).toBe(false);
     });
   });
+
+  it("keeps the row when the object delete fails and carries on with the rest of the batch", async () => {
+    await withRollback(async (db) => {
+      await sql`update files set created_at = now() where true`.execute(db);
+      for (const key of ["s3_down", "s3_ok"]) {
+        await sql`insert into files (public_id, bucket, object_key, upload_status, created_at) values (${`fil_orphan_${key}`}, 'media', ${`orphans/${key}`}, 'abandoned', now() - interval '30 days')`.execute(db);
+      }
+      const deleted: string[] = [];
+      const reconciler = new StorageOrphanReconciler(db, {}, async (_bucket, key) => {
+        if (key === "orphans/s3_down") throw new Error("S3 unavailable");
+        deleted.push(key);
+      });
+
+      const applied = await reconciler.reconcile({ mode: "apply", limit: 100, deleteEnabled: true });
+      expect(applied.candidates.find((candidate) => candidate.public_id === "fil_orphan_s3_down")).toMatchObject({ deleted: false, error: "S3 unavailable" });
+      expect(applied.summary.failed_count).toBe(1);
+      expect(deleted).toContain("orphans/s3_ok");
+      // The row survives, so the next run picks the object up again.
+      expect(await db.selectFrom("files").select("id").where("public_id", "=", "fil_orphan_s3_down").executeTakeFirst()).toBeDefined();
+      expect(await db.selectFrom("files").select("id").where("public_id", "=", "fil_orphan_s3_ok").executeTakeFirst()).toBeUndefined();
+    });
+  });
 });

@@ -456,8 +456,13 @@ export function createDomainRoutes() {
       ...(status ? { status } : {}),
     });
 
-    // Inbox-wide counters (unread / pool / per channel) ride along so the list needs no separate summary poll.
-    return context.json({ data: conversations.map(serializeConversation), meta: { counts: await repository.getConversationCounts() } });
+    // Inbox-wide counters (unread / pool / per channel) ride along with the first page so the list needs no separate
+    // summary poll; "load more" pages skip the full-table aggregate.
+    const firstPage = !(Number.isFinite(offset) && offset > 0);
+    return context.json({
+      data: conversations.map(serializeConversation),
+      ...(firstPage ? { meta: { counts: await repository.getConversationCounts() } } : {}),
+    });
   });
 
   routes.post("/conversations/mark-all-read", async (context) => {

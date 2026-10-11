@@ -9,7 +9,7 @@ const records = [
 ];
 
 /** Minimal Kysely stand-in: settings → live gate, provider_attempts → cached answer. */
-function fakeDb(input: { liveMode: boolean; answer?: unknown }) {
+function fakeDb(input: { liveMode: boolean | "true"; answer?: unknown }) {
   const query = (table: string) => {
     const builder = {
       innerJoin: () => builder,
@@ -18,7 +18,7 @@ function fakeDb(input: { liveMode: boolean; answer?: unknown }) {
       orderBy: () => builder,
       executeTakeFirst: async () =>
         table === "settings"
-          ? (input.liveMode ? { value: true } : undefined)
+          ? (input.liveMode ? { value: input.liveMode } : undefined)
           : input.answer
             ? { response_metadata: { live_call_performed: true, result: { data: { records: input.answer } } }, started_at: new Date("2026-10-10T07:00:00.000Z") }
             : undefined,
@@ -76,11 +76,18 @@ describe("Sürat AT coverage decision", () => {
       queued: true,
     });
     expect(jobs[0]).toMatchObject({
-      job_id: "job_surat_coverage_konya_selcuklu_20261010",
+      job_id: "job_surat_coverage_konya_selcuklu_20261010_h22",
       queue: "provider-delivery",
       name: "surat.address.coverage",
       payload: { envelope: { provider: "surat", operation: "address.coverage", payload: { il: "Konya", ilce: "Selçuklu", idempotency_key: "surat_coverage_konya_selcuklu_20261010" } } },
     });
+  });
+
+  it("reads a live_mode stored as the string \"true\" like the worker does", async () => {
+    const jobs: JobEnvelope[] = [];
+    const service = new SuratCoverageService(fakeDb({ liveMode: "true" }), publisher(jobs), now);
+    await expect(service.check({ city: "Konya", district: "Selçuklu", address_line: "Sarayköy Mah." })).resolves.toMatchObject({ live_enabled: true, queued: true });
+    expect(jobs).toHaveLength(1);
   });
 
   it("uses today's live ATDurumListesi answer instead of keywords", async () => {
