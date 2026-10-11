@@ -42,6 +42,8 @@ garanti-migrator migrate --dry-run --report-file /secure/migration/dry-run-repor
 
 Review the dry-run report before continuing.
 
+`MIGRATION_CONVERSATION_ACCOUNTS_FILE` is the single integration account snapshot for both conversations and customer external identities. Its `instagram` and `messenger` entries are also the accounts that customer `ig_`/`fb_` identities resolve to (one active account per provider; `whatsapp` entries are not customer identities). The dry-run fails closed, exactly like apply, when any customer external identity has no active account for its provider; the error lists only the provider names and the unresolved count. A passed dry-run therefore always reports `customerTransform.unresolvedIdentities = 0`. Customers carrying `woocommerce_id` or `kolaybi_id` cannot be resolved through this file yet.
+
 The report includes the full secret-free migration result. Confirm inline media counts/decoded byte totals, bridge `s3://` media counts per MIME (and zero `invalid_legacy_media_uri` blocked rows), customer resolution paths, shipment linkage counts, duplicate product warnings, and order total adjustment warnings before apply.
 
 ## 3. Apply
@@ -83,6 +85,18 @@ MIGRATION_CONVERSATION_ACCOUNTS_FILE=/secure/migration/conversation-accounts.jso
 MIGRATION_USER_PUBLIC_IDS_FILE=/secure/migration/user-public-ids.json \
 garanti-migrator migrate --apply --report-file /secure/migration/apply-report.json
 ```
+
+### Split legacy threads (conversation merge)
+
+Legacy `konusmalar` can hold several rows for one thread (same integration account and `kanal_konusma_id`, or same channel and thread for account-less conversations). The target allows one conversation per thread, so apply collapses each group into one conversation; this was decided in PR #7 (option 1, merge).
+
+- Winner: most recent `son_mesaj_tarihi`, then `guncelleme_tarihi`, then `olusturma_tarihi`, then the greatest legacy id. Its status, pool, assignment and `last_message_*` are kept; `unread_count` is the sum over the group.
+- Merged-away rows get no target row. Their legacy ids map to the winner with `legacy_id_map.mapping_role = 'merged_into'`; their messages and order links resolve to the winner. Every message keeps its own row and timestamp.
+- Review `dryRunReport.conversationMerge` (groups, member rows, merged-away rows, per-channel counts, `groupsWithMultipleCustomers`, `messagesInMergedGroups`, `messagesReassigned`) before apply. Merging never blocks the dry-run. The apply report repeats the group counts under `migration.conversationMerge`.
+- Verify expects `conversations source rows = migrated conversations + merged-away rows`, and checks `legacy_id_map.merged_conversations` (every merged-away row points at a migrated conversation of the same run).
+- The plan is deterministic for a source snapshot, so a resumed or repeated apply with the same `MIGRATION_RUN_ID` lands on the same winners.
+
+Pass the same `MIGRATION_CONVERSATION_ACCOUNTS_FILE` used for the dry-run; without it apply stops at the first customer batch that carries an external identity.
 
 The apply command registers the run manifest, applies batches in dependency order, resumes completed batches by persisted state, runs deferred reconciliation, runs verification, and writes a secret-free operation report.
 

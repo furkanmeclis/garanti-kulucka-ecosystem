@@ -1,3 +1,4 @@
+import { conversationMergedIntoMappingRole } from "./conversation-merge.js";
 import { createVerificationReport } from "./reports.js";
 import { canonicalMigrationEntities } from "./plan.js";
 import { calculateSourceManifestHash } from "./source-manifest.js";
@@ -264,19 +265,55 @@ export function verifyLegacyIdMapCoverage(snapshot: MigrationVerificationSnapsho
         entry.target_table === targetTable &&
         entry.mapping_role === "primary",
     );
-    const distinctSourceIds = new Set(expectedPrimaryMaps.map((entry) => entry.source_id)).size;
+    // Merged-away legacy conversations map to their winner instead of owning a target row:
+    // source rows = distinct primary targets + merged-away rows.
+    const mergedAwayMaps = entity === "conversations"
+      ? scopedMaps.filter(
+        (entry) =>
+          entry.source_system === manifest?.sourceSystem &&
+          sourceTables.has(entry.source_table) &&
+          entry.target_table === targetTable &&
+          entry.mapping_role === conversationMergedIntoMappingRole,
+      )
+      : [];
+    const distinctSourceIds = new Set([...expectedPrimaryMaps, ...mergedAwayMaps].map((entry) => entry.source_id)).size;
     const distinctTargetIds = new Set(expectedPrimaryMaps.map((entry) => entry.target_id)).size;
+    const mergedAwaySourceIds = new Set(mergedAwayMaps.map((entry) => entry.source_id)).size;
     return [
       countCheck(`legacy_id_map.source_coverage.${entity}`, expected, distinctSourceIds),
-      countCheck(`legacy_id_map.target_coverage.${entity}`, expected, distinctTargetIds),
+      countCheck(`legacy_id_map.target_coverage.${entity}`, expected - mergedAwaySourceIds, distinctTargetIds),
     ];
   });
 
   return [
     verifyLegacyIdMapFoundationRules(snapshot),
     ...countChecks,
+    verifyMergedConversationTargets(snapshot),
     verifyLegacyIdMapTargetReferences(snapshot),
   ];
+}
+
+/**
+ * Every merged-away conversation must point at a conversation that is itself a primary migrated row
+ * of the same run, and no legacy conversation may be both primary and merged away.
+ */
+function verifyMergedConversationTargets(snapshot: MigrationVerificationSnapshot): VerificationCheck {
+  const scopedMaps = (snapshot.legacyIdMaps ?? []).filter(
+    (entry) => entry.run_id === snapshot.runId && entry.target_table === "conversations",
+  );
+  const primaryTargets = new Set(
+    scopedMaps.filter((entry) => entry.mapping_role === "primary").map((entry) => entry.target_id),
+  );
+  const primarySources = new Set(
+    scopedMaps.filter((entry) => entry.mapping_role === "primary").map((entry) => entry.source_id),
+  );
+  const invalidCount = scopedMaps.filter(
+    (entry) =>
+      entry.mapping_role === conversationMergedIntoMappingRole &&
+      (!primaryTargets.has(entry.target_id) || primarySources.has(entry.source_id)),
+  ).length;
+
+  return countCheck("legacy_id_map.merged_conversations", 0, invalidCount);
 }
 
 function trustedSourceCountsFromManifest(manifest: SourceManifest | null): Record<string, number> {
@@ -366,6 +403,9 @@ function isAllowedLegacyIdMapForEntity(entity: MigrationEntity, entry: Verificat
   }
   if (entity === "orders") {
     return entry.target_table === "orders" && entry.mapping_role.startsWith("tracking_number:");
+  }
+  if (entity === "conversations") {
+    return entry.target_table === "conversations" && entry.mapping_role === conversationMergedIntoMappingRole;
   }
   return false;
 }

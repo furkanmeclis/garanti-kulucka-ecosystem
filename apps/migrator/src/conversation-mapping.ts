@@ -207,6 +207,51 @@ export function transformLegacyConversation(
   });
 }
 
+/** The fields that decide whether legacy conversations collapse into one target conversation, and which one wins. */
+export interface ConversationMergeCandidate {
+  readonly sourceId: string;
+  readonly publicId: string;
+  readonly legacyCustomerId: string;
+  readonly channel: ConversationChannel;
+  readonly integrationAccountPublicId: string | null;
+  readonly externalThreadId: string | null;
+  readonly lastMessageAt: string | null;
+  readonly updatedAt: string | null;
+  readonly createdAt: string | null;
+  readonly unreadCount: number;
+}
+
+/**
+ * Reads only the merge-relevant fields of a legacy conversation with the same validation as
+ * transformLegacyConversation (so a row it rejects is rejected here too), without needing the customer map.
+ */
+export function legacyConversationMergeCandidate(
+  record: LegacyRecord,
+  accounts: readonly VerifiedConversationAccount[],
+): ConversationMergeCandidate {
+  const rejectRow: LegacyRowRejection = failConversation;
+  const verifiedAccounts = validateConversationAccounts(accounts);
+  const row = parseLegacyRow(record, legacyConversationTable, legacyConversationFields, rejectRow);
+  const { payload } = row;
+  const channel = requiredEnum(payload.kanal, "kanal", conversationChannels, rejectRow);
+  const igAccountId = optionalString(payload.ig_account_id, "ig_account_id", rejectRow);
+  if (channel !== "instagram" && igAccountId !== null) {
+    rejectRow("field ig_account_id is only allowed for instagram conversations");
+  }
+  return Object.freeze({
+    sourceId: row.sourceId,
+    publicId: stablePublicId("conv", row),
+    legacyCustomerId: requiredUuid(payload.musteri_id, "musteri_id", rejectRow),
+    channel,
+    integrationAccountPublicId: resolveIntegrationAccount(channel, igAccountId, verifiedAccounts),
+    externalThreadId: optionalExternalId(payload.kanal_konusma_id, "kanal_konusma_id", rejectRow),
+    lastMessageAt: normalizeLegacyTimestamp(payload.son_mesaj_tarihi, "son_mesaj_tarihi", rejectRow),
+    updatedAt: normalizeLegacyTimestamp(payload.guncelleme_tarihi, "guncelleme_tarihi", rejectRow),
+    createdAt: normalizeLegacyTimestamp(payload.olusturma_tarihi, "olusturma_tarihi", rejectRow),
+    unreadCount: optionalCount(payload.okunmamis_sayisi, "okunmamis_sayisi", rejectRow),
+  });
+}
+
 export function transformLegacyMessage(
   record: LegacyRecord,
   context: MessageTransformContext,

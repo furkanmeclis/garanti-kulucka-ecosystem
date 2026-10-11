@@ -51,6 +51,10 @@ class FixturePostgresClient implements PostgresSourceClient {
     parameters: readonly unknown[] = [],
   ): Promise<{ rows: Row[] }> {
     this.queries.push(sql);
+    if (/^declare /i.test(sql)) return { rows: [] };
+    if (/as superseded_insert_time_rows/i.test(sql)) {
+      return { rows: [{ source_rows: "0", superseded_insert_time_rows: "0", undated_rows: "0" }] as Row[] };
+    }
     if (/select count\(\*\)/i.test(sql)) {
       if (this.countError) throw this.countError;
       return { rows: [{ count: "0" }] as Row[] };
@@ -178,9 +182,19 @@ describe("PostgreSQL migration runtime", () => {
       'select count(*) as count from "public"."siparisler"',
       'select count(*) as count from "public"."siparis_kalemleri"',
       'select count(*) as count from "public"."kargo_gonderimleri"',
-      expect.stringContaining('from "public"."kargo_takip"'),
+      // The tracking aggregate is computed once into a scroll cursor in the source transaction; an empty cursor
+      // falls back to a standalone row-accounting query.
+      expect.stringMatching(/^declare migrator_shipment_tracking_events scroll cursor without hold for [\s\S]*from "public"."kargo_takip"/),
+      expect.stringContaining("as superseded_insert_time_rows"),
     ]);
     expect(client.queries.find((sql) => sql.includes('"public"."kargo_takip"'))).toContain("group_rollup as");
+    expect(client.queries).toContain("fetch absolute 1 from migrator_shipment_tracking_events");
+    expect(result.dryRunReport?.shipmentTrackingEventTransform).toMatchObject({
+      transformedRows: 0,
+      sourceRows: 0,
+      supersededInsertTimeRows: 0,
+      undatedRows: 0,
+    });
   });
 
   it("fails a dry-run closed when konusmalar lacks human_agent", async () => {

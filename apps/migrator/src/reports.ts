@@ -1,4 +1,5 @@
 import type {
+  ConversationMergeReport,
   ConversationTransformSummary,
   CustomerTransformSummary,
   DryRunReport,
@@ -19,6 +20,7 @@ export function createDryRunReport(input: {
   readonly warnings?: MigrationWarning[];
   readonly customerTransform?: CustomerTransformSummary;
   readonly conversationTransform?: ConversationTransformSummary;
+  readonly conversationMerge?: ConversationMergeReport;
   readonly messageTransform?: MessageTransformSummary;
   readonly productTransform?: ProductTransformSummary;
   readonly orderTransform?: OrderTransformSummary;
@@ -50,6 +52,7 @@ export function createDryRunReport(input: {
     warnings,
     ...(input.customerTransform ? { customerTransform: input.customerTransform } : {}),
     ...(input.conversationTransform ? { conversationTransform: input.conversationTransform } : {}),
+    ...(input.conversationMerge ? { conversationMerge: input.conversationMerge } : {}),
     ...(input.messageTransform ? { messageTransform: input.messageTransform } : {}),
     ...(input.productTransform ? { productTransform: input.productTransform } : {}),
     ...(input.orderTransform ? { orderTransform: input.orderTransform } : {}),

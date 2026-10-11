@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { upsertLegacyIdMap } from "./id-map.js";
+import { conversationMergedIntoMappingRole, type ConversationMergePlan } from "./conversation-merge.js";
 import { toSafeMigratorError } from "./errors.js";
 import {
   transformLegacyConversation,
@@ -71,6 +72,8 @@ export interface ApplyConversationMigrationBatchInput {
   readonly batch: MigrationBatch;
   readonly integrationAccounts: readonly VerifiedConversationAccount[];
   readonly userPublicIds?: ReadonlyMap<string, string>;
+  /** Legacy conversations sharing a target thread key collapse into their winner (see conversation-merge.ts). */
+  readonly conversationMergePlan?: ConversationMergePlan;
 }
 
 export interface ApplyMessageMigrationBatchInput {
@@ -651,6 +654,24 @@ async function applyConversationMigrationBatch(
       accounts: input.integrationAccounts,
     });
     const conversation = conversationResult.conversation;
+    const sourceId = legacyRecord.sourceId.toLowerCase();
+    const mergedIntoPublicId = input.conversationMergePlan?.winnerPublicIdByMergedSourceId.get(sourceId);
+    if (mergedIntoPublicId !== undefined) {
+      // Merged away: no target row of its own; the legacy id resolves to the winner for messages and orders.
+      result.skippedRows += 1;
+      countIdMapResult(result, await upsertLegacyIdMap(input.target, {
+        runId: input.runId,
+        sourceSystem: legacyRecord.sourceSystem,
+        sourceTable: legacyRecord.sourceTable,
+        sourceId: legacyRecord.sourceId,
+        targetTable: "conversations",
+        mappingRole: conversationMergedIntoMappingRole,
+        targetId: mergedIntoPublicId,
+        checksum: conversationResult.sourcePayloadChecksum,
+      }));
+      continue;
+    }
+    const mergeGroup = input.conversationMergePlan?.groupBySourceId.get(sourceId);
     const conversationRecord: ConversationCanonicalRecord = {
       targetTable: "conversations",
       targetId: conversation.publicId,
@@ -664,7 +685,8 @@ async function applyConversationMigrationBatch(
         status: conversation.status,
         is_in_pool: conversation.is_in_pool,
         human_agent_enabled: conversation.human_agent_enabled,
-        unread_count: conversation.unread_count,
+        // The winner carries the unread messages of every merged member.
+        unread_count: mergeGroup ? mergeGroup.unreadCount : conversation.unread_count,
         last_message_text: conversation.last_message_text,
         last_message_sender_type: conversation.last_message_sender_type,
         last_message_at: conversation.last_message_at,
@@ -701,15 +723,16 @@ async function applyMessageMigrationBatch(
 
   for (const legacyRecord of records) {
     const legacyConversationId = requiredPayloadString(legacyRecord, "konusma_id").toLowerCase();
-    const conversationPublicId = await resolveRequiredLegacyMap(input.target, {
+    const conversationPublicId = await findConversationPublicId(input.target, {
       runId: input.runId,
       sourceSystem: legacyRecord.sourceSystem,
-      sourceTable: "public.konusmalar",
       sourceId: legacyConversationId,
-      targetTable: "conversations",
-      mappingRole: "primary",
-      errorLabel: "conversation",
     });
+    if (conversationPublicId === null) {
+      throw new Error(
+        `Cannot resolve conversation legacy id public.konusmalar.${legacyConversationId} from legacy_id_map`,
+      );
+    }
     transformed.push({
       legacyRecord,
       result: transformLegacyMessage(legacyRecord, {
@@ -926,15 +949,12 @@ async function applyOrderMigrationBatch(
     const conversationPublicIds = new Map<string, string>();
     const legacyConversationId = optionalPayloadString(legacyRecord, "konusma_id")?.toLowerCase() ?? null;
     if (legacyConversationId !== null) {
-      const conversationEntry = await input.target.findLegacyIdMap({
+      const conversationPublicId = await findConversationPublicId(input.target, {
         runId: input.runId,
         sourceSystem: legacyRecord.sourceSystem,
-        sourceTable: "public.konusmalar",
         sourceId: legacyConversationId,
-        targetTable: "conversations",
-        mappingRole: "primary",
       });
-      if (conversationEntry) conversationPublicIds.set(legacyConversationId, conversationEntry.targetId);
+      if (conversationPublicId !== null) conversationPublicIds.set(legacyConversationId, conversationPublicId);
     }
 
     const orderResult = transformLegacyOrder(legacyRecord, {
@@ -1339,6 +1359,25 @@ function newApplyResult(batch: MigrationBatch, readRows: number): MutableMigrati
     idMapUnchanged: 0,
     warnings: [],
   };
+}
+
+/** A legacy conversation's target public id: its own row, or the winner it was merged into. */
+async function findConversationPublicId(
+  target: MigrationTarget,
+  input: { readonly runId: string; readonly sourceSystem: string; readonly sourceId: string },
+): Promise<string | null> {
+  for (const mappingRole of ["primary", conversationMergedIntoMappingRole]) {
+    const entry = await target.findLegacyIdMap({
+      runId: input.runId,
+      sourceSystem: input.sourceSystem,
+      sourceTable: "public.konusmalar",
+      sourceId: input.sourceId,
+      targetTable: "conversations",
+      mappingRole,
+    });
+    if (entry) return entry.targetId;
+  }
+  return null;
 }
 
 async function resolveRequiredLegacyMap(

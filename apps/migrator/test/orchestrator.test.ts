@@ -5,7 +5,7 @@ import type { VerifiedIntegrationAccount } from "../src/customer-mapping.js";
 import { migrationApplyDisabledMessage } from "../src/errors.js";
 import { calculateSourcePayloadChecksum } from "../src/legacy-source.js";
 import { createLegacyMappingCatalog, legacyMappingCatalog } from "../src/mapping-catalog.js";
-import { runMigration } from "../src/orchestrator.js";
+import { assertShipmentTrackingEventRowAccounting, runMigration } from "../src/orchestrator.js";
 import type {
   BatchReadOptions,
   CanonicalRecord,
@@ -25,6 +25,7 @@ import type {
   MigrationRunRegistration,
   MigrationRunState,
   SourceManifest,
+  ShipmentTrackingEventSourceRowAccounting,
   SourceTableSnapshot,
 } from "../src/types.js";
 
@@ -594,6 +595,8 @@ const legacyCustomerRows: LegacyRecord[] = [
 const verifiedAccounts: VerifiedIntegrationAccount[] = [
   { publicId: "iac_woo_main", providerKey: "woocommerce", status: "active" },
   { publicId: "iac_kolaybi_old", providerKey: "kolaybi", status: "inactive" },
+  { publicId: "iac_kolaybi_main", providerKey: "kolaybi", status: "active" },
+  { publicId: "iac_instagram_main", providerKey: "instagram", status: "active" },
 ];
 
 function customerDryRun(source: LegacySource, integrationAccounts?: VerifiedIntegrationAccount[]) {
@@ -624,8 +627,8 @@ describe("customer dry-run validation", () => {
     expect(result.dryRunReport?.customerTransform).toEqual({
       transformedRows: 3,
       addressDrafts: 2,
-      resolvedIdentities: 2,
-      unresolvedIdentities: 2,
+      resolvedIdentities: 4,
+      unresolvedIdentities: 0,
       nameFallbackWarnings: 1,
     });
     expect(result.sourceManifest.rowContentChecksums).toEqual([{
@@ -659,13 +662,33 @@ describe("customer dry-run validation", () => {
     expect(changed.sourceManifest.sourceManifestHash).not.toBe(unchanged.sourceManifest.sourceManifestHash);
   });
 
-  it("leaves every identity candidate unresolved when no accounts are supplied", async () => {
-    const result = await customerDryRun(new LegacyCustomerSource(legacyCustomerRows));
+  it("fails the dry-run closed, like apply, when identity candidates have no account", async () => {
+    const source = new LegacyCustomerSource(legacyCustomerRows);
+
+    await expect(customerDryRun(source)).rejects.toThrow(
+      "Customer external identity dry-run requires resolved integration accounts for providers: "
+        + "instagram, kolaybi, woocommerce (4 unresolved identities;",
+    );
+    expect(source.reads).toHaveLength(2);
+  });
+
+  it("names only the providers that still lack an active account", async () => {
+    await expect(customerDryRun(new LegacyCustomerSource(legacyCustomerRows), [
+      { publicId: "iac_woo_main", providerKey: "woocommerce", status: "active" },
+      { publicId: "iac_kolaybi_old", providerKey: "kolaybi", status: "inactive" },
+    ])).rejects.toThrow(
+      "Customer external identity dry-run requires resolved integration accounts for providers: instagram, kolaybi "
+        + "(2 unresolved identities;",
+    );
+  });
+
+  it("passes without accounts when no customer carries an external identity", async () => {
+    const result = await customerDryRun(new LegacyCustomerSource([legacyCustomerRows[1]!]));
 
     expect(result.dryRunReport?.customerTransform).toMatchObject({
-      transformedRows: 3,
+      transformedRows: 1,
       resolvedIdentities: 0,
-      unresolvedIdentities: 4,
+      unresolvedIdentities: 0,
     });
   });
 
@@ -710,7 +733,7 @@ describe("customer dry-run validation", () => {
 
     const result = await customerDryRun(source, accounts);
 
-    expect(result.dryRunReport?.customerTransform?.resolvedIdentities).toBe(2);
+    expect(result.dryRunReport?.customerTransform?.resolvedIdentities).toBe(4);
   });
 });
 
@@ -735,6 +758,20 @@ class LegacyTableSource implements LegacySource {
   async describeTables(entities: readonly MigrationEntity[]): Promise<SourceTableSnapshot[]> {
     this.operations.push("describe");
     return entities.map(legacySnapshotFor);
+  }
+}
+
+class AccountedTrackingSource extends LegacyTableSource {
+  constructor(
+    records: Partial<Record<MigrationEntity, LegacyRecord[]>>,
+    private readonly accounting: ShipmentTrackingEventSourceRowAccounting,
+  ) {
+    super(records);
+  }
+
+  async describeShipmentTrackingEventSourceRows(): Promise<ShipmentTrackingEventSourceRowAccounting> {
+    this.operations.push("describe:shipment_tracking_event_rows");
+    return this.accounting;
   }
 }
 
@@ -838,6 +875,7 @@ function conversationDryRun(source: LegacySource, entities: MigrationEntity[]) {
     now: new Date("2026-09-30T00:00:00.000Z"),
     sourceSystem: "legacy_postgres",
     sourceDatabaseIdentity: sourceIdentity,
+    integrationAccounts: verifiedAccounts,
     conversationAccounts: verifiedConversationAccounts,
     userPublicIds: new Map([[assignedUserId, "usr_agent_1"]]),
   });
@@ -882,6 +920,53 @@ describe("conversation dry-run validation", () => {
     });
     expect(result.dryRunReport?.totals).toEqual({ plannedRows: 9, plannedBatches: 6, blockedRows: 0 });
     expect(result.batches).toEqual([]);
+  });
+
+  it("reports and simulates the merge of split legacy threads without blocking the dry-run", async () => {
+    const customer = "0a32ce63-4c3b-4fd4-917d-726d540a7216";
+    const older = "3d65f196-7f6e-4b07-8c50-a59f873d0541";
+    const newer = "3d65f196-7f6e-4b07-8c50-a59f873d0542";
+    const source = new LegacyTableSource({
+      customers: legacyCustomerRows,
+      conversations: [
+        legacyConversationRow(older, {
+          musteri_id: customer,
+          kanal_konusma_id: "wa-split",
+          son_mesaj_tarihi: "2024-03-02T00:00:00Z",
+        }),
+        legacyConversationRow(newer, {
+          musteri_id: customer,
+          kanal_konusma_id: "wa-split",
+          son_mesaj_tarihi: "2024-03-08T00:00:00Z",
+        }),
+        legacyConversationRows[1]!,
+      ],
+      messages: [
+        legacyMessageRow("6a000000-0000-4000-8000-000000000011", { konusma_id: older }),
+        legacyMessageRow("6a000000-0000-4000-8000-000000000012", { konusma_id: older }),
+        legacyMessageRow("6a000000-0000-4000-8000-000000000013", { konusma_id: newer }),
+        legacyMessageRow("6a000000-0000-4000-8000-000000000014", {
+          konusma_id: "4e76a2a7-8a7f-4c18-9d61-b6a0984e165a",
+        }),
+      ],
+    });
+
+    const result = await conversationDryRun(source, ["messages", "conversations", "customers"]);
+
+    expect(result.dryRunReport?.conversationMerge).toEqual({
+      groups: 1,
+      memberRows: 2,
+      mergedAwayRows: 1,
+      largestGroup: 2,
+      groupsWithMultipleCustomers: 0,
+      byChannel: { whatsapp: { groups: 1, memberRows: 2, mergedAwayRows: 1 } },
+      messagesInMergedGroups: 3,
+      messagesReassigned: 2,
+    });
+    expect(result.dryRunReport?.conversationTransform).toMatchObject({ transformedRows: 3 });
+    expect(result.dryRunReport?.messageTransform).toMatchObject({ transformedRows: 4 });
+    expect(result.dryRunReport?.totals.blockedRows).toBe(0);
+    expect(result.dryRunReport?.warnings).toEqual([]);
   });
 
   it("rejects conversations without customers and messages without conversations before source access", async () => {
@@ -1430,6 +1515,7 @@ function orderDryRun(source: LegacySource) {
     now: new Date("2026-09-30T00:00:00.000Z"),
     sourceSystem: "legacy_postgres",
     sourceDatabaseIdentity: sourceIdentity,
+    integrationAccounts: verifiedAccounts,
     userPublicIds: new Map([[assignedUserId, "usr_agent_1"]]),
   });
 }
@@ -1444,6 +1530,7 @@ function orderItemDryRun(source: LegacySource, entities: MigrationEntity[] = ["o
     now: new Date("2026-09-30T00:00:00.000Z"),
     sourceSystem: "legacy_postgres",
     sourceDatabaseIdentity: sourceIdentity,
+    integrationAccounts: verifiedAccounts,
     userPublicIds: new Map([[assignedUserId, "usr_agent_1"]]),
   });
 }
@@ -1458,6 +1545,7 @@ function shipmentDryRun(source: LegacySource, entities: MigrationEntity[] = ["sh
     now: new Date("2026-09-30T00:00:00.000Z"),
     sourceSystem: "legacy_postgres",
     sourceDatabaseIdentity: sourceIdentity,
+    integrationAccounts: verifiedAccounts,
   });
 }
 
@@ -1559,6 +1647,51 @@ describe("shipment dry-run validation", () => {
       firstSeenEvents: 1,
       unresolvedShipments: 1,
     });
+  });
+
+  it("accounts for every raw tracking row when the source exposes row accounting", async () => {
+    const source = new AccountedTrackingSource(
+      { customers: legacyCustomerRows, shipments: legacyShipmentRows, shipment_tracking_events: legacyShipmentTrackingEventRows },
+      { sourceRows: 13, supersededInsertTimeRows: 4, undatedRows: 1 },
+    );
+
+    const result = await shipmentDryRun(source, ["customers", "shipments", "shipment_tracking_events"]);
+
+    expect(source.operations.at(-1)).toBe("describe:shipment_tracking_event_rows");
+    expect(result.dryRunReport?.shipmentTrackingEventTransform).toEqual({
+      transformedRows: 8,
+      uniqueEvents: 5,
+      duplicateRows: 2,
+      futureDatedRows: 1,
+      providerTimeEvents: 4,
+      firstSeenEvents: 1,
+      unresolvedShipments: 1,
+      sourceRows: 13,
+      supersededInsertTimeRows: 4,
+      undatedRows: 1,
+    });
+  });
+
+  it("fails closed when raw tracking rows are not fully accounted for", async () => {
+    const source = new AccountedTrackingSource(
+      { customers: legacyCustomerRows, shipments: legacyShipmentRows, shipment_tracking_events: legacyShipmentTrackingEventRows },
+      { sourceRows: 14, supersededInsertTimeRows: 4, undatedRows: 1 },
+    );
+
+    await expect(shipmentDryRun(source, ["customers", "shipments", "shipment_tracking_events"])).rejects.toThrow(
+      "Shipment tracking event row accounting mismatch: source rows 14, accounted 13 " +
+        "(transformed 8, superseded insert-time 4, undated 1)",
+    );
+    expect(() => assertShipmentTrackingEventRowAccounting(8, {
+      sourceRows: 12,
+      supersededInsertTimeRows: 4,
+      undatedRows: 1,
+    })).toThrow("source rows 12, accounted 13");
+    expect(() => assertShipmentTrackingEventRowAccounting(8, {
+      sourceRows: 13,
+      supersededInsertTimeRows: 4,
+      undatedRows: 1,
+    })).not.toThrow();
   });
 
   it("rejects shipments without customers before source access", async () => {

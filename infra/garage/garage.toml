@@ -5,7 +5,8 @@ replication_factor = 1
 
 rpc_bind_addr = "[::]:3901"
 rpc_public_addr = "garage:3901"
-rpc_secret = "local-dev-garage-rpc-secret-change-me"
+# Local development only: Garage requires 32 bytes of hex (`openssl rand -hex 32`). Replace in every real deployment.
+rpc_secret = "6c6f63616c2d6465762d6761726167652d7270632d7365637265742d30303031"
 
 [s3_api]
 s3_region = "garage"

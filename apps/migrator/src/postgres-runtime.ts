@@ -47,6 +47,7 @@ export async function executePostgresMigration(
           sourceSystem: input.sourceSystem,
           tables: canonicalSourceTableMap(legacyMappingCatalog),
           mappingCatalog: legacyMappingCatalog,
+          repeatableReadSnapshot: true,
         });
 
         return runMigration({
@@ -61,6 +62,7 @@ export async function executePostgresMigration(
           sourceDatabaseIdentity: normalizePostgresDatabaseIdentity(input.sourceDatabaseUrl),
           entities: dryRunMigrationEntities(legacyMappingCatalog),
           ...(input.conversationAccounts ? { conversationAccounts: input.conversationAccounts } : {}),
+          ...(input.integrationAccounts ? { integrationAccounts: input.integrationAccounts } : {}),
           ...(input.userPublicIds ? { userPublicIds: input.userPublicIds } : {}),
           ...(mediaStorage ? { mediaStorage } : {}),
           legacyMediaBucket: legacyMediaBucketFromEnv(),
@@ -82,6 +84,7 @@ export async function executePostgresMigration(
       sourceSystem: input.sourceSystem,
       tables: canonicalSourceTableMap(legacyMappingCatalog),
       mappingCatalog: legacyMappingCatalog,
+      repeatableReadSnapshot: true,
     });
 
     return runMigration({
@@ -93,6 +96,7 @@ export async function executePostgresMigration(
       sourceDatabaseIdentity: normalizePostgresDatabaseIdentity(input.sourceDatabaseUrl),
       entities: dryRunMigrationEntities(legacyMappingCatalog),
       ...(input.conversationAccounts ? { conversationAccounts: input.conversationAccounts } : {}),
+      ...(input.integrationAccounts ? { integrationAccounts: input.integrationAccounts } : {}),
       ...(input.userPublicIds ? { userPublicIds: input.userPublicIds } : {}),
       legacyMediaBucket: legacyMediaBucketFromEnv(),
     });

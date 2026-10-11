@@ -162,7 +162,7 @@ describe("LegacyDatabaseSource", () => {
 
     expect(db.queries).toEqual([
       {
-        sql: 'select * from "legacy"."musteriler" where "legacy_id"::text > $2 order by "legacy_id" asc limit $1',
+        sql: 'select * from "legacy"."musteriler" where "legacy_id" > $2 order by "legacy_id" asc limit $1',
         parameters: [2, "5"],
       },
     ]);
@@ -242,6 +242,131 @@ describe("LegacyDatabaseSource", () => {
       },
       checksum: expect.stringMatching(/^sha256:[a-f0-9]{64}$/),
     }]);
+  });
+
+  it("continues sequential offset batches with keyset inside a repeatable-read snapshot", async () => {
+    const db = new FakeDatabase(
+      [{ id: 1 }, { id: 4 }],
+      [{ id: 7 }, { id: 9 }],
+      [{ id: 12 }],
+      [{ id: 4 }, { id: 7 }],
+      [{ id: 9 }, { id: 12 }],
+    );
+    const source = new LegacyDatabaseSource({
+      db,
+      sourceSystem: "legacy_postgres",
+      tables: { customers: "public.musteriler" },
+      repeatableReadSnapshot: true,
+    });
+
+    const firstPass = [
+      ...await source.readBatch("customers", { limit: 2 }),
+      ...await source.readBatch("customers", { limit: 2, offset: 2 }),
+      ...await source.readBatch("customers", { limit: 2, offset: 4 }),
+    ];
+    // A resumed run starts mid-table: the first read has no predecessor and falls back to OFFSET.
+    await source.readBatch("customers", { limit: 2, offset: 1 });
+    await source.readBatch("customers", { limit: 2, offset: 3 });
+
+    expect(firstPass.map((record) => record.sourceId)).toEqual(["1", "4", "7", "9", "12"]);
+    expect(db.queries).toEqual([
+      { sql: 'select * from "public"."musteriler" order by "id" asc limit $1', parameters: [2] },
+      { sql: 'select * from "public"."musteriler" where "id" > $2 order by "id" asc limit $1', parameters: [2, 4] },
+      { sql: 'select * from "public"."musteriler" where "id" > $2 order by "id" asc limit $1', parameters: [2, 9] },
+      { sql: 'select * from "public"."musteriler" order by "id" asc limit $1 offset $2', parameters: [2, 1] },
+      { sql: 'select * from "public"."musteriler" where "id" > $2 order by "id" asc limit $1', parameters: [2, 7] },
+    ]);
+  });
+
+  it("keeps OFFSET paging without a repeatable-read snapshot", async () => {
+    const db = new FakeDatabase([{ id: 1 }, { id: 4 }], [{ id: 7 }]);
+    const source = new LegacyDatabaseSource({
+      db,
+      sourceSystem: "legacy_postgres",
+      tables: { customers: "public.musteriler" },
+    });
+
+    await source.readBatch("customers", { limit: 2 });
+    await source.readBatch("customers", { limit: 2, offset: 2 });
+
+    expect(db.queries[1]).toEqual({
+      sql: 'select * from "public"."musteriler" order by "id" asc limit $1 offset $2',
+      parameters: [2, 2],
+    });
+  });
+
+  it("serves tracking event count, batches and row accounting from one scroll cursor in a snapshot", async () => {
+    const aggregateRow = {
+      id: "provider:c1000000-0000-4000-8000-000000000001:abc",
+      representative_source_id: "e1000000-0000-4000-8000-000000000001",
+      kargo_id: "c1000000-0000-4000-8000-000000000001",
+      durum: "Teslim edildi",
+      aciklama: null,
+      lokasyon: "Istanbul",
+      event_time: "2024-01-03 03:04:05+00",
+      time_source: "provider",
+      raw_row_count: 2,
+      is_future: false,
+    };
+    const accountingColumns = {
+      __migrator_event_rows: 3,
+      __migrator_source_rows: 9,
+      __migrator_superseded_insert_time_rows: "5",
+      __migrator_undated_rows: 0,
+    };
+    const db = new FakeDatabase(
+      [],
+      [{ ...aggregateRow, ...accountingColumns }],
+      [],
+      [{ ...aggregateRow, ...accountingColumns }],
+    );
+    const source = new LegacyDatabaseSource({
+      db,
+      sourceSystem: "legacy_postgres",
+      tables: { shipment_tracking_events: { tableName: "public.kargo_takip", idColumn: "id" } },
+      repeatableReadSnapshot: true,
+    });
+    const offsetSource = new LegacyDatabaseSource({
+      db: new FakeDatabase([aggregateRow]),
+      sourceSystem: "legacy_postgres",
+      tables: { shipment_tracking_events: { tableName: "public.kargo_takip", idColumn: "id" } },
+    });
+
+    await expect(source.count("shipment_tracking_events")).resolves.toBe(3);
+    const rows = await source.readBatch("shipment_tracking_events", { limit: 1, offset: 2 });
+    await expect(source.describeShipmentTrackingEventSourceRows()).resolves.toEqual({
+      sourceRows: 9,
+      supersededInsertTimeRows: 5,
+      undatedRows: 0,
+    });
+
+    expect(db.queries.map((query) => query.sql.split("\n")[0])).toEqual([
+      "declare migrator_shipment_tracking_events scroll cursor without hold for ",
+      "fetch absolute 1 from migrator_shipment_tracking_events",
+      "move absolute 2 in migrator_shipment_tracking_events",
+      "fetch forward 1 from migrator_shipment_tracking_events",
+    ]);
+    expect(db.queries[0]?.sql).toContain("count(*) over () as __migrator_event_rows");
+    expect(db.queries[0]?.sql).toContain("order by events.id asc");
+    expect(rows).toEqual(await offsetSource.readBatch("shipment_tracking_events", { limit: 1, offset: 2 }));
+    expect(Object.keys(rows[0]?.payload ?? {}).some((key) => key.startsWith("__migrator_"))).toBe(false);
+  });
+
+  it("reads tracking row accounting with a standalone query outside a snapshot", async () => {
+    const db = new FakeDatabase([{ source_rows: "10", superseded_insert_time_rows: "6", undated_rows: "1" }]);
+    const source = new LegacyDatabaseSource({
+      db,
+      sourceSystem: "legacy_postgres",
+      tables: { shipment_tracking_events: { tableName: "public.kargo_takip", idColumn: "id" } },
+    });
+
+    await expect(source.describeShipmentTrackingEventSourceRows()).resolves.toEqual({
+      sourceRows: 10,
+      supersededInsertTimeRows: 6,
+      undatedRows: 1,
+    });
+    expect(db.queries[0]?.sql).toContain("insert_time_row_count");
+    expect(db.queries[0]?.sql).not.toContain("declare");
   });
 
   it("captures a deterministic table and column snapshot from information_schema", async () => {

@@ -3,6 +3,8 @@ import {
   applyConversationMigrationBatchWithState,
   applyMessageMigrationBatchWithState,
 } from "../src/apply.js";
+import { legacyConversationMergeCandidate } from "../src/conversation-mapping.js";
+import { buildConversationMergePlan } from "../src/conversation-merge.js";
 import { calculateSourcePayloadChecksum } from "../src/legacy-source.js";
 import { legacyIdMapKey } from "../src/id-map.js";
 import type {
@@ -371,6 +373,79 @@ describe("bridge-extracted s3:// legacy media apply", () => {
     );
     expect(remote?.payload.raw_payload).toMatchObject({ media_url: "https://cdn.example.test/b.jpg" });
     expect(remote?.payload.raw_payload).not.toHaveProperty("media_storage");
+  });
+});
+
+describe("split legacy thread merge apply", () => {
+  const olderId = "6f1c2b3a-4d5e-4f60-8172-93a4b5c6d7e1";
+  const newerId = "6f1c2b3a-4d5e-4f60-8172-93a4b5c6d7e2";
+  const mergeAccounts = [
+    { publicId: "iac_whatsapp_main", providerKey: "whatsapp" as const, status: "active" as const, externalAccountId: null },
+  ];
+
+  function splitConversation(id: string, overrides: Record<string, unknown>): LegacyRecord {
+    const base = conversationRecord(overrides);
+    const payload = { ...base.payload, id };
+    return legacyRow("public.konusmalar", id, payload);
+  }
+
+  it("writes only the winner with the merged unread count and maps the merged-away row to it", async () => {
+    const rows = [
+      splitConversation(olderId, { son_mesaj_tarihi: "2024-03-01T00:00:00Z", okunmamis_sayisi: 2, durum: "kapali" }),
+      splitConversation(newerId, { son_mesaj_tarihi: "2024-03-09T00:00:00Z", okunmamis_sayisi: 3, son_mesaj_text: "Son" }),
+    ];
+    const mergePlan = buildConversationMergePlan(rows.map((row) => legacyConversationMergeCandidate(row, mergeAccounts)));
+    const winnerPublicId = mergePlan.groupBySourceId.get(newerId)!.winnerPublicId;
+    const target = new ConversationMemoryTarget();
+    target.seedMap("public.musteriler", customerId, "customers", "primary", "cus_0123456789abcdef01234567", "run_merge");
+    const input = {
+      runId: "run_merge",
+      source: new MemorySource(rows),
+      target,
+      batch: batch("conversations", 2),
+      integrationAccounts: mergeAccounts,
+      conversationMergePlan: mergePlan,
+    };
+
+    await expect(applyConversationMigrationBatchWithState(input)).resolves.toMatchObject({
+      readRows: 2,
+      writtenRows: 1,
+      skippedRows: 1,
+      idMapCreated: 2,
+    });
+    expect(target.records).toHaveLength(1);
+    expect(target.records[0]).toMatchObject({
+      targetId: winnerPublicId,
+      payload: { unread_count: 5, status: "open", last_message_text: "Son", external_thread_id: "wa-thread-1" },
+    });
+    const mapKey = {
+      runId: "run_merge",
+      sourceSystem: "legacy_postgres",
+      sourceTable: "public.konusmalar",
+      targetTable: "conversations",
+    };
+    expect(await target.findLegacyIdMap({ ...mapKey, sourceId: olderId, mappingRole: "merged_into" }))
+      .toMatchObject({ targetId: winnerPublicId });
+    expect(await target.findLegacyIdMap({ ...mapKey, sourceId: olderId, mappingRole: "primary" })).toBeNull();
+    expect(await target.findLegacyIdMap({ ...mapKey, sourceId: newerId, mappingRole: "primary" }))
+      .toMatchObject({ targetId: winnerPublicId });
+
+    // Messages of the merged-away conversation land on the winner, each exactly once, also on a rerun.
+    const messages = new MemorySource([
+      messageRecord(messageOneId, { konusma_id: olderId, olusturma_tarihi: "2024-03-01T00:00:00Z" }),
+      messageRecord(messageTwoId, { konusma_id: newerId, olusturma_tarihi: "2024-03-09T00:00:00Z" }),
+    ]);
+    for (const runBatchNumber of [1, 2]) {
+      await expect(applyMessageMigrationBatchWithState({
+        runId: "run_merge",
+        source: messages,
+        target,
+        batch: { ...batch("messages", 2), batchNumber: runBatchNumber },
+      })).resolves.toMatchObject({ readRows: 2, writtenRows: 2 });
+    }
+    const written = target.records.filter((record) => record.targetTable === "messages");
+    expect(written).toHaveLength(2);
+    expect(written.map((record) => record.payload.conversation_id)).toEqual([winnerPublicId, winnerPublicId]);
   });
 });
 

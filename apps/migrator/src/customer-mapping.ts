@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { calculateSourcePayloadChecksum } from "./legacy-source.js";
 import type { SourcePayloadChecksum } from "./legacy-source.js";
+import type { VerifiedConversationAccount } from "./conversation-mapping.js";
 import type { LegacyRecord } from "./types.js";
 
 export const legacyCustomerTable = "public.musteriler";
@@ -176,6 +177,24 @@ export function transformLegacyCustomer(record: LegacyRecord): CustomerTransform
     externalIdentityCandidates: Object.freeze(externalIdentityCandidates.map((candidate) => Object.freeze(candidate))),
     warnings: Object.freeze(warnings.map((warning) => Object.freeze(warning))),
   });
+}
+
+/**
+ * Customer external identities (`ig_`/`fb_` telefon placeholders) resolve against the same integration accounts
+ * that conversations bind to, so MIGRATION_CONVERSATION_ACCOUNTS_FILE is the single account snapshot: its
+ * instagram and messenger entries become the customer identity accounts. WhatsApp has no customer identity
+ * candidate and is skipped. WooCommerce and KolayBi accounts cannot be expressed in that file.
+ */
+export function customerIdentityAccountsFromConversationAccounts(
+  accounts: readonly VerifiedConversationAccount[],
+): readonly VerifiedIntegrationAccount[] {
+  return Object.freeze(accounts
+    .filter((account) => customerIdentityProviders.has(account.providerKey))
+    .map((account) => Object.freeze({
+      publicId: account.publicId,
+      providerKey: account.providerKey as CustomerIdentityProvider,
+      status: account.status,
+    })));
 }
 
 export function resolveCustomerExternalIdentities(

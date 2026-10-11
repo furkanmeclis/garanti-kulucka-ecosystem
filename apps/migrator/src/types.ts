@@ -1,3 +1,4 @@
+import type { ConversationMergeSummary } from "./conversation-merge.js";
 export type MigrationMode = "dry-run" | "apply";
 
 export type MigrationEntity =
@@ -53,6 +54,22 @@ export interface LegacySource {
   count(entity: MigrationEntity): Promise<number>;
   readBatch(entity: MigrationEntity, options: BatchReadOptions): Promise<LegacyRecord[]>;
   describeTables(entities: readonly MigrationEntity[]): Promise<SourceTableSnapshot[]>;
+  /**
+   * Raw-row accounting for the `shipment_tracking_events` aggregate, read from the same source snapshot.
+   * Optional so in-memory sources can omit it; the dry-run report then omits the source-row counters.
+   */
+  describeShipmentTrackingEventSourceRows?(): Promise<ShipmentTrackingEventSourceRowAccounting>;
+}
+
+/**
+ * Every raw legacy tracking row lands in exactly one bucket:
+ * provider/first_seen events and future markers (`raw_row_count`, i.e. `transformedRows`),
+ * insert-time copies superseded by a provider-time row of the same group, or undated rows (null `tarih`).
+ */
+export interface ShipmentTrackingEventSourceRowAccounting {
+  readonly sourceRows: number;
+  readonly supersededInsertTimeRows: number;
+  readonly undatedRows: number;
 }
 
 export interface SourceDatabaseIdentity {
@@ -477,6 +494,8 @@ export interface DryRunReport {
   readonly warnings: MigrationWarning[];
   readonly customerTransform?: CustomerTransformSummary;
   readonly conversationTransform?: ConversationTransformSummary;
+  /** Legacy conversations collapsed into one target conversation per thread key (see conversation-merge.ts). */
+  readonly conversationMerge?: ConversationMergeReport;
   readonly messageTransform?: MessageTransformSummary;
   readonly productTransform?: ProductTransformSummary;
   readonly orderTransform?: OrderTransformSummary;
@@ -484,6 +503,13 @@ export interface DryRunReport {
   readonly shipmentTransform?: ShipmentTransformSummary;
   readonly shipmentTrackingEventTransform?: ShipmentTrackingEventTransformSummary;
   readonly generatedAt: string;
+}
+
+export interface ConversationMergeReport extends ConversationMergeSummary {
+  /** Messages whose legacy conversation is a member of a merged group (winner included). */
+  readonly messagesInMergedGroups?: number;
+  /** Messages whose legacy conversation was merged away and that move to the winner. */
+  readonly messagesReassigned?: number;
 }
 
 export interface CustomerTransformSummary {
@@ -563,6 +589,12 @@ export interface ShipmentTrackingEventTransformSummary {
   readonly providerTimeEvents: number;
   readonly firstSeenEvents: number;
   readonly unresolvedShipments: number;
+  /** Raw legacy rows; present when the source exposes row accounting. */
+  readonly sourceRows?: number;
+  /** Raw rows whose content is already carried by a provider-time event of the same group (not migrated separately). */
+  readonly supersededInsertTimeRows?: number;
+  /** Raw rows with a null `tarih`; they produce no event. */
+  readonly undatedRows?: number;
 }
 
 export interface VerificationReport {
