@@ -16,13 +16,13 @@ garanti-migrator verify
 
 ### Dry-run
 
-`migrate --dry-run` requires `SOURCE_DATABASE_URL` and opens the source in a `REPEATABLE READ READ ONLY` transaction. The current preflight reads row counts using canonical table names, then creates a deterministic entity and batch plan.
+`migrate --dry-run` requires `SOURCE_DATABASE_URL` and opens the source in a `REPEATABLE READ READ ONLY` transaction. It reads every planned legacy row through the mapping catalog and runs the customer (with address and external identity fan-out), conversation, message, product, order, order item, shipment and shipment tracking event transforms, including enum, FK and schema-gap checks. It never resolves a target URL or writes anything. The report lists blocked rows, warnings and per-entity resolution counts.
 
-Dry-run does not resolve a target URL, connect to the target, write data, or validate legacy field and relationship transformations. A source whose tables use legacy names requires the mapping catalog described in the roadmap section before it can be migrated.
+The first dry-run against a full copy of the production legacy database passed on 2026-10-11; see `docs/migration/LEGACY_DRYRUN_2026-10-11.md`.
 
 ### Apply
 
-`migrate --apply` is fail-closed. It validates the explicit `MIGRATION_RUN_ID`, then exits before resolving a target URL or opening either database. Apply remains disabled until the reviewed legacy-to-canonical table, field, and relationship mapping catalog is connected to the runtime.
+`migrate --apply` writes canonical rows, `legacy_id_map` entries and batch state in one transaction per batch, under a PostgreSQL advisory lock, with row-content fingerprints for idempotent resume. It is gated: `MIGRATION_APPLY_ENABLED=true`, a backup evidence file for the target (`MIGRATION_BACKUP_EVIDENCE`), distinct source and target identities and a run-ID-bound approval (`apply-approval.ts`) are all required. Real PostgreSQL E2E tests cover full apply, idempotent rerun and interrupted resume. Apply has not been run against real data yet. The operator procedure is `docs/operations/MIGRATION_APPLY_RUNBOOK.md`.
 
 ### Verify
 
@@ -37,7 +37,7 @@ Dry-run does not resolve a target URL, connect to the target, write data, or val
 - `LegacySource` provides read-only count and batch-read ports.
 - `MigrationTarget` provides canonical write, migration batch state, and `legacy_id_map` ports.
 - `createMigrationPlan` creates deterministic entity and batch plans.
-- `applyMigrationBatch` and its state wrapper implement resumable, idempotent batch foundations behind the disabled apply gate.
+- `applyMigrationBatch` and its per-entity state wrappers implement resumable, idempotent batch writes behind the apply gate.
 - `upsertLegacyIdMap` keys migrated records by source system, source table, source ID, target table, and mapping role.
 - Source transactions enforce repeatable-read and read-only semantics.
 - Error and report serialization remove database URLs and credential parameters.
@@ -48,13 +48,13 @@ Dry-run does not resolve a target URL, connect to the target, write data, or val
 
 `conversations.integration_account_id` links a conversation to the exact persisted integration account that owns its provider thread. The nullable foreign key uses `ON DELETE SET NULL`, so deleting an account does not delete conversation history. This is the canonical resolution target for legacy Instagram account identifiers.
 
-Target verification requires the identity table and snapshots both identity ownership and conversation account links. These schema additions do not enable apply; the legacy mapping catalog and activation review remain mandatory.
+Target verification requires the identity table and snapshots both identity ownership and conversation account links. These schema additions alone do not enable apply; the apply gate and operator approval remain mandatory.
 
 `legacy_id_map.mapping_role` defaults to `primary` and participates in the source-to-target uniqueness key. A single legacy row can therefore retain separate mappings for its canonical customer, synthesized address, and account-scoped external identities without overwriting earlier mappings.
 
 ## Migration Roadmap
 
-The apply gate can be reviewed for activation after these capabilities are implemented and verified:
+These were the prerequisites for the apply gate. All of them are implemented and covered by tests; the remaining work before a production apply (synthetic order customers, user creation, media, performance, scope of unmigrated tables) is tracked under Faz B in `docs/roadmap/TAMAMLAMA_YOL_HARITASI.md`.
 
 - A versioned mapping catalog for each real legacy database shape.
 - Explicit table, field, enum, and foreign-key transformations into the canonical English schema.
@@ -64,8 +64,6 @@ The apply gate can be reviewed for activation after these capabilities are imple
 - Recovery drills proving that interrupted runs resume without duplicate target records.
 - A project-wide PostgreSQL `BIGINT` runtime type policy and corresponding Kysely type migration.
 - A source-backed migration manifest that proves source completeness independently of `legacy_id_map`.
-
-These roadmap artifacts are not outputs of the current dry-run command.
 
 ## Guardrails
 
