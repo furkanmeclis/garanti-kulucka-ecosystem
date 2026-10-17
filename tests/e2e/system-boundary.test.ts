@@ -48,10 +48,12 @@ describe("e2e gate", () => {
     expect(compose).not.toMatch(/api:\n(?:.*\n)*?garanti-migrator/);
   });
 
-  it("keeps the web runtime in the local compose stack", () => {
+  it("serves only the beta panel from the compose stack", () => {
     const compose = readFileSync("compose.yaml", "utf8");
 
-    expect(compose).toMatch(/web:\n(?:.*\n)*?\s+dockerfile: apps\/web\/Dockerfile/);
-    expect(compose).toMatch(/web:\n(?:.*\n)*?\s+- "8080:80"/);
+    expect(compose).toMatch(/beta-frontend:\n(?:.*\n)*?\s+dockerfile: apps\/web-beta\/Dockerfile/);
+    expect(compose).toMatch(/beta-frontend:\n(?:.*\n)*?\s+- "8081:80"/);
+    expect(compose).not.toMatch(/dockerfile: apps\/web\/Dockerfile/);
+    expect(compose).not.toMatch(/^  web:$/m);
   });
 });
