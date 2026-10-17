@@ -201,3 +201,20 @@ export interface ShipmentSummaryStats {
 export interface BackendErrorBody {
   error?: { code?: string; message?: string };
 }
+
+/** POST /api/customers/{customer_public_id}/merge. The URL identifies the survivor. */
+export interface MergeCustomerRequest { source_public_id: string }
+export type CustomerMergeCounts = Record<string, number>;
+export interface CustomerMergeCandidate {
+  public_id: string;
+  full_name: string;
+  phone: string | null;
+  email: string | null;
+  orders_count: number;
+  conversations_count: number;
+}
+export interface CustomerMergeResult {
+  target_public_id: string;
+  source_public_id: string;
+  counts: CustomerMergeCounts;
+}

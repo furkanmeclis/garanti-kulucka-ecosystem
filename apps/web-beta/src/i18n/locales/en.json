@@ -2872,5 +2872,26 @@
     "logout": "Log out",
     "mismatch": "Passwords do not match.",
     "failed": "Could not change password."
+  },
+  "customerMerge": {
+    "title": "Merge customers",
+    "description": "Move {{name}} into the customer you select. The selected customer is kept; this record is deleted. Existing fields are preserved.",
+    "search": "Search customers by name, phone or email",
+    "noCandidates": "No candidates found. Try searching.",
+    "loadFailed": "Could not load details. Close and reopen this dialog to retry.",
+    "candidateCounts": "{{orders}} orders · {{conversations}} conversations",
+    "preview": "Relations moving from this record",
+    "confirm": "I confirm merging {{source}} into {{target}}. This cannot be undone.",
+    "orders": "Orders",
+    "conversations": "Conversations",
+    "shipments": "Shipments",
+    "addresses": "Addresses",
+    "identities": "Social identities",
+    "contacts": "Accounting contacts",
+    "calls": "Call logs",
+    "sms": "SMS messages",
+    "vapi": "Vapi calls",
+    "queue": "Vapi queue",
+    "notes": "Customer note"
   }
 }

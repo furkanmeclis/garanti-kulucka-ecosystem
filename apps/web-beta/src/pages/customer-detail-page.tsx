@@ -1,10 +1,11 @@
+import { CustomerMergeDialog } from "./customer-merge-dialog";
 import { ClickToCall } from "@/softphone/Softphone";
 import { CallLogsSection } from "./call-logs-page";
 import type { CustomerDetail } from "@garanti-kulucka/shared";
 import { ArrowLeft, CheckCircle2, Loader2, MapPin, MessageCircle, Pencil, ShoppingCart, StickyNote } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "@/app/auth";
 import { ErrorState, StatusBadge } from "@/components/data-list";
 import { Badge } from "@/components/ui/badge";
@@ -53,8 +54,21 @@ export function CustomerDetailPage() {
   const { t, i18n } = useTranslation();
   const { api } = useAuth();
   const { id = "" } = useParams();
+  const navigate = useNavigate();
+  useEffect(() => {
+    const onMerge = (event: Event) => {
+      const payload = (event as CustomEvent<{ source_public_id: string; target_public_id: string }>).detail;
+      if (payload?.source_public_id === id) {
+        setMerging(false);
+        navigate(`/musteriler/${encodeURIComponent(payload.target_public_id)}`, { replace: true });
+      }
+    };
+    window.addEventListener("garanti:customer-merged", onMerge);
+    return () => window.removeEventListener("garanti:customer-merged", onMerge);
+  }, [id, navigate]);
   const query = useQuery(`customer:${id}`, () => api.getCustomer(id));
   const [detail, setDetail] = useState<CustomerDetail>();
+  const [merging, setMerging] = useState(false);
   const [editing, setEditing] = useState(false);
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState<"profile" | "notes" | null>(null);
@@ -145,13 +159,16 @@ export function CustomerDetailPage() {
         {...(customer.phone || customer.email ? { description: customer.phone ?? customer.email ?? "" } : {})}
         actions={
           !editing && (
+            <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={() => setMerging(true)} data-testid="customer-merge">{t("customerMerge.title")}</Button>
             <Button variant="outline" onClick={() => setEditing(true)} data-testid="customer-edit">
               <Pencil aria-hidden="true" />
               {t("customerDetail.edit")}
-            </Button>
+            </Button></div>
           )
         }
       />
+      {merging && <CustomerMergeDialog key={id} source={customer} onClose={() => setMerging(false)} />}
       <ClickToCall number={customer.phone} customer_public_id={customer.public_id} />
       <FeedbackLine feedback={feedback} />
       <CallLogsSection customerPublicId={customer.public_id} />

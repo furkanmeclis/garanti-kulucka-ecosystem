@@ -113,7 +113,7 @@ Not: Meta uygulaması (`1413725227640949`) hazır; kalanlar memory notunda ve `t
   - Betada: "Arama Geçmişi" sayfası (yön/durum/personel/tarih filtresi), müşteri ve sipariş detayında arama sekmesi.
   - 192 legacy kayıt migrator ile taşınır (daha az alan; eksikler boş).
   - **Hata:** mevcut `callReportRequest` varsayılan 7 günlük aralık istiyor; NetGSM 24 saatten uzununu hata 60 ile reddeder. Düzeltilecek.
-- [ ] **Müşteri birleştirme** (yeni sistemde yok): Messenger/Instagram müşterisi ile telefonla oluşan müşteri kaydını betada elle birleştirme; konuşma, sipariş, adres ve dış kimlikler taşınır.
+- [x] **Müşteri birleştirme:** beta müşteri detayından aday/arama, ilişki sayıları ve açık onay ile seçilen hedefe birleştirme. Tüm müşteri FK’leri, notlar ve legacy eşlemeleri tek transaction’da taşınır; migration `031` uygulanmalı (sosyal kimlik alias’ları, birden fazla legacy eşlemesi ve `pg_trgm`).
 - [ ] Beta eşitlik taraması: koordinatör listesinde "tamam" olan işleri legacy davranışıyla betada tek tek karşılaştır.
 - [ ] Mesajlar: satır içi medya önizleme ve kalan küçük ekstralar.
 - [ ] Barkod yazdır sayfası ve NetGSM görüşme raporu ekranlarının son kontrolü.

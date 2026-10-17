@@ -100,6 +100,10 @@ export function useNavCounts() {
     if (!user || !["admin", "owner", "calisan"].includes(user.role)) return;
     const socket = io(api.baseUrl || window.location.origin, { auth: (callback) => callback({ token: readTokens()?.access_token }), transports: ["websocket"] });
     socket.on("call.missed", reload);
+    socket.on("customer.merged", (envelope: { payload: { source_public_id: string; target_public_id: string } }) => {
+      window.dispatchEvent(new CustomEvent("garanti:customer-merged", { detail: envelope.payload }));
+      reload();
+    });
     return () => { socket.disconnect(); };
   }, [api.baseUrl, user?.public_id, user?.role, reload]);
   return data ?? [];

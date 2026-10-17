@@ -913,10 +913,14 @@ export class DomainRepository {
     }));
   }
 
-  async listCustomers(limit: number): Promise<CustomerRecord[]> {
+  async listCustomers(limit: number, search?: string): Promise<CustomerRecord[]> {
     return this.db
       .selectFrom("customers")
       .selectAll()
+      .$if(Boolean(search), (qb) => qb.where((eb) => eb.or([
+        eb("full_name", "ilike", `%${search}%`), eb("phone", "ilike", `%${search}%`),
+        eb("email", "ilike", `%${search}%`), eb("username", "ilike", `%${search}%`),
+      ])))
       .orderBy("updated_at", "desc")
       .orderBy("full_name", "asc")
       .limit(limit)

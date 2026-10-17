@@ -51,6 +51,12 @@ export function useQuery<T>(key: string, fetcher: () => Promise<T>, options: { e
     return () => window.clearInterval(timer);
   }, [enabled, refreshMs]);
 
+  useEffect(() => {
+    const refresh = () => setTick((value) => value + 1);
+    window.addEventListener("garanti:customer-merged", refresh);
+    return () => window.removeEventListener("garanti:customer-merged", refresh);
+  }, []);
+
   const reload = useCallback(() => setTick((value) => value + 1), []);
   return { data, error, loading, reload };
 }
