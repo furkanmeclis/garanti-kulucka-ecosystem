@@ -281,7 +281,8 @@ export interface OrderItemCanonicalRecord {
   readonly targetTable: "order_items";
   readonly targetId: string;
   readonly orderPublicId: string;
-  readonly productPublicId: string;
+  /** Null when no migrated product resolves by SKU or KolayBi id (owner decision 9c: keep the item by name and price). */
+  readonly productPublicId: string | null;
   readonly checksum: string;
   readonly payload: {
     readonly name: string;
@@ -357,6 +358,8 @@ export interface DeferredReconciliationResult {
   readonly examined: number;
   readonly resolved: number;
   readonly pending: number;
+  /** Pending rows whose lookup matched several targets; left unlinked (owner decision 9d). */
+  readonly ambiguous?: number;
 }
 
 export interface OrderTotalConsistencyCheck {

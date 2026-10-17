@@ -143,6 +143,7 @@ describe("migration gate", () => {
           };
         }
 
+        if (sql.includes("from migration_batches")) return { rows: [] };
         throw new Error(`Unexpected query: ${sql}`);
       },
     };

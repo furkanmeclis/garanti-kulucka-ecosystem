@@ -999,12 +999,8 @@ async function applyOrderItemMigrationBatch(
       productPublicIdsBySku,
       productPublicIdsByExternalId,
     });
+    // Unmatched items keep name and price without a product link (owner decision 9c); dry-run counts them.
     const item = itemResult.orderItem;
-    if (item.productPublicId === null) {
-      throw new Error(
-        `Cannot resolve product FK for order item ${legacyRecord.sourceTable}.${legacyRecord.sourceId}`,
-      );
-    }
 
     const itemRecord: OrderItemCanonicalRecord = {
       targetTable: item.targetTable,
@@ -1058,6 +1054,9 @@ async function applyOrderItemMigrationBatch(
         code: "order_total_manual_adjustment",
         message: `Order total adjustment recorded for ${orderPublicId}: ${adjustment.adjustmentAmount}`,
       });
+    } else {
+      // An order's items can span batches: clear the partial-batch adjustment once the totals match.
+      await input.target.recordOrderManualAdjustment?.({ orderPublicId, manualAdjustmentAmount: "0.00" });
     }
   }
 

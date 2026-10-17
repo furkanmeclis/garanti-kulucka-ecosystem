@@ -19,6 +19,8 @@ export interface MigrationVerificationSnapshot {
   readonly orderItems: VerificationOrderItem[];
   readonly shipments: VerificationShipment[];
   readonly legacyIdMaps?: VerificationLegacyIdMapEntry[];
+  /** Source rows apply skipped on purpose per entity (e.g. future-dated tracking rows), from migration_batches. */
+  readonly skippedSourceRows?: Partial<Record<MigrationEntity, number>>;
   readonly now?: Date;
 }
 
@@ -52,6 +54,7 @@ export interface VerificationOrder {
   readonly public_id: string;
   readonly customer_public_id: string | null;
   readonly total_amount: string;
+  readonly manual_adjustment_amount?: string | null;
 }
 
 export interface VerificationOrderItem {
@@ -241,11 +244,17 @@ export function verifyOrderTotals(
 ): VerificationCheck {
   let mismatchCount = 0;
 
+  const itemTotals = new Map<string, number>();
+  for (const item of items) {
+    itemTotals.set(item.order_public_id, (itemTotals.get(item.order_public_id) ?? 0) + moneyToCents(item.total_amount));
+  }
   for (const order of orders) {
-    const itemTotal = items
-      .filter((item) => item.order_public_id === order.public_id)
-      .reduce((sum, item) => sum + moneyToCents(item.total_amount), 0);
-    if (moneyToCents(order.total_amount) !== itemTotal) {
+    const itemTotal = itemTotals.get(order.public_id);
+    // Item-less legacy orders keep their own total (owner decision 9c); there is nothing to reconcile.
+    if (itemTotal === undefined) continue;
+    // The legacy order total is authoritative; the difference lives in manual_adjustment_amount (decision 9a).
+    const adjustment = moneyToCents(order.manual_adjustment_amount ?? "0");
+    if (moneyToCents(order.total_amount) !== itemTotal + adjustment) {
       mismatchCount += 1;
     }
   }
@@ -268,7 +277,7 @@ export function verifyLegacyIdMapCoverage(snapshot: MigrationVerificationSnapsho
         entry.source_system === manifest?.sourceSystem &&
         sourceTables.has(entry.source_table) &&
         entry.target_table === targetTable &&
-        entry.mapping_role === "primary",
+        isCoverageMappingRole(entity as MigrationEntity, entry.mapping_role),
     );
     // Merged-away legacy conversations map to their winner instead of owning a target row:
     // source rows = distinct primary targets + merged-away rows.
@@ -284,9 +293,11 @@ export function verifyLegacyIdMapCoverage(snapshot: MigrationVerificationSnapsho
     const distinctSourceIds = new Set([...expectedPrimaryMaps, ...mergedAwayMaps].map((entry) => entry.source_id)).size;
     const distinctTargetIds = new Set(expectedPrimaryMaps.map((entry) => entry.target_id)).size;
     const mergedAwaySourceIds = new Set(mergedAwayMaps.map((entry) => entry.source_id)).size;
+    // Only tracking events skip source rows by design (future-dated); merged-away conversations are counted above.
+    const skipped = entity === "shipment_tracking_events" ? snapshot.skippedSourceRows?.shipment_tracking_events ?? 0 : 0;
     return [
-      countCheck(`legacy_id_map.source_coverage.${entity}`, expected, distinctSourceIds),
-      countCheck(`legacy_id_map.target_coverage.${entity}`, expected - mergedAwaySourceIds, distinctTargetIds),
+      countCheck(`legacy_id_map.source_coverage.${entity}`, expected - skipped, distinctSourceIds),
+      countCheck(`legacy_id_map.target_coverage.${entity}`, expected - skipped - mergedAwaySourceIds, distinctTargetIds),
     ];
   });
 
@@ -399,8 +410,15 @@ function verifyLegacyIdMapFoundationRules(snapshot: MigrationVerificationSnapsho
   return countCheck("legacy_id_map.foundation_rules", 0, invalidCount);
 }
 
+/** Deduplicated tracking events map per event group ("provider"/"first_seen"), not "primary". */
+const trackingEventMappingRoles = new Set(["provider", "first_seen"]);
+
+function isCoverageMappingRole(entity: MigrationEntity, mappingRole: string): boolean {
+  return entity === "shipment_tracking_events" ? trackingEventMappingRoles.has(mappingRole) : mappingRole === "primary";
+}
+
 function isAllowedLegacyIdMapForEntity(entity: MigrationEntity, entry: VerificationLegacyIdMapEntry): boolean {
-  if (entry.target_table === legacyEntityTargetTable(entity) && entry.mapping_role === "primary") return true;
+  if (entry.target_table === legacyEntityTargetTable(entity) && isCoverageMappingRole(entity, entry.mapping_role)) return true;
   if (entity === "message_shortcuts") {
     return (entry.target_table === "files" && /^media:\d+$/.test(entry.mapping_role))
       || (entry.target_table === "message_shortcut_attachments" && /^attachment:\d+$/.test(entry.mapping_role));
