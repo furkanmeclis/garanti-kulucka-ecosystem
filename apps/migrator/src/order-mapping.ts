@@ -249,7 +249,7 @@ export function transformLegacyOrder(
       ? null
       : requiredEnum(payload.teyit_durumu, "teyit_durumu", confirmationStatuses, rejectRow),
     customerName: requiredName(payload.musteri_ad, "musteri_ad", rejectRow),
-    customerPhone: requiredName(payload.musteri_telefon, "musteri_telefon", rejectRow),
+    customerPhone: optionalTrimmedString(payload.musteri_telefon, "musteri_telefon", rejectRow) ?? "",
     customerAddress: optionalTrimmedString(payload.musteri_adres, "musteri_adres", rejectRow),
     customerCity: optionalTrimmedString(payload.musteri_il, "musteri_il", rejectRow),
     customerDistrict: optionalTrimmedString(payload.musteri_ilce, "musteri_ilce", rejectRow),
@@ -288,7 +288,7 @@ function resolveOrderCustomer(
   const normalizedPhone = normalizePhoneLast10(optionalTrimmedString(payload.musteri_telefon, "musteri_telefon", reject));
   if (normalizedPhone === null) {
     return {
-      customerPublicId: syntheticOrderCustomerPublicId(row),
+      customerPublicId: syntheticOrderCustomerPublicId(row, normalizedPhone),
       report: { path: "synthetic", reason: "missing_phone" },
     };
   }
@@ -298,12 +298,12 @@ function resolveOrderCustomer(
   }
   if (matches.length > 1) {
     return {
-      customerPublicId: syntheticOrderCustomerPublicId(row),
+      customerPublicId: syntheticOrderCustomerPublicId(row, normalizedPhone),
       report: { path: "synthetic", reason: "ambiguous_phone", normalizedPhone, matches: matches.length },
     };
   }
   return {
-    customerPublicId: syntheticOrderCustomerPublicId(row),
+    customerPublicId: syntheticOrderCustomerPublicId(row, normalizedPhone),
     report: { path: "synthetic", reason: "unmatched_phone" },
   };
 }
@@ -401,10 +401,11 @@ function optionalTrimmedString(value: unknown, field: string, reject: LegacyRowR
   return trimmed || null;
 }
 
-function normalizePhoneLast10(value: string | null): string | null {
+export function normalizePhoneLast10(value: string | null): string | null {
   if (value === null) return null;
   const digits = value.replace(/\D/g, "");
-  if (digits.length < 10) return null;
+  // Keep short legacy numbers as identities too; only a digit-less value is phoneless.
+  if (digits.length === 0) return null;
   return digits.slice(-10);
 }
 
@@ -514,8 +515,56 @@ function stablePublicId(row: ParsedLegacyOrder): string {
   return `ord_${createHash("sha256").update(identity).digest("hex").slice(0, 24)}`;
 }
 
-function syntheticOrderCustomerPublicId(row: ParsedLegacyOrder): string {
-  const identity = [row.sourceSystem, row.sourceTable, row.sourceId, "synthetic_from_order"].join(":");
+export interface SyntheticOrderCustomerDraft {
+  readonly publicId: string;
+  readonly fullName: string;
+  readonly phone: string | null;
+  readonly address: {
+    readonly publicId: string;
+    readonly addressLine: string;
+    readonly district: string | null;
+    readonly city: string | null;
+    readonly postalCode: string | null;
+    readonly country: string;
+  } | null;
+}
+
+export function syntheticOrderCustomerDraft(
+  record: LegacyRecord,
+  result: OrderTransformationResult,
+): SyntheticOrderCustomerDraft | null {
+  if (result.customerResolution.path !== "synthetic") return null;
+  const order = result.order;
+  const addressParts = [order.customerAddress, order.customerDistrict, order.customerCity, order.customerPostalCode];
+  const hasAddress = addressParts.some((part) => part !== null);
+  const identity = [record.sourceSystem.trim(), legacyOrderTable, normalizePhoneLast10(order.customerPhone) ?? record.sourceId.toLowerCase(), "synthetic_customer_address"].join(":");
+  return Object.freeze({
+    publicId: order.customerPublicId,
+    fullName: order.customerName,
+    phone: order.customerPhone.trim() ? order.customerPhone : null,
+    address: hasAddress
+      ? Object.freeze({
+        publicId: `caddr_${createHash("sha256").update(identity).digest("hex").slice(0, 24)}`,
+        addressLine: order.customerAddress
+          ?? [order.customerDistrict, order.customerCity, order.customerPostalCode].filter((part) => part !== null).join(", "),
+        district: order.customerDistrict,
+        city: order.customerCity,
+        postalCode: order.customerPostalCode,
+        country: normalizeOrderCountry(order.customerCountry),
+      })
+      : null,
+  });
+}
+
+/** Customer addresses store ISO country codes ("TR", as legacy customer addresses do); other values are kept as-is. */
+function normalizeOrderCountry(country: string | null): string {
+  if (country === null) return "TR";
+  const folded = country.trim().toLocaleLowerCase("tr");
+  return ["tr", "türkiye", "turkiye", "turkey"].includes(folded) ? "TR" : country.trim();
+}
+
+function syntheticOrderCustomerPublicId(row: ParsedLegacyOrder, phone: string | null): string {
+  const identity = [row.sourceSystem, row.sourceTable, phone === null ? row.sourceId : `phone:${phone}`, "synthetic_from_order"].join(":");
   return `cus_${createHash("sha256").update(identity).digest("hex").slice(0, 24)}`;
 }
 
