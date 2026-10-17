@@ -79,7 +79,10 @@ async function installFakeSip(page: Page) {
 
 async function setup(page: Page, enabled = true) {
   const sockets: string[] = [];
-  page.on("websocket", (socket) => sockets.push(socket.url()));
+  // Only SIP sockets matter here: the panel's own Socket.IO realtime channel is expected.
+  page.on("websocket", (socket) => {
+    if (!socket.url().includes("/socket.io/")) sockets.push(socket.url());
+  });
   await installFakeSip(page);
   const extra: ExtraRoute = ({ path }) => {
     if (path === "/api/webphone/config") return { status: 200, body: { enabled, sip_websocket_url: "wss://pbx.invalid/ws", sip_domain: "pbx.invalid", sip_username: "1001", sip_password: "test", ice_servers: [] } };
