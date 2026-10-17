@@ -1,3 +1,4 @@
+import { CallLogsSection } from "./call-logs-page";
 import type { CustomerDetail } from "@garanti-kulucka/shared";
 import { ArrowLeft, CheckCircle2, Loader2, MapPin, MessageCircle, Pencil, ShoppingCart, StickyNote } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
@@ -151,6 +152,7 @@ export function CustomerDetailPage() {
         }
       />
       <FeedbackLine feedback={feedback} />
+      <CallLogsSection customerPublicId={customer.public_id} />
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card data-testid="customer-profile">

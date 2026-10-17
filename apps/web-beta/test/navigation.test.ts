@@ -27,13 +27,13 @@ describe("role-based menu", () => {
       operations: ["cargoPipeline", "cancellations", "inventory", "comments", "sms"],
       accounting: ["balances", "invoices", "accounts", "reports"],
       instagram: ["instagramAnalytics", "instagramPublish"],
-      voice: ["calls", "voiceMessages", "vapi", "phonebook"],
+      voice: ["callLogs", "calls", "voiceMessages", "vapi", "phonebook"],
     };
     expect(groups("admin")).toEqual(managerGroups);
     expect(groups("owner")).toEqual(managerGroups);
     expect(navGroupsFor("admin").map((group) => group.key)).toEqual(["operations", "accounting", "instagram", "voice"]);
-    // Staff miss the manager-only accounting pages and the whole voice group.
-    expect(groups("calisan")).toEqual({ operations: ["cargoPipeline", "cancellations", "inventory", "comments", "sms"], accounting: ["balances"], instagram: ["instagramAnalytics", "instagramPublish"] });
+    // Staff see their call history, while voice administration stays manager-only.
+    expect(groups("calisan")).toEqual({ operations: ["cargoPipeline", "cancellations", "inventory", "comments", "sms"], accounting: ["balances"], instagram: ["instagramAnalytics", "instagramPublish"], voice: ["callLogs"] });
     expect(groups("kargo_operatoru")).toEqual({ operations: ["cargoPipeline", "sms"] });
     expect(groups("unknown-role")).toEqual({});
     expect(canAccessPath("calisan", "/iptaller")).toBe(true);

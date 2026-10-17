@@ -19,6 +19,7 @@ export interface Database {
   permissions: PermissionsTable;
   role_permissions: RolePermissionsTable;
   users: UsersTable;
+  call_logs: CallLogsTable;
   user_sessions: UserSessionsTable;
   refresh_tokens: RefreshTokensTable;
   login_attempts: LoginAttemptsTable;
@@ -107,6 +108,7 @@ export interface UsersTable extends BaseTable {
   is_active: boolean;
   is_online: boolean;
   last_seen_at: Timestamp | null;
+  sip_extension: Generated<string | null>;
   sip_username: string | null;
   sip_password_encrypted: string | null;
 }
@@ -807,3 +809,37 @@ export type UserUpdate = Updateable<UsersTable>;
 export type CustomerExternalIdentity = Selectable<CustomerExternalIdentitiesTable>;
 export type NewCustomerExternalIdentity = Insertable<CustomerExternalIdentitiesTable>;
 export type CustomerExternalIdentityUpdate = Updateable<CustomerExternalIdentitiesTable>;
+
+export interface CallLogsTable extends BaseTable {
+  provider: Generated<"netgsm">;
+  unique_id: string | null;
+  common_id: string | null;
+  asterisk_id: string | null;
+  direction: "inbound" | "outbound" | "internal" | null;
+  status: "answered" | "missed" | "busy" | "timeout" | "failed" | "cancelled" | null;
+  caller: string | null;
+  callee: string | null;
+  clid: string | null;
+  internal_number: string | null;
+  customer_number: string | null;
+  incoming_number: string | null;
+  trunk: string | null;
+  queue_name: string | null;
+  context_name: string | null;
+  dtmf_digits: string | null;
+  talk_seconds: number | null;
+  hold_seconds: number | null;
+  initiated_at: Timestamp | null;
+  queued_at: Timestamp | null;
+  connected_at: Timestamp | null;
+  ended_at: Timestamp | null;
+  user_id: number | null;
+  customer_id: number | null;
+  order_id: number | null;
+  recording_url: string | null;
+  recording_file_id: number | null;
+  source: "netgsm_webhook" | "netgsm_report" | "softphone" | "legacy";
+  raw_payload: Json;
+  events: Json;
+  missed_notified_at: Timestamp | null;
+}

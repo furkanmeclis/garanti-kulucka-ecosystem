@@ -8,6 +8,7 @@ import { defineConfig, devices } from "@playwright/test";
  */
 const port = 4319;
 const executablePath = process.env.PW_CHROMIUM_EXECUTABLE;
+const wsEndpoint = process.env.PLAYWRIGHT_WS_ENDPOINT;
 
 export default defineConfig({
   testDir: ".",
@@ -22,6 +23,7 @@ export default defineConfig({
     video: "retain-on-failure",
     baseURL: `http://127.0.0.1:${port}`,
     ...devices["Desktop Chrome"],
+    ...(wsEndpoint ? { connectOptions: { wsEndpoint, exposeNetwork: "<loopback>" } } : {}),
     ...(executablePath ? { launchOptions: { executablePath } } : {}),
   },
   webServer: {

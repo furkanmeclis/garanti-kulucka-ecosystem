@@ -13,6 +13,7 @@ export const realtimeEventNameSchema = z.enum([
   "shipment.updated",
   "presence.updated",
   "settings.changed",
+  "call.missed",
 ]);
 
 export const realtimeRoomTypeSchema = z.enum(["broadcast", "user", "conversation", "order", "shipment"]);
@@ -87,6 +88,7 @@ export const realtimePayloadSchemaByEvent = {
   "shipment.updated": shipmentUpdatedPayloadSchema,
   "presence.updated": presenceUpdatedPayloadSchema,
   "settings.changed": settingsChangedPayloadSchema,
+  "call.missed": z.object({ call_log_public_id: publicIdSchema, phone: z.string().nullable() }),
 } as const;
 
 export const realtimeEnvelopeSchema = z.object({

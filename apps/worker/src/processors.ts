@@ -1,3 +1,4 @@
+import type { CallLogJobs } from "./call-logs.js";
 import type { Job } from "bullmq";
 import {
   type JobEnvelope,
@@ -123,6 +124,7 @@ export interface WorkerProcessorRegistry {
 }
 
 export interface WorkerProcessorRegistryOptions {
+  callLogJobs?: CallLogJobs;
   lifecycleRecorder?: WorkerLifecycleRecorder;
   providerAttemptRepository?: ProviderAttemptRepository;
   providerAccountConfigRepository?: ProviderAccountConfigRepository;
@@ -302,6 +304,7 @@ function createProviderDeliveryProcessor(
   netgsmTransport?: NetgsmFetchTransport,
   vapiTransport?: VapiFetchTransport,
   extras: {
+    callLogJobs?: CallLogJobs;
     instagramGraphTransport?: InstagramGraphFetchTransport;
     mediaFileResolver?: ProviderMediaFileResolver;
     shipmentWritebackRepository?: ShipmentWritebackRepository;
@@ -311,6 +314,10 @@ function createProviderDeliveryProcessor(
 ): QueueProcessor {
   return async (job) => {
     const envelope = assertJobMatchesQueue("provider-delivery", job);
+    if (["netgsm.call.recording.archive", "netgsm.call.reconcile"].includes(envelope.name)) {
+      if (!extras.callLogJobs) throw new Error("Call log jobs require database configuration");
+      return extras.callLogJobs.run(envelope);
+    }
     assertProviderJobName(envelope);
     const requestEnvelope = providerRequestEnvelopeSchema.parse(
       (envelope.payload as { envelope?: unknown }).envelope,
@@ -688,6 +695,7 @@ export function createWorkerProcessorRegistry(
           ...(shipmentWritebackRepository ? { shipmentWritebackRepository } : {}),
           ...(instagramAnalyticsRepository ? { instagramAnalyticsRepository } : {}),
           ...(kolaybiProductRepository ? { kolaybiProductRepository } : {}),
+          ...(typeof options !== "function" && options.callLogJobs ? { callLogJobs: options.callLogJobs } : {}),
         },
       ),
     ],

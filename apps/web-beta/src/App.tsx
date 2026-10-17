@@ -1,3 +1,4 @@
+import { CallLogsPage } from "@/pages/call-logs-page";
 import type { ReactNode } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { useAuth } from "@/app/auth";
@@ -81,6 +82,7 @@ export function App() {
       <Route path="/raporlar" element={<Protected><ReportsPage /></Protected>} />
       <Route path="/faturalar" element={<Protected><InvoicesPage /></Protected>} />
       <Route path="/cari-hesaplar" element={<Protected><AccountsPage /></Protected>} />
+      <Route path="/aramalar" element={<Protected><CallLogsPage /></Protected>} />
       <Route path="/sesli-asistan" element={<Protected><CallsPage /></Protected>} />
       <Route path="/sesli-asistan/sesli-mesajlar" element={<Protected><VoiceMessagesPage /></Protected>} />
       <Route path="/sesli-asistan/vapi" element={<Protected><VapiPage /></Protected>} />
