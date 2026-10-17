@@ -16,6 +16,7 @@ export function panelRoleOf(role: string | null | undefined): PanelRole | null {
 }
 
 export interface AuthUser {
+  must_change_password: boolean;
   public_id: string;
   email: string;
   first_name?: string | null;

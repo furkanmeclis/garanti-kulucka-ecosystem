@@ -13,7 +13,9 @@
     "bootstrap:admin": "tsx src/bootstrap-admin.ts",
     "bootstrap:admin:prod": "node dist/bootstrap-admin.js",
     "dev": "tsx src/server.ts",
-    "start": "node dist/server.js"
+    "start": "node dist/server.js",
+    "bootstrap:legacy-users": "tsx src/bootstrap-legacy-users.ts",
+    "bootstrap:legacy-users:prod": "node dist/bootstrap-legacy-users.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1141.0",

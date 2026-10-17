@@ -1,6 +1,6 @@
 import type { AppDatabase } from "@garanti-kulucka/database";
 import { sql } from "kysely";
-import { hashPassword, newPublicId } from "../auth/crypto.js";
+import { hashPassword, newPublicId, verifyPassword } from "../auth/crypto.js";
 import type { SecretEncryptor } from "../security/encryption.js";
 
 export const managedUserRoles = ["admin", "calisan", "kargo_operatoru"] as const;
@@ -17,6 +17,7 @@ export interface AdminUserRecord {
   is_active: boolean;
   is_online: boolean;
   last_seen_at: Date | string | null;
+  sip_extension: string | null;
   sip_username: string | null;
   sip_password_encrypted: string | null;
   created_at: Date | string;
@@ -51,9 +52,14 @@ export interface UpdateManagedUserInput {
   role?: ManagedUserRole;
   isActive?: boolean;
   password?: string;
+  sipExtension?: string | null;
   sipUsername?: string | null;
   sipPassword?: string | null;
   actorUserId: number | null;
+}
+
+export class PasswordUnchangedError extends Error {
+  constructor() { super("Yeni şifre geçici şifreden farklı olmalı."); }
 }
 
 export class ManagedUserNotFoundError extends Error {
@@ -95,6 +101,7 @@ export class AdminUsersRepository {
         "users.is_active",
         "users.is_online",
         "users.last_seen_at",
+        "users.sip_extension",
         "users.sip_username",
         "users.sip_password_encrypted",
         "users.created_at",
@@ -189,8 +196,10 @@ export class AdminUsersRepository {
     if (input.isActive !== undefined) patch.is_active = changed.is_active = input.isActive;
     if (input.password !== undefined) {
       patch.password_hash = await hashPassword(input.password);
+      patch.must_change_password = true;
       changed.password = "[redacted]";
     }
+    if (input.sipExtension !== undefined) patch.sip_extension = changed.sip_extension = input.sipExtension;
     if (input.sipUsername !== undefined) patch.sip_username = changed.sip_username = input.sipUsername;
     if (input.sipPassword !== undefined) {
       patch.sip_password_encrypted = input.sipPassword ? JSON.stringify(this.encryptor.encryptJson(input.sipPassword)) : null;
@@ -272,11 +281,14 @@ export class AdminUsersRepository {
   }
 
   async updateOwnPassword(userId: number, password: string): Promise<void> {
-    const passwordHash = await hashPassword(password);
     await this.db.transaction().execute(async (transaction) => {
+      const current = await transaction.selectFrom("users").select(["password_hash", "must_change_password"])
+        .where("id", "=", userId).forUpdate().executeTakeFirstOrThrow();
+      if (current.must_change_password && await verifyPassword(current.password_hash, password)) throw new PasswordUnchangedError();
+      const passwordHash = await hashPassword(password);
       await transaction
         .updateTable("users")
-        .set({ password_hash: passwordHash, updated_at: new Date() })
+        .set({ password_hash: passwordHash, must_change_password: false, updated_at: new Date() })
         .where("id", "=", userId)
         .execute();
       await transaction
@@ -332,6 +344,7 @@ export function serializeAdminUser(record: AdminUserRecord) {
     is_active: record.is_active,
     is_online: record.is_online,
     last_seen_at: isoDate(record.last_seen_at),
+    sip_extension: record.sip_extension,
     sip_username: record.sip_username,
     sip_password_configured: Boolean(record.sip_password_encrypted),
     created_at: isoDate(record.created_at),

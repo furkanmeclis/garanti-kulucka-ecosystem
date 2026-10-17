@@ -68,6 +68,10 @@ export async function authenticate(context: Context<AppBindings>, next: Next) {
       );
     }
 
+    if (user.must_change_password && !passwordChangeAllowed(context.req.method, context.req.path)) {
+      return context.json({ error: { code: "password_change_required", message: "Change your temporary password before continuing" } }, 403);
+    }
+
     context.set("auth", claims);
     context.set("actorUserId", user.id);
     return next();
@@ -99,4 +103,10 @@ export async function requireAdmin(context: Context<AppBindings>, next: Next) {
   }
 
   return next();
+}
+
+/** Only these method/path pairs are available until the temporary password is replaced. */
+export function passwordChangeAllowed(method: string, path: string): boolean {
+  return (method === "GET" && path === "/auth/me") ||
+    (method === "POST" && (path === "/auth/logout" || path === "/auth/account/password"));
 }
