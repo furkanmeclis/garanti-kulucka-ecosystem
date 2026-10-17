@@ -59,6 +59,19 @@ Mevcut durum: customer (adres + dış kimlik fan-out), conversation, message, pr
 
 Kabul: legacy kopyadan temiz hedefe tam taşıma, doğrulama raporu temiz.
 
+### Faz B kararları (sahibiyle, 2026-10-17)
+
+- **Medya taşınmaz.** Gömülü base64 dosyalar (1.394 mesaj, ~1,88 GB) ve bridge `s3://` nesneleri hedef storage'a yazılmaz. Mesajın metni, tarihi ve medya türü taşınır; mesajda "taşınmadı" notu görünür. Bu yüzden B.3 ve performans maddelerinin medya kısmı düşer, apply için Garage gerekmez.
+- **Yalnız taşıma kapsamında.** Yeni sistem kendi dosyaları (ekler, Instagram yayını, faturalar) için Garage'ı kullanmaya devam eder.
+- **Meta CDN linkleri** (4.104 mesaj) metin olarak kalır, indirilmez.
+- **Satırlar kesilmez.** Tarih sınırı yok; tüm müşteri, konuşma, mesaj metni, sipariş ve kargo taşınır.
+- **Boş legacy tablolar** (faturalar, cari hesaplar, sosyal/Instagram yorumları, stok hareketleri, teyit aramaları, VAPI kuyruğu) için iş yok.
+- **Taşınmayanlar:** `bakiye_hareketleri` ve `odeme_istekleri` (bakiye sıfırdan başlar; legacy'de 7 personelde toplam 4.400 TL güncel bakiye vardı, sahibi bilerek kabul etti), `stocks` (Ocak'ta bir kez doldurulmuş terk edilmiş tablo; gerçek stok `urunler`'den zaten taşınıyor), `ayarlar`/`settings` (admin panelden elle girilir), `kargo_pipeline_kuyrugu`, `islem_kayitlari`/`islem_loglari`.
+- **Kısayollar migrator ile taşınır, medyasıyla birlikte** (medya kuralına tek istisna): 53 kısayol → `message_shortcuts`; 10 medya → `message_shortcut_attachments` + Garage. 7'si dump'taki gömülü base64'ten (~2,9 MB), 3'ü legacy public storage URL'sinden (`db.garantikulucka.com/storage/v1/object/public/...`) indirilir. Bu yüzden apply'da yalnız kısayol medyası için storage yapılandırması gerekir.
+- **Müşterisi olmayan siparişler (B, 2026-10-17):** legacy'de yalnız 12 siparişte `musteri_id` var; 2.304 sipariş telefonun son 10 hanesiyle mevcut müşteriye bağlanır. Kalan 2.379 sipariş için **telefon başına tek sentetik müşteri** açılır (2.260 telefon + 11 telefonsuz sipariş için ayrı ayrı = 2.271 müşteri). Ad en son siparişteki ad olur; farklı adlar (48 telefonda) müşteri notuna yazılır; adres siparişteki adresten `customer_addresses`'a gider. Müşteriyi boş bırakmak reddedildi: `orders` tablosunda müşteri adı/telefon/adres alanı olmadığı için veri kaybı olurdu. Messenger/Instagram müşterilerinin `telefon` alanı gerçek telefon değil (`fb_…`/`ig_…` kimliği); bu yüzden onlarla otomatik telefon eşleşmesi olmaz, gerekirse geçiş sonrası elle birleştirme.
+- **Kullanıcılar (2026-10-17):** 16 legacy kullanıcının hepsi apply'dan önce bir betikle planlanan `usr_` public id'leriyle oluşturulur (liste repo dışında). Fiilen çalışan **4 kişi aktif**, diğer 12'si **pasif** (giriş yok, geçmiş kayıtlardaki "kim yaptı" bilgisi korunur). Owner: proje sahibi. Şifreler taşınamaz (Supabase auth dump'ta yok); betik aktif kullanıcılar için **geçici şifre** üretir, admin dağıtır, kullanıcı ilk girişte değiştirir. SIP bilgisi olan 2 kullanıcının SIP kullanıcı adı/şifresi de taşınır; yeni `users` tablosunda dahili numarası alanı yok, arama kayıtları işiyle eklenecek.
+- **Geçmiş kayıtlar taşınır:** `sms_gonderimler` (270) → `sms_messages`, `vapi_aramalar` (21) → `vapi_calls`, `arama_kayitlari` (192) → hedef tablo henüz yok (açık konu).
+
 ## Faz C — Staging / canlı ortam (~3–5 gün, Faz B ile paralel başlayabilir)
 
 - [ ] Dokploy üzerinde ortam: API, worker, web, web-beta, PostgreSQL, Redis, Garage.
@@ -87,8 +100,20 @@ Not: Meta uygulaması (`1413725227640949`) hazır; kalanlar memory notunda ve `t
 
 ## Faz E — Frontend son eksikler ve panel kararı (paralel)
 
-- [ ] **Karar:** canlıya hangi panel çıkıyor — `apps/web` (legacy görünüm), `apps/web-beta` (yeni tasarım) ya da ikisi birlikte?
-- [ ] Softphone widget'ı ve gelen arama modalı (P5 Layout/components satırı).
+- [x] **Karar (2026-10-17): canlıya yalnız `apps/web-beta` çıkar.** `apps/web` kabul kapısı değildir; yeni özellikler ve eksik kapatmaları betaya yapılır, `apps/web` yalnız kırılmayacak kadar korunur. "Tamam" işaretli her iş betada ayrıca doğrulanmalıdır.
+- [ ] **Beta softphone:** betada hiç softphone yok (`apps/web/src/ui/softphone/` yalnız eski panelde). JsSIP motoru betaya taşınacak, gelen arama modalıyla birlikte.
+- [ ] **Arama kayıtları (eksik bulundu, 2026-10-17):** legacy softphone her aramayı `arama_kayitlari`'na yazıyordu; yeni sistemde tablo, API ve kayıt yok (eski P6 "call-log persistence" maddesi hiç yapılmamış). Tasarım ve kararlar:
+  - **Ana kaynak NetGSM santral webhook'u** ("URL'e yönlendirme", [netsantraldokuman](https://www.netgsm.com.tr/netsantraldokuman/)): olaylar (Inbound/Outbound/Answer/Hangup/Queue/DTMF/Context) ve nihai `cdr` kaydı. Tüm alanlar saklanır: unique_id/kimlik/ortakkimlik/asteriskId, arayan, aranan, clid, internal_num (dahili), customer_num, yon, sondurum (1 cevaplandı, 2 cevapsız, 3 meşgul, 4 timeout, 5 failed), sure/talktime, holdtime, queue_name, context, digit, trunk, callInitiated/Queued/Connected/EndedTime, ses kaydı; ham payload da tutulur. Public URL gerektirir (Faz C).
+  - **Gece tamamlama:** `netsantral/report` ile önceki gün 24 saatlik dilimlerle çekilir, kaçan kayıtlar eklenir (sınır: aralık ≤ 24 saat, dakikada ≤ 2 sorgu).
+  - **Eşleme:** dahili → kullanıcının SIP dahilisi; dış numara → müşteri telefonu; sipariş bağı yalnız beta softphone'dan sipariş üzerinden başlatılan aramada.
+  - **Ses kayıtları Garage'a indirilir** (kalıcı arşiv), panelde oradan dinlenir.
+  - **Cevapsız gelen arama** betada bildirim zili ile personele bildirilir.
+  - **Yetki:** personel yalnız kendi aramalarını, yönetici hepsini görür (ses kaydı dahil).
+  - Betada: "Arama Geçmişi" sayfası (yön/durum/personel/tarih filtresi), müşteri ve sipariş detayında arama sekmesi.
+  - 192 legacy kayıt migrator ile taşınır (daha az alan; eksikler boş).
+  - **Hata:** mevcut `callReportRequest` varsayılan 7 günlük aralık istiyor; NetGSM 24 saatten uzununu hata 60 ile reddeder. Düzeltilecek.
+- [ ] **Müşteri birleştirme** (yeni sistemde yok): Messenger/Instagram müşterisi ile telefonla oluşan müşteri kaydını betada elle birleştirme; konuşma, sipariş, adres ve dış kimlikler taşınır.
+- [ ] Beta eşitlik taraması: koordinatör listesinde "tamam" olan işleri legacy davranışıyla betada tek tek karşılaştır.
 - [ ] Mesajlar: satır içi medya önizleme ve kalan küçük ekstralar.
 - [ ] Barkod yazdır sayfası ve NetGSM görüşme raporu ekranlarının son kontrolü.
 - [ ] Personelle kullanıcı kabul testi (UAT): her rol için gerçek bir iş günü senaryosu.
@@ -100,13 +125,33 @@ Not: Meta uygulaması (`1413725227640949`) hazır; kalanlar memory notunda ve `t
 - [ ] RBAC izin matrisi testi (owner/admin/calisan/kargo_operatoru).
 - [ ] Secret rotation runbook'u ve bir tatbikat.
 
-## Faz G — Prova ve geçiş (~1 hafta)
+## Faz G — Prova ve geçiş (acil)
 
-1. [ ] Staging'de legacy kopyasıyla tam prova taşıma, süre ölçümü.
-2. [ ] Geçiş günü planı: duyuru, legacy'yi yazmaya kapatma, son yedek, `migrate --apply`, doğrulama, DNS/yönlendirme.
-3. [ ] Geri dönüş planı: yeni sistem başarısız olursa legacy'yi yeniden yazılabilir açma adımları.
-4. [ ] Geçiş sonrası 2 hafta yakın takip (hata, kuyruk, sağlayıcı hataları).
-5. [ ] Legacy Supabase'i salt okunur bırak, sonra kapat.
+**Karar (2026-10-17):** legacy sunucu disk dolu (%96, ~187 GB) ve sürekli kırılıyor; geçiş acil. Yeni sistem **aynı sunucuya** kurulacak: legacy veriler yerele alınır, sunucu sıfırlanıp Dokploy kurulur, migrator yereldeki veriyle yeni sunucuya çalışır. Sunucu sıfırlandığı an legacy'ye geri dönüş yolu kapanır; bu yüzden prova ikinci bir sunucuda yapılır ve sıfırlamadan önce aşağıdaki kontrol listesi eksiksiz tamamlanır. Canlıya yalnız beta panel çıkar (`web` servisi compose'dan kaldırıldı).
+
+Hazırlık (legacy sunucuya dokunmadan):
+
+1. [ ] Faz B kod işleri bitmiş, yerel legacy kopyasıyla tam apply + beta panelde kontrol yapılmış.
+2. [ ] Prova sunucusunda Dokploy kurulumu + deploy + migrator apply, süre ölçümü.
+3. [ ] Dokploy ayarları (compose, env, alan adları, Garage) hazır ve yazılı.
+
+Sıfırlamadan önce legacy'den alınacaklar (geri dönüşü olmayan adım):
+
+4. [ ] Veritabanı dump'ı **sunucuya yazmadan** doğrudan yerele akıtılır (disk dolu: `ssh ... pg_dump -Fc | > yerel dosya`), iki ayrı yerde saklanır, SHA-256 ve `pg_restore --list` ile doğrulanır.
+5. [ ] Legacy sırlar ve sağlayıcı ayarları: sunucu `.env` dosyaları + veritabanındaki ayar/token kayıtları (WhatsApp, Instagram, Messenger, NetGSM, PTT, Sürat, KolayBi, VAPI, SIP). Yeni admin paneline girilecek.
+6. [ ] Supabase storage: en az kısayol medyası (3 dosya); mümkünse tüm bucket'ların yedeği.
+7. [ ] Sunucu envanteri: çalışan servisler, cron'lar, alan adları/DNS, sertifikalar, webhook adresleri (Meta, NetGSM IVR/santral).
+
+Geçiş günü:
+
+8. [ ] Legacy panel kapatılır, son dump (4–6 tekrar).
+9. [ ] Sunucu sıfırlanır, Dokploy kurulur, yeni sistem deploy edilir.
+10. [ ] Kullanıcılar betikle oluşturulur, 3 entegrasyon hesabı girilir, migrator apply (yerel dump → SSH tüneli ile yeni DB, ya da dump sunucuda).
+11. [ ] Webhook adresleri (Meta, NetGSM) yeni sisteme çevrilir.
+12. [ ] Duman testi: gerçek mesaj, sipariş, kargo; personele geçici şifreler.
+13. [ ] Geçiş sonrası 2 hafta yakın takip (hata, kuyruk, sağlayıcı hataları).
+
+Tahmini kesinti: 3–5 saat (prova ile kesinleşecek).
 
 ## Kabaca takvim
 
