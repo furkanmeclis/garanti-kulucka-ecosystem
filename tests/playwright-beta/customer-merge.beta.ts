@@ -53,5 +53,10 @@ for (const language of ["tr", "en"] as const) {
     expect(mergeBody).toEqual({ source_public_id: "cus_1" });
     await expect(dialog).not.toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Zeynep Müşteri 2");
+    await page.getByTestId("customer-merge").click();
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent("garanti:customer-merged", { detail: { source_public_id: "cus_2", target_public_id: "cus_3" } })));
+    await expect(page).toHaveURL(/\/musteriler\/cus_3$/);
+    await expect(dialog).not.toBeVisible();
   });
 }

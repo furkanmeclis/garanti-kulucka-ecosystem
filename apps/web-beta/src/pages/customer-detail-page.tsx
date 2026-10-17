@@ -58,7 +58,10 @@ export function CustomerDetailPage() {
   useEffect(() => {
     const onMerge = (event: Event) => {
       const payload = (event as CustomEvent<{ source_public_id: string; target_public_id: string }>).detail;
-      if (payload?.source_public_id === id) navigate(`/musteriler/${encodeURIComponent(payload.target_public_id)}`, { replace: true });
+      if (payload?.source_public_id === id) {
+        setMerging(false);
+        navigate(`/musteriler/${encodeURIComponent(payload.target_public_id)}`, { replace: true });
+      }
     };
     window.addEventListener("garanti:customer-merged", onMerge);
     return () => window.removeEventListener("garanti:customer-merged", onMerge);
