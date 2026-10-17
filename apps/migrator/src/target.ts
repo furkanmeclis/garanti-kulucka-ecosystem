@@ -458,6 +458,7 @@ export class DatabaseMigrationTarget implements MigrationTarget {
 
     let resolved = 0;
     let pending = 0;
+    let ambiguous = 0;
     for (const row of rows) {
       const maps = row.target_table === "shipments" && row.target_column === "order_id"
         ? await this.findLegacyIdMapsByMappingRole({
@@ -476,9 +477,17 @@ export class DatabaseMigrationTarget implements MigrationTarget {
           mappingRole: row.lookup_mapping_role,
         })].filter((map): map is LegacyIdMapEntry => map !== null);
       if (maps.length > 1) {
-        throw new Error(
-          `Deferred reconciliation ${row.public_id} found ambiguous ${row.lookup_mapping_role} legacy_id_map entries`,
-        );
+        // Owner decision 9d: an ambiguous link (e.g. one tracking number on several orders) is left unlinked
+        // and pending with the reason, for the post-cutover checklist, instead of failing the whole apply.
+        await this.db
+          .updateTable("migration_deferred_reconciliations")
+          .set({ error_message: `ambiguous: ${maps.length} ${row.lookup_mapping_role} candidates`, updated_at: new Date() })
+          .where("public_id", "=", row.public_id)
+          .where("status", "=", "pending")
+          .execute();
+        ambiguous += 1;
+        pending += 1;
+        continue;
       }
       const map = maps[0] ?? null;
       if (!map) {
@@ -520,7 +529,7 @@ export class DatabaseMigrationTarget implements MigrationTarget {
       resolved += 1;
     }
 
-    return { examined: rows.length, resolved, pending };
+    return { examined: rows.length, resolved, pending, ambiguous };
   }
 
   async calculateOrderTotalAdjustment(input: OrderTotalConsistencyCheck): Promise<{

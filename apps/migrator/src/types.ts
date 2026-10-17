@@ -358,6 +358,8 @@ export interface DeferredReconciliationResult {
   readonly examined: number;
   readonly resolved: number;
   readonly pending: number;
+  /** Pending rows whose lookup matched several targets; left unlinked (owner decision 9d). */
+  readonly ambiguous?: number;
 }
 
 export interface OrderTotalConsistencyCheck {

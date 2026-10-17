@@ -172,17 +172,43 @@ describe("PostgreSQL product/order/order item/shipment apply", () => {
         target,
         batch: batch("orders", 2, 0, 1),
       })).resolves.toMatchObject({ writtenRows: 1, idMapCreated: 2 });
+      // Owner decision 9d: a shipment whose tracking number matches several orders stays unlinked and pending.
+      await expect(applyOrderMigrationBatchWithState({
+        runId,
+        source: new MemorySource([
+          orderRecord({ id: "6f1c2b3a-4d5e-4f60-8172-93a4b5c6d7eb", siparis_no: "GK-AMB-1", konusma_id: null, genel_toplam: "0.00", kargo_takip_no: "TRK-AMBIG" }),
+          orderRecord({ id: "6f1c2b3a-4d5e-4f60-8172-93a4b5c6d7ec", siparis_no: "GK-AMB-2", konusma_id: null, genel_toplam: "0.00", kargo_takip_no: "TRK-AMBIG" }),
+        ]),
+        target,
+        batch: batch("orders", 3, 0, 2),
+      })).resolves.toMatchObject({ writtenRows: 2 });
+      await expect(applyShipmentMigrationBatchWithState({
+        runId,
+        source: new MemorySource([
+          shipmentRecord("c1000000-0000-4000-8000-000000000003", { takip_no: null, surat_kargo_takip_no: "TRK-AMBIG" }),
+        ]),
+        target,
+        batch: batch("shipments", 2, 0, 1),
+      })).resolves.toMatchObject({ writtenRows: 1 });
       seedConversation(container, runId);
-      await expect(reconcileDeferredReconciliations(target, runId)).resolves.toEqual({
-        examined: 2,
+      await expect(reconcileDeferredReconciliations(target, runId)).resolves.toMatchObject({
+        examined: 3,
         resolved: 2,
-        pending: 0,
+        pending: 1,
+        ambiguous: 1,
       });
-      await expect(reconcileDeferredReconciliations(target, runId)).resolves.toEqual({
-        examined: 0,
+      await expect(reconcileDeferredReconciliations(target, runId)).resolves.toMatchObject({
+        examined: 1,
         resolved: 0,
-        pending: 0,
+        pending: 1,
+        ambiguous: 1,
       });
+      expect(query(container, "canonical_target", `
+        select concat_ws(':', shipment.order_id is null, rec.status, rec.error_message like 'ambiguous%')
+        from shipments shipment
+        join migration_deferred_reconciliations rec on rec.target_id = shipment.public_id and rec.run_id = '${runId}'
+        where shipment.tracking_number = 'TRK-AMBIG'
+      `)).toBe("t:pending:t");
       expect(query(container, "canonical_target", `
         select count(*)
         from orders ord
