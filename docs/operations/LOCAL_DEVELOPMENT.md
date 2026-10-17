@@ -92,7 +92,7 @@ docker compose run --rm \
 ## Services
 
 ```bash
-docker compose up api worker web
+docker compose up api worker beta-frontend
 ```
 
 API health:
@@ -102,11 +102,13 @@ curl http://localhost:3000/health/live
 curl http://localhost:3000/health/ready
 ```
 
-Web health:
+Panel (beta) health:
 
 ```bash
-curl http://localhost:8080/healthz
+curl http://localhost:8081/healthz
 ```
+
+Only the beta panel (`apps/web-beta`) runs in compose; `apps/web` is no longer deployed.
 
 ## Notes
 
