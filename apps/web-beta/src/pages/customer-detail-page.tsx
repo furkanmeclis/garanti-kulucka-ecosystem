@@ -1,3 +1,4 @@
+import { ClickToCall } from "@/softphone/Softphone";
 import { CallLogsSection } from "./call-logs-page";
 import type { CustomerDetail } from "@garanti-kulucka/shared";
 import { ArrowLeft, CheckCircle2, Loader2, MapPin, MessageCircle, Pencil, ShoppingCart, StickyNote } from "lucide-react";
@@ -151,6 +152,7 @@ export function CustomerDetailPage() {
           )
         }
       />
+      <ClickToCall number={customer.phone} customer_public_id={customer.public_id} />
       <FeedbackLine feedback={feedback} />
       <CallLogsSection customerPublicId={customer.public_id} />
 

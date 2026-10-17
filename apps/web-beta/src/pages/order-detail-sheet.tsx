@@ -1,3 +1,4 @@
+import { ClickToCall } from "@/softphone/Softphone";
 import { CallLogsSection } from "./call-logs-page";
 import type { ShipmentSummary } from "@garanti-kulucka/shared";
 import { CheckCircle2, Clock, FileCheck, FileText, Loader2, MapPin, PackageCheck, PackageOpen, Pencil, Phone, PhoneOff, RefreshCw, RotateCcw, Save, SearchCheck, Trash2, Truck, Undo2, XCircle } from "lucide-react";
@@ -177,6 +178,7 @@ export function OrderDetailSheet({ publicId, row, onClose, onChanged }: { public
           <SheetDescription>
             {order ? `${order.customer_full_name ?? "-"} · ${order.customer_phone ?? "-"} · ${formatMoney(order.total_amount, order.currency, i18n.language)}` : t("orderActions.loading")}
           </SheetDescription>
+          {order && <ClickToCall number={order.customer_phone} order_public_id={order.public_id} customer_public_id={row?.customer_public_id ?? null} />}
         </SheetHeader>
         <div className="flex flex-col gap-3 p-4 text-sm">
           <FeedbackLine feedback={feedback} testId="order-action-message" />

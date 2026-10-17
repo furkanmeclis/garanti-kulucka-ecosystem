@@ -13,6 +13,7 @@ export interface OrderRowShipment {
 
 /** Legacy order-row extras: linked conversation, latest shipment, KolayBi and teyit call state. */
 export interface OrderRowExtras {
+  customer_public_id?: string | null;
   conversation_public_id?: string | null;
   shipment?: OrderRowShipment | null;
   kolaybi_status?: string | null;

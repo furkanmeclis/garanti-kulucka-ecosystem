@@ -1,4 +1,27 @@
 {
+  "softphone": {
+    "title": "Phone",
+    "close": "Close phone",
+    "registered": "Connected",
+    "disconnected": "Not connected",
+    "connecting": "Connecting",
+    "failed": "Registration failed",
+    "numberLabel": "Number or extension",
+    "call": "Call",
+    "hangup": "Hang up",
+    "mute": "Mute",
+    "unmute": "Unmute",
+    "hold": "Hold",
+    "resume": "Resume",
+    "keypad": "Keypad",
+    "ringing": "Ringing",
+    "active": "In call",
+    "ended": "Call ended",
+    "error": "Error",
+    "incomingTitle": "Incoming call",
+    "answer": "Answer",
+    "reject": "Decline"
+  },
   "app": {
     "name": "Garanti Kuluçka",
     "beta": "Beta",

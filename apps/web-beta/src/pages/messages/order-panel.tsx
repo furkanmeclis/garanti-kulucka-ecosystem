@@ -1,3 +1,4 @@
+import { ClickToCall } from "@/softphone/Softphone";
 import type { OrderSummary } from "@garanti-kulucka/shared";
 import { Loader2, Search } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -184,6 +185,7 @@ function OrderPanelBody({
   return (
     <>
       <div className={sheet ? "pb-3" : undefined}>
+        <ClickToCall number={prefill.phone} customer_public_id={prefill.customerPublicId} order_public_id={detail?.public_id ?? null} />
         <div className="relative mb-2" ref={searchBox}>
           <Search className="absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-msg-subtle" aria-hidden="true" />
           {searching && <Loader2 className="absolute top-1/2 right-2.5 size-3.5 -translate-y-1/2 animate-spin text-msg-subtle" aria-hidden="true" />}
