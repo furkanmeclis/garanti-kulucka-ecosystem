@@ -13,6 +13,8 @@ describe("auth serialization", () => {
       last_name: "User",
       phone: null,
       is_active: true,
+      must_change_password: true,
+      sip_extension: "101",
       is_online: false,
       last_seen_at: null,
       sip_username: "1001",
@@ -28,6 +30,7 @@ describe("auth serialization", () => {
       public_id: "usr_test",
       role: "admin",
       permissions: ["settings:read", "settings:write"],
+      must_change_password: true,
       is_online: false,
       sip_username: "1001",
     });

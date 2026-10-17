@@ -5,6 +5,7 @@ import { breakdownsFixture, dashboardFixture, invoicesFixture, timeseriesFixture
 export const backendBaseUrl = "http://127.0.0.1:65531";
 
 export interface MockUser {
+  must_change_password?: boolean;
   public_id: string;
   email: string;
   first_name: string;

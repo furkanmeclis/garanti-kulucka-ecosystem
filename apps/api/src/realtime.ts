@@ -86,6 +86,7 @@ export async function authenticateRealtimeToken(token: string | null, config: Ap
     throw new Error("unauthorized");
   }
 
+  if (user.must_change_password) throw new Error("password_change_required");
   return claims;
 }
 
@@ -111,7 +112,7 @@ export async function disconnectStaleRealtimeSessions(
         repository.findUserByPublicId(userPublicId),
         repository.findSessionByPublicId(sessionPublicId),
       ]);
-      if (!user || !session || session.user_id !== user.id) {
+      if (!user || !session || session.user_id !== user.id || user.must_change_password) {
         socket.disconnect(true);
         disconnected += 1;
       }

@@ -7,6 +7,7 @@ import {
   DuplicateUserEmailError,
   managedUserRoles,
   ManagedUserNotFoundError,
+  PasswordUnchangedError,
   SelfDeactivationError,
   serializeAdminLog,
   serializeAdminUser,
@@ -34,6 +35,7 @@ const updateUserSchema = z
     role: z.enum(managedUserRoles).optional(),
     is_active: z.boolean().optional(),
     password: passwordSchema.optional(),
+    sip_extension: trimmed(100).nullable().optional(),
     sip_username: trimmed(100).nullable().optional(),
     sip_password: z.string().max(200).nullable().optional(),
   })
@@ -114,6 +116,7 @@ export function createAdminUserRoutes() {
         ...(payload.role !== undefined ? { role: payload.role } : {}),
         ...(payload.is_active !== undefined ? { isActive: payload.is_active } : {}),
         ...(payload.password !== undefined ? { password: payload.password } : {}),
+        ...(payload.sip_extension !== undefined ? { sipExtension: emptyToNull(payload.sip_extension) ?? null } : {}),
         ...(payload.sip_username !== undefined ? { sipUsername: emptyToNull(payload.sip_username) ?? null } : {}),
         ...(payload.sip_password !== undefined ? { sipPassword: emptyToNull(payload.sip_password) ?? null } : {}),
         actorUserId: context.get("actorUserId"),
@@ -197,8 +200,13 @@ export function createAccountRoutes() {
     if (!parsed.success) return validationError(context, parsed.error);
     const actorUserId = context.get("actorUserId");
     if (actorUserId === null) return context.json({ error: { code: "unauthorized", message: "Oturum geçersiz" } }, 401);
-    await repository(context).updateOwnPassword(actorUserId, parsed.data.password);
-    return context.json({ updated: true });
+    try {
+      await repository(context).updateOwnPassword(actorUserId, parsed.data.password);
+      return context.json({ updated: true });
+    } catch (error) {
+      if (error instanceof PasswordUnchangedError) return context.json({ error: { code: "password_unchanged", message: error.message } }, 400);
+      throw error;
+    }
   });
 
   return routes;

@@ -180,6 +180,7 @@ export function isAdminRole(role: Selectable<RolesTable>["name"] | string): bool
 
 export function serializeAuthUser(user: AuthUserRecord, permissions: string[]) {
   return {
+    must_change_password: user.must_change_password,
     public_id: user.public_id,
     email: user.email,
     first_name: user.first_name,
