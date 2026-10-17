@@ -1,4 +1,27 @@
 {
+  "softphone": {
+    "title": "Telefon",
+    "close": "Telefonu kapat",
+    "registered": "Bağlı",
+    "disconnected": "Bağlı değil",
+    "connecting": "Bağlanıyor",
+    "failed": "Kayıt başarısız",
+    "numberLabel": "Numara veya dahili",
+    "call": "Ara",
+    "hangup": "Kapat",
+    "mute": "Sessiz",
+    "unmute": "Sesi aç",
+    "hold": "Beklet",
+    "resume": "Devam",
+    "keypad": "Tuş takımı",
+    "ringing": "Çalıyor",
+    "active": "Görüşmede",
+    "ended": "Görüşme bitti",
+    "error": "Hata",
+    "incomingTitle": "Gelen arama",
+    "answer": "Aç",
+    "reject": "Reddet"
+  },
   "app": {
     "name": "Garanti Kuluçka",
     "beta": "Beta",

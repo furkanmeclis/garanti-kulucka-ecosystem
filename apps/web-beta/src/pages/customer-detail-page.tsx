@@ -1,3 +1,4 @@
+import { ClickToCall } from "@/softphone/Softphone";
 import type { CustomerDetail } from "@garanti-kulucka/shared";
 import { ArrowLeft, CheckCircle2, Loader2, MapPin, MessageCircle, Pencil, ShoppingCart, StickyNote } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
@@ -150,6 +151,7 @@ export function CustomerDetailPage() {
           )
         }
       />
+      <ClickToCall number={customer.phone} customer_public_id={customer.public_id} />
       <FeedbackLine feedback={feedback} />
 
       <div className="grid gap-4 lg:grid-cols-2">

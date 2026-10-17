@@ -1,3 +1,4 @@
+import { SoftphoneStatus } from "@/softphone/Softphone";
 import { ChevronDown, Menu, Search, Settings, WifiOff } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
@@ -287,6 +288,7 @@ function ShellFrame({ children }: { children: ReactNode }) {
           </nav>
           <div className="ml-auto flex min-w-0 items-center gap-0.5 sm:gap-1" data-testid="header-actions">
             <GlobalSearch className="mr-1 hidden w-56 2xl:block" />
+            <SoftphoneStatus />
             <MobileSearch />
             <NotificationBell />
             <div className="hidden items-center gap-0.5 sm:flex">

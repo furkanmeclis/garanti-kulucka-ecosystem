@@ -88,7 +88,7 @@ describe("i18n coverage of the source", () => {
    */
   const dynamicPrefixes = [
     "status.", "statusHint.", "enums.", "nav.", "roles.", "orders.", "orderActions.", "sms.", "comments.", "accounting.", "balances.", "inventory.",
-    "cargoPipeline.", "dataDeletion.", "voiceMessages.", "calls.", "vapi.", "users.", "shipments.", "reports.", "settingsTabs.", "debugPages.", "orderEdit.",
+    "softphone.", "cargoPipeline.", "dataDeletion.", "voiceMessages.", "calls.", "vapi.", "users.", "shipments.", "reports.", "settingsTabs.", "debugPages.", "orderEdit.",
     "instagramAnalytics.", "instagramPublish.", "datePicker.", "dashboard.", "chat.", "inbox.", "messages.", "customerDetail.", "cancellations.", "settings.", "header.", "common.", "cargoCreate.", "login.", "passwordReset.", "analytics.",
   ];
 

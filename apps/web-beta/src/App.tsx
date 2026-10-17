@@ -1,3 +1,4 @@
+import { SoftphoneProvider } from "@/softphone/Softphone";
 import type { ReactNode } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { useAuth } from "@/app/auth";
@@ -55,7 +56,7 @@ function LoginRoute() {
 
 export function App() {
   return (
-    <Routes>
+    <SoftphoneProvider><Routes>
       <Route path="/giris" element={<LoginRoute />} />
       <Route path="/veri-silme" element={<DataDeletionPage />} />
       <Route path="/sifre-sifirla" element={<ResetPasswordPage />} />
@@ -101,6 +102,6 @@ export function App() {
       {/* Legacy and web use /kargo; the beta list lives at /kargolar. */}
       <Route path="/kargo" element={<Navigate to="/kargolar" replace />} />
       <Route path="*" element={<Protected><Navigate to="/" replace /></Protected>} />
-    </Routes>
+    </Routes></SoftphoneProvider>
   );
 }

@@ -1,3 +1,4 @@
+import type { WebphoneConfig, ClientCallEvent } from "@/softphone/types";
 import type {
   AuthSession,
   AuthUser,
@@ -330,6 +331,8 @@ export function createApiClient(options: ApiClientOptions) {
   }
 
   return {
+    getWebphoneConfig: () => request<WebphoneConfig>("/api/webphone/config"),
+    postClientCallEvent: (body: ClientCallEvent) => request<void>("/api/call-logs/client-events", { method: "POST", body }),
     baseUrl,
     requestBlob,
     async login(email: string, password: string) {
