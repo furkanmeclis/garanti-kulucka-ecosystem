@@ -85,6 +85,7 @@ describe("PostgreSQL migration runtime", () => {
       message_shortcuts: { tableName: "public.kisayollar", idColumn: "id" },
       sms_messages: { tableName: "public.sms_gonderimler", idColumn: "id" },
       vapi_calls: { tableName: "public.vapi_aramalar", idColumn: "id" },
+      call_logs: { tableName: "public.arama_kayitlari", idColumn: "id" },
     });
   });
 
@@ -179,6 +180,7 @@ describe("PostgreSQL migration runtime", () => {
       { entity: "message_shortcuts", totalRows: 0, batches: 0 },
       { entity: "sms_messages", totalRows: 0, batches: 0 },
       { entity: "vapi_calls", totalRows: 0, batches: 0 },
+      { entity: "call_logs", totalRows: 0, batches: 0 },
     ]);
     expect(client.queries.filter((sql) => /select count\(\*\)/i.test(sql))).toEqual([
       'select count(*) as count from "public"."musteriler"',
@@ -194,6 +196,7 @@ describe("PostgreSQL migration runtime", () => {
       'select count(*) as count from "public"."kisayollar"',
       'select count(*) as count from "public"."sms_gonderimler"',
       'select count(*) as count from "public"."vapi_aramalar"',
+      'select count(*) as count from "public"."arama_kayitlari"',
       expect.stringContaining("as superseded_insert_time_rows"),
     ]);
     expect(client.queries.find((sql) => sql.includes('"public"."kargo_takip"'))).toContain("group_rollup as");

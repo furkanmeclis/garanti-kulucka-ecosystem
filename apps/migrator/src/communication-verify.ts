@@ -34,6 +34,20 @@ export async function selectCommunicationVerification(client: Client,
     if (!Number.isSafeInteger(invalid) || invalid! < 0) throw new Error("Invalid communication verification count");
     communicationChecks.push({ name: `referential_integrity.${table}`, status: invalid === 0 ? "passed" : "failed", expected: 0, actual: invalid! });
   }
+  if (ids.call_logs.length > 0) {
+    const result = await client.query<{ invalid_count: number }>(`
+      select count(*)::int as invalid_count from call_logs h
+      left join users u on u.id = h.user_id
+      left join customers c on c.id = h.customer_id
+      left join orders o on o.id = h.order_id
+      where h.public_id = any($1::text[]) and
+        (h.source <> 'legacy' or h.raw_payload->>'id' is null or
+         (h.user_id is not null and u.id is null) or (h.customer_id is not null and c.id is null) or
+         (h.order_id is not null and o.id is null))`, [ids.call_logs]);
+    const invalid = result.rows[0]?.invalid_count;
+    if (!Number.isSafeInteger(invalid) || invalid! < 0) throw new Error("Invalid call log verification count");
+    communicationChecks.push({ name: "referential_integrity.call_logs", status: invalid === 0 ? "passed" : "failed", expected: 0, actual: invalid! });
+  }
   return { shortcutAttachments, communicationChecks };
 }
 export function verifyShortcutMediaMappings(snapshot: MigrationVerificationSnapshot): VerificationCheck {

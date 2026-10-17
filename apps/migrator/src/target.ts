@@ -1,3 +1,4 @@
+import { normalizePhoneLast10 } from "./order-mapping.js";
 import type { CommunicationDraft } from "./communication-mapping.js";
 import { createHash } from "node:crypto";
 import type {
@@ -65,6 +66,7 @@ const canonicalTargetTables = new Set<string>([
   "message_shortcut_attachments",
   "sms_messages",
   "vapi_calls",
+  "call_logs",
 ]);
 
 export function assertCanonicalTargetTable(table: string): asserts table is MigrationEntity {
@@ -124,7 +126,7 @@ export class DatabaseMigrationTarget implements MigrationTarget {
     return this.writeResolvedRecord(input);
   }
 
-  async writeCommunicationRecord(input: CommunicationDraft & { readonly shipmentPublicId: string | null }): Promise<CanonicalWriteResult> {
+  async writeCommunicationRecord(input: CommunicationDraft & { readonly shipmentPublicId: string | null; readonly userPublicId?: string | null; readonly orderPublicId?: string | null }): Promise<CanonicalWriteResult> {
     let record = input.record;
     if (record.targetTable === "message_shortcuts") {
       const existing = await this.db.selectFrom("message_shortcuts").select("public_id")
@@ -140,9 +142,21 @@ export class DatabaseMigrationTarget implements MigrationTarget {
       payload.shipment_id = input.shipmentPublicId === null ? null
         : await this.findRequiredPublicId("shipments", input.shipmentPublicId, "shipment");
     }
+    if (record.targetTable === "call_logs") {
+      payload.user_id = input.userPublicId ? await this.findRequiredPublicId("users", input.userPublicId, "user") : null;
+      payload.order_id = input.orderPublicId ? await this.findRequiredPublicId("orders", input.orderPublicId, "order") : null;
+      const phone = normalizePhoneLast10(String(payload.customer_number ?? ""));
+      // Match the same last-ten-digit identity as order migration; ambiguous phones stay unlinked.
+      const matches = phone ? await this.db.selectFrom("customers").select("id")
+        .where(sql<string>`right(regexp_replace(coalesce(phone, ''), '[^0-9]', '', 'g'), 10)`, "=", phone)
+        .limit(2).execute() : [];
+      payload.customer_id = matches.length === 1 ? matches[0]!.id : null;
+      payload.raw_payload = jsonb(payload.raw_payload);
+      payload.events = jsonb(payload.events);
+    }
     if (record.targetTable === "vapi_calls" && payload.transcript !== null) payload.transcript = jsonb(payload.transcript);
     const result = await this.writeResolvedRecord({ ...record, payload });
-    if (input.createdAt || input.updatedAt) await this.db.updateTable(record.targetTable as "message_shortcuts" | "sms_messages" | "vapi_calls").set({
+    if (input.createdAt || input.updatedAt) await this.db.updateTable(record.targetTable as "message_shortcuts" | "sms_messages" | "vapi_calls" | "call_logs").set({
       ...(input.createdAt ? { created_at: sql<Date>`${input.createdAt}::timestamptz` } : {}),
       ...(input.updatedAt ? { updated_at: sql<Date>`${input.updatedAt}::timestamptz` } : {}),
     }).where("public_id", "=", record.targetId).execute();

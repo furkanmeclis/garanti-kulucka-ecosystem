@@ -62,6 +62,7 @@ describe("legacy mapping catalog", () => {
       ["public.kisayollar", "id"],
       ["public.sms_gonderimler", "id"],
       ["public.vapi_aramalar", "id"],
+      ["public.arama_kayitlari", "id"],
     ]);
     expect(conversationMapping.targetEntities).toEqual([
       { entity: "conversations", mapping: "direct", readiness: "dry-run" },
@@ -296,6 +297,7 @@ describe("legacy mapping catalog", () => {
       "message_shortcuts",
       "sms_messages",
       "vapi_calls",
+      "call_logs",
     ]);
   });
 

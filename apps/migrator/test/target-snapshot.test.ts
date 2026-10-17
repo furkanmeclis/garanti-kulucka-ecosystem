@@ -163,8 +163,8 @@ describe("target verification snapshot", () => {
       "select public_id from shipments where public_id = any($1::text[]) order by id asc",
     ]);
     expect(queries.some((query) => /^select public_id from [a-z_]+ order by/.test(query))).toBe(false);
-    expect(canonicalMigrationEntities).toHaveLength(19);
-    expect(snapshot.sourceManifest?.rowCounts).toHaveLength(19);
+    expect(canonicalMigrationEntities).toHaveLength(20);
+    expect(snapshot.sourceManifest?.rowCounts).toHaveLength(20);
     expect(snapshot.sourceManifest?.rowContentChecksums).toEqual([{
       entity: "customers",
       rows: 1,

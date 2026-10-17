@@ -66,6 +66,24 @@ export const communicationTableMappings: readonly LegacyTableMapping[] = [
       column("olusturma_tarihi", "timestamp with time zone", "timestamptz", true),
     ],
   },
+  {
+    sourceTable: "public.arama_kayitlari",
+    idColumn: "id",
+    targetEntities: [{ entity: "call_logs", mapping: "direct", readiness: "dry-run" }],
+    columns: [
+      column("id", "uuid", "uuid", false),
+      column("kullanici_id", "uuid", "uuid", true),
+      column("siparis_id", "uuid", "uuid", true),
+      column("musteri_telefon", "character varying", "varchar", false),
+      column("yon", "character varying", "varchar", false),
+      column("durum", "character varying", "varchar", false),
+      column("baslangic", "timestamp with time zone", "timestamptz", false),
+      column("bitis", "timestamp with time zone", "timestamptz", true),
+      column("sure_sn", "integer", "int4", true),
+      column("notlar", "text", "text", true),
+      column("olusturma_tarihi", "timestamp with time zone", "timestamptz", false),
+    ],
+  },
 ];
 
 function column(name: string, dataType: string, udtName: string, nullable: boolean): LegacyColumnContract {

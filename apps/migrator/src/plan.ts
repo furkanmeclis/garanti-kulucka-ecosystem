@@ -15,6 +15,7 @@ export const canonicalMigrationEntities: readonly MigrationEntity[] = [
   "message_shortcut_attachments",
   "sms_messages",
   "vapi_calls",
+  "call_logs",
   "integration_accounts",
   "integration_settings",
   "webhook_subscriptions",

@@ -21,7 +21,8 @@ export type MigrationEntity =
   | "message_shortcuts"
   | "message_shortcut_attachments"
   | "sms_messages"
-  | "vapi_calls";
+  | "vapi_calls"
+  | "call_logs";
 
 export interface LegacyCursor {
   readonly entity: MigrationEntity;
@@ -56,6 +57,7 @@ export interface LegacyIdMapEntry {
 }
 
 export interface LegacySource {
+  readonly supportsKeysetPagination?: boolean;
   count(entity: MigrationEntity): Promise<number>;
   readBatch(entity: MigrationEntity, options: BatchReadOptions): Promise<LegacyRecord[]>;
   describeTables(entities: readonly MigrationEntity[]): Promise<SourceTableSnapshot[]>;
@@ -134,7 +136,7 @@ export interface MigrationTarget {
     operation: (target: MigrationTarget) => Promise<T>,
   ): Promise<T>;
   runInTransaction?<T>(operation: (target: MigrationTarget) => Promise<T>): Promise<T>;
-  writeCommunicationRecord?(input: CommunicationDraft & { readonly shipmentPublicId: string | null }): Promise<CanonicalWriteResult>;
+  writeCommunicationRecord?(input: CommunicationDraft & { readonly shipmentPublicId: string | null; readonly userPublicId?: string | null; readonly orderPublicId?: string | null }): Promise<CanonicalWriteResult>;
   writeShortcutAttachmentRecord?(input: CanonicalRecord & { readonly shortcutPublicId: string; readonly filePublicId: string }): Promise<CanonicalWriteResult>;
   writeCanonicalRecord(input: CanonicalRecord): Promise<CanonicalWriteResult>;
   writeCustomerAddressRecord?(input: CustomerAddressCanonicalRecord): Promise<CanonicalWriteResult>;
