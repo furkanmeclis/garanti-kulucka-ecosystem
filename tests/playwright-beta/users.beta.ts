@@ -110,7 +110,7 @@ test("users: edit with SIP, toggle active and delete; self is protected", async 
   await expect(page.getByTestId("users-feedback")).toHaveText("Kullanıcı güncellendi.");
   await expect(mehmet).toContainText("05559998877");
   // A blank SIP password keeps the stored one, so it is not sent.
-  expect(state.bodies.find((entry) => entry.method === "PATCH" && entry.path === "/admin/users/usr_2")?.body).toEqual({ first_name: "Mehmet", last_name: "Demir", phone: "05559998877", role: "calisan", sip_username: "102" });
+  expect(state.bodies.find((entry) => entry.method === "PATCH" && entry.path === "/admin/users/usr_2")?.body).toEqual({ first_name: "Mehmet", last_name: "Demir", phone: "05559998877", role: "calisan", sip_extension: null, sip_username: "102" });
 
   const can = table.locator("tr", { hasText: "kargo@example.com" });
   await expect(can).toContainText("Pasif");

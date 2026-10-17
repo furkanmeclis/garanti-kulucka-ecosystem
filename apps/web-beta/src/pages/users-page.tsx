@@ -35,7 +35,7 @@ function useRoleName() {
   };
 }
 
-const emptyForm = { email: "", first_name: "", last_name: "", phone: "", password: "", role: "" as ManagedRole | "", sip_username: "", sip_password: "" };
+const emptyForm = { email: "", first_name: "", last_name: "", phone: "", password: "", role: "" as ManagedRole | "", sip_extension: "", sip_username: "", sip_password: "" };
 type UserForm = typeof emptyForm;
 
 /** /kullanicilar — legacy KullanicilarPage (`/admin/users`, admin-only): list, create, edit (incl. SIP extension), activate/deactivate, delete. */
@@ -117,7 +117,7 @@ export function UsersPage() {
       cell: (row) =>
         row.sip_username ? (
           <span data-testid="user-sip">
-            {row.sip_username} <span className="text-xs text-muted-foreground">· {row.sip_password_configured ? t("users.sipPasswordSet") : t("users.sipPasswordMissing")}</span>
+            {row.sip_username}{row.sip_extension ? ` (${row.sip_extension})` : ""} <span className="text-xs text-muted-foreground">· {row.sip_password_configured ? t("users.sipPasswordSet") : t("users.sipPasswordMissing")}</span>
           </span>
         ) : (
           "-"
@@ -202,7 +202,7 @@ function UserSheet({ target, roles, onClose, onSaved }: { target: ManagedUser | 
     setShowPassword(false);
     setForm(
       existing
-        ? { ...emptyForm, first_name: existing.first_name, last_name: existing.last_name, phone: existing.phone ?? "", role: (roles as string[]).includes(existing.role) ? (existing.role as ManagedRole) : "", sip_username: existing.sip_username ?? "" }
+        ? { ...emptyForm, first_name: existing.first_name, last_name: existing.last_name, phone: existing.phone ?? "", role: (roles as string[]).includes(existing.role) ? (existing.role as ManagedRole) : "", sip_extension: existing.sip_extension ?? "", sip_username: existing.sip_username ?? "" }
         : emptyForm,
     );
   }, [target]);
@@ -227,6 +227,7 @@ function UserSheet({ target, roles, onClose, onSaved }: { target: ManagedUser | 
           last_name: form.last_name.trim(),
           phone: form.phone.trim() || null,
           ...(form.role ? { role: form.role } : {}),
+          sip_extension: form.sip_extension.trim() || null,
           sip_username: form.sip_username.trim() || null,
           // A blank SIP password keeps the stored (encrypted) one.
           ...(form.sip_password ? { sip_password: form.sip_password } : {}),
@@ -289,6 +290,7 @@ function UserSheet({ target, roles, onClose, onSaved }: { target: ManagedUser | 
               <Field label={t("users.sipUsername")}>
                 <Input className="h-11 md:h-9" value={form.sip_username} onChange={set("sip_username")} data-testid="user-sip-username" />
               </Field>
+              <Field label={t("users.sipExtension")}><Input value={form.sip_extension} onChange={set("sip_extension")} data-testid="user-sip-extension" /></Field>
               <Field label={t("users.sipPassword")}>
                 <Input
                   className="h-11 md:h-9"

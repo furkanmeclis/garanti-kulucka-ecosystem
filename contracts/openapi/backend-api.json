@@ -9319,7 +9319,8 @@
           "public_id",
           "email",
           "role",
-          "permissions"
+          "permissions",
+          "must_change_password"
         ],
         "properties": {
           "public_id": {
@@ -9355,6 +9356,9 @@
               "string",
               "null"
             ]
+          },
+          "must_change_password": {
+            "type": "boolean"
           }
         }
       },
@@ -14581,7 +14585,8 @@
           "last_seen_at",
           "sip_username",
           "sip_password_configured",
-          "created_at"
+          "created_at",
+          "sip_extension"
         ],
         "properties": {
           "public_id": {
@@ -14631,6 +14636,12 @@
           "created_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "sip_extension": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
@@ -14759,6 +14770,12 @@
               "null"
             ],
             "writeOnly": true
+          },
+          "sip_extension": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },

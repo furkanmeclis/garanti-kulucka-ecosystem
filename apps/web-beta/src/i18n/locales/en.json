@@ -1538,7 +1538,8 @@
     "colAction": "Action",
     "colModule": "Module",
     "colRecord": "Record",
-    "refresh": "Refresh"
+    "refresh": "Refresh",
+    "sipExtension": "SIP extension"
   },
   "dataDeletion": {
     "title": "Data Deletion Request",
@@ -2838,5 +2839,15 @@
     "saved": "Saved",
     "save": "Save",
     "tokenHint": "Optional: 16–128 letters, numbers, underscores or hyphens. Leave empty to disable."
+  },
+  "forcedPassword": {
+    "title": "Change your password",
+    "description": "Replace your temporary password before continuing.",
+    "password": "New password",
+    "confirmation": "Confirm new password",
+    "submit": "Change password",
+    "logout": "Log out",
+    "mismatch": "Passwords do not match.",
+    "failed": "Could not change password."
   }
 }

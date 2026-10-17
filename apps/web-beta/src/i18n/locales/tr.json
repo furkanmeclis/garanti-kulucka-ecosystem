@@ -1538,7 +1538,8 @@
     "colAction": "İşlem",
     "colModule": "Modül",
     "colRecord": "Kayıt",
-    "refresh": "Yenile"
+    "refresh": "Yenile",
+    "sipExtension": "SIP dahili"
   },
   "dataDeletion": {
     "title": "Veri Silme Talebi",
@@ -2838,5 +2839,15 @@
     "saved": "Kaydedildi",
     "save": "Kaydet",
     "tokenHint": "İsteğe bağlı: 16–128 harf, rakam, alt çizgi veya tire. Boş bırakarak kapatabilirsiniz."
+  },
+  "forcedPassword": {
+    "title": "Şifrenizi değiştirin",
+    "description": "Devam etmek için geçici şifrenizi yeni bir şifreyle değiştirin.",
+    "password": "Yeni şifre",
+    "confirmation": "Yeni şifre tekrar",
+    "submit": "Şifreyi değiştir",
+    "logout": "Çıkış yap",
+    "mismatch": "Şifreler eşleşmiyor.",
+    "failed": "Şifre değiştirilemedi."
   }
 }
