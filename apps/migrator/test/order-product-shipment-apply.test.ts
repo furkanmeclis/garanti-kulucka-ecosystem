@@ -206,7 +206,7 @@ describe("product/order/order item/shipment apply", () => {
     ]);
   });
 
-  it("fails closed when required product FK resolution is missing and warns for total adjustments", async () => {
+  it("writes order items without a product link when no product resolves (owner decision 9c) and warns for total adjustments", async () => {
     const missingProductTarget = new ApplyMemoryTarget();
     missingProductTarget.seedMap(
       "public.siparisler",
@@ -222,7 +222,9 @@ describe("product/order/order item/shipment apply", () => {
       source: new MemorySource([orderItemRecord()]),
       target: missingProductTarget,
       batch: batch("order_items", 1),
-    })).rejects.toThrow(`Cannot resolve product FK for order item public.siparis_kalemleri.${orderItemId}`);
+    })).resolves.toMatchObject({ writtenRows: 1 });
+    const unlinked = missingProductTarget.records.find((record) => record.targetTable === "order_items");
+    expect(unlinked?.payload).toMatchObject({ product_id: null, order_id: "ord_0123456789abcdef01234567" });
 
     const mismatchTarget = new ApplyMemoryTarget({ orderTotals: { ord_0123456789abcdef01234567: "99.00" } });
     mismatchTarget.seedMap(

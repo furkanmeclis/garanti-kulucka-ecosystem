@@ -317,7 +317,9 @@ export class DatabaseMigrationTarget implements MigrationTarget {
 
   async writeOrderItemRecord(input: OrderItemCanonicalRecord): Promise<CanonicalWriteResult> {
     const orderId = await this.findRequiredPublicId("orders", input.orderPublicId, "order");
-    const productId = await this.findRequiredPublicId("products", input.productPublicId, "product");
+    const productId = input.productPublicId === null
+      ? null
+      : await this.findRequiredPublicId("products", input.productPublicId, "product");
 
     return this.writeResolvedRecord({
       targetTable: input.targetTable,

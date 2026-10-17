@@ -999,12 +999,8 @@ async function applyOrderItemMigrationBatch(
       productPublicIdsBySku,
       productPublicIdsByExternalId,
     });
+    // Unmatched items keep name and price without a product link (owner decision 9c); dry-run counts them.
     const item = itemResult.orderItem;
-    if (item.productPublicId === null) {
-      throw new Error(
-        `Cannot resolve product FK for order item ${legacyRecord.sourceTable}.${legacyRecord.sourceId}`,
-      );
-    }
 
     const itemRecord: OrderItemCanonicalRecord = {
       targetTable: item.targetTable,
