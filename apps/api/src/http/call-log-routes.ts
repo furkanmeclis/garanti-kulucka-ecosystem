@@ -1,4 +1,5 @@
-import { timingSafeEqual } from "node:crypto";
+import { netgsmTokenMatches } from "../webhooks/security.js";
+import { clientIp, rateLimit } from "./rate-limit.js";
 import { Hono } from "hono";
 import {
   CallLogsRepository,
@@ -77,11 +78,17 @@ export function serializeCall(
 }
 export function createSantralWebhookRoutes() {
   const routes = new Hono<AppBindings>();
-  routes.post("/santral", async (c) => {
+  routes.post("/santral", rateLimit({ namespace: "webhook:netgsm-santral", limit: (c) => c.get("config").webhookRateLimitPerMinute ?? 600, windowMs: 60_000, key: clientIp, rejectionStatus: 200, rejectionBody: { ok: true, processed: false } }), async (c) => {
     const db = c.get("db");
     if (!db) return c.json({ ok: true, processed: false });
     const repo = new CallLogsRepository(db);
     try {
+      const expected = await repo.webhookToken();
+      if (!netgsmTokenMatches(expected, c.req.query("token"))) {
+        c.get("logger").warn({ event: "netgsm.webhook_rejected", endpoint: "santral", reason: expected ? "invalid_token" : "missing_token_configuration" });
+        await repo.recordEvent({}, "rejected");
+        return c.json({ ok: true, processed: false });
+      }
       let payload: Record<string, unknown>;
       const type = c.req.header("content-type") ?? "";
       try {
@@ -96,16 +103,6 @@ export function createSantralWebhookRoutes() {
         payload = {
           malformed_body: (await c.req.text().catch(() => "")).slice(0, 10000),
         };
-      }
-      const expected = await repo.webhookToken();
-      const received = c.req.query("token") ?? "";
-      if (
-        expected &&
-        (Buffer.byteLength(expected) !== Buffer.byteLength(received) ||
-          !timingSafeEqual(Buffer.from(expected), Buffer.from(received)))
-      ) {
-        await repo.recordEvent({}, "rejected");
-        return c.json({ ok: true, processed: false });
       }
       // Durable receipt precedes applying the call. Errors remain visible for operational replay.
       const event = await repo.recordEvent(payload, "received");

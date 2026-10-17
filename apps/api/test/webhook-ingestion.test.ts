@@ -1,6 +1,6 @@
 import { createHmac } from "node:crypto";
 import { Hono } from "hono";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { JobEnvelope, ProviderName } from "@garanti-kulucka/shared";
 import { createWebhookRoutes, type WebhookSignaturePolicy } from "../src/http/webhook-routes.js";
 import type { AppBindings } from "../src/http/types.js";
@@ -76,11 +76,13 @@ function createTestApp(input: {
   policy?: WebhookSignaturePolicy;
   warnings?: unknown[];
   failPublish?: boolean;
+  limit?: number;
 }) {
   const app = new Hono<AppBindings>();
+  const limiterStore = new MemoryRateLimitStore();
   app.use("*", async (context, next) => {
     context.set("requestId", "req_test_webhook");
-    context.set("rateLimitStore", new MemoryRateLimitStore());
+    context.set("rateLimitStore", limiterStore);
     context.set("config", {
       databaseUrl: null,
       jwtSecret: "test",
@@ -90,6 +92,7 @@ function createTestApp(input: {
       refreshTokenTtlDays: 30,
       redisUrl: null,
       corsOrigin: null,
+      webhookRateLimitPerMinute: input.limit ?? 600,
     });
     context.set("logger", {
       info: () => undefined,
@@ -120,6 +123,8 @@ function createTestApp(input: {
 function metaSignature(body: string) {
   return `sha256=${createHmac("sha256", "meta-secret").update(body).digest("hex")}`;
 }
+
+afterEach(() => vi.unstubAllEnvs());
 
 describe("webhook ingestion", () => {
   it("creates stable payload hashes independent of object key order", () => {
@@ -236,7 +241,7 @@ describe("webhook ingestion", () => {
       body: JSON.stringify({ object: "page", event_id: "evt_unsigned" }),
     });
 
-    expect(response.status).toBe(401);
+    expect(response.status).toBe(403);
     await expect(response.json()).resolves.toEqual({
       error: {
         code: "webhook_signature_invalid",
@@ -246,7 +251,7 @@ describe("webhook ingestion", () => {
     expect(repository.storedInputs).toHaveLength(0);
   });
 
-  it("accepts bad signatures in report_only mode and emits a warning", async () => {
+  it("enforces configured Meta secrets even in report_only mode", async () => {
     const repository = new FakeWebhookRepository();
     const warnings: unknown[] = [];
     const response = await createTestApp({
@@ -259,10 +264,9 @@ describe("webhook ingestion", () => {
       body: JSON.stringify({ object: "page", event_id: "evt_report_only" }),
     });
 
-    expect(response.status).toBe(202);
-    expect(repository.storedInputs).toHaveLength(1);
-    expect(warnings).toHaveLength(1);
-    expect(JSON.stringify(warnings[0])).toContain("invalid_signature");
+    expect(response.status).toBe(403);
+    expect(repository.storedInputs).toHaveLength(0);
+    expect(warnings).toHaveLength(0);
   });
 
   it("returns the same accepted response for replayed event ids without enqueueing duplicate work", async () => {
@@ -374,14 +378,90 @@ describe("webhook ingestion recovery", () => {
     expect(jobs).toHaveLength(0);
   });
 
-  it("rejects unsigned callbacks when enforce is configured without a secret (no fail-open)", async () => {
+  it("rejects unsigned production callbacks without a secret", async () => {
+    vi.stubEnv("APP_ENV", "production");
     const jobs: JobEnvelope[] = [];
     const response = await createTestApp({ repository: new FakeWebhookRepository(), jobs, policy: { mode: "enforce", secret: null } }).request("/webhooks/instagram", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body,
     });
-    expect(response.status).toBe(401);
+    expect(response.status).toBe(403);
     expect(jobs).toHaveLength(0);
   });
+});
+
+
+describe.each(["meta", "whatsapp", "instagram", "messenger"])("%s security modes", (provider) => {
+  it.each(["development", "production"])("validates raw bytes and rejects missing/forged signatures in %s", async (env) => {
+    vi.stubEnv("APP_ENV", env);
+    for (const mode of ["off", "report_only", "enforce"] as const) {
+      const repository = new FakeWebhookRepository();
+      const jobs: JobEnvelope[] = [];
+      const app = createTestApp({ repository, jobs, policy: { mode, secret: "meta-secret" } });
+      const body = '{ "event_id": "raw-çığ", "text": "你好" }';
+      for (const signature of [undefined, "sha256=bad", metaSignature(body + " ")]) {
+        const response = await app.request(`/webhooks/${provider}`, { method: "POST", headers: { "content-type": "application/json", ...(signature ? { "x-hub-signature-256": signature } : {}) }, body });
+        expect(response.status).toBe(403);
+      }
+      expect(repository.storedInputs).toHaveLength(0);
+      expect(jobs).toHaveLength(0);
+      expect((await app.request(`/webhooks/${provider}`, { method: "POST", headers: { "content-type": "application/json", "x-hub-signature-256": metaSignature(body) }, body })).status).toBe(202);
+      expect(repository.storedInputs[0]?.verificationStatus).toBe("verified");
+    }
+  });
+  it.each(["development", "production"])("handles missing secrets in %s", async (env) => {
+    vi.stubEnv("APP_ENV", env);
+    const repository = new FakeWebhookRepository();
+    const warnings: unknown[] = [];
+    const jobs: JobEnvelope[] = [];
+    const response = await createTestApp({ repository, jobs, warnings }).request(`/webhooks/${provider}`, { method: "POST", headers: { "content-type": "application/json" }, body: '{}' });
+    expect(response.status).toBe(env === "production" ? 403 : 202);
+    if (env === "development") {
+      expect(repository.storedInputs[0]?.verificationStatus).toBe("unverified");
+      expect(warnings).toHaveLength(1);
+    } else { expect(repository.storedInputs).toHaveLength(0); expect(jobs).toHaveLength(0); }
+  });
+});
+
+describe("Meta replay batches", () => {
+  it("deduplicates overlapping batches per message and hashes events without ids", async () => {
+    const repository = new FakeWebhookRepository();
+    const jobs: JobEnvelope[] = [];
+    const app = createTestApp({ repository, jobs });
+    const deliver = (body: unknown) => app.request("/webhooks/whatsapp", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    const batch = (...ids: string[]) => ({ entry: [{ id: "WABA", changes: [{ value: { messages: ids.map((id) => ({ id })) } }] }] });
+    await deliver(batch("a", "b"));
+    await deliver(batch("b", "c"));
+    expect(repository.storedInputs.map((input) => input.externalEventId)).toEqual(["a", "b", "c"]);
+    await deliver({ entry: [{ id: "WABA", messaging: [{ read: { watermark: 123 } }] }] });
+    await deliver({ entry: [{ id: "WABA", messaging: [{ read: { watermark: 123 } }] }] });
+    expect(jobs).toHaveLength(4);
+    expect(repository.storedInputs[3]?.externalEventId).toMatch(/^body:[a-f0-9]{64}$/);
+  });
+  it("keeps GET verification handshakes unchanged even in production", async () => {
+    vi.stubEnv("APP_ENV", "production");
+    const response = await createTestApp({ repository: new FakeWebhookRepository() }).request("/webhooks/whatsapp?hub.mode=subscribe&hub.challenge=123&hub.verify_token=test");
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe("123");
+  });
+});
+
+
+it("limits Meta ingress without persisting or queueing excess requests", async () => {
+  const repository = new FakeWebhookRepository(); const jobs: JobEnvelope[] = [];
+  const app = createTestApp({ repository, jobs, limit: 2 });
+  for (let i = 0; i < 3; i++) {
+    const response = await app.request("/webhooks/whatsapp", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ event_id: `limited-${i}` }) });
+    expect(response.status).toBe(i < 2 ? 202 : 429);
+  }
+  expect(repository.storedInputs).toHaveLength(2); expect(jobs).toHaveLength(2);
+});
+
+
+it("isolates message, delivery, standby and status ids in mixed Meta batches", async () => {
+  const { splitMetaWebhookBody } = await import("../src/webhooks/meta-events.js");
+  const { inferExternalEventId } = await import("../src/webhooks/payload.js");
+  const events = splitMetaWebhookBody({ object: "page", entry: [{ id: "page", messaging: [{ message: { mid: "dm1" } }, { delivery: { mids: ["dm1", "dm2"] } }], changes: [{ value: { messages: [{ id: "wa1" }, { id: "wa2" }], statuses: [{ id: "wa3", status: "delivered" }] } }] }] });
+  expect(events.map(inferExternalEventId)).toEqual(["dm1", "delivery:dm1", "delivery:dm2", "wa1", "wa2", "status:wa3:delivered"]);
 });

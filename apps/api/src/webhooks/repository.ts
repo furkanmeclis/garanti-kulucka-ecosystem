@@ -29,6 +29,7 @@ export interface StoreWebhookEventInput {
   externalEventId: string | null;
   payloadHash: string;
   rawPayload: unknown;
+  verificationStatus?: string;
 }
 
 export interface WebhookEventRepository {
@@ -138,6 +139,7 @@ export class DatabaseWebhookEventRepository implements WebhookEventRepository {
           payload_hash: input.payloadHash,
           raw_payload: input.rawPayload,
           status: "received",
+          verification_status: input.verificationStatus ?? "unverified",
         })
         .returningAll()
         .executeTakeFirstOrThrow();
@@ -171,10 +173,6 @@ export class DatabaseWebhookEventRepository implements WebhookEventRepository {
       ])
       .where("integration_providers.key", "=", input.provider)
       .where("webhook_events.external_event_id", "=", input.externalEventId)
-      .$if(input.accountPublicId === null, (builder) => builder.where("webhook_events.account_id", "is", null))
-      .$if(input.accountPublicId !== null, (builder) =>
-        builder.where("integration_accounts.public_id", "=", input.accountPublicId as string),
-      )
       .orderBy("webhook_events.received_at", "asc")
       .executeTakeFirst();
 

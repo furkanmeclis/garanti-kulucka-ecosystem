@@ -1,5 +1,6 @@
+import { createHmac } from "node:crypto";
 import type { AppDatabase } from "@garanti-kulucka/database";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ApiConfig } from "../src/config.js";
 
 const mocks = vi.hoisted(() => {
@@ -25,6 +26,7 @@ const mocks = vi.hoisted(() => {
     updated_at: now,
   };
   return {
+    secret: "meta-secret" as string | null,
     now,
     baseRow,
     setRole: (next: string) => {
@@ -55,6 +57,11 @@ vi.mock("../src/privacy/data-deletion-repository.js", async (importOriginal) => 
   DataDeletionRepository: vi.fn(function DataDeletionRepository() {
     return mocks.repository;
   }),
+}));
+
+vi.mock("../src/webhooks/security.js", async (original) => ({
+  ...(await original<typeof import("../src/webhooks/security.js")>()),
+  resolveMetaAppSecret: vi.fn(async () => mocks.secret),
 }));
 
 const { createApp } = await import("../src/app.js");
@@ -94,7 +101,8 @@ async function authed(method: string, path: string, body?: unknown, role = "admi
 }
 
 describe("data deletion requests (legacy DataDeletionPage)", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => { vi.clearAllMocks(); mocks.secret = "meta-secret"; });
+  afterEach(() => vi.unstubAllEnvs());
 
   it("accepts the anonymous legacy form and returns a DEL reference", async () => {
     const response = await anonymous("POST", "/api/veri-silme-talebi", { ad: "  Zeynep Kaya ", email: "zeynep@example.com", telefon: "", instagram_kullanici_adi: "zeynep.k", aciklama: "Lütfen silin" });
@@ -125,20 +133,45 @@ describe("data deletion requests (legacy DataDeletionPage)", () => {
     expect(statuses[5]).toBe(429);
   });
 
-  it("answers the Meta data deletion callback with a panel status URL", async () => {
+  it.each(["development", "production"])("answers the verified Meta callback in %s with the same panel status URL", async (env) => {
+    vi.stubEnv("APP_ENV", env);
     const payload = Buffer.from(JSON.stringify({ algorithm: "HMAC-SHA256", user_id: "1234567890" })).toString("base64url");
-    const response = await anonymous("POST", "/api/facebook/data-deletion", `signed_request=sig.${payload}`, { "content-type": "application/x-www-form-urlencoded" });
+    const response = await anonymous("POST", "/api/facebook/data-deletion", `signed_request=${createHmac("sha256", "meta-secret").update(payload).digest("base64url")}.${payload}`, { "content-type": "application/x-www-form-urlencoded" });
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ url: "https://panel.example.com/veri-silme?ref=DEL-ABC123", confirmation_code: "DEL-ABC123" });
     expect(mocks.repository.create).toHaveBeenCalledWith(expect.objectContaining({ source: "facebook", messengerPsid: "1234567890", fullName: null }));
   });
 
-  it("parses only numeric user ids from signed requests", () => {
-    expect(signedRequestUserId(`x.${Buffer.from('{"user_id":"42"}').toString("base64url")}`)).toBe("42");
-    expect(signedRequestUserId(`x.${Buffer.from('{"user_id":"<script>"}').toString("base64url")}`)).toBeNull();
-    expect(signedRequestUserId("garbage")).toBeNull();
-    expect(signedRequestUserId(undefined)).toBeNull();
+  it("parses user ids only after authenticating algorithm, signature and payload", () => {
+    const signed = (value: unknown) => {
+      const payload = Buffer.from(JSON.stringify(value)).toString("base64url");
+      return `${createHmac("sha256", "meta-secret").update(payload).digest("base64url")}.${payload}`;
+    };
+    expect(signedRequestUserId(signed({ algorithm: "HMAC-SHA256", user_id: "42" }), "meta-secret")).toBe("42");
+    for (const value of [{ algorithm: "HMAC-SHA256", user_id: "<script>" }, { algorithm: "none", user_id: "42" }, { user_id: "42" }]) expect(signedRequestUserId(signed(value), "meta-secret")).toBeNull();
+    expect(signedRequestUserId(signed({ algorithm: "HMAC-SHA256", user_id: "42" }), "wrong")).toBeNull();
+    const paddedPayload = Buffer.from(JSON.stringify({ algorithm: "HMAC-SHA256", user_id: "42" })).toString("base64").replaceAll("+", "-").replaceAll("/", "_");
+    const paddedSignature = createHmac("sha256", "meta-secret").update(paddedPayload).digest("base64").replaceAll("+", "-").replaceAll("/", "_");
+    expect(signedRequestUserId(`${paddedSignature}.${paddedPayload}`, "meta-secret")).toBe("42");
+    expect(signedRequestUserId("garbage", "meta-secret")).toBeNull();
+    expect(signedRequestUserId(undefined, "meta-secret")).toBeNull();
     expect(deletionReference(0)).toMatch(/^DEL-0[A-Z0-9]{4}$/);
+  });
+
+  it.each(["development", "production"])("rejects forged or missing signed_request in %s without persisting", async (env) => {
+    vi.stubEnv("APP_ENV", env);
+    for (const signed_request of [undefined, "forged.payload", "a.b.c"]) {
+      expect((await anonymous("POST", "/api/facebook/data-deletion", { signed_request })).status).toBe(403);
+    }
+    expect(mocks.repository.create).not.toHaveBeenCalled();
+  });
+
+  it.each(["development", "production"])("handles missing deletion secret in %s without trusting an unverified user id", async (env) => {
+    vi.stubEnv("APP_ENV", env); mocks.secret = null;
+    const response = await anonymous("POST", "/api/facebook/data-deletion", { signed_request: "forged.payload" });
+    expect(response.status).toBe(env === "production" ? 403 : 200);
+    if (env === "production") expect(mocks.repository.create).not.toHaveBeenCalled();
+    else expect(mocks.repository.create).toHaveBeenCalledWith(expect.objectContaining({ messengerPsid: null }));
   });
 
   it("exposes only the status for a public reference lookup", async () => {

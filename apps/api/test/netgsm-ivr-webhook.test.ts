@@ -1,5 +1,5 @@
 import type { AppDatabase } from "@garanti-kulucka/database";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ApiConfig } from "../src/config.js";
 
 const mocks = vi.hoisted(() => ({
@@ -35,6 +35,7 @@ function app() {
 }
 
 describe("NetGSM IVR (teyit) webhook", () => {
+  afterEach(() => vi.unstubAllEnvs());
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.token = null;
@@ -91,5 +92,23 @@ describe("NetGSM IVR (teyit) webhook", () => {
 
   it("keeps the admin NetGSM routes protected", async () => {
     expect((await app().request("/api/netgsm/status")).status).toBe(401);
+  });
+});
+
+
+describe.each(["development", "production"])("IVR token mode %s", (env) => {
+  afterEach(() => vi.unstubAllEnvs());
+  it.each([null, "ivr-token-0123456789"])("enforces token %s without side effects on rejection", async (expected) => {
+    vi.stubEnv("APP_ENV", env); mocks.token = expected;
+    for (const received of [undefined, "wrong", "ivr-token-0123456789"]) {
+      vi.clearAllMocks(); mocks.events.length = 0; mocks.applied.length = 0;
+      const suffix = received ? `?token=${received}` : "";
+      const response = await app().request(`/api/netgsm/webhook/sesli-mesaj${suffix}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ bulkid: "B-1", state: "1" }) });
+      const accepted = expected ? received === expected : env !== "production";
+      expect(response.status).toBe(accepted ? 200 : 401);
+      expect(mocks.applied).toHaveLength(accepted ? 1 : 0);
+      expect(mocks.events).toHaveLength(accepted ? 1 : 0);
+      if (!accepted) expect(mocks.broadcasts.length === 0 || !realtimePublisher.broadcast.mock.calls.length).toBe(true);
+    }
   });
 });

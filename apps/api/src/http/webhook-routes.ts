@@ -1,4 +1,6 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHash } from "node:crypto";
+import { constantTimeEqual, isProduction, resolveMetaAppSecret, verifyMetaSignature } from "../webhooks/security.js";
+import { splitMetaWebhookBody } from "../webhooks/meta-events.js";
 import { Hono } from "hono";
 import type { Context } from "hono";
 import { createStructuredLog, type ProviderName } from "@garanti-kulucka/shared";
@@ -95,27 +97,8 @@ function isDuplicateKeyError(error: unknown) {
   );
 }
 
-function safeEqual(left: string, right: string) {
-  const leftBuffer = Buffer.from(left, "utf8");
-  const rightBuffer = Buffer.from(right, "utf8");
-  return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer);
-}
-
-function verifyMetaSignature(input: { rawBody: string; signature: string | undefined; secret: string | undefined }) {
-  if (!input.signature || !input.secret) {
-    return false;
-  }
-
-  const expected = `sha256=${createHmac("sha256", input.secret).update(input.rawBody).digest("hex")}`;
-  return safeEqual(input.signature, expected);
-}
-
 function verifySharedToken(input: { token: string | undefined; secret: string | undefined }) {
-  if (!input.token || !input.secret) {
-    return false;
-  }
-
-  return safeEqual(input.token, input.secret);
+  return Boolean(input.token && input.secret && constantTimeEqual(input.token, input.secret));
 }
 
 class WebhookReplayCache {
@@ -158,9 +141,11 @@ async function getWebhookSignaturePolicy(input: {
   accountId: number | null;
   provider: WebhookProvider;
 }): Promise<WebhookSignaturePolicy> {
-  const secretKeys = metaSignatureProviders.has(input.provider)
-    ? ["webhook.app_secret", "app_secret"]
-    : ["webhook.shared_token"];
+  if (metaSignatureProviders.has(input.provider)) {
+    const secret = await resolveMetaAppSecret(input.context, input.providerId, input.accountId);
+    return { mode: secret || isProduction() ? "enforce" : "off", secret };
+  }
+  const secretKeys = ["webhook.shared_token"];
   const keys = [...secretKeys, "webhook.signature_mode"];
   const settings = await input.db
     .selectFrom("integration_settings")
@@ -226,17 +211,13 @@ function logSignatureWarning(input: {
 
 function signatureMatches(input: {
   provider: WebhookProvider;
-  rawBody: string;
+  rawBody: Uint8Array;
   metaSignature: string | undefined;
   sharedToken: string | undefined;
   secret: string;
 }) {
   return metaSignatureProviders.has(input.provider)
-    ? verifyMetaSignature({
-        rawBody: input.rawBody,
-        signature: input.metaSignature,
-        secret: input.secret,
-      })
+    ? verifyMetaSignature(input.rawBody, input.metaSignature, input.secret)
     : verifySharedToken({ token: input.sharedToken, secret: input.secret });
 }
 
@@ -316,12 +297,14 @@ export function createWebhookRoutes(options: CreateWebhookRoutesOptions = {}) {
           return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
         }
 
-        const rawBody = await context.req.text();
+        const rawBytes = new Uint8Array(await context.req.arrayBuffer());
+        const rawBody = new TextDecoder().decode(rawBytes);
         let body: unknown;
+        let invalidPayload = false;
         try {
           body = parseWebhookBody(rawBody, context.req.header("content-type") ?? null);
         } catch {
-          return context.json({ error: { code: "invalid_payload", message: "Webhook payload is not valid JSON" } }, 400);
+          invalidPayload = true;
         }
 
         const accountPublicId = resolveAccountPublicId(body, context.req.query("account_public_id"));
@@ -351,10 +334,13 @@ export function createWebhookRoutes(options: CreateWebhookRoutesOptions = {}) {
               accountId: resolution.accountId,
               provider: callback.provider,
             });
-        if (!policy.secret && policy.mode === "enforce") {
+        const isMeta = metaSignatureProviders.has(callback.provider);
+        const enforce = isMeta ? Boolean(policy.secret) || isProduction() : policy.mode === "enforce";
+        if (!policy.secret && enforce) {
           // Explicit enforce without a secret used to accept everything unsigned (fail open).
-          return context.json({ error: { code: "webhook_signature_invalid", message: "Webhook signature cannot be verified: no secret is configured" } }, 401);
+          return context.json({ error: { code: "webhook_signature_invalid", message: "Webhook signature cannot be verified: no secret is configured" } }, isMeta ? 403 : 401);
         }
+        let signatureVerified = false;
         if (!policy.secret) {
           logSignatureWarning({
             context,
@@ -366,13 +352,14 @@ export function createWebhookRoutes(options: CreateWebhookRoutesOptions = {}) {
         } else {
           const matches = signatureMatches({
             provider: callback.provider,
-            rawBody,
+            rawBody: rawBytes,
             metaSignature: context.req.header("x-hub-signature-256"),
             sharedToken: context.req.header("x-webhook-token"),
             secret: policy.secret,
           });
-          if (!matches && policy.mode === "enforce") {
-            return context.json({ error: { code: "webhook_signature_invalid", message: "Webhook signature is missing or invalid" } }, 401);
+          signatureVerified = matches;
+          if (!matches && enforce) {
+            return context.json({ error: { code: "webhook_signature_invalid", message: "Webhook signature is missing or invalid" } }, isMeta ? 403 : 401);
           }
           if (!matches) {
             logSignatureWarning({
@@ -385,106 +372,118 @@ export function createWebhookRoutes(options: CreateWebhookRoutesOptions = {}) {
           }
         }
 
-        const rawPayload = {
-          provider: callback.provider,
-          channel: callback.channel,
-          body,
-          query: sanitizedQuery(context.req.url),
-        };
-        const payloadHash = hashWebhookPayload(rawPayload);
-        const eventType = inferEventType(body);
-        const externalEventId = inferExternalEventId(body);
-        const replayKey = externalEventId ? `${callback.provider}:event:${externalEventId}` : null;
-        const now = Date.now();
-        if (replayKey) {
-          const replayed = replayCache.get(replayKey, now);
-          if (replayed) {
-            return context.json(replayed.body, replayed.status);
-          }
-        }
-
-        let event;
-        try {
-          event = await repository.storeReceivedEvent({
+        if (invalidPayload) return context.json({ error: { code: "invalid_payload", message: "Webhook payload is not valid JSON" } }, 400);
+        const verificationStatus = signatureVerified ? "verified" : "unverified";
+        const signedBodyHash = createHash("sha256").update(rawBytes).digest("hex");
+        const bodies = isMeta ? splitMetaWebhookBody(body) : [body];
+        let firstAccepted: AcceptedWebhookResponse | null = null;
+        for (const eventBody of bodies) {
+          const rawPayload = {
             provider: callback.provider,
-            accountPublicId: resolution.accountPublicId,
-            eventType,
-            externalEventId,
-            payloadHash,
-            rawPayload,
-          });
-        } catch (error) {
-          if (isDuplicateKeyError(error) && externalEventId) {
-            const existing = await repository.findReceivedEventByExternalId({
-              provider: callback.provider,
-              accountPublicId: resolution.accountPublicId,
-              externalEventId,
-            });
-            if (existing) {
-              // Stored but never processed (the publish failed after the insert, or the job exhausted its attempts):
-              // queue it again. The job id is derived from the event, so a job that is still waiting is not queued
-              // twice. A queue outage must not turn the provider's redelivery into a 500.
-              if (existing.status === "received") {
-                try {
-                  await queuePublisher.publish(
-                    buildWebhookJob({
-                      eventPublicId: existing.public_id,
-                      provider: callback.provider,
-                      accountPublicId: existing.account_public_id,
-                      payloadHash: existing.payload_hash,
-                      eventType: existing.event_type,
-                      externalEventId,
-                      requestId: context.get("requestId"),
-                    }),
-                  );
-                } catch (error) {
-                  context.get("logger").warn(
-                    createStructuredLog({
-                      level: "warn",
-                      service: "api",
-                      event: "webhook.requeue_failed",
-                      request_id: context.get("requestId"),
-                      msg: "Stored webhook event could not be re-queued",
-                      context: {
-                        provider: callback.provider,
-                        webhook_event_public_id: existing.public_id,
-                        error: error instanceof Error ? error.message : String(error),
-                      },
-                    }),
-                    "Stored webhook event could not be re-queued",
-                  );
-                }
-              }
-              const replayed = responseFromStoredEvent(existing);
-              if (replayKey) {
-                replayCache.set(replayKey, now, replayWindowMs, replayed);
-              }
-              return context.json(replayed.body, replayed.status);
+            channel: callback.channel,
+            body: eventBody,
+            ...(isMeta ? { signed_body_sha256: signedBodyHash, verification_status: verificationStatus } : {}),
+            query: sanitizedQuery(context.req.url),
+          };
+          const payloadHash = hashWebhookPayload(rawPayload);
+          const eventType = inferEventType(eventBody);
+          const externalEventId = inferExternalEventId(eventBody) ?? (isMeta ? `body:${hashWebhookPayload(eventBody)}` : null);
+          const replayKey = externalEventId ? `${callback.provider}:${resolution.accountPublicId ?? "global"}:event:${externalEventId}` : null;
+          const now = Date.now();
+          if (replayKey) {
+            const replayed = replayCache.get(replayKey, now);
+            if (replayed) {
+              firstAccepted ??= replayed;
+              continue;
             }
           }
-          throw error;
-        }
-        const job = buildWebhookJob({
-          eventPublicId: event.public_id,
-          provider: callback.provider,
-          accountPublicId: event.account_public_id,
-          payloadHash,
-          eventType,
-          externalEventId,
-          requestId: context.get("requestId"),
-        });
-        const queuedJobId = await queuePublisher.publish(job);
-        const accepted = acceptedWebhookResponse({
-          provider: callback.provider,
-          eventPublicId: event.public_id,
-          payloadHash,
-          queuedJobId,
-        });
-        if (replayKey) {
-          replayCache.set(replayKey, now, replayWindowMs, accepted);
-        }
 
-        return context.json(accepted.body, accepted.status);
+          let event;
+          try {
+            event = await repository.storeReceivedEvent({
+              provider: callback.provider,
+              accountPublicId: resolution.accountPublicId,
+              eventType,
+              externalEventId,
+              payloadHash,
+              rawPayload,
+              verificationStatus,
+            });
+          } catch (error) {
+            if (isDuplicateKeyError(error) && externalEventId) {
+              const existing = await repository.findReceivedEventByExternalId({
+                provider: callback.provider,
+                accountPublicId: resolution.accountPublicId,
+                externalEventId,
+              });
+              if (existing) {
+                // Stored but never processed (the publish failed after the insert, or the job exhausted its attempts):
+                // queue it again. The job id is derived from the event, so a job that is still waiting is not queued
+                // twice. A queue outage must not turn the provider's redelivery into a 500.
+                if (existing.status === "received") {
+                  try {
+                    await queuePublisher.publish(
+                      buildWebhookJob({
+                        eventPublicId: existing.public_id,
+                        provider: callback.provider,
+                        accountPublicId: existing.account_public_id,
+                        payloadHash: existing.payload_hash,
+                        eventType: existing.event_type,
+                        externalEventId,
+                        requestId: context.get("requestId"),
+                      }),
+                    );
+                  } catch (error) {
+                    context.get("logger").warn(
+                      createStructuredLog({
+                        level: "warn",
+                        service: "api",
+                        event: "webhook.requeue_failed",
+                        request_id: context.get("requestId"),
+                        msg: "Stored webhook event could not be re-queued",
+                        context: {
+                          provider: callback.provider,
+                          webhook_event_public_id: existing.public_id,
+                          error: error instanceof Error ? error.message : String(error),
+                        },
+                      }),
+                      "Stored webhook event could not be re-queued",
+                    );
+                  }
+                }
+                const replayed = responseFromStoredEvent(existing);
+                if (replayKey) {
+                  replayCache.set(replayKey, now, replayWindowMs, replayed);
+                }
+                firstAccepted ??= replayed;
+                continue;
+              }
+            }
+            throw error;
+          }
+          const job = buildWebhookJob({
+            eventPublicId: event.public_id,
+            provider: callback.provider,
+            accountPublicId: event.account_public_id,
+            payloadHash,
+            eventType,
+            externalEventId,
+            requestId: context.get("requestId"),
+          });
+          const queuedJobId = await queuePublisher.publish(job);
+          const accepted = acceptedWebhookResponse({
+            provider: callback.provider,
+            eventPublicId: event.public_id,
+            payloadHash,
+            queuedJobId,
+          });
+          if (replayKey) {
+            replayCache.set(replayKey, now, replayWindowMs, accepted);
+          }
+
+          firstAccepted ??= accepted;
+        }
+        return context.json(firstAccepted!.body, firstAccepted!.status);
       },
     );
   }

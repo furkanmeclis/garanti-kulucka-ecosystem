@@ -1,3 +1,5 @@
+import { isProduction, resolveMetaAppSecret, signedRequestUserId } from "../webhooks/security.js";
+export { signedRequestUserId } from "../webhooks/security.js";
 import { Hono, type Context } from "hono";
 import { z } from "zod";
 import type { AppBindings } from "./types.js";
@@ -40,19 +42,6 @@ function repository(context: Context<AppBindings>) {
 
 const publicLimit = (namespace: string) => rateLimit({ namespace, limit: 5, windowMs: 10 * 60_000, key: (context) => clientIp(context) });
 
-/** Meta `signed_request`: `<signature>.<base64url JSON>`; only the payload's `user_id` is kept (unverified, see docs). */
-export function signedRequestUserId(signedRequest: unknown): string | null {
-  if (typeof signedRequest !== "string") return null;
-  const [, payload] = signedRequest.split(".");
-  if (!payload) return null;
-  try {
-    const parsed = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as { user_id?: unknown };
-    return typeof parsed.user_id === "string" && /^\d{1,40}$/.test(parsed.user_id) ? parsed.user_id : null;
-  } catch {
-    return null;
-  }
-}
-
 export function createPrivacyPublicRoutes() {
   const routes = new Hono<AppBindings>();
 
@@ -76,7 +65,7 @@ export function createPrivacyPublicRoutes() {
     );
   });
 
-  routes.post("/facebook/data-deletion", publicLimit("privacy:facebook-deletion"), requireDatabase, async (context) => {
+  routes.post("/facebook/data-deletion", rateLimit({ namespace: "privacy:facebook-deletion", limit: (c) => c.get("config").webhookRateLimitPerMinute ?? 600, windowMs: 60_000, key: clientIp }), requireDatabase, async (context) => {
     const type = context.req.header("content-type") ?? "";
     let signedRequest: unknown;
     try {
@@ -84,13 +73,19 @@ export function createPrivacyPublicRoutes() {
     } catch {
       signedRequest = undefined;
     }
+    const secret = await resolveMetaAppSecret(context);
+    const userId = signedRequestUserId(signedRequest, secret);
+    if ((secret && !userId) || (!secret && isProduction())) {
+      return context.json({ error: { code: "webhook_signature_invalid", message: "Invalid signed_request" } }, 403);
+    }
+    if (!secret) context.get("logger").warn({ event: "webhook.signature_unverified", provider: "facebook-data-deletion", reason: "missing_secret" });
     const created = await repository(context).create({
       source: "facebook",
       fullName: null,
       email: null,
       phone: null,
       instagramUsername: null,
-      messengerPsid: signedRequestUserId(signedRequest),
+      messengerPsid: userId,
       description: null,
       requestedAt: new Date(),
     });

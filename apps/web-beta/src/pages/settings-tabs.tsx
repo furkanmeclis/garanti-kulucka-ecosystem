@@ -398,6 +398,7 @@ export function IntegrationsOverviewTab({ onOpen }: { onOpen: (tab: ProviderTab)
 
   return (
     <div className="flex flex-col gap-6" data-testid="settings-tab-panel-integrations">
+      <MetaWebhookSettings provider="facebook-data-deletion" />
       <SectionHeading icon={Server} title={t("settingsTabs.integrationsTitle")} description={t("settingsTabs.integrationsSubtitle")} action={<RefreshButton loading={overview.loading} onClick={overview.reload} />} />
       {overview.error != null && !data ? (
         <ErrorState onRetry={overview.reload} />
@@ -478,6 +479,42 @@ export function IntegrationsOverviewTab({ onOpen }: { onOpen: (tab: ProviderTab)
   );
 }
 
+function WebhookVerificationStatus({ active, testId }: { active: boolean; testId: string }) {
+  const { t } = useTranslation();
+  return <StatusBadge ok={active} okText={t("settingsTabs.webhookVerified")} badText={t("settingsTabs.webhookUnverified")} testId={testId} />;
+}
+
+function MetaWebhookSettings({ provider = "meta" }: { provider?: string }) {
+  const { api } = useAuth();
+  const { t } = useTranslation();
+  const query = useQuery(`settings:meta-secret:${provider}`, () => api.webhookVerification());
+  const [secret, setSecret] = useState("");
+  const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [feedback, setFeedback] = useState<Feedback>(null);
+  const active = saved || Boolean(query.data?.data[provider]);
+  async function save(event: FormEvent) {
+    event.preventDefault();
+    if (!secret.trim()) return;
+    setSaving(true);
+    try {
+      await api.upsertAdminSetting("webhook.app_secret", secret.trim(), true);
+      setSecret(""); setSaved(true);
+      setFeedback({ tone: "success", text: t("settingsTabs.saved") });
+    } catch (error) { setFeedback({ tone: "error", text: errorText(error) }); }
+    finally { setSaving(false); }
+  }
+  return <Card className="space-y-4 p-4 sm:p-6" data-testid={`${provider}-signature-card`}>
+    <SectionHeading icon={Webhook} title={t("settingsTabs.metaAppSecret")} description={t("settingsTabs.metaAppSecretHint")} />
+    {query.loading ? <span>{t("app.loading")}</span> : query.error ? <p role="alert">{t("settingsTabs.loadFailed", { error: errorText(query.error) })}</p> : <WebhookVerificationStatus active={active} testId={`${provider}-signature-status`} />}
+    <form onSubmit={(event) => void save(event)} className="space-y-3">
+      <SecretInput label={t("settingsTabs.metaAppSecret")} name="webhook.app_secret" value={secret} configured={active} onChange={setSecret} testId={`${provider}-app-secret`} />
+      <SaveButton saving={saving} testId={`${provider}-app-secret-save`} />
+      <FeedbackLine feedback={feedback} testId={`${provider}-app-secret-feedback`} />
+    </form>
+  </Card>;
+}
+
 // ─── WhatsApp ────────────────────────────────────────────────────────────────
 
 /** wa.me link for a business number (TR numbers normalised to 90XXXXXXXXXX). */
@@ -540,6 +577,7 @@ export function WhatsAppTab() {
 
   return (
     <div className="flex flex-col gap-6" data-testid="settings-tab-panel-whatsapp">
+      <MetaWebhookSettings provider="whatsapp" />
       <Card className="flex flex-col gap-3 p-4 sm:p-6">
         <SectionHeading brand="whatsapp" title={t("settingsTabs.whatsappTitle")} description={t("settingsTabs.whatsappSubtitle")} action={<RefreshButton loading={state.loading} onClick={state.reload} />} />
         {state.error != null && !state.data && <p className="text-sm text-destructive">{t("settingsTabs.loadFailed", { error: errorText(state.error) })}</p>}
@@ -685,6 +723,7 @@ export function MetaProviderTab({ provider }: { provider: "instagram" | "messeng
 
   return (
     <div className="flex flex-col gap-6" data-testid={`settings-tab-panel-${provider}`}>
+      <MetaWebhookSettings provider={provider} />
       <Card className="flex flex-col gap-3 p-4 sm:p-6">
         <SectionHeading
           brand={provider}
@@ -862,6 +901,7 @@ export function NetgsmTab() {
 
   return (
     <div className="flex flex-col gap-6" data-testid="settings-tab-panel-netgsm">
+      <SantralWebhookSettings kind="ivr" />
       <Card className="flex flex-col gap-3 p-4 sm:p-6">
         <SectionHeading brand="netgsm" title={t("settingsTabs.netgsmTitle")} description={t("settingsTabs.netgsmSubtitle")} action={<RefreshButton loading={state.loading} onClick={state.reload} />} />
         {state.error != null && !state.data && <p className="text-sm text-destructive">{t("settingsTabs.loadFailed", { error: errorText(state.error) })}</p>}
@@ -1032,28 +1072,30 @@ export function SantralTab() {
   );
 }
 
-function SantralWebhookSettings() {
+function SantralWebhookSettings({ kind = "santral" }: { kind?: "santral" | "ivr" }) {
+  const settingKey = `netgsm.${kind}_webhook_token`;
+  const prefix = kind === "ivr" ? "ivr" : "santral";
   const { api } = useAuth();
   const { t } = useTranslation();
-  const query = useQuery("santral:webhook-token", () => api.listAdminSettings());
+  const query = useQuery(`${kind}:webhook-token`, () => api.listAdminSettings());
   const [token, setToken] = useState("");
   const [savedToken, setSavedToken] = useState("");
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<Feedback>(null);
   useEffect(() => {
-    const value = query.data?.data.find((s) => s.key === "netgsm.santral_webhook_token")?.value;
+    const value = query.data?.data.find((s) => s.key === settingKey)?.value;
     if (typeof value === "string") { setToken(value); setSavedToken(value); }
-  }, [query.data]);
-  const url = new URL("/api/netgsm/webhook/santral", api.baseUrl || window.location.origin);
+  }, [query.data, settingKey]);
+  const url = new URL(`/api/netgsm/webhook/${kind === "ivr" ? "sesli-mesaj" : "santral"}`, api.baseUrl || window.location.origin);
   if (savedToken) url.searchParams.set("token", savedToken);
   async function save(event: FormEvent) {
     event.preventDefault(); setSaving(true); setFeedback(null);
-    try { await api.upsertAdminSetting("netgsm.santral_webhook_token", token.trim()); setSavedToken(token.trim()); setFeedback({ tone: "success", text: t("callLogs.saved") }); }
+    try { await api.upsertAdminSetting(settingKey, token.trim()); setSavedToken(token.trim()); setFeedback({ tone: "success", text: t("callLogs.saved") }); }
     catch (error) { setFeedback({ tone: "error", text: errorText(error) }); }
     finally { setSaving(false); }
   }
-  return <Card className="space-y-4 p-4"><form onSubmit={(e) => void save(e)} className="space-y-3">
-    <Field label={t("callLogs.webhookToken")}><Input value={token} pattern="(?:[A-Za-z0-9_-]{16,128})?" onChange={(e) => setToken(e.target.value)} data-testid="santral-webhook-token" /><span className="text-xs text-muted-foreground">{t("callLogs.tokenHint")}</span></Field>
-    <Button type="submit" disabled={saving || query.loading}>{t("callLogs.save")}</Button><FeedbackLine feedback={feedback} testId="santral-webhook-feedback" />
-  </form><CopyField label={t("callLogs.webhookUrl")} value={url.toString()} testId="santral-webhook-url" notify={setFeedback} /></Card>;
+  return <Card className="space-y-4 p-4"><WebhookVerificationStatus active={Boolean(savedToken)} testId={`${prefix}-signature-status`} /><form onSubmit={(e) => void save(e)} className="space-y-3">
+    <Field label={t("callLogs.webhookToken")}><Input value={token} pattern="(?:[A-Za-z0-9_-]{16,128})?" onChange={(e) => setToken(e.target.value)} data-testid={`${prefix}-webhook-token`} /><span className="text-xs text-muted-foreground">{t("callLogs.tokenHint")}</span></Field>
+    <Button type="submit" disabled={saving || query.loading}>{t("callLogs.save")}</Button><FeedbackLine feedback={feedback} testId={`${prefix}-webhook-feedback`} />
+  </form><CopyField label={t("callLogs.webhookUrl")} value={url.toString()} testId={`${prefix}-webhook-url`} notify={setFeedback} /></Card>;
 }

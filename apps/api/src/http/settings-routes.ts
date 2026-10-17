@@ -1,3 +1,4 @@
+import { resolveMetaAppSecret } from "../webhooks/security.js";
 import { Hono, type Context } from "hono";
 import { z } from "zod";
 import { validateGlobalSetting } from "@garanti-kulucka/shared";
@@ -35,6 +36,16 @@ export function createSettingsRoutes() {
 
     const settings = await new SettingsRepository(db, context.get("encryptor"), context.get("settingsCache")).list(scope);
     return context.json({ data: settings.map(serializeSetting) });
+  });
+
+  // Only configuration booleans leave the API; use the same secret resolution as public ingress.
+  routes.get("/webhook-verification", async (context) => {
+    const db = context.get("db")!;
+    const providers = await db.selectFrom("integration_providers").select(["id", "key"]).where("key", "in", ["meta", "whatsapp", "instagram", "messenger"]).where("is_active", "=", true).execute();
+    const entries = await Promise.all(providers.map(async (provider) => [provider.key, Boolean(await resolveMetaAppSecret(context, provider.id, null))] as const));
+    const tokens = await db.selectFrom("settings").select(["key", "value"]).where("scope", "=", "global").where("key", "in", ["netgsm.ivr_webhook_token", "netgsm.santral_webhook_token"]).execute();
+    const configuredToken = (key: string) => tokens.some((row) => row.key === key && typeof row.value === "string" && row.value.trim().length > 0);
+    return context.json({ data: { ...Object.fromEntries(entries), "facebook-data-deletion": Boolean(await resolveMetaAppSecret(context)), ivr: configuredToken("netgsm.ivr_webhook_token"), santral: configuredToken("netgsm.santral_webhook_token") } });
   });
 
   routes.get("/audit", async (context) => {

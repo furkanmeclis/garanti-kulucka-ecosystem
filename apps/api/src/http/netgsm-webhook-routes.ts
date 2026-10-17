@@ -1,4 +1,4 @@
-import { timingSafeEqual } from "node:crypto";
+import { netgsmTokenMatches } from "../webhooks/security.js";
 import { Hono, type Context } from "hono";
 import type { AppBindings } from "./types.js";
 import { clientIp, rateLimit } from "./rate-limit.js";
@@ -10,13 +10,6 @@ import { IvrWebhookRepository, ivrPayloadFrom, parseIvrWebhook } from "../orders
  * global setting `netgsm.ivr_webhook_token` is set, the callback URL must carry `?token=<value>`.
  * Like the legacy handler it always answers 200 so NetGSM never retries into a loop.
  */
-
-function tokensMatch(expected: string, received: string | undefined) {
-  if (!received) return false;
-  const a = Buffer.from(expected);
-  const b = Buffer.from(received);
-  return a.length === b.length && timingSafeEqual(a, b);
-}
 
 async function readBody(context: Context<AppBindings>): Promise<unknown> {
   if (context.req.method !== "POST") return undefined;
@@ -43,7 +36,8 @@ export function createNetgsmWebhookRoutes() {
     const repository = new IvrWebhookRepository(db);
     const query = Object.fromEntries(new URL(context.req.url).searchParams);
     const expectedToken = await repository.webhookToken();
-    if (expectedToken && !tokensMatch(expectedToken, query.token)) {
+    if (!netgsmTokenMatches(expectedToken, query.token)) {
+      context.get("logger").warn({ event: "netgsm.webhook_rejected", endpoint: "ivr", reason: expectedToken ? "invalid_token" : "missing_token_configuration" });
       return context.json({ ok: false, error: "invalid_token" }, 401);
     }
     const { token: _token, ...queryWithoutToken } = query;

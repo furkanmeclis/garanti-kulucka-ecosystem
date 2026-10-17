@@ -2065,7 +2065,11 @@
     "callerIdLabel": "Arayan numara (kullanıcı kodu)",
     "callerIdSaved": "Arayan numara kaydedildi.",
     "santralMoreTitle": "Kullanıcı SIP hesapları ve teyit ayarları",
-    "santralMoreDescription": "Kullanıcı SIP bilgileri Kullanıcılar sayfasında, otomatik teyit ayarları Sesli Asistan sayfasında düzenlenir."
+    "santralMoreDescription": "Kullanıcı SIP bilgileri Kullanıcılar sayfasında, otomatik teyit ayarları Sesli Asistan sayfasında düzenlenir.",
+    "webhookVerified": "Webhook doğrulaması aktif",
+    "webhookUnverified": "Webhook doğrulaması eksik",
+    "metaAppSecret": "Meta App Secret",
+    "metaAppSecretHint": "Ortak sır WhatsApp, Instagram, Messenger ve Facebook veri silme bildirimi için kullanılır. Hesaba özel sır varsa önceliklidir. Üretimde sır olmadan istekler reddedilir."
   },
   "debugPages": {
     "refresh": "Yenile",

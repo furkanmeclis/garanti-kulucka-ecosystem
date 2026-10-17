@@ -89,6 +89,7 @@ const literalGlobalSettingSchemas = {
   "ai.auto_reply_enabled": { schema: z.boolean(), secret: false },
   "kargo_pipeline_ayarlar": { schema: cargoPipelineSettingsSchema, secret: false },
   "vapi_ayarlar": { schema: vapiSettingsSchema, secret: false },
+  "webhook.app_secret": { schema: nonblankString, secret: true },
   "vapi.api_key": { schema: nonblankString, secret: true },
   "netgsm.teyit_voice_usercode": { schema: z.string(), secret: false },
   "netgsm.teyit_voice_password": { schema: nonblankString, secret: true },

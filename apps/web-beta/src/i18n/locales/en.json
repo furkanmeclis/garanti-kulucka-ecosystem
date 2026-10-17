@@ -2065,7 +2065,11 @@
     "callerIdLabel": "Caller number (user code)",
     "callerIdSaved": "Caller ID saved.",
     "santralMoreTitle": "User SIP accounts and confirmation settings",
-    "santralMoreDescription": "User SIP details are edited on the Users page and automatic confirmation settings on the Voice Assistant page."
+    "santralMoreDescription": "User SIP details are edited on the Users page and automatic confirmation settings on the Voice Assistant page.",
+    "webhookVerified": "Webhook verification active",
+    "webhookUnverified": "Webhook verification not configured",
+    "metaAppSecret": "Meta App Secret",
+    "metaAppSecretHint": "Shared secret for WhatsApp, Instagram, Messenger and Facebook data deletion. Account secrets take precedence. Production rejects requests without a secret."
   },
   "debugPages": {
     "refresh": "Refresh",

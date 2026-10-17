@@ -648,6 +648,7 @@ export interface WebhookSubscriptionsTable extends BaseTable {
 }
 
 export interface WebhookEventsTable extends BaseTable {
+  verification_status: Generated<string>;
   provider_id: number;
   account_id: number | null;
   event_type: string;
