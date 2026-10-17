@@ -1,3 +1,4 @@
+import { communicationTableMappings } from "./communication-catalog.js";
 import { canonicalMigrationEntities } from "./plan.js";
 import type { MigrationEntity, SourceColumnSnapshot, SourceTableSnapshot } from "./types.js";
 
@@ -25,7 +26,7 @@ export interface LegacyMappingCatalog {
   readonly tables: readonly LegacyTableMapping[];
 }
 
-export const mappingCatalogVersion = "p2-live-production-drift-v3";
+export const mappingCatalogVersion = "p2-shortcuts-sms-vapi-v4";
 
 const canonicalMigrationEntitySet = new Set<string>(canonicalMigrationEntities);
 const targetMappingValues = new Set<string>(["direct", "synthetic"]);
@@ -33,6 +34,7 @@ const targetReadinessValues = new Set<string>(["dry-run", "apply-ready", "descri
 const applyPrerequisites: Partial<Record<MigrationEntity, readonly MigrationEntity[]>> = {
   // Customer drafts fan out into identity/address targets; apply stays closed until both are executable.
   customers: ["customer_external_identities", "customer_addresses"],
+  message_shortcuts: ["message_shortcut_attachments"],
   conversations: ["customers"],
   messages: ["conversations"],
   orders: ["customers"],
@@ -275,6 +277,7 @@ export const legacyMappingCatalog = createLegacyMappingCatalog({
         column("tarih", "timestamp with time zone", "timestamptz", true),
       ],
     },
+    ...communicationTableMappings,
   ],
 });
 

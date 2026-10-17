@@ -1,3 +1,4 @@
+import { selectCommunicationVerification } from "./communication-verify.js";
 import type { Client } from "pg";
 import { canonicalMigrationEntities } from "./plan.js";
 import type {
@@ -28,6 +29,7 @@ export async function createTargetVerificationSnapshot(
     ]);
 
   return {
+    ...await selectCommunicationVerification(client, targetPublicIds),
     runId,
     sourceManifest,
     targetPublicIds,

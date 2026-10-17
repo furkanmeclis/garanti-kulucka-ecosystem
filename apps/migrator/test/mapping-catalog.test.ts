@@ -46,7 +46,7 @@ describe("legacy mapping catalog", () => {
       "guncelleme_tarihi",
       "username",
     ]);
-    expect(mappingCatalogVersion).toBe("p2-live-production-drift-v3");
+    expect(mappingCatalogVersion).toBe("p2-shortcuts-sms-vapi-v4");
   });
 
   it("declares konusmalar and mesajlar as direct dry-run tables after musteriler", () => {
@@ -59,6 +59,9 @@ describe("legacy mapping catalog", () => {
       ["public.kargo_gonderimleri", "id"],
       ["public.urunler", "id"],
       ["public.kargo_takip", "id"],
+      ["public.kisayollar", "id"],
+      ["public.sms_gonderimler", "id"],
+      ["public.vapi_aramalar", "id"],
     ]);
     expect(conversationMapping.targetEntities).toEqual([
       { entity: "conversations", mapping: "direct", readiness: "dry-run" },
@@ -290,6 +293,9 @@ describe("legacy mapping catalog", () => {
       "order_items",
       "shipments",
       "shipment_tracking_events",
+      "message_shortcuts",
+      "sms_messages",
+      "vapi_calls",
     ]);
   });
 

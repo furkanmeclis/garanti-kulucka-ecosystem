@@ -1,3 +1,4 @@
+import { verifyShortcutMediaMappings, type VerificationShortcutAttachment } from "./communication-verify.js";
 import { conversationMergedIntoMappingRole } from "./conversation-merge.js";
 import { createVerificationReport } from "./reports.js";
 import { canonicalMigrationEntities } from "./plan.js";
@@ -5,6 +6,8 @@ import { calculateSourceManifestHash } from "./source-manifest.js";
 import type { MigrationEntity, SourceManifest, VerificationCheck, VerificationReport } from "./types.js";
 
 export interface MigrationVerificationSnapshot {
+  readonly shortcutAttachments?: VerificationShortcutAttachment[];
+  readonly communicationChecks?: VerificationCheck[];
   readonly runId: string;
   readonly sourceManifest: SourceManifest | null;
   readonly targetPublicIds: Record<MigrationEntity, readonly string[]>;
@@ -89,6 +92,8 @@ export function createMigrationVerificationReport(
       verifyMessageConversations(snapshot),
       verifyOrderCustomers(snapshot),
       verifyShipmentReferences(snapshot),
+      verifyShortcutMediaMappings(snapshot),
+      ...(snapshot.communicationChecks ?? []),
       verifyDuplicateCustomers(snapshot.customers),
       verifyMessageOrdering(snapshot.messages),
       verifyOrderTotals(snapshot.orders, snapshot.orderItems),
@@ -396,6 +401,10 @@ function verifyLegacyIdMapFoundationRules(snapshot: MigrationVerificationSnapsho
 
 function isAllowedLegacyIdMapForEntity(entity: MigrationEntity, entry: VerificationLegacyIdMapEntry): boolean {
   if (entry.target_table === legacyEntityTargetTable(entity) && entry.mapping_role === "primary") return true;
+  if (entity === "message_shortcuts") {
+    return (entry.target_table === "files" && /^media:\d+$/.test(entry.mapping_role))
+      || (entry.target_table === "message_shortcut_attachments" && /^attachment:\d+$/.test(entry.mapping_role));
+  }
   if (entity === "customers") {
     return (entry.target_table === "customer_addresses" && entry.mapping_role === "address:default")
       || (entry.target_table === "customer_external_identities"
@@ -427,6 +436,10 @@ function legacyEntityTargetTable(entity: string): string {
     webhook_subscriptions: "webhook_subscriptions",
     files: "files",
     settings: "settings",
+    message_shortcuts: "message_shortcuts",
+    message_shortcut_attachments: "message_shortcut_attachments",
+    sms_messages: "sms_messages",
+    vapi_calls: "vapi_calls",
   } satisfies Record<MigrationEntity, string>;
 
   return targetTables[entity as MigrationEntity] ?? entity;

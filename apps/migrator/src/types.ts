@@ -1,3 +1,4 @@
+import type { CommunicationDraft, CommunicationSummaries } from "./communication-mapping.js";
 import type { ConversationMergeSummary } from "./conversation-merge.js";
 export type MigrationMode = "dry-run" | "apply";
 
@@ -16,7 +17,11 @@ export type MigrationEntity =
   | "integration_settings"
   | "webhook_subscriptions"
   | "files"
-  | "settings";
+  | "settings"
+  | "message_shortcuts"
+  | "message_shortcut_attachments"
+  | "sms_messages"
+  | "vapi_calls";
 
 export interface LegacyCursor {
   readonly entity: MigrationEntity;
@@ -129,6 +134,8 @@ export interface MigrationTarget {
     operation: (target: MigrationTarget) => Promise<T>,
   ): Promise<T>;
   runInTransaction?<T>(operation: (target: MigrationTarget) => Promise<T>): Promise<T>;
+  writeCommunicationRecord?(input: CommunicationDraft & { readonly shipmentPublicId: string | null }): Promise<CanonicalWriteResult>;
+  writeShortcutAttachmentRecord?(input: CanonicalRecord & { readonly shortcutPublicId: string; readonly filePublicId: string }): Promise<CanonicalWriteResult>;
   writeCanonicalRecord(input: CanonicalRecord): Promise<CanonicalWriteResult>;
   writeCustomerAddressRecord?(input: CustomerAddressCanonicalRecord): Promise<CanonicalWriteResult>;
   writeCustomerExternalIdentityRecord?(input: CustomerExternalIdentityCanonicalRecord): Promise<CanonicalWriteResult>;
@@ -502,6 +509,7 @@ export interface DryRunReport {
   readonly orderItemTransform?: OrderItemTransformSummary;
   readonly shipmentTransform?: ShipmentTransformSummary;
   readonly shipmentTrackingEventTransform?: ShipmentTrackingEventTransformSummary;
+  readonly communicationTransforms?: CommunicationSummaries;
   readonly generatedAt: string;
 }
 

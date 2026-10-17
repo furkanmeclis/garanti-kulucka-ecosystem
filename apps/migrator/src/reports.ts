@@ -1,3 +1,4 @@
+import type { CommunicationSummaries } from "./communication-mapping.js";
 import type {
   ConversationMergeReport,
   ConversationTransformSummary,
@@ -16,6 +17,7 @@ import type {
 } from "./types.js";
 
 export function createDryRunReport(input: {
+  readonly communicationTransforms?: CommunicationSummaries;
   readonly plan: MigrationPlan;
   readonly warnings?: MigrationWarning[];
   readonly customerTransform?: CustomerTransformSummary;
@@ -59,6 +61,7 @@ export function createDryRunReport(input: {
     ...(input.orderItemTransform ? { orderItemTransform: input.orderItemTransform } : {}),
     ...(input.shipmentTransform ? { shipmentTransform: input.shipmentTransform } : {}),
     ...(input.shipmentTrackingEventTransform ? { shipmentTrackingEventTransform: input.shipmentTrackingEventTransform } : {}),
+    ...(input.communicationTransforms ? { communicationTransforms: input.communicationTransforms } : {}),
     generatedAt: (input.now ?? new Date()).toISOString(),
   };
 }

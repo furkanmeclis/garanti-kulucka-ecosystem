@@ -446,7 +446,7 @@ export async function reconcileDeferredReconciliations(
   return target.reconcileDeferredReconciliations(runId);
 }
 
-async function runExclusiveSuccessfulBatchApply<TInput extends ApplyMigrationBatchWithStateInput>(
+export async function runExclusiveSuccessfulBatchApply<TInput extends ApplyMigrationBatchWithStateInput>(
   input: TInput,
   apply: (input: TInput) => Promise<MigrationBatchApplyResult> = applyMigrationBatch,
 ): Promise<MigrationBatchApplyResult> {
