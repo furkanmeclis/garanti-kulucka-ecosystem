@@ -563,6 +563,9 @@ export interface OrderTransformSummary {
   readonly customerResolutionById?: number;
   readonly customerResolutionByPhone?: number;
   readonly syntheticCustomersFromOrders?: number;
+  readonly syntheticCustomers?: number;
+  readonly syntheticPhoneCustomers?: number;
+  readonly syntheticPhonelessCustomers?: number;
   readonly ambiguousPhoneMatches?: number;
 }
 
@@ -593,6 +596,7 @@ export interface ShipmentTrackingEventTransformSummary {
   readonly transformedRows: number;
   readonly uniqueEvents: number;
   readonly duplicateRows: number;
+  readonly duplicateRowsDropped?: number;
   readonly futureDatedRows: number;
   readonly providerTimeEvents: number;
   readonly firstSeenEvents: number;

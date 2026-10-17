@@ -13,17 +13,12 @@ import {
   transformLegacyCustomer,
   type VerifiedIntegrationAccount,
 } from "./customer-mapping.js";
+import type { OrderCustomerPlan } from "./order-customer-plan.js";
 import { transformLegacyOrder } from "./order-mapping.js";
 import { transformLegacyOrderItem } from "./order-item-mapping.js";
 import { transformLegacyProduct } from "./product-mapping.js";
 import { transformLegacyShipment } from "./shipment-mapping.js";
-import {
-  defaultLegacyMediaBucket,
-  isLegacyMediaUri,
-  parseLegacyMediaUri,
-  type LegacyMediaObjectReference,
-  type MigratorMediaStorage,
-} from "./media-storage.js";
+import type { MigratorMediaStorage } from "./media-storage.js";
 import type {
   BatchReadOptions,
   CanonicalRecord,
@@ -34,8 +29,6 @@ import type {
   LegacyIdMapEntry,
   LegacyRecord,
   MessageCanonicalRecord,
-  FileCanonicalRecord,
-  MessageAttachmentCanonicalRecord,
   MigrationBatch,
   MigrationBatchApplyResult,
   MigrationTarget,
@@ -98,6 +91,7 @@ export interface ApplyOrderMigrationBatchInput {
   readonly target: MigrationTarget;
   readonly runId: string;
   readonly batch: MigrationBatch;
+  readonly orderCustomerPlan?: OrderCustomerPlan;
   readonly userPublicIds?: ReadonlyMap<string, string>;
 }
 
@@ -740,44 +734,6 @@ async function applyMessageMigrationBatch(
       }),
     });
   }
-  if (transformed.some((item) => messageInlineMediaUrl(toRawPayloadRecord(item.result.message.rawPayload)) !== null)) {
-    assertInlineMediaApplyTarget(input.target);
-    if (!input.mediaStorage) {
-      throw new Error("Message apply requires migrator media storage configuration for inline data URLs");
-    }
-  }
-
-  const legacyMediaBucket = input.legacyMediaBucket ?? defaultLegacyMediaBucket;
-  const legacyObjectReferences = new Map<string, LegacyMediaObjectReference>();
-  for (const item of transformed) {
-    const rawPayload = toRawPayloadRecord(item.result.message.rawPayload);
-    const mediaUrl = rawPayload?.media_url;
-    if (!isLegacyMediaUri(mediaUrl)) continue;
-    const parsed = parseLegacyMediaUri(mediaUrl, { expectedBucket: legacyMediaBucket, mediaType: rawPayload?.media_type });
-    if (!parsed.ok) {
-      throw new Error(
-        `Message apply rejected legacy media URI for ${item.legacyRecord.sourceTable}.${item.legacyRecord.sourceId}: ${parsed.reason}`,
-      );
-    }
-    legacyObjectReferences.set(item.legacyRecord.sourceId, parsed.reference);
-  }
-  const legacyObjectSizes = new Map<string, number>();
-  if (legacyObjectReferences.size > 0) {
-    assertInlineMediaApplyTarget(input.target);
-    if (!input.mediaStorage) {
-      throw new Error("Message apply requires migrator media storage configuration for legacy s3:// media");
-    }
-    for (const [sourceId, reference] of legacyObjectReferences) {
-      const objectKey = `${reference.bucket}/${reference.objectKey}`;
-      if (legacyObjectSizes.has(objectKey)) continue;
-      const head = await input.mediaStorage.headObject({ bucket: reference.bucket, objectKey: reference.objectKey });
-      if (head === null) {
-        throw new Error(`Legacy media object ${reference.uri} for public.mesajlar.${sourceId} is missing in storage`);
-      }
-      legacyObjectSizes.set(objectKey, head.size);
-    }
-  }
-
   transformed.sort((left, right) =>
     left.result.message.sentAt.localeCompare(right.result.message.sentAt)
     || left.legacyRecord.sourceId.localeCompare(right.legacyRecord.sourceId),
@@ -787,41 +743,6 @@ async function applyMessageMigrationBatch(
     const message = item.result.message;
     const rawPayload = toRawPayloadRecord(message.rawPayload);
     assertMappedLegacyMessageRawPayload(rawPayload);
-    const inlineMediaUrl = messageInlineMediaUrl(rawPayload);
-    const legacyObject = legacyObjectReferences.get(item.legacyRecord.sourceId);
-    let inlineMedia: Awaited<ReturnType<MigratorMediaStorage["storeInlineDataUrl"]>> | null = null;
-    if (legacyObject !== undefined) {
-      // Bridge already extracted the bytes: keep the object where it is, no copy/re-upload.
-      inlineMedia = {
-        checksum: legacyObject.checksum,
-        mimeType: legacyObject.mimeType,
-        size: legacyObjectSizes.get(`${legacyObject.bucket}/${legacyObject.objectKey}`)!,
-        bucket: legacyObject.bucket,
-        objectKey: legacyObject.objectKey,
-      };
-      delete rawPayload!.media_url;
-      rawPayload!.media_storage = {
-        bucket: inlineMedia.bucket,
-        object_key: inlineMedia.objectKey,
-        checksum: inlineMedia.checksum,
-        mime_type: inlineMedia.mimeType,
-        byte_size: inlineMedia.size,
-      };
-    } else if (inlineMediaUrl !== null) {
-      inlineMedia = await input.mediaStorage!.storeInlineDataUrl({
-        dataUrl: inlineMediaUrl,
-        sourceTable: item.legacyRecord.sourceTable,
-        sourceId: item.legacyRecord.sourceId,
-      });
-      delete rawPayload!.media_url;
-      rawPayload!.media_storage = {
-        bucket: inlineMedia.bucket,
-        object_key: inlineMedia.objectKey,
-        checksum: inlineMedia.checksum,
-        mime_type: inlineMedia.mimeType,
-        byte_size: inlineMedia.size,
-      };
-    }
     const messageRecord: MessageCanonicalRecord = {
       targetTable: "messages",
       targetId: message.publicId,
@@ -849,38 +770,7 @@ async function applyMessageMigrationBatch(
       targetId: messageRecord.targetId,
       checksum: messageRecord.checksum,
     }));
-    if (inlineMedia !== null) {
-      const fileRecord: FileCanonicalRecord = {
-        targetTable: "files",
-        targetId: filePublicId(inlineMedia.checksum),
-        checksum: inlineMedia.checksum,
-        payload: {
-          bucket: inlineMedia.bucket,
-          object_key: inlineMedia.objectKey,
-          original_name: null,
-          mime_type: inlineMedia.mimeType,
-          byte_size: inlineMedia.size,
-          checksum: inlineMedia.checksum,
-          upload_status: "available",
-          scan_status: "skipped",
-          upload_type: "singlepart",
-          completed_at: message.sentAt,
-        },
-      };
-      await input.target.writeFileRecord!(fileRecord);
-      const attachmentRecord: MessageAttachmentCanonicalRecord = {
-        targetTable: "message_attachments",
-        targetId: messageAttachmentPublicId(message.publicId, inlineMedia.checksum),
-        messagePublicId: message.publicId,
-        filePublicId: fileRecord.targetId,
-        checksum: inlineMedia.checksum,
-        payload: {
-          attachment_type: inlineMedia.mimeType.split("/")[0] || "file",
-        },
-      };
-      await input.target.writeMessageAttachmentRecord!(attachmentRecord);
-      result.writtenRows += 2;
-    }
+
   }
 
   return result;
@@ -935,16 +825,20 @@ async function applyOrderMigrationBatch(
   const result = newApplyResult(input.batch, records.length);
 
   for (const legacyRecord of records) {
-    const legacyCustomerId = requiredPayloadString(legacyRecord, "musteri_id").toLowerCase();
-    const customerPublicId = await resolveRequiredLegacyMap(input.target, {
-      runId: input.runId,
-      sourceSystem: legacyRecord.sourceSystem,
-      sourceTable: "public.musteriler",
-      sourceId: legacyCustomerId,
-      targetTable: "customers",
-      mappingRole: "primary",
-      errorLabel: "customer",
-    });
+    const legacyCustomerId = optionalPayloadString(legacyRecord, "musteri_id")?.toLowerCase() ?? null;
+    let customerPublicIds: ReadonlyMap<string, string> = input.orderCustomerPlan?.customerPublicIds ?? new Map();
+    if (legacyCustomerId !== null) {
+      const publicId = await resolveRequiredLegacyMap(input.target, {
+        runId: input.runId, sourceSystem: legacyRecord.sourceSystem, sourceTable: "public.musteriler",
+        sourceId: legacyCustomerId, targetTable: "customers", mappingRole: "primary", errorLabel: "customer",
+      });
+      if (input.orderCustomerPlan && customerPublicIds.get(legacyCustomerId) !== publicId) {
+        throw new Error("Order customer plan does not match the migrated customer mapping");
+      }
+      if (!input.orderCustomerPlan) customerPublicIds = new Map([[legacyCustomerId, publicId]]);
+    } else if (!input.orderCustomerPlan) {
+      throw new Error("Order apply without musteri_id requires a snapshot-wide order customer plan");
+    }
 
     const conversationPublicIds = new Map<string, string>();
     const legacyConversationId = optionalPayloadString(legacyRecord, "konusma_id")?.toLowerCase() ?? null;
@@ -958,11 +852,34 @@ async function applyOrderMigrationBatch(
     }
 
     const orderResult = transformLegacyOrder(legacyRecord, {
-      customerPublicIds: new Map([[legacyCustomerId, customerPublicId]]),
+      customerPublicIds,
+      customerPublicIdsByPhone: input.orderCustomerPlan?.customerPublicIdsByPhone ?? new Map(),
       conversationPublicIds,
       userPublicIds: input.userPublicIds ?? new Map(),
     });
     const order = orderResult.order;
+    if (orderResult.customerResolution.path === "synthetic") {
+      const draft = input.orderCustomerPlan?.syntheticCustomers.get(order.customerPublicId);
+      if (!draft) throw new Error("Synthetic customer is missing from the snapshot-wide plan");
+      const key = { runId: input.runId, sourceSystem: draft.sourceSystem, sourceTable: "public.siparisler", sourceId: draft.sourceId };
+      const customerKey = { ...key, targetTable: "customers", mappingRole: "synthetic_customer" };
+      if (await input.target.findLegacyIdMap(customerKey) === null) {
+        await input.target.writeCanonicalRecord({ targetTable: "customers", targetId: draft.publicId, checksum: draft.checksum,
+          payload: { full_name: draft.fullName, phone: draft.phone, email: null, username: null, notes: draft.notes } });
+        result.writtenRows += 1;
+        countIdMapResult(result, await upsertLegacyIdMap(input.target, { ...customerKey, targetId: draft.publicId, checksum: draft.checksum }));
+      }
+      const address = draft.address;
+      const addressKey = { ...key, targetTable: "customer_addresses", mappingRole: "synthetic_customer_address" };
+      if (address && await input.target.findLegacyIdMap(addressKey) === null) {
+        if (!input.target.writeCustomerAddressRecord) throw new Error("Synthetic customers require an address writer");
+        await input.target.writeCustomerAddressRecord({ targetTable: "customer_addresses", targetId: address.publicId,
+          customerPublicId: draft.publicId, checksum: draft.checksum, payload: { label: null, address_line: address.addressLine,
+            district: address.district, city: address.city, postal_code: address.postalCode, country: address.country, is_default: true } });
+        result.writtenRows += 1;
+        countIdMapResult(result, await upsertLegacyIdMap(input.target, { ...addressKey, targetId: address.publicId, checksum: draft.checksum }));
+      }
+    }
     const orderRecord: OrderCanonicalRecord = {
       targetTable: order.targetTable,
       targetId: order.publicId,
@@ -1491,17 +1408,6 @@ function assertMessageTarget(
   }
 }
 
-function assertInlineMediaApplyTarget(
-  target: MigrationTarget,
-): asserts target is MigrationTarget & Required<Pick<
-  MigrationTarget,
-  "writeFileRecord" | "writeMessageAttachmentRecord"
->> {
-  if (!target.writeFileRecord || !target.writeMessageAttachmentRecord) {
-    throw new Error("Message inline media apply requires a target with file and attachment writers");
-  }
-}
-
 function assertOrderTarget(
   target: MigrationTarget,
 ): asserts target is MigrationTarget & Required<Pick<
@@ -1572,28 +1478,15 @@ function assertDeferredReconciliationTarget(
 
 function assertMappedLegacyMessageRawPayload(rawPayload: Record<string, unknown> | null): void {
   if (rawPayload === null) return;
-  const allowed = new Set(["media_url", "media_type", "gonderici_adi", "medya_url", "medya_tipi", "gonderici_id"]);
+  const allowed = new Set(["media_url", "media_type", "gonderici_adi", "medya_url", "medya_tipi", "gonderici_id", "media_omitted"]);
   const unmapped = Object.keys(rawPayload).filter((key) => !allowed.has(key)).sort();
   if (unmapped.length > 0) {
     throw new Error(`Message apply found unmapped legacy media/raw payload fields: ${unmapped.join(", ")}`);
   }
 }
 
-function messageInlineMediaUrl(rawPayload: Record<string, unknown> | null): string | null {
-  const mediaUrl = rawPayload?.media_url;
-  return typeof mediaUrl === "string" && mediaUrl.startsWith("data:") ? mediaUrl : null;
-}
-
 function toRawPayloadRecord(rawPayload: MessageTransformationResult["message"]["rawPayload"]): Record<string, unknown> | null {
   return rawPayload === null ? null : { ...rawPayload };
-}
-
-function filePublicId(checksum: string): string {
-  return `fil_${createHash("sha256").update(`file:${checksum}`).digest("hex").slice(0, 24)}`;
-}
-
-function messageAttachmentPublicId(messagePublicId: string, checksum: string): string {
-  return `mat_${createHash("sha256").update(`${messagePublicId}:${checksum}`).digest("hex").slice(0, 24)}`;
 }
 
 function shipmentTrackingEventPublicId(sourceId: string): string {

@@ -987,7 +987,7 @@ describe("conversation dry-run validation", () => {
     expect(source.operations).toEqual([]);
   });
 
-  it("counts bridge s3:// media per MIME separately and reports malformed URIs as blocked rows", async () => {
+  it("counts all omitted bridge media without blocking missing or malformed object keys", async () => {
     const hash = "a".repeat(64);
     const [first, second, third] = legacyMessageRows as [LegacyRecord, LegacyRecord, LegacyRecord];
     const source = new LegacyTableSource({
@@ -1039,30 +1039,13 @@ describe("conversation dry-run validation", () => {
       mediaPayloads: 7,
       inlineMediaPayloads: 1,
       inlineMediaDecodedBytesByMime: { "image/png": 5 },
-      legacyObjectMediaPayloads: 2,
-      legacyObjectMediaByMime: { "audio/ogg": 1, "image/jpeg": 1 },
-      invalidLegacyObjectMediaPayloads: 3,
+      legacyObjectMediaPayloads: 5,
+      legacyObjectMediaByMime: { "audio/ogg": 1, "image/jpeg": 2, "image/png": 1, "application/octet-stream": 1 },
       remoteUrlMediaPayloads: 1,
     });
-    expect(result.dryRunReport?.warnings).toEqual([
-      {
-        entity: "messages",
-        code: "invalid_legacy_media_uri",
-        message: expect.stringContaining(`${second.sourceId} has an invalid s3:// media_url: object key file name`),
-      },
-      {
-        entity: "messages",
-        code: "invalid_legacy_media_uri",
-        message: expect.stringContaining("bucket other-bucket does not match configured legacy media bucket gk-legacy-media"),
-      },
-      {
-        entity: "messages",
-        code: "invalid_legacy_media_uri",
-        message: expect.stringContaining("unknown media extension .exe"),
-      },
-    ]);
-    expect(result.dryRunReport?.entities.find((entity) => entity.entity === "messages")?.blockedRows).toBe(3);
-    expect(result.dryRunReport?.totals.blockedRows).toBe(3);
+    expect(result.dryRunReport?.warnings).toEqual([]);
+    expect(result.dryRunReport?.entities.find((entity) => entity.entity === "messages")?.blockedRows).toBe(0);
+    expect(result.dryRunReport?.totals.blockedRows).toBe(0);
   });
 
   it("fails the dry-run when a message batch is out of source id order", async () => {
@@ -1648,6 +1631,7 @@ describe("shipment dry-run validation", () => {
       transformedRows: 8,
       uniqueEvents: 5,
       duplicateRows: 2,
+      duplicateRowsDropped: 2,
       futureDatedRows: 1,
       providerTimeEvents: 4,
       firstSeenEvents: 1,
@@ -1668,6 +1652,7 @@ describe("shipment dry-run validation", () => {
       transformedRows: 8,
       uniqueEvents: 5,
       duplicateRows: 2,
+      duplicateRowsDropped: 6,
       futureDatedRows: 1,
       providerTimeEvents: 4,
       firstSeenEvents: 1,

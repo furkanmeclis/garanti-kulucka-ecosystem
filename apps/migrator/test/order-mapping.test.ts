@@ -1,3 +1,4 @@
+import { buildOrderCustomerPlan } from "../src/order-customer-plan.js";
 import { describe, expect, it } from "vitest";
 import { transformLegacyOrder, type OrderTransformContext } from "../src/order-mapping.js";
 import { calculateSourcePayloadChecksum } from "../src/legacy-source.js";
@@ -317,7 +318,7 @@ describe("transformLegacyOrder", () => {
       }), orderContext())),
       captureError(() => transformLegacyOrder(fixture({
         musteri_ad: secretName,
-        musteri_telefon: " ",
+        musteri_telefon: 42,
       }), orderContext())),
       captureError(() => transformLegacyOrder(fixture({ gizli: secretPhone }), orderContext())),
     ];
@@ -330,5 +331,41 @@ describe("transformLegacyOrder", () => {
       expect(error.message).not.toContain(secretTracking);
       expect(error.message).not.toContain(secretCancelReason);
     }
+  });
+});
+
+
+describe("snapshot-wide synthetic order customers", () => {
+  it("groups phone variants, chooses the latest name and latest available address, and folds old aliases", () => {
+    const rows = [
+      fixture({ id: "00000000-0000-4000-8000-000000000001", musteri_id: null, musteri_ad: "  ESKİ   Ad ", olusturma_tarihi: "2023-01-01T00:00:00Z" }),
+      fixture({ id: "00000000-0000-4000-8000-000000000002", musteri_id: null, musteri_ad: "eski ad", musteri_telefon: "05321112233", musteri_adres: "Son adres", musteri_ulke: "Türkiye", olusturma_tarihi: "2024-01-01T00:00:00Z" }),
+      fixture({ id: "00000000-0000-4000-8000-000000000003", musteri_id: null, musteri_ad: "Yeni Ad", musteri_telefon: "532 111 22 33", musteri_adres: null, musteri_il: null, musteri_ilce: null, musteri_posta_kodu: null, olusturma_tarihi: "2025-01-01T00:00:00Z" }),
+    ];
+    const plan = buildOrderCustomerPlan([], rows);
+    expect(plan.syntheticCustomers.size).toBe(1);
+    const draft = [...plan.syntheticCustomers.values()][0]!;
+    expect(draft).toMatchObject({ fullName: "Yeni Ad", phone: "5321112233", sourceId: "phone:5321112233",
+      notes: "Eski siparişlerde geçen adlar: eski ad", address: { addressLine: "Son adres", country: "TR" } });
+    expect(buildOrderCustomerPlan([], [...rows].reverse())).toEqual(plan);
+    const context = { ...plan, conversationPublicIds: new Map(), userPublicIds: new Map() };
+    expect(new Set(rows.map((row) => transformLegacyOrder(row, context).order.customerPublicId))).toEqual(new Set([draft.publicId]));
+  });
+
+  it("groups short nonempty legacy phones instead of treating them as phoneless", () => {
+    const rows = [1, 2].map((i) => fixture({ id: `00000000-0000-4000-8000-00000000000${i}`, musteri_id: null, musteri_telefon: "532 111 223" }));
+    const plan = buildOrderCustomerPlan([], rows);
+    expect(plan.syntheticCustomers.size).toBe(1);
+    expect([...plan.syntheticCustomers.values()][0]).toMatchObject({ phone: "532111223", sourceId: "phone:532111223" });
+  });
+
+  it("keeps missing-phone orders separate and breaks equal dates deterministically", () => {
+    const rows = [
+      fixture({ id: "00000000-0000-4000-8000-000000000001", musteri_id: null, musteri_telefon: null }),
+      fixture({ id: "00000000-0000-4000-8000-000000000002", musteri_id: null, musteri_telefon: "" }),
+    ];
+    expect(buildOrderCustomerPlan([], rows).syntheticCustomers.size).toBe(2);
+    const tied = rows.map((row, i) => fixture({ ...row.payload, musteri_telefon: "5321112233", musteri_ad: `Ad ${i}` }));
+    expect([...buildOrderCustomerPlan([], tied).syntheticCustomers.values()][0]?.fullName).toBe("Ad 1");
   });
 });

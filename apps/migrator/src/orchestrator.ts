@@ -2,6 +2,7 @@ import { applyCommunicationMigrationBatchWithState } from "./communication-apply
 import { validateCommunicationBatches } from "./communication-dry-run.js";
 import { communicationEntities } from "./communication-mapping.js";
 import { communicationTableMappings } from "./communication-catalog.js";
+import { buildOrderCustomerPlan, type OrderCustomerPlan } from "./order-customer-plan.js";
 import {
   applyConversationMigrationBatchWithState,
   applyCustomerMigrationBatchWithState,
@@ -48,14 +49,12 @@ import {
 } from "./customer-mapping.js";
 import { canonicalMigrationEntities, createMigrationPlan } from "./plan.js";
 import { legacyOrderItemTable, transformLegacyOrderItem } from "./order-item-mapping.js";
-import { legacyOrderTable, transformLegacyOrder } from "./order-mapping.js";
+import { legacyOrderTable, normalizePhoneLast10, transformLegacyOrder } from "./order-mapping.js";
 import { legacyProductTable, transformLegacyProduct } from "./product-mapping.js";
 import { createDryRunReport } from "./reports.js";
 import { legacyShipmentTable, normalizeShipmentTrackingNumber, transformLegacyShipment } from "./shipment-mapping.js";
 import {
   defaultLegacyMediaBucket,
-  isLegacyMediaUri,
-  parseLegacyMediaUri,
   type MigratorMediaStorage,
 } from "./media-storage.js";
 import {
@@ -134,6 +133,7 @@ export interface MigrationRunResult {
   readonly deferredReconciliation?: DeferredReconciliationResult;
   /** Apply only: the conversation merge plan the run applied (the dry-run reports it in dryRunReport). */
   readonly conversationMerge?: ConversationMergeSummary;
+  readonly shipmentTrackingEventTransform?: ShipmentTrackingEventTransformSummary;
 }
 
 export async function runMigration(input: RunMigrationInput): Promise<MigrationRunResult> {
@@ -298,6 +298,17 @@ export async function runMigration(input: RunMigrationInput): Promise<MigrationR
   const conversationMergePlan = entities.includes("conversations")
     ? createConversationMergePlan(dedupeLegacyRecords(rowContentRecords.get("conversations") ?? []), conversationAccounts)
     : emptyConversationMergePlan;
+  const orderCustomerPlan = entities.includes("orders")
+    ? buildOrderCustomerPlan(
+      dedupeLegacyRecords(rowContentRecords.get("customers") ?? []),
+      dedupeLegacyRecords(rowContentRecords.get("orders") ?? []),
+    )
+    : undefined;
+  const shipmentTrackingEventTransform = entities.includes("shipment_tracking_events")
+    ? await validateShipmentTrackingEventBatches(source, plan, {
+      shipmentPublicIds: new Map((rowContentRecords.get("shipments") ?? []).map((row) => [row.sourceId.toLowerCase(), ""])),
+    })
+    : undefined;
   await registerMigrationRun(input.target, input.runId, sourceManifest);
 
   const batches: MigrationBatchApplyResult[] = [];
@@ -310,6 +321,7 @@ export async function runMigration(input: RunMigrationInput): Promise<MigrationR
       integrationAccounts,
       conversationAccounts,
       conversationMergePlan,
+      ...(orderCustomerPlan ? { orderCustomerPlan } : {}),
       userPublicIds,
       ...(input.mediaStorage ? { mediaStorage: input.mediaStorage } : {}),
       ...(input.legacyMediaBucket ? { legacyMediaBucket: input.legacyMediaBucket } : {}),
@@ -324,6 +336,7 @@ export async function runMigration(input: RunMigrationInput): Promise<MigrationR
     sourceManifest,
     batches,
     deferredReconciliation,
+    ...(shipmentTrackingEventTransform ? { shipmentTrackingEventTransform } : {}),
     ...(entities.includes("conversations") ? { conversationMerge: conversationMergePlan.summary } : {}),
   };
 }
@@ -353,6 +366,7 @@ async function applyPlannedBatch(input:
     readonly integrationAccounts: readonly VerifiedIntegrationAccount[];
     readonly conversationAccounts: readonly VerifiedConversationAccount[];
     readonly conversationMergePlan: ConversationMergePlan;
+    readonly orderCustomerPlan?: OrderCustomerPlan;
     readonly userPublicIds: ReadonlyMap<string, string>;
     readonly mediaStorage?: MigratorMediaStorage;
     readonly legacyMediaBucket?: string;
@@ -415,7 +429,10 @@ function trackSourceRowContent(
       : {}),
     readBatch: async (entity, options) => {
       const records = await source.readBatch(entity, options);
-      recordsByEntity.get(entity)?.push(...records);
+      // Only orders/customers/conversations need payloads for snapshot-wide plans. Checksums
+      // already cover all source bytes; never retain message base64 in the manifest cache.
+      recordsByEntity.get(entity)?.push(...records.map((record) =>
+        entity === "messages" ? { ...record, payload: {} } : record));
       return records;
     },
   };
@@ -694,7 +711,7 @@ async function validateMessageBatches(
   source: LegacySource,
   plan: MigrationPlan,
   conversationPublicIds: ReadonlyMap<string, string>,
-  legacyMediaBucket: string,
+  _legacyMediaBucket: string,
   mergePlan: ConversationMergePlan,
 ): Promise<{
   readonly summary: MessageTransformSummary;
@@ -731,37 +748,27 @@ async function validateMessageBatches(
       if (mergePlan.winnerPublicIdByMergedSourceId.has(legacyConversationId)) messagesReassigned += 1;
       mediaFieldConflicts += result.warnings.filter((warning) => warning.code === "media_field_conflict").length;
       const rawPayload = result.message.rawPayload;
-      const mediaUrl = typeof rawPayload?.media_url === "string" ? rawPayload.media_url : null;
+      const mediaUrl = typeof row.payload.media_url === "string" ? row.payload.media_url
+        : typeof row.payload.medya_url === "string" ? row.payload.medya_url : null;
       if (mediaUrl !== null || rawPayload?.media_type !== undefined || rawPayload?.medya_url !== undefined || rawPayload?.medya_tipi !== undefined) {
         mediaPayloads += 1;
       }
-      if (isLegacyMediaUri(mediaUrl)) {
-        const parsed = parseLegacyMediaUri(mediaUrl, { expectedBucket: legacyMediaBucket, mediaType: rawPayload?.media_type });
-        if (parsed.ok) {
-          legacyObjectMediaPayloads += 1;
-          legacyObjectMediaByMime.set(
-            parsed.reference.mimeType,
-            (legacyObjectMediaByMime.get(parsed.reference.mimeType) ?? 0) + 1,
-          );
-        } else {
-          warnings.push(Object.freeze({
-            entity: "messages" as const,
-            code: "invalid_legacy_media_uri",
-            message: `Message ${row.sourceTable}.${row.sourceId} has an invalid s3:// media_url: ${parsed.reason}`,
-          }));
-        }
+      const omitted = rawPayload?.media_omitted;
+      if (omitted?.source === "legacy_object") {
+        legacyObjectMediaPayloads += 1;
+        const mime = omitted.mime_type ?? "application/octet-stream";
+        legacyObjectMediaByMime.set(mime, (legacyObjectMediaByMime.get(mime) ?? 0) + 1);
         continue;
       }
       if (mediaUrl !== null && /^https?:\/\//i.test(mediaUrl)) {
         remoteUrlMediaPayloads += 1;
         continue;
       }
-      const inline = mediaUrl === null ? null : parseDataUrlStats(mediaUrl);
-      if (inline !== null) {
+      if (omitted?.source === "inline") {
         inlineMediaPayloads += 1;
         inlineMediaDecodedBytesByMime.set(
-          inline.mimeType,
-          (inlineMediaDecodedBytesByMime.get(inline.mimeType) ?? 0) + inline.decodedBytes,
+          omitted.mime_type ?? "application/octet-stream",
+          (inlineMediaDecodedBytesByMime.get(omitted.mime_type ?? "application/octet-stream") ?? 0) + (omitted.byte_size ?? 0),
         );
       }
     }
@@ -882,6 +889,9 @@ async function validateOrderBatches(
   let customerResolutionById = 0;
   let customerResolutionByPhone = 0;
   let syntheticCustomersFromOrders = 0;
+  const syntheticIds = new Set<string>();
+  const syntheticPhones = new Set<string>();
+  let syntheticPhonelessCustomers = 0;
   let ambiguousPhoneMatches = 0;
   const publicIds = new Map<string, string>();
   const customerPublicIds = new Map<string, string>();
@@ -901,6 +911,9 @@ async function validateOrderBatches(
       if (result.customerResolution.path === "phone") customerResolutionByPhone += 1;
       if (result.customerResolution.path === "synthetic") {
         syntheticCustomersFromOrders += 1;
+        syntheticIds.add(result.order.customerPublicId);
+        if (result.customerResolution.reason === "missing_phone") syntheticPhonelessCustomers += 1;
+        else syntheticPhones.add(normalizePhoneLast10(result.order.customerPhone)!);
         if (result.customerResolution.reason === "ambiguous_phone") ambiguousPhoneMatches += 1;
       }
       for (const entry of result.reconciliation) {
@@ -917,7 +930,12 @@ async function validateOrderBatches(
       unresolvedCreators,
       ...(customerResolutionById > 0 ? { customerResolutionById } : {}),
       ...(customerResolutionByPhone > 0 ? { customerResolutionByPhone } : {}),
-      ...(syntheticCustomersFromOrders > 0 ? { syntheticCustomersFromOrders } : {}),
+      ...(syntheticCustomersFromOrders > 0 ? {
+        syntheticCustomersFromOrders,
+        syntheticCustomers: syntheticIds.size,
+        syntheticPhoneCustomers: syntheticPhones.size,
+        syntheticPhonelessCustomers,
+      } : {}),
       ...(ambiguousPhoneMatches > 0 ? { ambiguousPhoneMatches } : {}),
     }),
     publicIds,
@@ -1137,6 +1155,7 @@ async function validateShipmentTrackingEventBatches(
     transformedRows,
     uniqueEvents,
     duplicateRows,
+    duplicateRowsDropped: duplicateRows + (accounting?.supersededInsertTimeRows ?? 0),
     futureDatedRows,
     providerTimeEvents,
     firstSeenEvents,
@@ -1180,11 +1199,6 @@ function ownSourceTableSnapshots(snapshots: readonly SourceTableSnapshot[]): Sou
   }))) as unknown as SourceTableSnapshot[];
 }
 
-function normalizePhoneLast10(value: string): string | null {
-  const digits = value.replace(/\D/g, "");
-  if (digits.length < 10) return null;
-  return digits.slice(-10);
-}
 
 function shipmentTrackingCandidates(payload: Record<string, unknown>): readonly string[] {
   const candidates = ["takip_no", "surat_kargo_takip_no", "surat_barkod_no"]
@@ -1201,18 +1215,6 @@ function compareProductExternalIdOwners(
   const updated = right.updatedAt.localeCompare(left.updatedAt);
   if (updated !== 0) return updated;
   return left.sourceId.localeCompare(right.sourceId);
-}
-
-function parseDataUrlStats(value: string): { readonly mimeType: string; readonly decodedBytes: number } | null {
-  const match = /^data:([^;,]+)(?:;[^,]*)?,(.*)$/s.exec(value);
-  if (!match) return null;
-  const mimeType = match[1]!.toLowerCase();
-  const payload = match[2]!;
-  const isBase64 = /^data:[^,]*;base64,/i.test(value);
-  const decodedBytes = isBase64
-    ? Buffer.byteLength(payload.replace(/\s/g, ""), "base64")
-    : Buffer.byteLength(decodeURIComponent(payload), "utf8");
-  return { mimeType, decodedBytes };
 }
 
 function requiredPayloadText(payload: Record<string, unknown>, field: string): string {
