@@ -1054,6 +1054,9 @@ async function applyOrderItemMigrationBatch(
         code: "order_total_manual_adjustment",
         message: `Order total adjustment recorded for ${orderPublicId}: ${adjustment.adjustmentAmount}`,
       });
+    } else {
+      // An order's items can span batches: clear the partial-batch adjustment once the totals match.
+      await input.target.recordOrderManualAdjustment?.({ orderPublicId, manualAdjustmentAmount: "0.00" });
     }
   }
 

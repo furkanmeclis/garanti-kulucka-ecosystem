@@ -247,6 +247,40 @@ describe("migration verification", () => {
     });
   });
 
+  it("accepts item-less orders and order totals reconciled by manual_adjustment_amount (owner decisions 9a, 9c)", () => {
+    const item = (id: string, orderId: string, total: string) => ({ public_id: id, order_public_id: orderId, quantity: 1, unit_price: total, total_amount: total });
+    expect(verifyOrderTotals(
+      [
+        { public_id: "ord_no_items", customer_public_id: "cus_1", total_amount: "250.00" },
+        { public_id: "ord_adjusted", customer_public_id: "cus_1", total_amount: "100.00", manual_adjustment_amount: "-20.00" },
+        { public_id: "ord_exact", customer_public_id: "cus_1", total_amount: "50.00", manual_adjustment_amount: "0.00" },
+      ],
+      [item("oit_1", "ord_adjusted", "120.00"), item("oit_2", "ord_exact", "50.00")],
+    )).toMatchObject({ name: "totals.orders", status: "passed", actual: 0 });
+    // A stale partial-batch adjustment no longer reconciles and is reported.
+    expect(verifyOrderTotals(
+      [{ public_id: "ord_stale", customer_public_id: "cus_1", total_amount: "200.00", manual_adjustment_amount: "150.00" }],
+      [item("oit_3", "ord_stale", "200.00")],
+    )).toMatchObject({ status: "failed", actual: 1 });
+  });
+
+  it("covers deduplicated tracking events by provider/first_seen maps minus skipped future rows", () => {
+    const report = createMigrationVerificationReport({
+      runId: "run_tracking",
+      sourceManifest: manifest({ shipment_tracking_events: 3 }),
+      targetPublicIds: targetPublicIds({ shipment_tracking_events: ["ste_1", "ste_2"] }),
+      customers: [], customerExternalIdentities: [], conversations: [], messages: [], orders: [], orderItems: [], shipments: [],
+      skippedSourceRows: { shipment_tracking_events: 1 },
+      legacyIdMaps: [
+        { source_id: "provider:a", mapping_role: "provider", target_id: "ste_1" },
+        { source_id: "first_seen:b", mapping_role: "first_seen", target_id: "ste_2" },
+      ].map((map) => ({ ...map, run_id: "run_tracking", source_system: "legacy_postgres", source_table: "legacy.shipment_tracking_events", target_table: "shipment_tracking_events" })),
+    });
+    expect(report.checks.find((check) => check.name === "legacy_id_map.foundation_rules")).toMatchObject({ status: "passed" });
+    expect(report.checks.find((check) => check.name === "legacy_id_map.source_coverage.shipment_tracking_events")).toMatchObject({ status: "passed", expected: 2, actual: 2 });
+    expect(report.checks.find((check) => check.name === "legacy_id_map.target_coverage.shipment_tracking_events")).toMatchObject({ status: "passed", expected: 2, actual: 2 });
+  });
+
   it("detects missing legacy id map coverage and dangling target references", () => {
     const checks = verifyLegacyIdMapCoverage({
       runId: "run_2026_09",

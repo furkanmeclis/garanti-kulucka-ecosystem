@@ -27,6 +27,7 @@ export async function createTargetVerificationSnapshot(
       selectOrderItems(client, targetPublicIds.order_items),
       selectShipments(client, targetPublicIds.shipments),
     ]);
+  const skippedSourceRows = await selectSkippedSourceRows(client, runId);
 
   return {
     ...await selectCommunicationVerification(client, targetPublicIds),
@@ -41,7 +42,18 @@ export async function createTargetVerificationSnapshot(
     orderItems,
     shipments,
     legacyIdMaps,
+    skippedSourceRows,
   };
+}
+
+async function selectSkippedSourceRows(client: Client, runId: string): Promise<Partial<Record<MigrationEntity, number>>> {
+  const result = await client.query<{ entity: MigrationEntity; skipped: string }>(`
+    select entity, sum(skipped_rows)::text as skipped
+    from migration_batches
+    where run_id = $1 and skipped_rows > 0 and entity = 'shipment_tracking_events'
+    group by entity
+  `, [runId]);
+  return Object.fromEntries(result.rows.map((row) => [row.entity, Number(row.skipped)]));
 }
 
 async function selectReferencedTargetPublicIds(
@@ -198,8 +210,10 @@ async function selectOrders(client: Client, publicIds: readonly string[]) {
     public_id: string;
     customer_public_id: string | null;
     total_amount: string;
+    manual_adjustment_amount: string | null;
   }>(`
-    select orders.public_id, customers.public_id as customer_public_id, orders.total_amount::text as total_amount
+    select orders.public_id, customers.public_id as customer_public_id, orders.total_amount::text as total_amount,
+           orders.manual_adjustment_amount::text as manual_adjustment_amount
     from orders
     left join customers on customers.id = orders.customer_id
     where orders.public_id = any($1::text[])

@@ -144,13 +144,15 @@ describe("target verification snapshot", () => {
           };
         }
 
+        if (sql.includes("from migration_batches")) return { rows: [] };
         throw new Error(`Unexpected query: ${sql}`);
       },
     };
 
     const snapshot = await createTargetVerificationSnapshot(client as never, "run_2026_09");
 
-    expect(queries).toHaveLength(16);
+    expect(queries).toHaveLength(17);
+    expect(queries.filter((query) => query.includes("from migration_batches"))).toHaveLength(1);
     expect(queries.filter((query) => query.startsWith("select public_id from") && query.includes("where public_id = any"))).toEqual([
       "select public_id from customers where public_id = any($1::text[]) order by id asc",
       "select public_id from customer_external_identities where public_id = any($1::text[]) order by id asc",
@@ -207,13 +209,15 @@ describe("target verification snapshot", () => {
           }] };
         }
         if (sql.includes("from legacy_id_map")) return { rows: [] };
+        if (sql.includes("from migration_batches")) return { rows: [] };
         throw new Error(`Unexpected full-table query: ${sql}`);
       },
     };
 
     const snapshot = await createTargetVerificationSnapshot(client as never, "run_empty");
 
-    expect(queries).toHaveLength(2);
+    expect(queries).toHaveLength(3);
+    expect(queries.filter((query) => query.includes("from migration_batches"))).toHaveLength(1);
     expect(snapshot.customers).toEqual([]);
     expect(snapshot.customerExternalIdentities).toEqual([]);
     expect(snapshot.conversations).toEqual([]);

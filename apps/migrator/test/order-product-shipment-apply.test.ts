@@ -248,6 +248,28 @@ describe("product/order/order item/shipment apply", () => {
     });
     expect(mismatchTarget.manualAdjustments.get("ord_0123456789abcdef01234567")).toBe("78.00");
   });
+
+  it("clears a partial-batch adjustment once the order's remaining items land in a later batch", async () => {
+    const splitTarget = new ApplyMemoryTarget({ orderTotals: { ord_0123456789abcdef01234567: "42.00" } });
+    splitTarget.seedMap("public.siparisler", orderId, "orders", "primary", "ord_0123456789abcdef01234567", "run_split_items");
+    splitTarget.productsBySku.set("SKU-1", "prd_0123456789abcdef01234567");
+
+    await applyOrderItemMigrationBatchWithState({
+      runId: "run_split_items",
+      source: new MemorySource([orderItemRecord()]),
+      target: splitTarget,
+      batch: batch("order_items", 1),
+    });
+    expect(splitTarget.manualAdjustments.get("ord_0123456789abcdef01234567")).toBe("21.00");
+
+    await applyOrderItemMigrationBatchWithState({
+      runId: "run_split_items",
+      source: new MemorySource([{ ...orderItemRecord({ id: "8a100000-0000-4000-8000-000000000002" }), sourceId: "8a100000-0000-4000-8000-000000000002" }]),
+      target: splitTarget,
+      batch: { ...batch("order_items", 1), batchNumber: 2 },
+    });
+    expect(splitTarget.manualAdjustments.get("ord_0123456789abcdef01234567")).toBe("0.00");
+  });
 });
 
 class MemorySource implements LegacySource {
