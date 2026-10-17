@@ -1,3 +1,4 @@
+import { SnapshotRowContent } from "./snapshot-row-content.js";
 import { applyCommunicationMigrationBatchWithState } from "./communication-apply.js";
 import { validateCommunicationBatches } from "./communication-dry-run.js";
 import { communicationEntities } from "./communication-mapping.js";
@@ -65,7 +66,7 @@ import {
   validateLegacySourceSnapshots,
   type LegacyMappingCatalog,
 } from "./mapping-catalog.js";
-import { createSourceManifest, createSourceRowContentChecksum, registerMigrationRun } from "./source-manifest.js";
+import { createSourceManifest, registerMigrationRun } from "./source-manifest.js";
 import type {
   ConversationTransformSummary,
   CustomerTransformSummary,
@@ -187,158 +188,170 @@ export async function runMigration(input: RunMigrationInput): Promise<MigrationR
     ...(input.now ? { now: input.now } : {}),
   });
 
-  const rowContentRecords = createRowContentRecordMap(entities);
-  const source = trackSourceRowContent(input.source, rowContentRecords);
+  const snapshot = await SnapshotRowContent.create(input.source, entities, input.mode === "apply");
+  const source = snapshot.source;
+  try {
 
-  if (input.mode === "dry-run") {
-    const customers = validateCustomerRows
-      ? await validateCustomerBatches(source, plan, integrationAccounts)
-      : undefined;
-    const customerPhoneIndex = customers?.publicIdsByPhone ?? new Map();
-    const conversations = validateConversationRows
-      ? await validateConversationBatches(source, plan, {
-        customerPublicIds: requireDependencyPublicIds(customers, "Conversation", "customers"),
-        userPublicIds,
-        accounts: conversationAccounts,
-      })
-      : undefined;
-    const messageTransform = validateMessageRows
-      ? await validateMessageBatches(
-        source,
+    if (input.mode === "dry-run") {
+      const customers = validateCustomerRows
+        ? await validateCustomerBatches(source, plan, integrationAccounts)
+        : undefined;
+      const customerPhoneIndex = customers?.publicIdsByPhone ?? new Map();
+      const conversations = validateConversationRows
+        ? await validateConversationBatches(source, plan, {
+          customerPublicIds: requireDependencyPublicIds(customers, "Conversation", "customers"),
+          userPublicIds,
+          accounts: conversationAccounts,
+        })
+        : undefined;
+      const messageTransform = validateMessageRows
+        ? await validateMessageBatches(
+          source,
+          plan,
+          requireDependencyPublicIds(conversations, "Message", "conversations"),
+          input.legacyMediaBucket ?? defaultLegacyMediaBucket,
+          conversations?.mergePlan ?? emptyConversationMergePlan,
+        )
+        : undefined;
+      const productTransform = validateProductRows
+        ? await validateProductBatches(source, plan)
+        : undefined;
+      const orders = validateOrderRows
+        ? await validateOrderBatches(source, plan, {
+          customerPublicIds: requireDependencyPublicIds(customers, "Order", "customers"),
+          customerPublicIdsByPhone: customerPhoneIndex,
+          conversationPublicIds: conversations?.publicIds ?? new Map(),
+          userPublicIds,
+        })
+        : undefined;
+      const orderItemTransform = validateOrderItemRows
+        ? await validateOrderItemBatches(source, plan, {
+          orderPublicIds: requireDependencyPublicIds(orders, "Order item", "orders"),
+          productPublicIdsBySku: requireProductDependency(productTransform).publicIdsBySku,
+          productPublicIdsByExternalId: requireProductDependency(productTransform).publicIdsByExternalProductId,
+          orderTotalsByPublicId: orders?.totalsByOrderPublicId ?? new Map(),
+        })
+        : undefined;
+      const shipmentTransform = validateShipmentRows
+        ? await validateShipmentBatches(
+          source,
+          plan,
+          {
+            customerPublicIds: requireDependencyPublicIds(customers, "Shipment", "customers"),
+            orderPublicIds: orders?.publicIds ?? new Map(),
+            orderCustomerPublicIds: orders?.customerPublicIds ?? new Map(),
+          },
+        )
+        : undefined;
+      const shipmentTrackingEventTransform = validateShipmentTrackingEventRows
+        ? await validateShipmentTrackingEventBatches(source, plan, {
+          shipmentPublicIds: shipmentTransform?.publicIds ?? new Map(),
+        })
+        : undefined;
+      const callCustomerPhoneIndex = new Map(customerPhoneIndex);
+      for (const [phone, ids] of orders?.syntheticCustomerPublicIdsByPhone ?? []) {
+        callCustomerPhoneIndex.set(phone, [...new Set([...(callCustomerPhoneIndex.get(phone) ?? []), ...ids])]);
+      }
+      const communicationTransforms = await validateCommunicationBatches(
+        source, plan, shipmentTransform?.publicIds ?? new Map(),
+        { userPublicIds, orderPublicIds: orders?.publicIds ?? new Map(), customerPublicIdsByPhone: callCustomerPhoneIndex },
+      );
+      const sourceManifest = createSourceManifest({
+        sourceSystem: input.sourceSystem,
+        databaseIdentity: input.sourceDatabaseIdentity,
+        tables,
         plan,
-        requireDependencyPublicIds(conversations, "Message", "conversations"),
-        input.legacyMediaBucket ?? defaultLegacyMediaBucket,
-        conversations?.mergePlan ?? emptyConversationMergePlan,
-      )
-      : undefined;
-    const productTransform = validateProductRows
-      ? await validateProductBatches(source, plan)
-      : undefined;
-    const orders = validateOrderRows
-      ? await validateOrderBatches(source, plan, {
-        customerPublicIds: requireDependencyPublicIds(customers, "Order", "customers"),
-        customerPublicIdsByPhone: customerPhoneIndex,
-        conversationPublicIds: conversations?.publicIds ?? new Map(),
-        userPublicIds,
-      })
-      : undefined;
-    const orderItemTransform = validateOrderItemRows
-      ? await validateOrderItemBatches(source, plan, {
-        orderPublicIds: requireDependencyPublicIds(orders, "Order item", "orders"),
-        productPublicIdsBySku: requireProductDependency(productTransform).publicIdsBySku,
-        productPublicIdsByExternalId: requireProductDependency(productTransform).publicIdsByExternalProductId,
-        orderTotalsByPublicId: orders?.totalsByOrderPublicId ?? new Map(),
-      })
-      : undefined;
-    const shipmentTransform = validateShipmentRows
-      ? await validateShipmentBatches(
-        source,
+        mappingCatalogVersion: catalog.version,
+        rowContentChecksums: await snapshot.checksums(),
+      });
+      return {
+        mode: input.mode,
         plan,
-        {
-          customerPublicIds: requireDependencyPublicIds(customers, "Shipment", "customers"),
-          orderPublicIds: orders?.publicIds ?? new Map(),
-          orderCustomerPublicIds: orders?.customerPublicIds ?? new Map(),
-        },
-      )
-      : undefined;
-    const shipmentTrackingEventTransform = validateShipmentTrackingEventRows
-      ? await validateShipmentTrackingEventBatches(source, plan, {
-        shipmentPublicIds: shipmentTransform?.publicIds ?? new Map(),
-      })
-      : undefined;
-    const communicationTransforms = await validateCommunicationBatches(source, plan, shipmentTransform?.publicIds ?? new Map());
+        sourceManifest,
+        dryRunReport: createDryRunReport({
+          communicationTransforms,
+          plan,
+          ...(customers ? { customerTransform: customers.summary } : {}),
+          ...(conversations ? { conversationTransform: conversations.summary } : {}),
+          ...(conversations
+            ? {
+              conversationMerge: Object.freeze({
+                ...conversations.mergePlan.summary,
+                ...(messageTransform ? messageTransform.mergeCounts : {}),
+              }),
+            }
+            : {}),
+          ...(messageTransform ? { messageTransform: messageTransform.summary } : {}),
+          ...(messageTransform && messageTransform.warnings.length > 0 ? { warnings: [...messageTransform.warnings] } : {}),
+          ...(productTransform ? { productTransform: productTransform.summary } : {}),
+          ...(orders ? { orderTransform: orders.summary } : {}),
+          ...(orderItemTransform ? { orderItemTransform } : {}),
+          ...(shipmentTransform ? { shipmentTransform: shipmentTransform.summary } : {}),
+          ...(shipmentTrackingEventTransform ? { shipmentTrackingEventTransform } : {}),
+          ...(input.now ? { now: input.now } : {}),
+        }),
+        batches: [],
+      };
+    }
+
     const sourceManifest = createSourceManifest({
       sourceSystem: input.sourceSystem,
       databaseIdentity: input.sourceDatabaseIdentity,
       tables,
       plan,
       mappingCatalogVersion: catalog.version,
-      rowContentChecksums: createRowContentChecksums(entities, rowContentRecords),
+      rowContentChecksums: await snapshot.readPlan(plan),
     });
+    // The checksum pre-pass read every planned conversation row of this snapshot, so the merge plan is
+    // built from exactly the rows the batches will apply; it is deterministic, so resumed runs agree.
+    const conversationMergePlan = entities.includes("conversations")
+      ? createConversationMergePlan(dedupeLegacyRecords(snapshot.planningRecords.get("conversations") ?? []), conversationAccounts)
+      : emptyConversationMergePlan;
+    const orderCustomerPlan = entities.includes("orders")
+      ? buildOrderCustomerPlan(
+        dedupeLegacyRecords(snapshot.planningRecords.get("customers") ?? []),
+        dedupeLegacyRecords(snapshot.planningRecords.get("orders") ?? []),
+      )
+      : undefined;
+    const shipmentTrackingEventTransform = entities.includes("shipment_tracking_events")
+      ? await validateShipmentTrackingEventBatches(source, plan, {
+        shipmentPublicIds: new Map((snapshot.planningRecords.get("shipments") ?? []).map((row) => [row.sourceId.toLowerCase(), ""])),
+      })
+      : undefined;
+    snapshot.planningRecords.clear();
+    await registerMigrationRun(input.target, input.runId, sourceManifest);
+
+    const batches: MigrationBatchApplyResult[] = [];
+    for (const batch of plan.batches) {
+      batches.push(await applyPlannedBatch({
+        source,
+        target: input.target,
+        runId: input.runId,
+        batch,
+        integrationAccounts,
+        conversationAccounts,
+        conversationMergePlan,
+        ...(orderCustomerPlan ? { orderCustomerPlan } : {}),
+        userPublicIds,
+        ...(input.mediaStorage ? { mediaStorage: input.mediaStorage } : {}),
+        ...(input.legacyMediaBucket ? { legacyMediaBucket: input.legacyMediaBucket } : {}),
+      }));
+    }
+    const deferredReconciliation = await reconcileDeferredReconciliations(input.target, input.runId);
+
     return {
       mode: input.mode,
+      runId: input.runId,
       plan,
       sourceManifest,
-      dryRunReport: createDryRunReport({
-        communicationTransforms,
-        plan,
-        ...(customers ? { customerTransform: customers.summary } : {}),
-        ...(conversations ? { conversationTransform: conversations.summary } : {}),
-        ...(conversations
-          ? {
-            conversationMerge: Object.freeze({
-              ...conversations.mergePlan.summary,
-              ...(messageTransform ? messageTransform.mergeCounts : {}),
-            }),
-          }
-          : {}),
-        ...(messageTransform ? { messageTransform: messageTransform.summary } : {}),
-        ...(messageTransform && messageTransform.warnings.length > 0 ? { warnings: [...messageTransform.warnings] } : {}),
-        ...(productTransform ? { productTransform: productTransform.summary } : {}),
-        ...(orders ? { orderTransform: orders.summary } : {}),
-        ...(orderItemTransform ? { orderItemTransform } : {}),
-        ...(shipmentTransform ? { shipmentTransform: shipmentTransform.summary } : {}),
-        ...(shipmentTrackingEventTransform ? { shipmentTrackingEventTransform } : {}),
-        ...(input.now ? { now: input.now } : {}),
-      }),
-      batches: [],
+      batches,
+      deferredReconciliation,
+      ...(shipmentTrackingEventTransform ? { shipmentTrackingEventTransform } : {}),
+      ...(entities.includes("conversations") ? { conversationMerge: conversationMergePlan.summary } : {}),
     };
+  } finally {
+    await snapshot.close();
   }
-
-  const sourceManifest = createSourceManifest({
-    sourceSystem: input.sourceSystem,
-    databaseIdentity: input.sourceDatabaseIdentity,
-    tables,
-    plan,
-    mappingCatalogVersion: catalog.version,
-    rowContentChecksums: await createApplyRowContentChecksums(source, plan, entities, rowContentRecords),
-  });
-  // The checksum pre-pass read every planned conversation row of this snapshot, so the merge plan is
-  // built from exactly the rows the batches will apply; it is deterministic, so resumed runs agree.
-  const conversationMergePlan = entities.includes("conversations")
-    ? createConversationMergePlan(dedupeLegacyRecords(rowContentRecords.get("conversations") ?? []), conversationAccounts)
-    : emptyConversationMergePlan;
-  const orderCustomerPlan = entities.includes("orders")
-    ? buildOrderCustomerPlan(
-      dedupeLegacyRecords(rowContentRecords.get("customers") ?? []),
-      dedupeLegacyRecords(rowContentRecords.get("orders") ?? []),
-    )
-    : undefined;
-  const shipmentTrackingEventTransform = entities.includes("shipment_tracking_events")
-    ? await validateShipmentTrackingEventBatches(source, plan, {
-      shipmentPublicIds: new Map((rowContentRecords.get("shipments") ?? []).map((row) => [row.sourceId.toLowerCase(), ""])),
-    })
-    : undefined;
-  await registerMigrationRun(input.target, input.runId, sourceManifest);
-
-  const batches: MigrationBatchApplyResult[] = [];
-  for (const batch of plan.batches) {
-    batches.push(await applyPlannedBatch({
-      source,
-      target: input.target,
-      runId: input.runId,
-      batch,
-      integrationAccounts,
-      conversationAccounts,
-      conversationMergePlan,
-      ...(orderCustomerPlan ? { orderCustomerPlan } : {}),
-      userPublicIds,
-      ...(input.mediaStorage ? { mediaStorage: input.mediaStorage } : {}),
-      ...(input.legacyMediaBucket ? { legacyMediaBucket: input.legacyMediaBucket } : {}),
-    }));
-  }
-  const deferredReconciliation = await reconcileDeferredReconciliations(input.target, input.runId);
-
-  return {
-    mode: input.mode,
-    runId: input.runId,
-    plan,
-    sourceManifest,
-    batches,
-    deferredReconciliation,
-    ...(shipmentTrackingEventTransform ? { shipmentTrackingEventTransform } : {}),
-    ...(entities.includes("conversations") ? { conversationMerge: conversationMergePlan.summary } : {}),
-  };
 }
 
 function createConversationMergePlan(
@@ -346,18 +359,6 @@ function createConversationMergePlan(
   accounts: readonly VerifiedConversationAccount[],
 ): ConversationMergePlan {
   return buildConversationMergePlan(records.map((record) => legacyConversationMergeCandidate(record, accounts)));
-}
-
-async function createApplyRowContentChecksums(
-  source: LegacySource,
-  plan: MigrationPlan,
-  entities: readonly MigrationEntity[],
-  recordsByEntity: ReadonlyMap<MigrationEntity, readonly LegacyRecord[]>,
-) {
-  for (const batch of plan.batches) {
-    await source.readBatch(batch.entity, { limit: batch.limit, offset: batch.offset });
-  }
-  return createRowContentChecksums(entities, recordsByEntity);
 }
 
 async function applyPlannedBatch(input:
@@ -376,6 +377,7 @@ async function applyPlannedBatch(input:
     case "message_shortcuts":
     case "sms_messages":
     case "vapi_calls":
+    case "call_logs":
       return applyCommunicationMigrationBatchWithState(input);
     case "customers":
       return applyCustomerMigrationBatchWithState({
@@ -411,40 +413,6 @@ async function applyPlannedBatch(input:
   }
 }
 
-function createRowContentRecordMap(
-  entities: readonly MigrationEntity[],
-): Map<MigrationEntity, LegacyRecord[]> {
-  return new Map(entities.map((entity) => [entity, []]));
-}
-
-function trackSourceRowContent(
-  source: LegacySource,
-  recordsByEntity: Map<MigrationEntity, LegacyRecord[]>,
-): LegacySource {
-  return {
-    count: (entity) => source.count(entity),
-    describeTables: (entities) => source.describeTables(entities),
-    ...(source.describeShipmentTrackingEventSourceRows
-      ? { describeShipmentTrackingEventSourceRows: () => source.describeShipmentTrackingEventSourceRows!() }
-      : {}),
-    readBatch: async (entity, options) => {
-      const records = await source.readBatch(entity, options);
-      // Only orders/customers/conversations need payloads for snapshot-wide plans. Checksums
-      // already cover all source bytes; never retain message base64 in the manifest cache.
-      recordsByEntity.get(entity)?.push(...records.map((record) =>
-        entity === "messages" ? { ...record, payload: {} } : record));
-      return records;
-    },
-  };
-}
-
-function createRowContentChecksums(
-  entities: readonly MigrationEntity[],
-  recordsByEntity: ReadonlyMap<MigrationEntity, readonly LegacyRecord[]>,
-) {
-  return entities.map((entity) => createSourceRowContentChecksum(entity, dedupeLegacyRecords(recordsByEntity.get(entity) ?? [])));
-}
-
 function dedupeLegacyRecords(records: readonly LegacyRecord[]): LegacyRecord[] {
   const seen = new Set<string>();
   const deduped: LegacyRecord[] = [];
@@ -472,6 +440,7 @@ interface ValidatedProductBatches extends ValidatedBatches<ProductTransformSumma
 }
 
 interface ValidatedOrderBatches extends ValidatedBatches<OrderTransformSummary> {
+  readonly syntheticCustomerPublicIdsByPhone: ReadonlyMap<string, readonly string[]>;
   readonly customerPublicIds: ReadonlyMap<string, string>;
   readonly totalsByOrderPublicId: ReadonlyMap<string, number>;
 }
@@ -890,6 +859,7 @@ async function validateOrderBatches(
   let customerResolutionByPhone = 0;
   let syntheticCustomersFromOrders = 0;
   const syntheticIds = new Set<string>();
+  const syntheticCustomerPublicIdsByPhone = new Map<string, string[]>();
   const syntheticPhones = new Set<string>();
   let syntheticPhonelessCustomers = 0;
   let ambiguousPhoneMatches = 0;
@@ -913,7 +883,13 @@ async function validateOrderBatches(
         syntheticCustomersFromOrders += 1;
         syntheticIds.add(result.order.customerPublicId);
         if (result.customerResolution.reason === "missing_phone") syntheticPhonelessCustomers += 1;
-        else syntheticPhones.add(normalizePhoneLast10(result.order.customerPhone)!);
+        else {
+          const phone = normalizePhoneLast10(result.order.customerPhone)!;
+          syntheticPhones.add(phone);
+          const ids = syntheticCustomerPublicIdsByPhone.get(phone) ?? [];
+          if (!ids.includes(result.order.customerPublicId)) ids.push(result.order.customerPublicId);
+          syntheticCustomerPublicIdsByPhone.set(phone, ids);
+        }
         if (result.customerResolution.reason === "ambiguous_phone") ambiguousPhoneMatches += 1;
       }
       for (const entry of result.reconciliation) {
@@ -941,6 +917,7 @@ async function validateOrderBatches(
     publicIds,
     customerPublicIds,
     totalsByOrderPublicId,
+    syntheticCustomerPublicIdsByPhone,
   };
 }
 

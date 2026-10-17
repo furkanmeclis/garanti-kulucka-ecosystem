@@ -413,6 +413,7 @@ describe("migration orchestrator", () => {
       "message_shortcuts",
       "sms_messages",
       "vapi_calls",
+      "call_logs",
     ]);
     expect(source.operations).toEqual([
       "describe",
@@ -427,6 +428,7 @@ describe("migration orchestrator", () => {
       "count:message_shortcuts",
       "count:sms_messages",
       "count:vapi_calls",
+      "count:call_logs",
     ]);
   });
 

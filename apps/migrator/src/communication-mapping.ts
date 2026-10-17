@@ -4,10 +4,12 @@ import { calculateSourcePayloadChecksum } from "./legacy-source.js";
 import { communicationTableMappings } from "./communication-catalog.js";
 import type { CanonicalRecord, LegacyRecord, MigrationEntity } from "./types.js";
 
-export const communicationEntities = ["message_shortcuts", "sms_messages", "vapi_calls"] as const;
+export const communicationEntities = ["message_shortcuts", "sms_messages", "vapi_calls", "call_logs"] as const;
 export type CommunicationEntity = typeof communicationEntities[number];
 export const smsStatusMap: Readonly<Record<string, string>> = Object.freeze({ basarili: "sent" });
 export const vapiStatusMap: Readonly<Record<string, string>> = Object.freeze({ basladi: "basladi" });
+export const callDirectionMap = Object.freeze({ giden: "outbound" });
+export const callStatusMap = Object.freeze({ cevaplandi: "answered", hata: "failed", cevapsiz: "missed", mesgul: "busy", iptal: "cancelled" });
 export interface ShortcutMedia {
   readonly mimeType: string;
   readonly mediaType: "image" | "video" | "document";
@@ -19,6 +21,8 @@ export interface ShortcutMedia {
 export interface CommunicationDraft {
   readonly record: CanonicalRecord;
   readonly shipmentSourceId: string | null;
+  readonly userSourceId?: string | null;
+  readonly orderSourceId?: string | null;
   readonly media: readonly ShortcutMedia[];
   readonly createdAt: string | null;
   readonly updatedAt: string | null;
@@ -33,6 +37,12 @@ export interface CommunicationSummary {
   remoteMediaUrls: number;
   linkedShipments: number;
   unresolvedShipments: number;
+  linkedUsers?: number;
+  unresolvedUsers?: number;
+  linkedOrders?: number;
+  unresolvedOrders?: number;
+  linkedCustomers?: number;
+  unresolvedCustomers?: number;
   byStatus: Record<string, number>;
 }
 export type CommunicationSummaries = Partial<Record<CommunicationEntity, CommunicationSummary>>;
@@ -84,7 +94,7 @@ export function transformLegacyCommunication(record: LegacyRecord, entity: Commu
   const createdAt = normalizeLegacyTimestamp(p.olusturma_tarihi, "olusturma_tarihi", fail);
   const updatedAt = entity === "message_shortcuts"
     ? normalizeLegacyTimestamp(p.guncelleme_tarihi, "guncelleme_tarihi", fail) : createdAt;
-  const prefix = { message_shortcuts: "msc", sms_messages: "sms", vapi_calls: "vcl" }[entity];
+  const prefix = { message_shortcuts: "msc", sms_messages: "sms", vapi_calls: "vcl", call_logs: "cal" }[entity];
   const publicId = communicationPublicId(prefix, `${record.sourceSystem}:${record.sourceTable}:${id}:primary`);
   let payload: Record<string, unknown>;
   let media: readonly ShortcutMedia[] = [];
@@ -102,6 +112,17 @@ export function transformLegacyCommunication(record: LegacyRecord, entity: Commu
       status: enumValue(p.durum, smsStatusMap, "durum"), error_message: text(p.hata_mesaji, "hata_mesaji"),
       provider_bulk_id: text(p.bulk_id, "bulk_id"), tracking_number: text(p.kargo_takip_no, "kargo_takip_no"),
       idempotency_key: `migration:${publicId}`, request_id: `migration:${publicId}`, queued: false };
+  } else if (entity === "call_logs") {
+    const started = normalizeLegacyTimestamp(p.baslangic, "baslangic", fail);
+    if (!started || !createdAt) fail("call timestamps must not be null");
+    text(p.notlar, "notlar");
+    payload = { provider: "netgsm", source: "legacy",
+      direction: enumValue(p.yon, callDirectionMap, "yon"), status: enumValue(p.durum, callStatusMap, "durum"),
+      customer_number: text(p.musteri_telefon, "musteri_telefon", true),
+      callee: text(p.musteri_telefon, "musteri_telefon", true),
+      talk_seconds: integer(p.sure_sn, "sure_sn", true), initiated_at: started,
+      ended_at: normalizeLegacyTimestamp(p.bitis, "bitis", fail),
+      raw_payload: { ...p }, events: [] };
   } else {
     shipmentSourceId = uuid(p.kargo_id, "kargo_id");
     const cost = p.maliyet;
@@ -116,7 +137,8 @@ export function transformLegacyCommunication(record: LegacyRecord, entity: Commu
       idempotency_key: `migration:${publicId}`, request_id: `migration:${publicId}`, queued: false };
   }
   return { record: { targetTable: entity, targetId: publicId, checksum: record.checksum, payload },
-    shipmentSourceId, media, createdAt, updatedAt };
+    shipmentSourceId, media, createdAt, updatedAt,
+    ...(entity === "call_logs" ? { userSourceId: uuid(p.kullanici_id, "kullanici_id"), orderSourceId: uuid(p.siparis_id, "siparis_id") } : {}) };
 }
 function parseShortcutMedia(value: unknown): ShortcutMedia {
   if (!value || typeof value !== "object" || Array.isArray(value)) fail("invalid shortcut media item");

@@ -63,4 +63,32 @@ describe("legacy shortcut/SMS/VAPI contracts", () => {
       expect(fetch).not.toHaveBeenCalled();
     } finally { fetch.mockRestore(); }
   });
+  it.each(Object.entries({ cevaplandi: "answered", hata: "failed", cevapsiz: "missed", mesgul: "busy", iptal: "cancelled" }))(
+    "maps call status %s explicitly to %s and preserves raw history", (durum, status) => {
+      const row = communicationFixture("call_logs", { durum, sure_sn: 42, notlar: "Fixture note", bitis: "2024-01-02T03:04:47Z" });
+      expect(transformLegacyCommunication(row, "call_logs").record.payload).toMatchObject({
+        provider: "netgsm", source: "legacy", direction: "outbound", status, talk_seconds: 42,
+        initiated_at: "2024-01-02T03:04:05.000000Z", ended_at: "2024-01-02T03:04:47.000000Z", raw_payload: row.payload, events: [],
+      });
+    });
+  it.each([{ yon: "incoming-private-value" }, { durum: "unknown-private-value" }, { yon: null }, { durum: null },
+    { sure_sn: -1 }, { sure_sn: 1.5 }, { baslangic: null }, { notlar: 42 }, { kullanici_id: "invalid" }, { siparis_id: "invalid" }])(
+    "fails call logs closed on invalid enum or field %j", (overrides) => {
+      expect(() => transformLegacyCommunication(communicationFixture("call_logs", overrides), "call_logs"))
+        .toThrow("Invalid legacy communication row");
+    });
+  it("counts optional call user/order/customer resolution without writes", async () => {
+    const userId = "c1000000-0000-4000-8000-000000000001";
+    const orderId = "c1000000-0000-4000-8000-000000000002";
+    const rows = [communicationFixture("call_logs", { kullanici_id: userId, siparis_id: orderId })];
+    const source: LegacySource = { count: async () => 1, readBatch: async () => rows, describeTables: async () => [] };
+    const plan = await createMigrationPlan({ source, mode: "dry-run", batchSize: 1, entities: ["call_logs"] });
+    expect((await validateCommunicationBatches(source, plan, new Map())).call_logs).toMatchObject({
+      sourceRows: 1, transformedRows: 1, unresolvedUsers: 1, unresolvedOrders: 1, unresolvedCustomers: 1,
+    });
+    expect((await validateCommunicationBatches(source, plan, new Map(), { userPublicIds: new Map([[userId, "usr_fixture"]]),
+      orderPublicIds: new Map([[orderId, "ord_fixture"]]), customerPublicIdsByPhone: new Map([["5551112233", ["cus_fixture"]]]) })).call_logs)
+      .toMatchObject({ linkedUsers: 1, linkedOrders: 1, linkedCustomers: 1, unresolvedUsers: 0, unresolvedOrders: 0, unresolvedCustomers: 0 });
+  });
+
 });

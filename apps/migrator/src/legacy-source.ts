@@ -62,11 +62,13 @@ interface ResolvedLegacyTable {
 const defaultSourceIdColumn = "id";
 
 export class LegacyDatabaseSource implements LegacySource {
+  readonly supportsKeysetPagination = true;
   private readonly tables: Partial<Record<MigrationEntity, ResolvedLegacyTable>>;
   private readonly sourceSystem: string;
   private readonly db: LegacyQueryDatabase;
   private readonly mappingsByTable: ReadonlyMap<string, LegacyTableMapping>;
   private readonly repeatableReadSnapshot: boolean;
+  private readonly idTypes = new Map<MigrationEntity, string>();
   private readonly keysetContinuations = new Map<MigrationEntity, KeysetContinuation>();
   private trackingEventCursor: Promise<TrackingEventCursorState> | undefined;
 
@@ -82,6 +84,16 @@ export class LegacyDatabaseSource implements LegacySource {
     this.mappingsByTable = new Map(
       (input.mappingCatalog?.tables ?? []).map((mapping) => [normalizeTableName(mapping.sourceTable), mapping]),
     );
+    for (const [entity, table] of Object.entries(this.tables)) {
+      const type = this.mappingsByTable.get(normalizeTableName(table.tableName))?.columns
+        .find((column) => column.name === table.idColumn)?.udtName;
+      if (type) this.rememberIdType(entity as MigrationEntity, type);
+    }
+  }
+
+  private rememberIdType(entity: MigrationEntity, type: string): void {
+    // Only server/catalog types from this allowlist can enter SQL; the indexed column is never cast.
+    if (["uuid", "int2", "int4", "int8", "text", "varchar"].includes(type)) this.idTypes.set(entity, type);
   }
 
   async count(entity: MigrationEntity): Promise<number> {
@@ -151,7 +163,8 @@ export class LegacyDatabaseSource implements LegacySource {
     let predicate = "";
     let offsetClause = "";
     if (keysetAfter !== undefined) {
-      predicate = ` where ${idColumn} > $2`;
+      const type = this.idTypes.get(entity);
+      predicate = ` where ${idColumn} > $2${type ? `::${type}` : ""}`;
       parameters.push(keysetAfter);
     } else if (offset > 0) {
       offsetClause = " offset $2";
@@ -270,6 +283,7 @@ export class LegacyDatabaseSource implements LegacySource {
       if (!columns.some((column) => column.name === table.idColumn)) {
         throw new Error(`Legacy source table ${physicalTableName} is missing configured id column ${table.idColumn}`);
       }
+      this.rememberIdType(entity, columns.find((column) => column.name === table.idColumn)!.udtName);
       return {
         entity,
         schema: identity.schema,

@@ -20,9 +20,11 @@ import type { LegacyRecord, LegacySource, MigrationEntity } from "../../apps/mig
 const migrationsDirectory = fileURLToPath(new URL("../../packages/database/migrations/", import.meta.url));
 
 class Source implements LegacySource {
+  readCalls = 0;
   constructor(private readonly rows: Partial<Record<MigrationEntity, LegacyRecord[]>>) {}
   async count(entity: MigrationEntity) { return this.rows[entity]?.length ?? 0; }
   async readBatch(entity: MigrationEntity, options: { limit: number; offset?: number }) {
+    this.readCalls++;
     return (this.rows[entity] ?? []).slice(options.offset ?? 0, (options.offset ?? 0) + options.limit);
   }
   async describeTables(entities: readonly MigrationEntity[]) {
@@ -109,6 +111,79 @@ describe("PostgreSQL shortcut/SMS/VAPI apply", () => {
       await client?.end(); await db?.destroy(); await server.close(); vi.unstubAllEnvs(); docker(["rm", "--force", container], true);
     }
   }, 180_000);
+  it("applies legacy call logs with mapped user/order and phone customer, verifies and reruns idempotently", async () => {
+    const container = `gk-migrator-calls-${randomUUID().slice(0, 8)}`;
+    docker(["run", "--detach", "--rm", "--name", container, "--publish", "127.0.0.1::5432",
+      "--env", "POSTGRES_PASSWORD=postgres", "--env", "POSTGRES_DB=canonical_target", "postgres:18-alpine"]);
+    let db: ReturnType<typeof createDatabase> | undefined;
+    let client: Client | undefined;
+    const runId = "legacy_calls_apply";
+    const userId = "c1000000-0000-4000-8000-000000000001";
+    const orderId = "c1000000-0000-4000-8000-000000000002";
+    try {
+      await waitForPostgres(container, "canonical_target");
+      for (const migration of await allCanonicalMigrations()) executeSql(container, "canonical_target", await migrationSection(migration, "up"));
+      executeSql(container, "canonical_target", `
+        insert into users(public_id,role_id,email,password_hash,first_name,last_name)
+          select 'usr_fixture',id,'fixture@example.test','hash','Fixture','User' from roles where name='agent';
+        insert into customers(public_id,full_name,phone) values('cus_fixture','Fixture','0555 111 22 33');
+        insert into orders(public_id,order_number,customer_id) select 'ord_fixture','FIXTURE-1',id from customers where public_id='cus_fixture';
+      `);
+      db = createDatabase(postgresUrl(container, "canonical_target"));
+      client = new Client({ connectionString: postgresUrl(container, "canonical_target") }); await client.connect();
+      const target = new DatabaseMigrationTarget(db);
+      const source = new Source({ call_logs: [
+        communicationFixture("call_logs", { kullanici_id: userId, siparis_id: orderId, notlar: "Fixture note", sure_sn: 42, bitis: "2024-01-02T03:04:47Z" }),
+        communicationFixture("call_logs", { id: "a1000000-0000-4000-8000-000000000002", kullanici_id: orderId, siparis_id: userId, musteri_telefon: "5559998877", durum: "hata" }),
+        communicationFixture("call_logs", { id: "a1000000-0000-4000-8000-000000000003", musteri_telefon: "5558887766", durum: "cevapsiz" }),
+      ] });
+      const base = { source, target, runId, batchSize: 2, sourceSystem: "legacy_postgres",
+        sourceDatabaseIdentity: { host: "127.0.0.1", port: "5440", database: "legacy_fixture" },
+        mappingCatalog: createLegacyMappingCatalog({ version: "legacy-calls-test", tables: communicationTableMappings.filter((m) => m.sourceTable === "public.arama_kayitlari") }),
+        userPublicIds: new Map([[userId, "usr_fixture"]]) };
+      const dry = await runMigration({ ...base, mode: "dry-run" });
+      expect(dry.dryRunReport?.communicationTransforms?.call_logs).toMatchObject({ sourceRows: 3, linkedUsers: 1, unresolvedUsers: 1, unresolvedOrders: 2 });
+      expect(query(container, "canonical_target", "select count(*) from call_logs")).toBe("0");
+      const approval = createMigrationApplyApproval({ runId, targetDatabaseIdentity: { host: "127.0.0.1", port: new URL(postgresUrl(container, "canonical_target")).port, database: "canonical_target" }, backupEvidenceCreatedAt: new Date().toISOString() });
+      const input = { ...base, mode: "apply" as const, applyApproval: approval };
+      const beforeReads = source.readCalls;
+      const applied = await runMigration(input);
+      expect(source.readCalls - beforeReads).toBe(2);
+      expect(applied.sourceManifest).toEqual(dry.sourceManifest);
+      expect(applied.batches.reduce((n, b) => n + b.writtenRows, 0)).toBe(3);
+      const warnings = applied.batches.flatMap((b) => b.warnings);
+      expect(warnings.filter((w) => w.code === "unresolved_optional_order")).toHaveLength(2);
+      expect(warnings.filter((w) => w.code === "unresolved_optional_user")).toHaveLength(1);
+      expect(warnings.filter((w) => w.code === "unresolved_optional_customer")).toHaveLength(2);
+      expect(query(container, "canonical_target", `select concat_ws(':',h.source,h.direction,h.status,h.talk_seconds,u.public_id,c.public_id,coalesce(o.public_id,'null'),
+        h.raw_payload->>'notlar',to_char(h.created_at,'US'),h.raw_payload->>'kullanici_id',jsonb_array_length(h.events))
+        from call_logs h left join users u on u.id=h.user_id left join customers c on c.id=h.customer_id left join orders o on o.id=h.order_id
+        where h.raw_payload->>'id'='a1000000-0000-4000-8000-000000000001'`))
+        .toBe(`legacy:outbound:answered:42:usr_fixture:cus_fixture:null:Fixture note:123456:${userId}:0`);
+      expect(query(container, "canonical_target", "select count(*) from call_logs where status='missed'")).toBe("1");
+      expect(query(container, "canonical_target", "select count(*) from legacy_id_map where source_table='public.arama_kayitlari' and target_table='call_logs' and mapping_role='primary'")).toBe("3");
+      const verify = () => createTargetVerificationSnapshot(client!, runId).then(createMigrationVerificationReport);
+      expect((await verify()).checks.filter((check) => check.status === "failed")).toEqual([]);
+      await runMigration(input);
+      expect(query(container, "canonical_target", "select count(*) from call_logs")).toBe("3");
+      executeSql(container, "canonical_target", "delete from migration_batches");
+      const rerun = await runMigration(input);
+      expect(rerun.batches.reduce((n, b) => n + b.idMapUnchanged, 0)).toBe(3);
+      expect(query(container, "canonical_target", "select count(*) from call_logs")).toBe("3");
+      expect((await verify()).checks.filter((check) => check.status === "failed")).toEqual([]);
+      executeSql(container, "canonical_target", "update call_logs set source='softphone' where status='missed'");
+      expect((await verify()).checks.find((c) => c.name === "referential_integrity.call_logs")?.status).toBe("failed");
+      executeSql(container, "canonical_target", "update call_logs set source='legacy'");
+      // Isolated FK writer check after the complete run's coverage/idempotency verification above.
+      executeSql(container, "canonical_target", `insert into legacy_id_map(run_id,source_system,source_table,source_id,target_table,mapping_role,target_id)
+        values('${runId}','legacy_postgres','public.siparisler','${orderId}','orders','primary','ord_fixture');
+        delete from migration_batches where entity='call_logs'`);
+      await applyCommunicationMigrationBatchWithState({ source, target, runId, userPublicIds: base.userPublicIds,
+        batch: { entity: "call_logs", batchNumber: 1, limit: 2, offset: 0, expectedRows: 2 } });
+      expect(query(container, "canonical_target", "select o.public_id from call_logs h join orders o on o.id=h.order_id")).toBe("ord_fixture");
+    } finally { await client?.end(); await db?.destroy(); docker(["rm", "--force", container], true); }
+  }, 180_000);
+
 });
 
 async function migrationSection(filename: string, section: "up" | "down"): Promise<string> {

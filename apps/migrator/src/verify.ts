@@ -442,6 +442,7 @@ function legacyEntityTargetTable(entity: string): string {
     message_shortcut_attachments: "message_shortcut_attachments",
     sms_messages: "sms_messages",
     vapi_calls: "vapi_calls",
+    call_logs: "call_logs",
   } satisfies Record<MigrationEntity, string>;
 
   return targetTables[entity as MigrationEntity] ?? entity;

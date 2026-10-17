@@ -80,6 +80,7 @@ describe("PostgreSQL migrator dry-run E2E", () => {
         { entity: "message_shortcuts", totalRows: 0, batches: 0 },
         { entity: "sms_messages", totalRows: 0, batches: 0 },
         { entity: "vapi_calls", totalRows: 0, batches: 0 },
+      { entity: "call_logs", totalRows: 0, batches: 0 },
       ]);
       expect(result.dryRunReport?.customerTransform).toMatchObject({
         transformedRows: 1,
@@ -134,7 +135,7 @@ describe("PostgreSQL migrator dry-run E2E", () => {
         supersededInsertTimeRows: 0,
         undatedRows: 0,
       });
-      expect(result.sourceManifest.rowContentChecksums).toHaveLength(11);
+      expect(result.sourceManifest.rowContentChecksums).toHaveLength(12);
       expect(result.sourceManifest.rowContentChecksums).toEqual(
         expect.arrayContaining([
           { entity: "customers", rows: 1, checksum: expect.stringMatching(/^sha256:[a-f0-9]{64}$/) },

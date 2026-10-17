@@ -6,7 +6,7 @@ import { prepareShortcutMedia } from "./shortcut-media.js";
 import type { MigratorMediaStorage } from "./media-storage.js";
 import type { MigrationBatchApplyResult } from "./types.js";
 
-type Input = ApplyMigrationBatchInput & { readonly mediaStorage?: MigratorMediaStorage };
+type Input = ApplyMigrationBatchInput & { readonly mediaStorage?: MigratorMediaStorage; readonly userPublicIds?: ReadonlyMap<string, string> };
 export async function applyCommunicationMigrationBatchWithState(input: Input): Promise<MigrationBatchApplyResult> {
   if (!isCommunicationEntity(input.batch.entity)) throw new Error("Unsupported communication batch entity");
   const existing = await input.target.findMigrationBatchState({ runId: input.runId, batch: input.batch });
@@ -55,7 +55,18 @@ async function applyBatch(input: Input): Promise<MigrationBatchApplyResult> {
       if (!shipmentPublicId) result.warnings.push({ entity, code: "unresolved_optional_shipment",
         message: "Optional legacy shipment link unresolved; retained history with null shipment" });
     }
-    const written = await input.target.writeCommunicationRecord({ ...draft, shipmentPublicId });
+    const userPublicId = draft.userSourceId ? input.userPublicIds?.get(draft.userSourceId) ?? null : null;
+    let orderPublicId: string | null = null;
+    if (draft.orderSourceId) {
+      orderPublicId = (await input.target.findLegacyIdMap({ runId: input.runId, sourceSystem: row.sourceSystem,
+        sourceTable: "public.siparisler", sourceId: draft.orderSourceId, targetTable: "orders", mappingRole: "primary" }))?.targetId ?? null;
+      if (!orderPublicId) result.warnings.push({ entity, code: "unresolved_optional_order", message: "Optional legacy order link unresolved; retained call with null order" });
+    }
+    if (draft.userSourceId && !userPublicId) result.warnings.push({ entity, code: "unresolved_optional_user", message: "Optional legacy user link unresolved; retained call with null user" });
+    const written = await input.target.writeCommunicationRecord({ ...draft, shipmentPublicId,
+      ...(entity === "call_logs" ? { userPublicId, orderPublicId } : {}) });
+    if (entity === "call_logs" && written.record.payload.customer_id === null) result.warnings.push({
+      entity, code: "unresolved_optional_customer", message: "Optional customer phone link unresolved or ambiguous; retained call with null customer" });
     const shortcutPublicId = written.record.targetId;
     result.writtenRows += 1;
     async function mapId(targetTable: string, targetId: string, mappingRole: string) {

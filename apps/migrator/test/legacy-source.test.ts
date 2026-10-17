@@ -123,6 +123,17 @@ describe("LegacyDatabaseSource", () => {
     }
   });
 
+
+  it.each(["uuid", "int2", "int4", "int8"])("uses an indexed %s keyset predicate after introspection", async (type) => {
+    const db = new FakeDatabase([{ column_name: "id", ordinal_position: 1, data_type: type === "uuid" ? "uuid" : "integer", udt_name: type, is_nullable: "NO" }], []);
+    const source = new LegacyDatabaseSource({ db, sourceSystem: "legacy", tables: { customers: "public.fixture" } });
+    await source.describeTables(["customers"]);
+    await source.readBatch("customers", { limit: 10, afterSourceId: type === "uuid" ? "a1000000-0000-4000-8000-000000000001" : "10" });
+    expect(db.queries.at(-1)?.sql).toBe(`select * from "public"."fixture" where "id" > $2::${type} order by "id" asc limit $1`);
+    expect(db.queries.at(-1)?.sql).not.toContain("id::text");
+    expect(db.queries.at(-1)?.sql).not.toContain("offset");
+  });
+
   it("counts rows from the configured legacy table", async () => {
     const db = new FakeDatabase([{ count: "42" }]);
     const source = new LegacyDatabaseSource({
@@ -442,6 +453,7 @@ describe("LegacyDatabaseSource", () => {
         message_shortcuts: "public.kisayollar",
         sms_messages: "public.sms_gonderimler",
         vapi_calls: "public.vapi_aramalar",
+        call_logs: "public.arama_kayitlari",
       },
       mappingCatalog: legacyMappingCatalog,
     });
