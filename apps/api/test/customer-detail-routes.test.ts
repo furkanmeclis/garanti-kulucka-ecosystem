@@ -78,6 +78,14 @@ const routeMocks = vi.hoisted(() => {
   return {
     customer,
     roleName: "calisan",
+    merge: vi.fn(async (target: string, source: string) => ({
+      target_public_id: target, source_public_id: source, counts: { orders: 2 },
+      conversations: [{ public_id: "cnv_merge", status: "open", unread_count: 0, is_in_pool: false, human_agent_enabled: true }],
+      orders: [{ public_id: "ord_merge", status: "pending" }],
+      shipments: [{ public_id: "shp_merge", status: "created", tracking_number: null }],
+    })),
+    candidates: vi.fn(async () => []),
+    counts: vi.fn(async () => ({ orders: 2 })),
     authRepository: {
       findUserByPublicId: vi.fn(async () => ({
         id: 10,
@@ -137,6 +145,13 @@ vi.mock("../src/domain/repository.js", async (importOriginal) => {
       return routeMocks.domainRepository;
     }),
   };
+});
+
+vi.mock("../src/domain/customer-merge.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/domain/customer-merge.js")>();
+  return { ...actual, CustomerMergeRepository: vi.fn(function () {
+    return { merge: routeMocks.merge, candidates: routeMocks.candidates, counts: routeMocks.counts };
+  }) };
 });
 
 const { createApp } = await import("../src/app.js");
@@ -252,5 +267,46 @@ describe("customer detail routes", () => {
     expect(update.status).toBe(403);
     const notes = await app().request("/api/customers/cus_ayse/notes", jsonRequest("PATCH", accessToken, { notes: "x" }));
     expect(notes.status).toBe(403);
+  });
+});
+
+describe("customer merge HTTP permissions and events", () => {
+  beforeEach(() => vi.clearAllMocks());
+  it.each(["owner", "admin", "calisan"])("allows %s like customer PATCH and publishes committed changes", async (role) => {
+    const broadcast = vi.fn();
+    const publishToConversation = vi.fn();
+    const application = createApp({ config, db: {} as AppDatabase, realtimePublisher: {
+      broadcast, publishToConversation, publish: vi.fn(), publishToUser: vi.fn(),
+    } });
+    const response = await application.request("/api/customers/cus_target/merge", jsonRequest("POST", await token(role), { source_public_id: "cus_source" }));
+    expect(response.status).toBe(200);
+    expect(routeMocks.merge).toHaveBeenCalledWith("cus_target", "cus_source", 10);
+    expect(broadcast.mock.calls.map(([event]) => event.event)).toEqual(["conversation.updated", "order.updated", "shipment.updated", "customer.merged"]);
+    expect(publishToConversation).toHaveBeenCalledWith("cnv_merge", expect.objectContaining({ event: "conversation.updated" }));
+    await expect(response.json()).resolves.toEqual({ target_public_id: "cus_target", source_public_id: "cus_source", counts: { orders: 2 } });
+  });
+  it.each(["kargo_operatoru", "viewer"])("rejects %s for merge, preview and suggestions", async (role) => {
+    const accessToken = await token(role);
+    for (const [method, suffix] of [["POST", "merge"], ["GET", "merge-preview"], ["GET", "merge-candidates"]]) {
+      const response = await app().request(`/api/customers/cus_target/${suffix}`, jsonRequest(method!, accessToken, method === "POST" ? { source_public_id: "cus_source" } : undefined));
+      expect(response.status).toBe(403);
+    }
+    expect(routeMocks.merge).not.toHaveBeenCalled();
+  });
+  it("rejects malformed requests before the repository is called", async () => {
+    const accessToken = await token();
+    for (const body of [{}, { source_public_id: "" }, { source_public_id: "cus_source", extra: true }]) {
+      expect((await app().request("/api/customers/cus_target/merge", jsonRequest("POST", accessToken, body))).status).toBe(400);
+    }
+    expect(routeMocks.merge).not.toHaveBeenCalled();
+  });
+  it("returns repository rejection and emits no events on failure", async () => {
+    const { CustomerMergeError } = await import("../src/domain/customer-merge.js");
+    routeMocks.merge.mockRejectedValueOnce(new CustomerMergeError(404, "Customer not found or already merged"));
+    const broadcast = vi.fn();
+    const application = createApp({ config, db: {} as AppDatabase, realtimePublisher: { broadcast, publishToConversation: vi.fn(), publish: vi.fn(), publishToUser: vi.fn() } });
+    const response = await application.request("/api/customers/cus_target/merge", jsonRequest("POST", await token(), { source_public_id: "cus_source" }));
+    expect(response.status).toBe(404);
+    expect(broadcast).not.toHaveBeenCalled();
   });
 });

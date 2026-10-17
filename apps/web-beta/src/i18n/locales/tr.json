@@ -2872,5 +2872,26 @@
     "logout": "Çıkış yap",
     "mismatch": "Şifreler eşleşmiyor.",
     "failed": "Şifre değiştirilemedi."
+  },
+  "customerMerge": {
+    "title": "Müşteri birleştir",
+    "description": "{{name}} kaydını seçtiğiniz müşteriye taşıyın. Seçilen müşteri korunur; bu kayıt silinir. Dolu alanlar değiştirilmez.",
+    "search": "Ad, telefon veya e-posta ile müşteri ara",
+    "noCandidates": "Aday bulunamadı. Arama yapabilirsiniz.",
+    "loadFailed": "Bilgiler yüklenemedi. Pencereyi kapatıp tekrar deneyin.",
+    "candidateCounts": "{{orders}} sipariş · {{conversations}} konuşma",
+    "preview": "Bu kayıttan taşınacak ilişkiler",
+    "confirm": "{{source}} kaydını {{target}} ile birleştirmeyi onaylıyorum. Bu işlem geri alınamaz.",
+    "orders": "Siparişler",
+    "conversations": "Konuşmalar",
+    "shipments": "Gönderiler",
+    "addresses": "Adresler",
+    "identities": "Sosyal medya kimlikleri",
+    "contacts": "Muhasebe kişileri",
+    "calls": "Arama kayıtları",
+    "sms": "SMS kayıtları",
+    "vapi": "Vapi aramaları",
+    "queue": "Vapi kuyruğu",
+    "notes": "Müşteri notu"
   }
 }

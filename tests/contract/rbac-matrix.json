@@ -212,5 +212,8 @@
   "GET /api/call-logs": {"anonymous": "deny", "kargo_operatoru": "deny", "calisan": "allow", "admin": "allow"},
   "POST /api/call-logs/client-events": {"anonymous": "deny", "kargo_operatoru": "deny", "calisan": "allow", "admin": "allow"},
   "GET /api/call-logs/{public_id}": {"anonymous": "deny", "kargo_operatoru": "deny", "calisan": "allow", "admin": "allow"},
-  "GET /api/call-logs/{public_id}/recording": {"anonymous": "deny", "kargo_operatoru": "deny", "calisan": "allow", "admin": "allow"}
+  "GET /api/call-logs/{public_id}/recording": {"anonymous": "deny", "kargo_operatoru": "deny", "calisan": "allow", "admin": "allow"},
+  "POST /api/customers/{customer_public_id}/merge": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "allow", "admin": "allow" },
+  "GET /api/customers/{customer_public_id}/merge-candidates": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "allow", "admin": "allow" },
+  "GET /api/customers/{customer_public_id}/merge-preview": { "anonymous": "deny", "kargo_operatoru": "deny", "calisan": "allow", "admin": "allow" }
 }

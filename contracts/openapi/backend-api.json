@@ -557,6 +557,15 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            },
+            "description": "Search customer name, phone, email or username."
           }
         ],
         "responses": {
@@ -9043,6 +9052,121 @@
             }
           }
         ]
+      }
+    },
+    "/api/customers/{customer_public_id}/merge": {
+      "post": {
+        "operationId": "mergeCustomers",
+        "description": "Customer PATCH permissions: owner, admin, calisan. Merge URL identifies the survivor; source is deleted atomically. SMS/Vapi history remains attached through shipments.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CustomerPublicId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerMergeResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MergeCustomerRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/customers/{customer_public_id}/merge-candidates": {
+      "get": {
+        "operationId": "getCustomerMergeCandidates",
+        "description": "Customer PATCH permissions: owner, admin, calisan. Merge URL identifies the survivor; source is deleted atomically. SMS/Vapi history remains attached through shipments.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CustomerPublicId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerMergeCandidateList"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/customers/{customer_public_id}/merge-preview": {
+      "get": {
+        "operationId": "getCustomerMergePreview",
+        "description": "Customer PATCH permissions: owner, admin, calisan. Merge URL identifies the survivor; source is deleted atomically. SMS/Vapi history remains attached through shipments.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CustomerPublicId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerMergePreview"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
       }
     }
   },
@@ -20172,6 +20296,111 @@
           "limit",
           "offset"
         ]
+      },
+      "MergeCustomerRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "source_public_id"
+        ],
+        "properties": {
+          "source_public_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          }
+        }
+      },
+      "CustomerMergeCounts": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "CustomerMergeResult": {
+        "type": "object",
+        "required": [
+          "source_public_id",
+          "target_public_id",
+          "counts"
+        ],
+        "properties": {
+          "source_public_id": {
+            "type": "string"
+          },
+          "target_public_id": {
+            "type": "string"
+          },
+          "counts": {
+            "$ref": "#/components/schemas/CustomerMergeCounts"
+          }
+        }
+      },
+      "CustomerMergeCandidate": {
+        "type": "object",
+        "required": [
+          "public_id",
+          "full_name",
+          "phone",
+          "email",
+          "orders_count",
+          "conversations_count"
+        ],
+        "properties": {
+          "public_id": {
+            "type": "string"
+          },
+          "full_name": {
+            "type": "string"
+          },
+          "phone": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "orders_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "conversations_count": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "CustomerMergeCandidateList": {
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "maxItems": 10,
+            "items": {
+              "$ref": "#/components/schemas/CustomerMergeCandidate"
+            }
+          }
+        }
+      },
+      "CustomerMergePreview": {
+        "type": "object",
+        "required": [
+          "counts"
+        ],
+        "properties": {
+          "counts": {
+            "$ref": "#/components/schemas/CustomerMergeCounts"
+          }
+        }
       }
     }
   }

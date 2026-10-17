@@ -1,3 +1,4 @@
+import type { CustomerMergeCandidate, CustomerMergeCounts, CustomerMergeResult, MergeCustomerRequest } from "@garanti-kulucka/shared";
 import type { WebphoneConfig, ClientCallEvent } from "@/softphone/types";
 import type { CallLog, CallLogListResponse, CallLogClientEventRequest, CallLogClientEventResponse } from "@garanti-kulucka/shared";
 import type {
@@ -367,7 +368,10 @@ export function createApiClient(options: ApiClientOptions) {
     listConversations: (query: ConversationListQuery = {}) =>
       request<ConversationListResponse>("/api/conversations", { query: { ...query, ...(query.unread ? { unread: "true" } : { unread: undefined }) } }),
     getConversation: (publicId: string) => request<ConversationDetail>(`/api/conversations/${encodeURIComponent(publicId)}`),
-    listCustomers: (limit = 200) => request<ListEnvelope<CustomerSummary>>("/api/customers", { query: { limit } }),
+    listCustomers: (limit = 200, search?: string) => request<ListEnvelope<CustomerSummary>>("/api/customers", { query: { limit, search } }),
+    customerMergeCandidates: (id: string) => request<ListEnvelope<CustomerMergeCandidate>>(`/api/customers/${encodeURIComponent(id)}/merge-candidates`),
+    customerMergePreview: (id: string) => request<{ counts: CustomerMergeCounts }>(`/api/customers/${encodeURIComponent(id)}/merge-preview`),
+    mergeCustomers: (id: string, input: MergeCustomerRequest) => request<CustomerMergeResult>(`/api/customers/${encodeURIComponent(id)}/merge`, { method: "POST", body: input }),
     getCustomer: (publicId: string) => request<CustomerDetail>(`/api/customers/${encodeURIComponent(publicId)}`),
     updateCustomer: (publicId: string, input: UpdateCustomerRequest) =>
       request<CustomerSummary>(`/api/customers/${encodeURIComponent(publicId)}`, { method: "PATCH", body: input }),

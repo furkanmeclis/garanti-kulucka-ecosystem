@@ -1,3 +1,4 @@
+import { CustomerMergeError, CustomerMergeRepository } from "../domain/customer-merge.js";
 import { BalanceRepository } from "../balances/repository.js";
 import { randomUUID } from "node:crypto";
 import { Hono, type Context } from "hono";
@@ -607,7 +608,7 @@ export function createDomainRoutes() {
       return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
     }
 
-    const customers = await new DomainRepository(db).listCustomers(limitSchema.parse(context.req.query("limit")));
+    const customers = await new DomainRepository(db).listCustomers(limitSchema.parse(context.req.query("limit")), context.req.query("search")?.trim().slice(0, 100));
     return context.json({ data: customers.map(serializeCustomer) });
   });
 
@@ -623,6 +624,59 @@ export function createDomainRoutes() {
 
     const summary = await new DomainRepository(db).getCustomerSummary();
     return context.json(serializeCustomerSummary(summary));
+  });
+
+  routes.get("/customers/:customer_public_id/merge-candidates", async (context) => {
+    if (!canReadCustomers(context.get("auth")?.role)) return context.json({ error: { code: "forbidden", message: "Customer access is not allowed" } }, 403);
+    const db = context.get("db");
+    if (!db) return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
+    try {
+      return context.json({ data: await new CustomerMergeRepository(db).candidates(context.req.param("customer_public_id")) });
+    } catch (error) {
+      if (error instanceof CustomerMergeError) return context.json({ error: { code: "not_found", message: error.message } }, error.status);
+      throw error;
+    }
+  });
+
+  routes.get("/customers/:customer_public_id/merge-preview", async (context) => {
+    if (!canReadCustomers(context.get("auth")?.role)) return context.json({ error: { code: "forbidden", message: "Customer access is not allowed" } }, 403);
+    const db = context.get("db");
+    if (!db) return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
+    try {
+      return context.json({ counts: await new CustomerMergeRepository(db).counts(context.req.param("customer_public_id")) });
+    } catch (error) {
+      if (error instanceof CustomerMergeError) return context.json({ error: { code: "not_found", message: error.message } }, error.status);
+      throw error;
+    }
+  });
+
+  routes.post("/customers/:customer_public_id/merge", async (context) => {
+    // Match customer PATCH permissions, including calisan.
+    if (!canReadCustomers(context.get("auth")?.role)) return context.json({ error: { code: "forbidden", message: "Customer update is not allowed" } }, 403);
+    const payload = z.object({ source_public_id: z.string().trim().min(1).max(100) }).strict().safeParse(await readJsonBody(context.req.raw));
+    if (!payload.success) return context.json({ error: { code: "invalid_request", message: "Invalid merge payload" } }, 400);
+    const db = context.get("db");
+    if (!db) return context.json({ error: { code: "database_unavailable", message: "Database connection is not configured" } }, 503);
+    try {
+      const result = await new CustomerMergeRepository(db).merge(context.req.param("customer_public_id"), payload.data.source_public_id, context.get("actorUserId") ?? null);
+      const publisher = context.get("realtimePublisher");
+      const base = { id: `evt_${randomUUID()}`, occurred_at: new Date().toISOString() };
+      for (const row of result.conversations) {
+        const envelope = { ...base, id: `evt_${randomUUID()}`, event: "conversation.updated", payload: {
+          conversation_public_id: row.public_id, status: row.status, unread_count: Number(row.unread_count),
+          is_in_pool: row.is_in_pool, human_agent_enabled: row.human_agent_enabled,
+        } } as const;
+        publisher.publishToConversation(row.public_id, envelope);
+        publisher.broadcast(envelope);
+      }
+      for (const row of result.orders) publisher.broadcast({ ...base, id: `evt_${randomUUID()}`, event: "order.updated", payload: { order_public_id: row.public_id, status: row.status } });
+      for (const row of result.shipments) publisher.broadcast({ ...base, id: `evt_${randomUUID()}`, event: "shipment.updated", payload: { shipment_public_id: row.public_id, status: row.status, tracking_number: row.tracking_number } });
+      publisher.broadcast({ ...base, event: "customer.merged", payload: { source_public_id: result.source_public_id, target_public_id: result.target_public_id } });
+      return context.json({ source_public_id: result.source_public_id, target_public_id: result.target_public_id, counts: result.counts });
+    } catch (error) {
+      if (error instanceof CustomerMergeError) return context.json({ error: { code: error.status === 404 ? "not_found" : "invalid_request", message: error.message } }, error.status);
+      throw error;
+    }
   });
 
   routes.get("/customers/:customer_public_id", async (context) => {
