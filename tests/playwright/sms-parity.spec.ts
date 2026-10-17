@@ -280,7 +280,12 @@ for (const role of ["admin", "calisan", "kargo_operatoru"] as const) {
       await page.getByTestId("sms-message-input").press("End");
       await page.getByTestId("sms-variable-takip-no").click();
       await expect(page.getByTestId("sms-message-input")).toHaveValue("Merhaba {takip_no}");
+      // The variable button moves the caret in a setTimeout; wait for it so it cannot collapse fill()'s selection.
+      await expect
+        .poll(() => page.getByTestId("sms-message-input").evaluate((el) => (el as HTMLTextAreaElement).selectionStart))
+        .toBe("Merhaba {takip_no}".length);
       await page.getByTestId("sms-message-input").fill("Kargonuz yolda, iyi günler");
+      await expect(page.getByTestId("sms-message-input")).toHaveValue("Kargonuz yolda, iyi günler");
 
       // multi recipient send
       await page.getByTestId("sms-add-phone").click();
