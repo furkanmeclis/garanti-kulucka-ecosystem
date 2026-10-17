@@ -192,7 +192,7 @@ test("calisan is redirected away from voice pages", async ({ page }) => {
   await signIn(page, "calisan");
   await page.goto("/sesli-asistan");
   await expect.poll(() => pathOf(page)).not.toBe("/sesli-asistan");
-  // The whole Sesli Asistan group is manager-only, so staff get no trigger at all.
+  // Staff see the Sesli Asistan group only for their own call history (Aramalar); the manager voice pages stay hidden.
   await expect(page.getByTestId("nav-group-trigger-operations")).toBeVisible();
-  await expect(page.getByTestId("nav-group-trigger-voice")).toHaveCount(0);
+  await expect(page.getByTestId("nav-group-trigger-voice")).toHaveCount(1);
 });

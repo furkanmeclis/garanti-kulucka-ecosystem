@@ -1,5 +1,7 @@
+import { io } from "socket.io-client";
+import { readTokens } from "@/lib/session-storage";
 import { Bell, Download, Languages, LogOut, Moon, Sun, User, Wifi, WifiOff } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { displayName, initialsOf, useAuth } from "@/app/auth";
@@ -76,15 +78,17 @@ export function ThemeToggle() {
 export function useNavCounts() {
   const { api, user } = useAuth();
   const allowed = new Set(navigationFor(user?.role).map((item) => item.key));
-  const { data } = useQuery(
+  const { data, reload } = useQuery(
     `notifications:${user?.public_id ?? ""}`,
     async () => {
-      const [conversations, orders, shipments] = await Promise.all([
+      const [conversations, orders, shipments, calls] = await Promise.all([
         allowed.has("messages") ? api.conversationSummary().catch(() => null) : null,
         allowed.has("orders") ? api.orderSummary().catch(() => null) : null,
         allowed.has("shipments") ? api.shipmentSummary().catch(() => null) : null,
+        allowed.has("callLogs") ? api.listCallLogs({ missed_only: "true", limit: 1 }).catch(() => null) : null,
       ]);
       return [
+        { key: "callLogs", count: calls?.total_count ?? 0, path: "/aramalar?missed_only=true", label: "header.missedCalls" },
         { key: "messages", count: conversations?.unread_count ?? 0, path: "/mesajlar", label: "header.unreadMessages" },
         { key: "orders", count: orders?.pending_confirmation_count ?? 0, path: "/siparisler", label: "header.pendingConfirmations" },
         { key: "shipments", count: shipments?.exception_counts.tracking_missing ?? 0, path: "/kargolar", label: "header.trackingMissing" },
@@ -92,6 +96,12 @@ export function useNavCounts() {
     },
     { enabled: Boolean(user), refreshMs: 60_000 },
   );
+  useEffect(() => {
+    if (!user || !["admin", "owner", "calisan"].includes(user.role)) return;
+    const socket = io(api.baseUrl || window.location.origin, { auth: (callback) => callback({ token: readTokens()?.access_token }), transports: ["websocket"] });
+    socket.on("call.missed", reload);
+    return () => { socket.disconnect(); };
+  }, [api.baseUrl, user?.public_id, user?.role, reload]);
   return data ?? [];
 }
 

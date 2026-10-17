@@ -93,6 +93,7 @@ const literalGlobalSettingSchemas = {
   "netgsm.teyit_voice_usercode": { schema: z.string(), secret: false },
   "netgsm.teyit_voice_password": { schema: nonblankString, secret: true },
   // Shared token the NetGSM IVR callback URL carries (?token=…); NetGSM cannot sign callbacks.
+  "netgsm.santral_webhook_token": { schema: z.string().regex(/^(?:[A-Za-z0-9_-]{16,128})?$/), secret: false },
   "netgsm.ivr_webhook_token": { schema: z.string().regex(/^[A-Za-z0-9_-]{16,128}$/), secret: false },
 } as const;
 

@@ -1,3 +1,4 @@
+import { DatabaseCallLogJobs } from "./call-logs.js";
 import { Queue, Worker } from "bullmq";
 import { createDatabase, type AppDatabase } from "@garanti-kulucka/database";
 import { Redis } from "ioredis";
@@ -135,7 +136,22 @@ export function createWorkerRuntime(options: WorkerRuntimeOptions): WorkerRuntim
   bindProviderConfigInvalidation(providerAccountConfigRepository, settingsChangeSubscriber).catch(
     reportStartupFailure("worker.provider_config_hydrate_failed", "Provider config cache could not be warmed up"),
   );
+  const callDeliveryQueue = new Queue<JobEnvelope>("provider-delivery", { connection, defaultJobOptions: workerJobOptions });
+  const callLogJobs = db && providerAccountConfigRepository ? new DatabaseCallLogJobs(db, providerAccountConfigRepository, providerAttemptRepository,
+    async (job) => {
+      const existing = await callDeliveryQueue.getJob(job.job_id);
+      if (existing && await existing.isFailed()) await existing.retry("failed", { resetAttemptsMade: true });
+      else {
+        if (existing && await existing.isCompleted()) await existing.remove();
+        await callDeliveryQueue.add(job.name, job, { jobId: job.job_id });
+      }
+    }) : undefined;
+  callDeliveryQueue.add("netgsm.call.reconcile", {
+    job_id: "job_call_reconcile", queue: "provider-delivery", name: "netgsm.call.reconcile", payload: {}, requested_at: new Date().toISOString(),
+  }, { jobId: "job_call_reconcile", repeat: { pattern: "15 2 * * *", tz: "Europe/Istanbul" } })
+    .catch(reportStartupFailure("worker.call_reconcile_schedule_failed", "Call reconciliation could not be scheduled"));
   const registry = createWorkerProcessorRegistry({
+    ...(callLogJobs ? { callLogJobs } : {}),
     lifecycleRecorder:
       options.lifecycleRecorder ??
       ((event) => {
@@ -374,6 +390,7 @@ export function createWorkerRuntime(options: WorkerRuntimeOptions): WorkerRuntim
       // Let a running tick finish its claimed rows before the database goes away (they used to stay `isleniyor`).
       await cargoPipelineTick;
       const result = await drainWorkers(workers.values(), options.shutdownTimeoutMs ?? 30_000);
+      await callDeliveryQueue.close();
       await Promise.all([...metricQueues.values()].map((queue) => queue.close()));
       await Promise.all([...schedulers.values()].map((scheduler) => scheduler.close()));
       await settingsChangeSubscriber?.close();

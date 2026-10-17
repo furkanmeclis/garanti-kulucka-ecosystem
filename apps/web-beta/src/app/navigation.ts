@@ -3,7 +3,7 @@ import { AudioLines, BarChart3, BookUser, Bot, Boxes, BrainCircuit, Bug, Calcula
 import { panelRoleOf, type PanelRole } from "@garanti-kulucka/shared";
 import type { Brand } from "@/components/brand-icons";
 
-export type NavKey = "dashboard" | "orders" | "messages" | "customers" | "shipments" | "settings" | "cancellations" | "invoices" | "accounts" | "inventory" | "balances" | "comments" | "sms" | "reports" | "instagramAnalytics" | "instagramPublish" | "calls" | "voiceMessages" | "phonebook" | "vapi" | "users" | "activityLogs" | "dataDeletionRequests" | "cargoPipeline" | "suratDebug" | "cronDebug" | "whatsappDebug" | "instagramDebug" | "aiDebug" | "aiTraining";
+export type NavKey = "callLogs" | "dashboard" | "orders" | "messages" | "customers" | "shipments" | "settings" | "cancellations" | "invoices" | "accounts" | "inventory" | "balances" | "comments" | "sms" | "reports" | "instagramAnalytics" | "instagramPublish" | "calls" | "voiceMessages" | "phonebook" | "vapi" | "users" | "activityLogs" | "dataDeletionRequests" | "cargoPipeline" | "suratDebug" | "cronDebug" | "whatsappDebug" | "instagramDebug" | "aiDebug" | "aiTraining";
 
 /** "main" pages sit in the top bar, the menu groups get a desktop dropdown each, "settings" pages live in the settings sub-nav. */
 export type NavGroup = "main" | MenuGroup | "settings";
@@ -46,6 +46,7 @@ export const navItems: readonly NavItem[] = [
   { key: "reports", path: "/raporlar", icon: BarChart3, roles: managers, bottomBar: false, group: "accounting" },
   { key: "instagramAnalytics", path: "/instagram/analitik", icon: LineChart, roles: office, bottomBar: false, group: "instagram" },
   { key: "instagramPublish", path: "/instagram/yayinla", icon: Instagram, roles: office, bottomBar: false, group: "instagram" },
+  { key: "callLogs", path: "/aramalar", icon: PhoneCall, roles: office, bottomBar: false, group: "voice" },
   { key: "calls", path: "/sesli-asistan", icon: PhoneCall, roles: managers, bottomBar: false, group: "voice" },
   { key: "voiceMessages", path: "/sesli-asistan/sesli-mesajlar", icon: Voicemail, roles: managers, bottomBar: false, group: "voice" },
   { key: "vapi", path: "/sesli-asistan/vapi", icon: Bot, roles: managers, bottomBar: false, group: "voice" },

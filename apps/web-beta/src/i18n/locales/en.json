@@ -53,7 +53,8 @@
     "settingsDescription": "Manage your account, team, integrations and developer tools.",
     "settingsGeneral": "General",
     "settingsManagement": "Management",
-    "settingsDeveloper": "Developer"
+    "settingsDeveloper": "Developer",
+    "callLogs": "Call logs"
   },
   "header": {
     "search": "Search",
@@ -78,7 +79,8 @@
     "install": "Install app",
     "logout": "Sign out",
     "presenceOnline": "Online (go offline)",
-    "presenceOffline": "Offline (go online)"
+    "presenceOffline": "Offline (go online)",
+    "missedCalls": "Missed incoming calls ({{count}})"
   },
   "roles": {
     "owner": "Owner",
@@ -2805,6 +2807,38 @@
       "messages_in": "Messages received from customers (honours the channel filter).",
       "unread_messages": "Current total of unread customer messages (snapshot)."
     }
+  },
+  "callLogs": {
+    "title": "Call logs",
+    "description": "PBX and softphone call history",
+    "phone": "Phone",
+    "direction": "Direction",
+    "status": "Status",
+    "user": "Staff",
+    "date": "Date",
+    "duration": "Talk time",
+    "recording": "Recording",
+    "play": "Play",
+    "all": "All",
+    "from": "From",
+    "to": "To",
+    "missedOnly": "Missed incoming only",
+    "inbound": "Incoming",
+    "outbound": "Outgoing",
+    "internal": "Internal",
+    "answered": "Answered",
+    "missed": "Missed",
+    "busy": "Busy",
+    "timeout": "Timeout",
+    "failed": "Failed",
+    "cancelled": "Cancelled",
+    "pending": "In progress",
+    "recordingError": "Could not play recording. Please retry.",
+    "webhookToken": "PBX webhook token",
+    "webhookUrl": "PBX webhook URL",
+    "saved": "Saved",
+    "save": "Save",
+    "tokenHint": "Optional: 16–128 letters, numbers, underscores or hyphens. Leave empty to disable."
   },
   "forcedPassword": {
     "title": "Change your password",

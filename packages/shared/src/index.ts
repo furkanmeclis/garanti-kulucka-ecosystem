@@ -15,3 +15,5 @@ export * from "./config/service-env.js";
 export * from "./legal/documents.js";
 export * from "./cargo/pipeline.js";
 export * from "./messaging/outbound.js";
+
+export * from "./contracts/http/call-logs.js";

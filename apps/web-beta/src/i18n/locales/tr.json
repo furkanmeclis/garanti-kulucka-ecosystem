@@ -53,7 +53,8 @@
     "settingsDescription": "Hesabınızı, ekibinizi, entegrasyonları ve geliştirici araçlarını yönetin.",
     "settingsGeneral": "Genel",
     "settingsManagement": "Yönetim",
-    "settingsDeveloper": "Geliştirici"
+    "settingsDeveloper": "Geliştirici",
+    "callLogs": "Aramalar"
   },
   "header": {
     "search": "Ara",
@@ -78,7 +79,8 @@
     "install": "Ana ekrana ekle",
     "logout": "Çıkış yap",
     "presenceOnline": "Çevrimiçi (çevrimdışı ol)",
-    "presenceOffline": "Çevrimdışı (çevrimiçi ol)"
+    "presenceOffline": "Çevrimdışı (çevrimiçi ol)",
+    "missedCalls": "Cevapsız gelen aramalar ({{count}})"
   },
   "roles": {
     "owner": "Sahip",
@@ -2805,6 +2807,38 @@
       "messages_in": "Müşterilerden gelen mesajlar (kanal filtresine uyar).",
       "unread_messages": "Şu an okunmamış müşteri mesajlarının toplamı (anlık)."
     }
+  },
+  "callLogs": {
+    "title": "Aramalar",
+    "description": "Santral ve softphone arama geçmişi",
+    "phone": "Telefon",
+    "direction": "Yön",
+    "status": "Durum",
+    "user": "Personel",
+    "date": "Tarih",
+    "duration": "Konuşma süresi",
+    "recording": "Ses kaydı",
+    "play": "Dinle",
+    "all": "Tümü",
+    "from": "Başlangıç",
+    "to": "Bitiş",
+    "missedOnly": "Yalnız cevapsız gelenler",
+    "inbound": "Gelen",
+    "outbound": "Giden",
+    "internal": "Dahili",
+    "answered": "Cevaplandı",
+    "missed": "Cevapsız",
+    "busy": "Meşgul",
+    "timeout": "Zaman aşımı",
+    "failed": "Başarısız",
+    "cancelled": "İptal",
+    "pending": "Devam ediyor",
+    "recordingError": "Ses kaydı açılamadı. Tekrar deneyin.",
+    "webhookToken": "Santral webhook anahtarı",
+    "webhookUrl": "Santral webhook adresi",
+    "saved": "Kaydedildi",
+    "save": "Kaydet",
+    "tokenHint": "İsteğe bağlı: 16–128 harf, rakam, alt çizgi veya tire. Boş bırakarak kapatabilirsiniz."
   },
   "forcedPassword": {
     "title": "Şifrenizi değiştirin",

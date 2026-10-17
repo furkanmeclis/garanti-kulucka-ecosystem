@@ -958,6 +958,7 @@ export function SantralTab() {
 
   return (
     <div className="flex flex-col gap-6" data-testid="settings-tab-panel-santral">
+      <SantralWebhookSettings />
       <SectionHeading brand="netgsm" title={t("settingsTabs.pbxTitle")} description={t("settingsTabs.pbxSubtitle")} action={<RefreshButton loading={settings.loading} onClick={settings.reload} />} />
       {settings.error != null && !settings.data && <p className="text-sm text-destructive">{t("settingsTabs.loadFailed", { error: errorText(settings.error) })}</p>}
 
@@ -1029,4 +1030,30 @@ export function SantralTab() {
       </Card>
     </div>
   );
+}
+
+function SantralWebhookSettings() {
+  const { api } = useAuth();
+  const { t } = useTranslation();
+  const query = useQuery("santral:webhook-token", () => api.listAdminSettings());
+  const [token, setToken] = useState("");
+  const [savedToken, setSavedToken] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [feedback, setFeedback] = useState<Feedback>(null);
+  useEffect(() => {
+    const value = query.data?.data.find((s) => s.key === "netgsm.santral_webhook_token")?.value;
+    if (typeof value === "string") { setToken(value); setSavedToken(value); }
+  }, [query.data]);
+  const url = new URL("/api/netgsm/webhook/santral", api.baseUrl || window.location.origin);
+  if (savedToken) url.searchParams.set("token", savedToken);
+  async function save(event: FormEvent) {
+    event.preventDefault(); setSaving(true); setFeedback(null);
+    try { await api.upsertAdminSetting("netgsm.santral_webhook_token", token.trim()); setSavedToken(token.trim()); setFeedback({ tone: "success", text: t("callLogs.saved") }); }
+    catch (error) { setFeedback({ tone: "error", text: errorText(error) }); }
+    finally { setSaving(false); }
+  }
+  return <Card className="space-y-4 p-4"><form onSubmit={(e) => void save(e)} className="space-y-3">
+    <Field label={t("callLogs.webhookToken")}><Input value={token} pattern="(?:[A-Za-z0-9_-]{16,128})?" onChange={(e) => setToken(e.target.value)} data-testid="santral-webhook-token" /><span className="text-xs text-muted-foreground">{t("callLogs.tokenHint")}</span></Field>
+    <Button type="submit" disabled={saving || query.loading}>{t("callLogs.save")}</Button><FeedbackLine feedback={feedback} testId="santral-webhook-feedback" />
+  </form><CopyField label={t("callLogs.webhookUrl")} value={url.toString()} testId="santral-webhook-url" notify={setFeedback} /></Card>;
 }
