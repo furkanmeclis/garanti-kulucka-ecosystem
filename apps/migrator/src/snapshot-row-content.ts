@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { mkdtemp, open, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, open, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
@@ -10,8 +10,7 @@ type DigestRow = { sourceId: string; checksum: string; sourceKey: string };
 
 /** Bounded external merge preserves the old JS string sort, including integer IDs and unordered test sources. */
 export class StreamingRowContentChecksum {
-  private runs: string[] = [];
-  private nextFile = 0;
+  private runCount = 0;
   private result?: SourceEntityRowContentChecksum;
   private ordered = true;
   private lastId: string | undefined;
@@ -42,9 +41,8 @@ export class StreamingRowContentChecksum {
       this.lastKey = row.sourceKey;
     }
     if (!rows.length) return;
-    const path = this.file();
+    const path = this.file(0, this.runCount++);
     await writeFile(path, rows.map((row) => JSON.stringify(row)).join("\n") + "\n", { mode: 0o600 });
-    this.runs.push(path);
   }
 
   async finish(): Promise<SourceEntityRowContentChecksum> {
@@ -53,14 +51,15 @@ export class StreamingRowContentChecksum {
       this.hash.update("]}");
       return this.result = Object.freeze({ entity: this.entity, rows: this.rowCount, checksum: `sha256:${this.hash.digest("hex")}` });
     }
-    // Two-way merges bound live rows and open descriptors independently of source size.
-    while (this.runs.length > 1) {
-      const next: string[] = [];
-      for (let i = 0; i < this.runs.length; i += 2) {
-        const left = this.runs[i]!;
-        const right = this.runs[i + 1];
-        if (!right) { next.push(left); continue; }
-        const path = this.file();
+    // Derive run names from counters: neither live rows, descriptors nor run metadata grow with N.
+    let level = 0;
+    let runCount = this.runCount;
+    while (runCount > 1) {
+      for (let i = 0; i < runCount; i += 2) {
+        const left = this.file(level, i);
+        const path = this.file(level + 1, i / 2);
+        if (i + 1 === runCount) { await rename(left, path); continue; }
+        const right = this.file(level, i + 1);
         const output = await open(path, "w", 0o600);
         try {
           let buffer = "";
@@ -71,15 +70,15 @@ export class StreamingRowContentChecksum {
           if (buffer) await output.write(buffer);
         } finally { await output.close(); }
         await Promise.all([rm(left), rm(right)]);
-        next.push(path);
       }
-      this.runs = next;
+      runCount = Math.ceil(runCount / 2);
+      level++;
     }
     const hash = createHash("sha256").update(`{"entity":${JSON.stringify(this.entity)},"rows":[`);
     let rows = 0;
     let previous: string | undefined;
     let previousKey: string | undefined;
-    if (this.runs[0]) for await (const row of readRows(this.runs[0])) {
+    if (runCount > 0) for await (const row of readRows(this.file(level, 0))) {
       // The old orchestrator deduplicated repeated source reads, retaining the first record.
       if (row.sourceId === previous) {
         if (row.sourceKey !== previousKey) throw new Error(`Source row content checksum for ${this.entity} received duplicate source id`);
@@ -93,7 +92,9 @@ export class StreamingRowContentChecksum {
     hash.update("]}");
     return this.result = Object.freeze({ entity: this.entity, rows, checksum: `sha256:${hash.digest("hex")}` });
   }
-  private file(): string { return join(this.directory, `${this.entity}-digest-${this.nextFile++}.jsonl`); }
+  private file(level: number, index: number): string {
+    return join(this.directory, `${this.entity}-digest-${level}-${index}.jsonl`);
+  }
 }
 function compare(a: string, b: string): number { return a < b ? -1 : a > b ? 1 : 0; }
 async function* readRows(path: string): AsyncGenerator<DigestRow> {
