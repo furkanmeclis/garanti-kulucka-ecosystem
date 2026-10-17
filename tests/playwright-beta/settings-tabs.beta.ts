@@ -18,7 +18,7 @@ function token(type: string) {
 }
 
 /** Backend mock for the manager settings endpoints; secrets only ever come back as `value: null`. */
-function routes(options: { aiEnabled?: boolean; instagramActive?: boolean } = {}) {
+function routes(options: { aiEnabled?: boolean; instagramActive?: boolean; webhookConfigured?: boolean } = {}) {
   const accounts = [
     account("whatsapp", { external_account_id: "1098765432" }),
     account("netgsm", { external_account_id: "8503000000" }),
@@ -32,20 +32,32 @@ function routes(options: { aiEnabled?: boolean; instagramActive?: boolean } = {}
     acc_netgsm: { settings: [setting("sms_usercode", "8503000000"), setting("msgheader", "GARANTI")], tokens: [token("sms_password")] },
     acc_instagram: { settings: [], tokens: [] },
   };
-  const globalSettings = [
+  const globalSettings: Array<{ key: string; scope: string; value: unknown; is_secret: boolean; updated_at: string }> = [
     { key: "ai.system_prompt", scope: "global", value: "Sen Garanti Kuluçka asistanısın.", is_secret: false, updated_at: now },
     { key: "sip_config", scope: "global", value: { ws_url: "wss://sip.example.com/ws", domain: "sip.example.com", stun: "stun:stun.example.com:3478" }, is_secret: false, updated_at: now },
     { key: "netgsm.teyit_voice_usercode", scope: "global", value: "3229110370", is_secret: false, updated_at: now },
     { key: "netgsm.teyit_voice_password", scope: "global", value: null, is_secret: true, updated_at: now },
     { key: "vapi_ayarlar", scope: "global", value: { enabled: true }, is_secret: false, updated_at: now },
   ];
+  if (options.webhookConfigured) globalSettings.push(
+    { key: "webhook.app_secret", scope: "global", value: null, is_secret: true, updated_at: now },
+    { key: "netgsm.ivr_webhook_token", scope: "global", value: "ivr-token-0123456789", is_secret: false, updated_at: now },
+    { key: "netgsm.santral_webhook_token", scope: "global", value: "santral-token-0123456789", is_secret: false, updated_at: now },
+  );
   const route: ExtraRoute = ({ method, path, body }) => {
+    if (path === "/admin/settings/webhook-verification" && method === "GET") {
+      const meta = globalSettings.some((item) => item.key === "webhook.app_secret");
+      return { status: 200, body: { data: { whatsapp: meta, instagram: meta, messenger: meta, "facebook-data-deletion": meta, ivr: Boolean(globalSettings.find((item) => item.key === "netgsm.ivr_webhook_token")?.value), santral: Boolean(globalSettings.find((item) => item.key === "netgsm.santral_webhook_token")?.value) } } };
+    }
     if (path === "/api/app-settings/ai-status") return { status: 200, body: { ai_enabled: options.aiEnabled ?? false } };
     if (path === "/admin/settings" && method === "GET") return { status: 200, body: { data: globalSettings } };
     const settingMatch = /^\/admin\/settings\/([^/]+)$/.exec(path);
     if (settingMatch && method === "PUT") {
       const input = body as { value: unknown; is_secret: boolean };
-      return { status: 200, body: { key: decodeURIComponent(settingMatch[1]!), scope: "global", value: input.is_secret ? null : input.value, is_secret: input.is_secret, updated_at: now } };
+      const saved = { key: decodeURIComponent(settingMatch[1]!), scope: "global", value: input.is_secret ? null : input.value, is_secret: input.is_secret, updated_at: now };
+      const index = globalSettings.findIndex((item) => item.key === saved.key);
+      if (index < 0) globalSettings.push(saved); else globalSettings[index] = saved;
+      return { status: 200, body: saved };
     }
     if (path === "/admin/integrations/accounts" && method === "GET") return { status: 200, body: { data: accounts } };
     if (path === "/admin/integrations/accounts" && method === "POST") {
@@ -90,7 +102,7 @@ function routes(options: { aiEnabled?: boolean; instagramActive?: boolean } = {}
   return route;
 }
 
-async function signIn(page: Page, role: string, viewport: { width: number; height: number } = viewports.desktop, options: { aiEnabled?: boolean; instagramActive?: boolean } = {}) {
+async function signIn(page: Page, role: string, viewport: { width: number; height: number } = viewports.desktop, options: { aiEnabled?: boolean; instagramActive?: boolean; webhookConfigured?: boolean } = {}) {
   await page.setViewportSize(viewport);
   const state = await mockBackend(page, mockUser(role), { extra: routes(options) });
   await page.goto("/giris");
@@ -378,4 +390,40 @@ test("settings: English labels on the manager tabs", async ({ page }) => {
   await page.getByTestId("settings-tab-netgsm").click();
   await expect(page.getByTestId("netgsm-password-status")).toHaveText("Password configured");
   await expect(page.getByTestId("netgsm-password")).toHaveAttribute("placeholder", "•••••••• · enter a new value to replace");
+});
+
+
+test("settings: webhook verification indicators show missing secrets and save the Meta secret write-only", async ({ page }) => {
+  const state = await signIn(page, "admin");
+  for (const provider of ["whatsapp", "instagram", "messenger"]) {
+    await page.goto(`/ayarlar?tab=${provider}`);
+    await expect(page.getByTestId(`${provider}-signature-status`)).toHaveText("Webhook doğrulaması eksik");
+  }
+  for (const [tab, prefix] of [["netgsm", "ivr"], ["santral", "santral"]]) {
+    await page.goto(`/ayarlar?tab=${tab}`);
+    await expect(page.getByTestId(`${prefix}-signature-status`)).toHaveText("Webhook doğrulaması eksik");
+  }
+  await page.goto("/ayarlar?tab=integrations");
+  await expect(page.getByTestId("facebook-data-deletion-signature-status")).toHaveText("Webhook doğrulaması eksik");
+  const input = page.getByTestId("facebook-data-deletion-app-secret");
+  await expect(input).toHaveAttribute("type", "password");
+  await input.fill("meta-app-test-secret");
+  await page.getByTestId("facebook-data-deletion-app-secret-save").click();
+  await expect(page.getByTestId("facebook-data-deletion-app-secret-feedback")).toHaveText("Ayarlar kaydedildi.");
+  await expect(input).toHaveValue("");
+  expect(writes(state, "/admin/settings/webhook.app_secret").map((entry) => entry.body)).toEqual([{ value: "meta-app-test-secret", scope: "global", is_secret: true }]);
+  for (const provider of ["whatsapp", "instagram", "messenger"]) {
+    await page.goto(`/ayarlar?tab=${provider}`);
+    await expect(page.getByTestId(`${provider}-signature-status`)).toHaveText("Webhook doğrulaması aktif");
+    await expect(page.getByTestId(`${provider}-app-secret`)).toHaveValue("");
+  }
+});
+
+test("settings: configured NetGSM webhook tokens activate the verification indicators", async ({ page }) => {
+  await signIn(page, "admin", viewports.desktop, { webhookConfigured: true });
+  await page.goto("/ayarlar?tab=netgsm");
+  await expect(page.getByTestId("ivr-signature-status")).toHaveText("Webhook doğrulaması aktif");
+  await expect(page.getByTestId("ivr-webhook-url")).toContainText("/api/netgsm/webhook/sesli-mesaj?token=ivr-token-0123456789");
+  await page.goto("/ayarlar?tab=santral");
+  await expect(page.getByTestId("santral-signature-status")).toHaveText("Webhook doğrulaması aktif");
 });

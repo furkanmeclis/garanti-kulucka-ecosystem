@@ -1,3 +1,6 @@
+import { Hono } from "hono";
+import type { AppBindings } from "../src/http/types.js";
+import { MemoryRateLimitStore } from "../src/http/rate-limit.js";
 import { describe, expect, it } from "vitest";
 import { Kysely, PostgresDialect } from "kysely";
 import {
@@ -140,7 +143,14 @@ describe("call log contracts and RBAC query", () => {
     ).toBe(false);
   });
   it("acknowledges without a configured database", async () => {
-    const response = await createSantralWebhookRoutes().request("/santral", {
+    const app = new Hono<AppBindings>();
+    app.use("*", async (c, next) => {
+      c.set("config", { webhookRateLimitPerMinute: 600 } as never);
+      c.set("rateLimitStore", new MemoryRateLimitStore());
+      await next();
+    });
+    app.route("/", createSantralWebhookRoutes());
+    const response = await app.request("/santral", {
       method: "POST",
       body: "bad",
     });

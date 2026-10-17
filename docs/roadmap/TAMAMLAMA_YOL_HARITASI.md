@@ -121,8 +121,8 @@ Not: Meta uygulaması (`1413725227640949`) hazır; kalanlar memory notunda ve `t
 
 ## Faz F — Güvenlik sertleştirme (Faz D ile paralel)
 
-- [ ] Meta webhook imza doğrulaması (`X-Hub-Signature-256`) tüm Meta uçlarında; `POST /api/facebook/data-deletion` şu an imzayı doğrulamıyor.
-- [ ] Webhook replay koruması, rate limit testleri.
+- [x] Meta webhook imza doğrulaması (`X-Hub-Signature-256`) WhatsApp/Instagram/Messenger uçlarında ve `POST /api/facebook/data-deletion` için signed_request doğrulaması. Üretimde eksik sır/token kapalı kalır; beta göstergeleri ve kurulum: [Webhook güvenliği](../operations/WEBHOOK_SECURITY.md).
+- [x] Webhook replay koruması (PostgreSQL, tekil batch olayları ve gövde hash'i), rate limit testleri.
 - [ ] RBAC izin matrisi testi (owner/admin/calisan/kargo_operatoru).
 - [ ] Secret rotation runbook'u ve bir tatbikat.
 

@@ -601,6 +601,7 @@ export function createApiClient(options: ApiClientOptions) {
     deactivateUser: (publicId: string) => request<{ user: ManagedUser; deactivated: boolean }>(`/admin/users/${encodeURIComponent(publicId)}`, { method: "DELETE" }),
     listAdminLogs: (limit = 100) => request<{ data: AdminLogEntry[] }>("/admin/logs", { query: { limit } }),
     aiStatus: () => request<{ ai_enabled: boolean }>("/api/app-settings/ai-status"),
+    webhookVerification: () => request<{ data: Record<string, boolean> }>("/admin/settings/webhook-verification"),
     listAdminSettings: (scope = "global") => request<{ data: AdminSetting[] }>("/admin/settings", { query: { scope } }),
     upsertAdminSetting: (key: string, value: unknown, isSecret = false) =>
       request<AdminSetting>(`/admin/settings/${encodeURIComponent(key)}`, { method: "PUT", body: { value, scope: "global", is_secret: isSecret } }),

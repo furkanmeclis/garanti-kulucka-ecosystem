@@ -13,6 +13,8 @@ export interface RateLimitStore {
 }
 
 export interface RateLimitPolicy {
+  rejectionStatus?: 200;
+  rejectionBody?: Record<string, unknown>;
   namespace: string;
   limit: number | ((context: Context<AppBindings>) => number);
   windowMs: number;
@@ -80,6 +82,7 @@ export function rateLimit(policy: RateLimitPolicy) {
     if (result.count > limit) {
       const retryAfterSeconds = Math.max(1, Math.ceil((result.resetAt - Date.now()) / 1000));
       context.header("Retry-After", String(retryAfterSeconds));
+      if (policy.rejectionStatus === 200) return context.json(policy.rejectionBody ?? { ok: true, processed: false });
       return context.json(
         {
           error: {

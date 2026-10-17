@@ -61,11 +61,13 @@ describePg("inbound webhook pipeline (API → queue → worker → Postgres)", (
   it("creates the customer, conversation and unread messages from a signed WhatsApp webhook exactly once", async () => {
     await setSecret("whatsapp");
     const body = fixture("whatsapp", "text_image_status.json");
-    expect((await deliver("whatsapp", body, "sha256=forged")).status).toBe(401);
+    expect((await deliver("whatsapp", body, "sha256=forged")).status).toBe(403);
     expect(jobs).toHaveLength(0);
 
     expect((await deliver("whatsapp", body)).status).toBe(202);
-    await expect(runQueuedJobs()).resolves.toMatchObject([{ status: "processed", messages_created: 2 }]);
+    const results = await runQueuedJobs();
+    expect(results.every((result) => ["processed", "ignored"].includes(result.status))).toBe(true);
+    expect(results.reduce((total, result) => total + Number(result.messages_created ?? 0), 0)).toBe(2);
 
     const conversation = await db
       .selectFrom("conversations")
@@ -91,7 +93,11 @@ describePg("inbound webhook pipeline (API → queue → worker → Postgres)", (
   it("stores Instagram DMs and comments, skipping our own echo", async () => {
     await setSecret("instagram");
     expect((await deliver("instagram", fixture("instagram", "dm_echo_comment.json"))).status).toBe(202);
-    await expect(runQueuedJobs()).resolves.toMatchObject([{ status: "processed", messages_created: 1, comments_created: 1, skipped: 2 }]);
+    const results = await runQueuedJobs();
+    expect(results.every((result) => ["processed", "ignored"].includes(result.status))).toBe(true);
+    expect(results.reduce((total, result) => total + Number(result.messages_created ?? 0), 0)).toBe(1);
+    expect(results.reduce((total, result) => total + Number(result.comments_created ?? 0), 0)).toBe(1);
+    expect(results.reduce((total, result) => total + Number(result.skipped ?? 0), 0)).toBe(2);
     const rows = await db
       .selectFrom("messages")
       .innerJoin("conversations", "conversations.id", "messages.conversation_id")
