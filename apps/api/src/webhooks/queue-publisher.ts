@@ -104,6 +104,15 @@ export function createBullMqProviderDeliveryQueuePublisher(redisUrl: string): Pr
     },
   });
   const publisher = createProviderDeliveryQueuePublisher(async (job, options) => {
+    // Recording jobs can have completed while live mode was disabled. A new callback must be able to retry them.
+    if (job.name === "netgsm.call.recording.archive" && options?.jobId) {
+      const existing = await queue.getJob(options.jobId);
+      if (existing && await existing.isFailed()) {
+        await existing.retry("failed", { resetAttemptsMade: true, resetAttemptsStarted: true });
+        return existing.id ?? job.job_id;
+      }
+      if (existing && await existing.isCompleted()) await existing.remove();
+    }
     const queued = await queue.add(job.name, job, options);
     return queued.id ?? job.job_id;
   });

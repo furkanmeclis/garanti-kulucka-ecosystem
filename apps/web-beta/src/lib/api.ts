@@ -1,4 +1,5 @@
 import type { WebphoneConfig, ClientCallEvent } from "@/softphone/types";
+import type { CallLog, CallLogListResponse, CallLogClientEventRequest, CallLogClientEventResponse } from "@garanti-kulucka/shared";
 import type {
   AuthSession,
   AuthUser,
@@ -333,6 +334,10 @@ export function createApiClient(options: ApiClientOptions) {
   return {
     getWebphoneConfig: () => request<WebphoneConfig>("/api/webphone/config"),
     postClientCallEvent: (body: ClientCallEvent) => request<void>("/api/call-logs/client-events", { method: "POST", body }),
+    listCallLogs: (query: Record<string, string | number | undefined> = {}) => request<CallLogListResponse>("/api/call-logs", { query }),
+    getCallLog: (publicId: string) => request<{ call_log: CallLog }>(`/api/call-logs/${encodeURIComponent(publicId)}`),
+    callRecording: (publicId: string) => request<{ download: { presigned_url: string } }>(`/api/call-logs/${encodeURIComponent(publicId)}/recording`),
+    recordClientCallEvent: (body: CallLogClientEventRequest) => request<CallLogClientEventResponse>("/api/call-logs/client-events", { method: "POST", body }),
     baseUrl,
     requestBlob,
     async login(email: string, password: string) {

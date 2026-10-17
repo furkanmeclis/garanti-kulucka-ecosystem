@@ -1,4 +1,5 @@
 import { ClickToCall } from "@/softphone/Softphone";
+import { CallLogsSection } from "./call-logs-page";
 import type { ShipmentSummary } from "@garanti-kulucka/shared";
 import { CheckCircle2, Clock, FileCheck, FileText, Loader2, MapPin, PackageCheck, PackageOpen, Pencil, Phone, PhoneOff, RefreshCw, RotateCcw, Save, SearchCheck, Trash2, Truck, Undo2, XCircle } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -220,6 +221,7 @@ export function OrderDetailSheet({ publicId, row, onClose, onChanged }: { public
                 {kb?.sub && <span className="text-xs text-muted-foreground">{t(`orderActions.${kb.sub}` as const)}</span>}
                 {order.kolaybi.status === "failed" && <Badge tone="danger">{t("orderActions.transferFailedBadge")}</Badge>}
               </div>
+              <CallLogsSection orderPublicId={order.public_id} />
               {order.kolaybi.error && <p className="text-destructive">{order.kolaybi.error}</p>}
               {editing ? (
                 <OrderEditForm

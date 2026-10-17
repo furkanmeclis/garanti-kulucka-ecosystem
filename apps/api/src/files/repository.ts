@@ -117,6 +117,7 @@ export class FilesRepository {
         .selectAll("files")
         .where("files.public_id", "=", publicId)
         .where("message_attachments.id", "is", null)
+      .where((e) => e.not(e.exists(e.selectFrom("call_logs").select("call_logs.id").whereRef("call_logs.recording_file_id", "=", "files.id"))))
         .where((expression) =>
           expression.or([
             expression("files.upload_status", "=", "available"),
@@ -138,6 +139,7 @@ export class FilesRepository {
       .leftJoin("message_attachments", "message_attachments.file_id", "files.id")
       .selectAll("files")
       .where("message_attachments.id", "is", null)
+      .where((e) => e.not(e.exists(e.selectFrom("call_logs").select("call_logs.id").whereRef("call_logs.recording_file_id", "=", "files.id"))))
       .where((expression) =>
         expression.or([
           expression("files.upload_status", "=", "available"),
@@ -159,6 +161,7 @@ export class FilesRepository {
       .leftJoin("message_attachments", "message_attachments.file_id", "files.id")
       .select((expression) => [expression.fn.countAll<number>().as("total_count")])
       .where("message_attachments.id", "is", null)
+      .where((e) => e.not(e.exists(e.selectFrom("call_logs").select("call_logs.id").whereRef("call_logs.recording_file_id", "=", "files.id"))))
       .where((expression) =>
         expression.or([
           expression("files.upload_status", "=", "available"),

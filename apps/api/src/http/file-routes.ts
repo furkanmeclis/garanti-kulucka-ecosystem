@@ -1,3 +1,4 @@
+import { isAdminRole } from "../auth/repository.js";
 import { Hono } from "hono";
 import { z } from "zod";
 import type { AppBindings } from "./types.js";
@@ -507,6 +508,11 @@ export function createFileRoutes() {
     if (!file) {
       return context.json({ error: { code: "not_found", message: "File was not found" } }, 404);
     }
+    if (file.object_key.startsWith("call-recordings/")) {
+      let query = db.selectFrom("call_logs").select("id").where("recording_file_id", "=", file.id);
+      if (!isAdminRole(context.get("auth")!.role)) query = query.where("user_id", "=", context.get("actorUserId")!);
+      if (!["admin", "owner", "calisan"].includes(context.get("auth")!.role) || !(await query.executeTakeFirst())) return context.json({ error: { code: "not_found", message: "File was not found" } }, 404);
+    }
     if (file.upload_status !== "available") {
       return context.json({ error: { code: "file_not_available", message: "File upload is not available for download" } }, 409);
     }
@@ -533,6 +539,11 @@ export function createFileRoutes() {
       return context.json({ error: { code: "not_found", message: "File was not found" } }, 404);
     }
 
+    if (file.object_key.startsWith("call-recordings/")) {
+      let query = db.selectFrom("call_logs").select("id").where("recording_file_id", "=", file.id);
+      if (!isAdminRole(context.get("auth")!.role)) query = query.where("user_id", "=", context.get("actorUserId")!);
+      if (!["admin", "owner", "calisan"].includes(context.get("auth")!.role) || !(await query.executeTakeFirst())) return context.json({ error: { code: "not_found", message: "File was not found" } }, 404);
+    }
     return context.json(serializeFile(file));
   });
 

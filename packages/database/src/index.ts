@@ -20,3 +20,5 @@ export { installSafeIntegerTypeParsers, parseSafePostgresInt8 } from "./integers
 export { sql };
 export type { Selectable };
 export type * from "./schema.js";
+
+export * from "./call-logs.js";

@@ -31,6 +31,7 @@ describe("API RBAC permission matrix", () => {
           operation === "POST /auth/refresh" ||
           // Public NetGSM IVR callback (legacy path; optional shared ?token= instead of a session).
           operation.endsWith(" /api/netgsm/webhook/sesli-mesaj") ||
+          operation === "POST /api/netgsm/webhook/santral" ||
           // Public KVKK / Meta data deletion endpoints (legacy paths, rate limited per IP).
           operation === "POST /api/veri-silme-talebi" ||
           operation === "GET /api/veri-silme-talebi/{reference}" ||

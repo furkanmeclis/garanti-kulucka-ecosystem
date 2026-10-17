@@ -77,6 +77,7 @@ export class StorageOrphanReconciler {
       ])
       .where((expression) => expression.not(expression.exists(expression.selectFrom("message_attachments").select("message_attachments.id").whereRef("message_attachments.file_id", "=", "files.id"))))
       .where((expression) => expression.not(expression.exists(expression.selectFrom("message_shortcut_attachments").select("message_shortcut_attachments.id").whereRef("message_shortcut_attachments.file_id", "=", "files.id"))))
+      .where((expression) => expression.not(expression.exists(expression.selectFrom("call_logs").select("call_logs.id").whereRef("call_logs.recording_file_id", "=", "files.id"))))
       .where((expression) => expression.not(expression.exists(expression.selectFrom("instagram_publications").select("instagram_publications.id").whereRef("instagram_publications.file_id", "=", "files.id"))))
       .where((expression) =>
         expression.or([

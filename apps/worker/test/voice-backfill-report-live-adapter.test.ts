@@ -145,7 +145,7 @@ describe("NetGSM call.report (legacy /api/netgsm/cdr)", () => {
     );
 
     expect(captured[0]).toMatchObject({ method: "POST", url: "https://netgsm.test/netsantral/report", netgsm_endpoint: "netsantral.report" });
-    expect(JSON.parse(captured[0]?.body ?? "{}")).toEqual({ usercode, password, startdate: "290920260000", stopdate: "061020262359" });
+    expect(JSON.parse(captured[0]?.body ?? "{}")).toEqual({ usercode, password, startdate: "290920260000", stopdate: "290920262359" });
     expect(result.response_payload).toMatchObject({ record_count: 2 });
     expect(result.attempt.response_metadata).toMatchObject({
       cdr_record_count: 2,
@@ -162,7 +162,7 @@ describe("NetGSM call.report (legacy /api/netgsm/cdr)", () => {
 
   it("turns legacy NetGSM error codes into a terminal attempt", async () => {
     await expect(sendNetgsmLiveRequest(input(async () => ({ status: 200, headers: {}, body: "30" })))).rejects.toBeInstanceOf(NetgsmLiveTransportError);
-    expect(parseNetgsmCdrReport("40")).toEqual({ ok: false, code: "40", message: "Kayıt bulunamadı veya geçersiz santral bilgisi" });
+    expect(parseNetgsmCdrReport("40")).toEqual({ ok: true, records: [] });
     expect(parseNetgsmCdrReport('{"code":"70","error":"Parametre"}')).toMatchObject({ ok: false, code: "70" });
     expect(netgsmCdrDate("2026-10-06", false)).toBe("061020260000");
   });

@@ -800,6 +800,9 @@ async function sendNetgsmConfirmationCall(input: NetgsmLiveAdapterInput, started
 // ─── NetGSM santral CDR report (legacy GET /api/netgsm/cdr → POST /netsantral/report) ───
 
 const cdrErrorMessages: Record<string, string> = {
+  "50": "Geçersiz tarih formatı",
+  "60": "Rapor aralığı 24 saati aşamaz",
+  "101": "Dakikada en fazla iki sorgu yapılabilir",
   "30": "Geçersiz kullanıcı adı veya şifre veya API erişim izni yok",
   "40": "Kayıt bulunamadı veya geçersiz santral bilgisi",
   "70": "Parametre hatası",
@@ -831,6 +834,7 @@ export function netgsmCdrDuration(seconds: number): string {
 }
 
 export interface NetgsmCdrRecord {
+  raw?: Record<string, unknown>;
   id: string | null;
   tarih: string | null;
   arayanNumara: string | null;
@@ -860,11 +864,13 @@ export function parseNetgsmCdrReport(body: string):
     parsed = JSON.parse(body);
   } catch {
     const code = body.trim();
+    if (code === "40") return { ok: true, records: [] };
     if (cdrErrorMessages[code]) return { ok: false, code, message: cdrErrorMessages[code] };
     return { ok: false, code: null, message: "API yanıtı parse edilemedi" };
   }
   if (typeof parsed === "number" || typeof parsed === "string") {
     const code = String(parsed).trim();
+    if (code === "40") return { ok: true, records: [] };
     return { ok: false, code, message: cdrErrorMessages[code] ?? `Bilinmeyen hata kodu: ${code}` };
   }
   if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
@@ -886,6 +892,7 @@ export function parseNetgsmCdrReport(body: string):
       const seconds = Number.parseInt(cdrString(value.duration) ?? "0", 10) || 0;
       const directory = cdrString(value.directory);
       return {
+        raw: { ...value, uniqueid: entry.uniqueid },
         id: cdrString(entry.uniqueid) ?? cdrString(value.commonID),
         tarih: cdrString(value.date),
         arayanNumara: cdrString(value.source),
@@ -908,9 +915,11 @@ function callReportRequest(input: NetgsmLiveAdapterInput, now: Date): NetgsmTran
   const creds = credentials(input.accountConfig);
   if (!creds.usercode || !creds.password) throw new Error("Net GSM API yapılandırılmamış");
   const payload = input.envelope.payload;
-  const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-  const startDate = payloadString(payload, ["start_date", "baslangic_tarih"], weekAgo.toISOString().split("T")[0]);
-  const stopDate = payloadString(payload, ["stop_date", "bitis_tarih"], now.toISOString().split("T")[0]);
+  // NetGSM rejects windows >24 h (60). Date-only requests include 00:00–23:59 of one day.
+  const today = new Date(now.getTime() + 3 * 3600000).toISOString().slice(0, 10);
+  const startDate = payloadString(payload, ["start_date", "baslangic_tarih"], today);
+  const stopDate = startDate;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate) || !Number.isFinite(Date.parse(startDate))) throw new Error("Invalid report date");
   return {
     method: "POST",
     url: `${creds.apiUrl}/netsantral/report`,
