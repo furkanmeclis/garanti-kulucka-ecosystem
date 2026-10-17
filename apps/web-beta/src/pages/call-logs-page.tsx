@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { PageHeader } from "@/layout/page-header";
 
 export function CallLogsPage() {
@@ -236,13 +237,13 @@ export function CallLogsSection({
           </label>
         )}
         <label className="flex min-h-11 items-center gap-2 text-sm">
-          <input
-            type="checkbox"
+          <Checkbox
             checked={missed}
-            onChange={(e) => {
-              setMissed(e.target.checked);
+            onCheckedChange={(next) => {
+              setMissed(next === true);
               setPage(1);
             }}
+            data-testid="call-logs-missed-only"
           />
           {t("callLogs.missedOnly")}
         </label>

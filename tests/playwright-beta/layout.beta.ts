@@ -59,8 +59,8 @@ test("mobile: hamburger sheet and bottom bar navigate; header keeps search, bell
   await expect(sheet.getByTestId("mobile-menu-operations").getByRole("link")).toHaveText(["Kargo Pipeline", "İptaller", "Stoklar", "Yorumlar", "SMS"]);
   await expect(sheet.getByTestId("mobile-menu-accounting").getByRole("link")).toHaveText(["Bakiyeler"]);
   await expect(sheet.getByTestId("mobile-menu-instagram").getByRole("link")).toHaveText(["Instagram Analitik", "Instagram Yayın"]);
-  // Staff see no voice pages, so that section is left out; settings is always there.
-  await expect(sheet.getByTestId("mobile-menu-voice")).toHaveCount(0);
+  // Staff see only their own call history in the voice section; settings is always there.
+  await expect(sheet.getByTestId("mobile-menu-voice").getByRole("link")).toHaveText(["Aramalar"]);
   await expect(sheet.getByTestId("mobile-menu-settings").getByRole("link")).toHaveText(["Genel"]);
   await expectResponsiveLayout(page, { checkTouchTargets: true });
   await sheet.getByRole("link", { name: "Müşteriler" }).click();
