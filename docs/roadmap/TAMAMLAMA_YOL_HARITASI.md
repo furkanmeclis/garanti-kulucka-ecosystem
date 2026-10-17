@@ -153,6 +153,17 @@ Geçiş günü:
 
 Tahmini kesinti: 3–5 saat (prova ile kesinleşecek).
 
+### Legacy sunucu envanteri (salt okunur inceleme, 2026-10-17)
+
+Ubuntu 24.04, 4 çekirdek, 15 GB RAM, 193 GB disk (%96 dolu), Coolify 4.3.23 + Traefik. Sahibinin kararıyla geçişe kadar sunucuya dokunulmayacak.
+
+- **Disk:** 152 GB Docker volume'lerinde. Bunun ~135 GB'ı iş verisi değil, Supabase'in kendi log tablosu (`_supabase` veritabanı, `_analytics.log_events_*`): üretim Supabase'inde 71 GB, ikinci Supabase'te 64 GB. Üretimdeki iş verisi (`postgres` veritabanı) yalnız ~5 GB. Kırılmaların sebebi bu log şişmesi; yeni sistemde Supabase olmadığı için tekrarlamaz.
+- **Üretim Supabase:** `kc00sgwkko0wsog40oo8w44k`, `db.garantikulucka.com`. Dump bundan alınır.
+- **İkinci Supabase:** `ouv4no088zjeouarigxb74an`, sslip alan adı; `public` şemasında hiç tablo yok, kullanılmıyor.
+- **Coolify uygulamaları:** `panel.garantikulucka.com` (legacy panel), `garantikulucka.com` (web sitesi), `account.asistzone.com` (**garanti dışı başka bir ürün**), legacy worker'lar (`worker`, `2mesaj-worker`, `voice-worker`) ve bir Redis.
+- **Kullanılmayan volume'ler:** n8n, ayrı bir PostgreSQL ve iki eski Supabase veritabanı (bağlı container yok).
+- **Sıfırlamadan önce karar gerekenler:** `garantikulucka.com` ve `account.asistzone.com` nereye taşınacak (aynı sunucuda Dokploy'a mı, başka yere mi); bunların kaynak kodu ve verisi yedeklenmeli.
+
 ## Kabaca takvim
 
 | Hafta | İş |
