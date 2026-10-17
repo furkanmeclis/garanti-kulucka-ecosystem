@@ -402,7 +402,9 @@ function isAllowedLegacyIdMapForEntity(entity: MigrationEntity, entry: Verificat
         && entry.mapping_role.startsWith("external_identity:"));
   }
   if (entity === "orders") {
-    return entry.target_table === "orders" && entry.mapping_role.startsWith("tracking_number:");
+    return (entry.target_table === "orders" && entry.mapping_role.startsWith("tracking_number:"))
+      || (entry.target_table === "customers" && entry.mapping_role === "synthetic_customer")
+      || (entry.target_table === "customer_addresses" && entry.mapping_role === "synthetic_customer_address");
   }
   if (entity === "conversations") {
     return entry.target_table === "conversations" && entry.mapping_role === conversationMergedIntoMappingRole;

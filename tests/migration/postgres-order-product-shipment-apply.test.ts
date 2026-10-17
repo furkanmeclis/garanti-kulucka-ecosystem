@@ -1,3 +1,4 @@
+import { buildOrderCustomerPlan } from "../../apps/migrator/src/order-customer-plan.js";
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
@@ -259,6 +260,41 @@ describe("PostgreSQL product/order/order item/shipment apply", () => {
           and lookup_mapping_role = 'tracking_number:TRK-AMB'
           and status = 'pending'
       `)).toBe("1");
+      // Snapshot-wide grouping is applied before writing the first (older) order, across batches.
+      const syntheticRows = [
+        orderRecord({ id: "00000000-0000-4000-8000-000000000001", siparis_no: "SYN-1", musteri_id: null, konusma_id: null, musteri_ad: "Eski Ad", musteri_telefon: "+90 532 111 22 33", musteri_adres: "Son adres", musteri_ulke: "Türkiye", olusturma_tarihi: "2024-01-01T00:00:00Z" }),
+        orderRecord({ id: "00000000-0000-4000-8000-000000000002", siparis_no: "SYN-2", musteri_id: null, konusma_id: null, musteri_ad: "Yeni Ad", musteri_telefon: "05321112233", musteri_adres: null, musteri_il: null, musteri_ilce: null, musteri_posta_kodu: null, olusturma_tarihi: "2025-01-01T00:00:00Z" }),
+        orderRecord({ id: "00000000-0000-4000-8000-000000000003", siparis_no: "SYN-3", musteri_id: null, konusma_id: null, musteri_telefon: "" }),
+      ];
+      const orderCustomerPlan = buildOrderCustomerPlan([], syntheticRows);
+      const source = new MemorySource(syntheticRows);
+      const syntheticRun = "synthetic_customers";
+      await target.registerMigrationRun({ ...registration, runId: syntheticRun });
+      const firstInput = { runId: syntheticRun, source, target, orderCustomerPlan, batch: batch("orders", 1, 0, 1) };
+      // Missing creator fails after the customer writes; the transaction must roll them back.
+      await expect(applyOrderMigrationBatchWithState({ ...firstInput,
+        userPublicIds: new Map([[String(syntheticRows[0]!.payload.olusturan_id), "usr_missing"]]) })).rejects.toThrow();
+      expect(query(container, "canonical_target", "select count(*) from legacy_id_map where mapping_role = 'synthetic_customer'")).toBe("0");
+      await applyOrderMigrationBatchWithState(firstInput);
+      await applyOrderMigrationBatchWithState({ ...firstInput, batch: batch("orders", 2, 1, 2) });
+      await applyOrderMigrationBatchWithState(firstInput); // persisted completed batch
+      await applyOrderMigrationBatchWithState({ ...firstInput, batch: batch("orders", 3, 0, 3) }); // reapply under a fresh batch state
+      expect(query(container, "canonical_target", `
+        select concat_ws(':', count(*), count(distinct customer_id)) from orders where order_number like 'SYN-%'
+      `)).toBe("3:2");
+      expect(query(container, "canonical_target", `
+        select concat_ws(':', full_name, notes, address.address_line, address.country, address.is_default)
+        from customers customer join customer_addresses address on address.customer_id = customer.id
+        where customer.phone = '5321112233'
+      `)).toBe("Yeni Ad:Eski siparişlerde geçen adlar: Eski Ad:Son adres:TR:t");
+      expect(query(container, "canonical_target", `
+        select count(*) from legacy_id_map where run_id = '${syntheticRun}' and mapping_role = 'synthetic_customer'
+      `)).toBe("2");
+      expect(query(container, "canonical_target", `
+        select count(*) from legacy_id_map where run_id = '${syntheticRun}' and source_id = 'phone:5321112233'
+          and mapping_role in ('synthetic_customer', 'synthetic_customer_address')
+      `)).toBe("2");
+
     } finally {
       await db?.destroy();
       docker(["rm", "--force", container], true);
