@@ -105,6 +105,10 @@ Videolarda "Meta'daki uç nokta → paneldeki sonuç" zinciri görünmeli (ör. 
 | WhatsApp mesajı al/yanıtla, medya gönder, sipariş bilgilendirmesi | `whatsapp_business_messaging` |
 | Numara/profil bilgisi ve şablon listesi | `whatsapp_business_management` |
 
+Üretim: `npm run review:videos` → `tmp/meta-review-videos/<izin>.webm` (+ `.mp4`). Senaryolar `tests/meta-review/`, tasarım
+`docs/superpowers/specs/2026-10-11-meta-review-videos-design.md`. Videolar taklit backend'e karşı çekilir; Meta gerçek
+Instagram/WhatsApp tarafını isterse ikinci tur gerçek ortamda alınır.
+
 ## 6. Kodda yapılması gerekenler (review'dan önce)
 
 1. **Inbound webhook işleme**: yeni API webhook'ları kaydediyor ama mesaj/yorum oluşturmuyor (`handleProviderWebhookJob` fixture).
