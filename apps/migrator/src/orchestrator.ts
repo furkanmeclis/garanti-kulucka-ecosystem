@@ -1,3 +1,7 @@
+import { applyCommunicationMigrationBatchWithState } from "./communication-apply.js";
+import { validateCommunicationBatches } from "./communication-dry-run.js";
+import { communicationEntities } from "./communication-mapping.js";
+import { communicationTableMappings } from "./communication-catalog.js";
 import { buildOrderCustomerPlan, type OrderCustomerPlan } from "./order-customer-plan.js";
 import {
   applyConversationMigrationBatchWithState,
@@ -166,6 +170,9 @@ export async function runMigration(input: RunMigrationInput): Promise<MigrationR
   if (validateShipmentTrackingEventRows) {
     assertEntityRoutesFromLegacyTable(catalog, "shipment_tracking_events", legacyShipmentTrackingEventTable, "Shipment tracking event");
   }
+  for (const entity of communicationEntities) {
+    if (entities.includes(entity)) assertEntityRoutesFromLegacyTable(catalog, entity, communicationTableMappings.find((t) => t.targetEntities[0]?.entity === entity)!.sourceTable, entity);
+  }
   const integrationAccounts = ownIntegrationAccounts(input.integrationAccounts);
   const conversationAccounts = ownConversationAccounts(input.conversationAccounts);
   const userPublicIds = ownUserPublicIds(input.userPublicIds);
@@ -239,6 +246,7 @@ export async function runMigration(input: RunMigrationInput): Promise<MigrationR
         shipmentPublicIds: shipmentTransform?.publicIds ?? new Map(),
       })
       : undefined;
+    const communicationTransforms = await validateCommunicationBatches(source, plan, shipmentTransform?.publicIds ?? new Map());
     const sourceManifest = createSourceManifest({
       sourceSystem: input.sourceSystem,
       databaseIdentity: input.sourceDatabaseIdentity,
@@ -252,6 +260,7 @@ export async function runMigration(input: RunMigrationInput): Promise<MigrationR
       plan,
       sourceManifest,
       dryRunReport: createDryRunReport({
+        communicationTransforms,
         plan,
         ...(customers ? { customerTransform: customers.summary } : {}),
         ...(conversations ? { conversationTransform: conversations.summary } : {}),
@@ -364,6 +373,10 @@ async function applyPlannedBatch(input:
   },
 ): Promise<MigrationBatchApplyResult> {
   switch (input.batch.entity) {
+    case "message_shortcuts":
+    case "sms_messages":
+    case "vapi_calls":
+      return applyCommunicationMigrationBatchWithState(input);
     case "customers":
       return applyCustomerMigrationBatchWithState({
         ...input,

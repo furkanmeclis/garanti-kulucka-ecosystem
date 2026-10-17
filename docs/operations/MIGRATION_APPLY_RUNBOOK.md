@@ -116,3 +116,13 @@ The report must pass before the target is promoted.
 If verification fails before promotion, restore the backup and preserve the apply and verify reports.
 
 If the target has already been promoted, do not re-run with a different `MIGRATION_RUN_ID` unless the incident owner approves it. Prefer a forward-fix using the same run evidence and keep the report files attached to the incident record.
+
+## Shortcut media and communication history
+
+`kisayollar`, `sms_gonderimler`, and `vapi_aramalar` are included in the canonical migration plan. Review `dryRunReport.communicationTransforms` before apply. The exact observed status maps are SMS `basarili → sent` and VAPI `basladi → basladi`; an unknown/null status stops migration. These are historical rows with `queued=false`, so migration does not send SMS or initiate calls. Optional shipment links resolve through the same run's primary `legacy_id_map`; unresolved links stay null and are counted (`unresolvedShipments` in dry-run, `unresolved_optional_shipment` warnings in apply). There is no SMS customer FK in the current target schema.
+
+Shortcut media is the sole exception to the Faz B decision to leave legacy message media behind. Dry-run never downloads public files or contacts object storage. Apply requires the existing `MIGRATION_MEDIA_S3_*` settings when any shortcut media is present; it validates/prepares every media item before writing that batch. Keep access to the three legacy public files or an HTTPS backup available until apply succeeds. `MIGRATION_SHORTCUT_MEDIA_BASE_URL` can point to a backup origin/base path; the original `/storage/v1/object/public/<bucket>/<path>` is appended. Redirects are rejected, downloads time out after 30 seconds and are capped at 25 MiB. HTTP overrides are accepted only on loopback for offline tests.
+
+Objects follow the API convention `media/YYYY/MM/DD/fil_…/<sanitized-filename>` using the source creation date, deterministic file ids and SHA-256 checksum. Shortcut object keys do not use `MIGRATION_MEDIA_S3_PREFIX`. HEAD checks existence/size before PUT; retries after a DB rollback reuse the same object. Verify checks primary and media/attachment id maps, file availability/checksum/size and shortcut attachment references. Seeded `msc_default_*` shortcuts with matching codes are updated in place; a collision with an operator-created shortcut stops apply.
+
+Reference local snapshot (2026-10-17): 53 shortcuts (6 inactive), 7 inline files / 2,254,896 decoded bytes, 3 public URLs; 270 SMS / 21 VAPI calls. All 266 non-null SMS shipment ids exist in the source; VAPI shipment ids are all null. The remaining SMS rows have no shipment id.

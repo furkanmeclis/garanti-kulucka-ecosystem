@@ -1,3 +1,4 @@
+import type { CommunicationDraft } from "./communication-mapping.js";
 import { createHash } from "node:crypto";
 import type {
   AppDatabase,
@@ -60,6 +61,10 @@ const canonicalTargetTables = new Set<string>([
   "files",
   "message_attachments",
   "settings",
+  "message_shortcuts",
+  "message_shortcut_attachments",
+  "sms_messages",
+  "vapi_calls",
 ]);
 
 export function assertCanonicalTargetTable(table: string): asserts table is MigrationEntity {
@@ -117,6 +122,37 @@ export class DatabaseMigrationTarget implements MigrationTarget {
 
   async writeCanonicalRecord(input: CanonicalRecord): Promise<CanonicalWriteResult> {
     return this.writeResolvedRecord(input);
+  }
+
+  async writeCommunicationRecord(input: CommunicationDraft & { readonly shipmentPublicId: string | null }): Promise<CanonicalWriteResult> {
+    let record = input.record;
+    if (record.targetTable === "message_shortcuts") {
+      const existing = await this.db.selectFrom("message_shortcuts").select("public_id")
+        .where("code", "=", String(record.payload.code)).executeTakeFirst();
+      if (existing && existing.public_id !== record.targetId) {
+        // Only migration 009 seed rows may be adopted; operator-created collisions fail closed.
+        if (!existing.public_id.startsWith("msc_default_")) throw new Error("Shortcut code conflicts with an existing target row");
+        record = { ...record, targetId: existing.public_id };
+      }
+    }
+    const payload = { ...record.payload };
+    if (record.targetTable === "sms_messages" || record.targetTable === "vapi_calls") {
+      payload.shipment_id = input.shipmentPublicId === null ? null
+        : await this.findRequiredPublicId("shipments", input.shipmentPublicId, "shipment");
+    }
+    if (record.targetTable === "vapi_calls" && payload.transcript !== null) payload.transcript = jsonb(payload.transcript);
+    const result = await this.writeResolvedRecord({ ...record, payload });
+    if (input.createdAt || input.updatedAt) await this.db.updateTable(record.targetTable as "message_shortcuts" | "sms_messages" | "vapi_calls").set({
+      ...(input.createdAt ? { created_at: sql<Date>`${input.createdAt}::timestamptz` } : {}),
+      ...(input.updatedAt ? { updated_at: sql<Date>`${input.updatedAt}::timestamptz` } : {}),
+    }).where("public_id", "=", record.targetId).execute();
+    return result;
+  }
+
+  async writeShortcutAttachmentRecord(input: CanonicalRecord & { readonly shortcutPublicId: string; readonly filePublicId: string }): Promise<CanonicalWriteResult> {
+    const shortcutId = await this.findRequiredPublicId("message_shortcuts", input.shortcutPublicId, "shortcut");
+    const fileId = await this.findRequiredPublicId("files", input.filePublicId, "file");
+    return this.writeResolvedRecord({ ...input, payload: { ...input.payload, shortcut_id: shortcutId, file_id: fileId } });
   }
 
   async writeCustomerAddressRecord(input: CustomerAddressCanonicalRecord): Promise<CanonicalWriteResult> {
@@ -530,7 +566,7 @@ export class DatabaseMigrationTarget implements MigrationTarget {
   }
 
   private async findRequiredPublicId(
-    table: "customers" | "integration_accounts" | "conversations" | "orders" | "products" | "users" | "messages" | "files" | "shipments",
+    table: "customers" | "integration_accounts" | "conversations" | "orders" | "products" | "users" | "messages" | "files" | "shipments" | "message_shortcuts",
     publicId: string,
     label: string,
   ): Promise<number> {

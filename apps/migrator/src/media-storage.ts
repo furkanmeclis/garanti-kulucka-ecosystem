@@ -17,6 +17,7 @@ export interface StoredMediaObjectHead {
 }
 
 export interface MigratorMediaStorage {
+  storeObject?(input: { readonly bytes: Buffer; readonly mimeType: string; readonly objectKey: string; readonly checksum: string }): Promise<InlineMediaObject>;
   storeInlineDataUrl(input: {
     readonly dataUrl: string;
     readonly sourceTable: string;
@@ -70,6 +71,18 @@ export class S3MigratorMediaStorage implements MigratorMediaStorage {
       },
     };
     this.client = new S3Client(clientConfig);
+  }
+
+  async storeObject(input: { readonly bytes: Buffer; readonly mimeType: string; readonly objectKey: string; readonly checksum: string }): Promise<InlineMediaObject> {
+    const head = await this.headObject({ bucket: this.config.bucket, objectKey: input.objectKey });
+    if (head && head.size !== input.bytes.length) throw new Error("Shortcut media HEAD size mismatch");
+    if (!head) await this.client.send(new PutObjectCommand({
+      Bucket: this.config.bucket, Key: input.objectKey, Body: input.bytes,
+      ContentType: input.mimeType, ContentLength: input.bytes.length,
+      Metadata: { sha256: input.checksum.replace("sha256:", "") },
+    }));
+    return { checksum: input.checksum, mimeType: input.mimeType, size: input.bytes.length,
+      bucket: this.config.bucket, objectKey: input.objectKey };
   }
 
   async storeInlineDataUrl(input: {

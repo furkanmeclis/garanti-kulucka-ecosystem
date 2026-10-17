@@ -439,6 +439,9 @@ describe("LegacyDatabaseSource", () => {
         shipments: "public.kargo_gonderimleri",
         products: "public.urunler",
         shipment_tracking_events: "public.kargo_takip",
+        message_shortcuts: "public.kisayollar",
+        sms_messages: "public.sms_gonderimler",
+        vapi_calls: "public.vapi_aramalar",
       },
       mappingCatalog: legacyMappingCatalog,
     });

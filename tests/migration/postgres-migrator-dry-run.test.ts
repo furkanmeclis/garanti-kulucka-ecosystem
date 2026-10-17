@@ -77,6 +77,9 @@ describe("PostgreSQL migrator dry-run E2E", () => {
         { entity: "order_items", totalRows: 1, batches: 1 },
         { entity: "shipments", totalRows: 1, batches: 1 },
         { entity: "shipment_tracking_events", totalRows: 1, batches: 1 },
+        { entity: "message_shortcuts", totalRows: 0, batches: 0 },
+        { entity: "sms_messages", totalRows: 0, batches: 0 },
+        { entity: "vapi_calls", totalRows: 0, batches: 0 },
       ]);
       expect(result.dryRunReport?.customerTransform).toMatchObject({
         transformedRows: 1,
@@ -131,7 +134,7 @@ describe("PostgreSQL migrator dry-run E2E", () => {
         supersededInsertTimeRows: 0,
         undatedRows: 0,
       });
-      expect(result.sourceManifest.rowContentChecksums).toHaveLength(8);
+      expect(result.sourceManifest.rowContentChecksums).toHaveLength(11);
       expect(result.sourceManifest.rowContentChecksums).toEqual(
         expect.arrayContaining([
           { entity: "customers", rows: 1, checksum: expect.stringMatching(/^sha256:[a-f0-9]{64}$/) },
@@ -190,6 +193,7 @@ function sqlType(column: LegacyColumnContract): string {
   if (column.dataType === "numeric" && column.udtName === "numeric") return "numeric";
   if (column.dataType === "text" && column.udtName === "text") return "text";
   if (column.dataType === "uuid" && column.udtName === "uuid") return "uuid";
+  if (column.dataType === "jsonb" && column.udtName === "jsonb") return "jsonb";
   throw new Error(`Unsupported legacy column type ${column.dataType}/${column.udtName}`);
 }
 

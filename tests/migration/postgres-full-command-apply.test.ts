@@ -434,6 +434,7 @@ function sqlType(column: LegacyColumnContract): string {
   if (column.dataType === "numeric" && column.udtName === "numeric") return "numeric";
   if (column.dataType === "text" && column.udtName === "text") return "text";
   if (column.dataType === "uuid" && column.udtName === "uuid") return "uuid";
+  if (column.dataType === "jsonb" && column.udtName === "jsonb") return "jsonb";
   throw new Error(`Unsupported legacy column type ${column.dataType}/${column.udtName}`);
 }
 

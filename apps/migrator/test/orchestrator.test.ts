@@ -410,6 +410,9 @@ describe("migration orchestrator", () => {
       "order_items",
       "shipments",
       "shipment_tracking_events",
+      "message_shortcuts",
+      "sms_messages",
+      "vapi_calls",
     ]);
     expect(source.operations).toEqual([
       "describe",
@@ -421,6 +424,9 @@ describe("migration orchestrator", () => {
       "count:order_items",
       "count:shipments",
       "count:shipment_tracking_events",
+      "count:message_shortcuts",
+      "count:sms_messages",
+      "count:vapi_calls",
     ]);
   });
 

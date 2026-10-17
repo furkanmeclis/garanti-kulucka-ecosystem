@@ -82,6 +82,9 @@ describe("PostgreSQL migration runtime", () => {
       shipments: { tableName: "public.kargo_gonderimleri", idColumn: "id" },
       products: { tableName: "public.urunler", idColumn: "id" },
       shipment_tracking_events: { tableName: "public.kargo_takip", idColumn: "id" },
+      message_shortcuts: { tableName: "public.kisayollar", idColumn: "id" },
+      sms_messages: { tableName: "public.sms_gonderimler", idColumn: "id" },
+      vapi_calls: { tableName: "public.vapi_aramalar", idColumn: "id" },
     });
   });
 
@@ -173,6 +176,9 @@ describe("PostgreSQL migration runtime", () => {
       { entity: "order_items", totalRows: 0, batches: 0 },
       { entity: "shipments", totalRows: 0, batches: 0 },
       { entity: "shipment_tracking_events", totalRows: 0, batches: 0 },
+      { entity: "message_shortcuts", totalRows: 0, batches: 0 },
+      { entity: "sms_messages", totalRows: 0, batches: 0 },
+      { entity: "vapi_calls", totalRows: 0, batches: 0 },
     ]);
     expect(client.queries.filter((sql) => /select count\(\*\)/i.test(sql))).toEqual([
       'select count(*) as count from "public"."musteriler"',
@@ -185,6 +191,9 @@ describe("PostgreSQL migration runtime", () => {
       // The tracking aggregate is computed once into a scroll cursor in the source transaction; an empty cursor
       // falls back to a standalone row-accounting query.
       expect.stringMatching(/^declare migrator_shipment_tracking_events scroll cursor without hold for [\s\S]*from "public"."kargo_takip"/),
+      'select count(*) as count from "public"."kisayollar"',
+      'select count(*) as count from "public"."sms_gonderimler"',
+      'select count(*) as count from "public"."vapi_aramalar"',
       expect.stringContaining("as superseded_insert_time_rows"),
     ]);
     expect(client.queries.find((sql) => sql.includes('"public"."kargo_takip"'))).toContain("group_rollup as");
