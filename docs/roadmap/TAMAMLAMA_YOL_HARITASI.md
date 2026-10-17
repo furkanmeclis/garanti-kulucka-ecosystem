@@ -46,16 +46,33 @@ Doküman:
 
 ## Faz B — Migrator apply aktivasyonu (kritik yol, ~1–2 hafta)
 
-Mevcut durum: customer (adres + dış kimlik fan-out), conversation, message, product, order, order item, shipment ve kargo hareketi için apply yazıcıları var. Gerçek legacy kopyası (yerel Postgres `127.0.0.1:5440`, 4,1 GB) üzerinde dry-run 2026-10-11'de **geçti**: 617.905 satır, blokaj 0, uyarı 0, kullanıcı eşlemesi tamam. Apply hiç gerçek veriye karşı çalıştırılmadı.
+**Durum (2026-10-17): Faz B kod işleri tamam; gerçek veriyle temiz apply provası geçti.**
 
-1. [ ] Sentetik sipariş müşterisini apply yolunda yaz (wip branch; 2.379 sipariş).
-2. [ ] Yeni sistemde 16 kullanıcıyı planlanan `usr_` public id'leriyle oluşturan betik (migrator kullanıcı taşımıyor).
-3. [ ] Medya: 1.394 inline base64 (~1,88 GB) Garage'a, 4.104 süreli Meta CDN linki için karar (indir ya da yalnız URL).
-4. [ ] Performans: akışlı row-content checksum (OOM riski), keyset sayfalama, toplu hedef yazımı (readiness O1–O3).
-5. [ ] Rapor eksikliği: tekilleştirilen 2,35 M kargo hareketi kopyası raporda sayılmıyor.
-6. [ ] Kapsam kararı: migrator'ın okumadığı tablolar (`ayarlar`, `bakiye_hareketleri`, `cari_hesaplar`, `faturalar`, `stok_hareketleri`, `sosyal_yorumlar`, `vapi_*`, `teyit_aramalari`, `odeme_istekleri`, `kargo_pipeline_kuyrugu`, `kisayollar`, log tabloları) ilk geçişe dahil mi, sıfırdan mı başlıyor?
-7. [ ] Geçiş stratejisi: tek seferlik donma penceresi mi, delta senkron mu? (Migrator bugün yalnız tam snapshot yapıyor.)
-8. [ ] Yerel kopyada boş bir hedefe tam apply → verify → ikinci apply sıfır duplicate.
+1. [x] Telefon başına sentetik müşteri (#12): 2.379 sipariş → 2.271 müşteri.
+2. [x] 16 kullanıcıyı planlanan public id'lerle oluşturan betik, zorunlu şifre değişimi, SIP dahili (#11).
+3. [x] Medya taşınmıyor, "taşınmadı" notu (#12); kısayol medyası istisnası Garage'a (#13).
+4. [x] Performans: akışlı checksum, tipli keyset, kaynak tek okuma (#19).
+5. [x] Kargo hareketi kopya sayacı (#12).
+6. [x] Kapsam kararları (aşağıda); kısayol, SMS, VAPI (#13) ve arama geçmişi (#19) taşınıyor.
+7. [x] Geçiş stratejisi: tek seferlik kesinti (Faz G).
+8. [x] Boş hedefe tam apply → verify (aşağıdaki prova).
+
+### Apply provası (2026-10-17, yerel legacy kopyası → boş hedef)
+
+İlk deneme provada dört hata buldu, hepsi düzeltildi (#20): ürünsüz sipariş kalemleri apply'ı durduruyordu (9c), belirsiz kargo eşleşmesi apply'ı durduruyordu (9d), batch'lere bölünen 5 siparişte hatalı manuel fark kalıyordu, verify kuralları 9a/9c ve tekilleştirilmiş kargo hareketlerine uymuyordu. Aynı run ID ile yarıda kalan apply'ın kaldığı yerden devam ettiği de doğrulandı.
+
+Son temiz prova (`main` = #19 + #20, boş hedef, batch 500):
+
+| Ölçüm | Sonuç |
+| --- | --- |
+| Süre | **35 dk** (önceki kod ~60 dk) |
+| En yüksek bellek | 890 MB |
+| Verify | **43/43 geçti** |
+| Müşteri / mesaj / sipariş / kalem (ürünsüz) | 76.158 / 412.683 / 4.695 / 3.799 (2.607) |
+| Kargo / hareket / arama / kısayol / SMS | 4.435 / 44.704 / 192 / 53 / 270 |
+| Siparişsiz kalan kargo | 506 (92 belirsiz + 414 eşleşmeyen) → geçiş sonrası kontrol listesi |
+
+Ön koşullar (provada da uygulandı): migration'lar (032'ye kadar), 16 kullanıcı bootstrap'ı, 3 entegrasyon hesabı, kısayol medyası için Garage, yedek kanıt dosyası. Geçiş günü kesinti tahmini: apply 35 dk + kurulum ve kontroller.
 
 Kabul: legacy kopyadan temiz hedefe tam taşıma, doğrulama raporu temiz.
 
