@@ -141,39 +141,28 @@ describe("PostgreSQL conversation and message apply", () => {
         target,
         batch: batch("messages", 1, 0, 4),
         mediaStorage,
-      })).resolves.toMatchObject({ writtenRows: 8, idMapCreated: 4 });
-      expect(mediaStorage.uploads).toEqual([{ sourceTable: "public.mesajlar", sourceId: messageThreeId }]);
-      expect(mediaStorage.heads).toEqual([`gk-legacy-media/${legacyMediaKey}`]);
+      })).resolves.toMatchObject({ writtenRows: 4, idMapCreated: 4 });
+      expect(mediaStorage.uploads).toEqual([]);
+      expect(mediaStorage.heads).toEqual([]);
       expect(targetCounts(container)).toBe("2:4:7");
 
-      // Idempotent rerun of the same batch keeps one files row per checksum and no extra uploads/rows.
+      // Idempotent rerun of the same batch keeps only messages and no files/attachments.
       await expect(applyMessageMigrationBatchWithState({
         runId,
         source: messageSource,
         target,
         batch: batch("messages", 1, 0, 4),
         mediaStorage,
-      })).resolves.toMatchObject({ writtenRows: 8 });
-      expect(mediaStorage.uploads).toHaveLength(1);
+      })).resolves.toMatchObject({ writtenRows: 4 });
+      expect(mediaStorage.uploads).toHaveLength(0);
       expect(targetCounts(container)).toBe("2:4:7");
+      expect(query(container, "canonical_target", "select count(*) from files")).toBe("0");
+      expect(query(container, "canonical_target", "select count(*) from message_attachments")).toBe("0");
       expect(query(container, "canonical_target", `
-        select concat_ws(':', count(*), count(distinct f.checksum))
-        from files f
-      `)).toBe("2:2");
-      expect(query(container, "canonical_target", `
-        select concat_ws(':', f.bucket, f.object_key, f.mime_type, f.byte_size, f.checksum, f.upload_status, f.scan_status)
-        from message_attachments attachment
-        join files f on f.id = attachment.file_id
-        join messages m on m.id = attachment.message_id
-        join legacy_id_map map on map.target_id = m.public_id
+        select concat_ws(':', raw_payload ? 'media_url', raw_payload->'media_omitted'->>'mime_type', raw_payload->'media_omitted'->>'migrated')
+        from messages m join legacy_id_map map on map.target_id = m.public_id
         where map.run_id = '${runId}' and map.source_id = '${messageFourId}'
-      `)).toBe(`gk-legacy-media:${legacyMediaKey}:image/jpeg:4096:sha256:${legacyMediaHash}:available:skipped`);
-      expect(query(container, "canonical_target", `
-        select concat_ws(':', raw_payload ? 'media_url', raw_payload->'media_storage'->>'bucket')
-        from messages m
-        join legacy_id_map map on map.target_id = m.public_id
-        where map.run_id = '${runId}' and map.source_id = '${messageFourId}'
-      `)).toBe("f:gk-legacy-media");
+      `)).toBe("f:image/jpeg:false");
 
       expect(query(container, "canonical_target", `
         select count(*)
@@ -198,19 +187,11 @@ describe("PostgreSQL conversation and message apply", () => {
         where map.run_id = '${runId}' and map.source_id = '${messageTwoId}'
       `)).toBe("https://cdn.example.test/a.jpg");
       expect(query(container, "canonical_target", `
-        select concat_ws(':', f.bucket, f.object_key, f.mime_type, f.byte_size, f.checksum, f.upload_status, f.scan_status)
-        from message_attachments attachment
-        join files f on f.id = attachment.file_id
-        join messages m on m.id = attachment.message_id
-        join legacy_id_map map on map.target_id = m.public_id
+        select concat_ws(':', raw_payload->'media_omitted'->>'mime_type', raw_payload->'media_omitted'->>'byte_size', body like '%eski sistemden taşınmadı%')
+        from messages m join legacy_id_map map on map.target_id = m.public_id
         where map.run_id = '${runId}' and map.source_id = '${messageThreeId}'
-      `)).toBe("migration-media:legacy/hello.png:image/png:5:sha256:inline-test:available:skipped");
-      expect(query(container, "canonical_target", `
-        select raw_payload->'media_storage'->>'checksum'
-        from messages m
-        join legacy_id_map map on map.target_id = m.public_id
-        where map.run_id = '${runId}' and map.source_id = '${messageThreeId}'
-      `)).toBe("sha256:inline-test");
+      `)).toBe("image/png:5:t");
+      expect(query(container, "canonical_target", "select count(*) from messages where raw_payload::text like '%base64%'")).toBe("0");
 
       executeSql(container, "canonical_target", `
         update integration_accounts

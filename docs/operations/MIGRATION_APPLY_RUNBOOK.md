@@ -44,7 +44,7 @@ Review the dry-run report before continuing.
 
 `MIGRATION_CONVERSATION_ACCOUNTS_FILE` is the single integration account snapshot for both conversations and customer external identities. Its `instagram` and `messenger` entries are also the accounts that customer `ig_`/`fb_` identities resolve to (one active account per provider; `whatsapp` entries are not customer identities). The dry-run fails closed, exactly like apply, when any customer external identity has no active account for its provider; the error lists only the provider names and the unresolved count. A passed dry-run therefore always reports `customerTransform.unresolvedIdentities = 0`. Customers carrying `woocommerce_id` or `kolaybi_id` cannot be resolved through this file yet.
 
-The report includes the full secret-free migration result. Confirm inline media counts/decoded byte totals, bridge `s3://` media counts per MIME (and zero `invalid_legacy_media_uri` blocked rows), customer resolution paths, shipment linkage counts, duplicate product warnings, and order total adjustment warnings before apply.
+The report includes the full secret-free migration result. Confirm inline media counts/decoded byte totals, bridge `s3://` media counts per MIME (omitted without storage access), customer resolution paths, shipment linkage counts, duplicate product warnings, and order total adjustment warnings before apply.
 
 ## 3. Apply
 
@@ -55,24 +55,21 @@ Apply requires both gates:
 
 The command also refuses if the source and target database identities are the same. Gate failures occur before database connections are opened.
 
-If the dry-run report contains inline `data:` message media, apply also requires Garage/S3-compatible storage configuration:
+### Message media (owner decision, Faz B)
 
-- `MIGRATION_MEDIA_S3_ENDPOINT`
-- `MIGRATION_MEDIA_S3_ACCESS_KEY_ID`
-- `MIGRATION_MEDIA_S3_SECRET_ACCESS_KEY`
-- `MIGRATION_MEDIA_S3_BUCKET`
-- optional `MIGRATION_MEDIA_S3_REGION`
-- optional `MIGRATION_MEDIA_S3_PREFIX`
+Inline `data:` and bridge `s3://` message media are not migrated. Message apply never uploads, downloads or HEADs these files and does not require Garage/S3 configuration. No `files` or `message_attachments` rows are created for them. Text and timestamps remain, with a Turkish note appended on a new line: `📎 Görsel/Video/Ses kaydı/Belge (eski sistemden taşınmadı)` (only the note if the text is blank).
 
-Missing storage configuration for a batch with inline media is fail-closed before that batch writes messages. The migrator uploads the decoded media, records a `files` row with checksum, size, MIME type, `upload_status=available`, and scan status, then links it through `message_attachments`.
+`raw_payload.media_omitted` preserves kind, MIME and inline decoded byte size, without base64 or the bridge URI. Bridge byte size is `null` because it is unavailable without accessing storage. Both live and fallback base64 fields are removed. http(s) URLs remain references only and are never downloaded. The checksum cache retains no message payloads. Dry-run keeps separate inline byte/MIME, bridge MIME/count and remote URL counters. Malformed bridge keys do not block omitted media.
 
-### Bridge-extracted `s3://` media
+This decision covers messages. The separate shortcut media migration retains its own storage requirements (Faz B exception).
 
-When the source is the bridge database, inline (and later expired Facebook/Instagram CDN) media is already extracted to Garage and `media_url` holds `s3://<legacy-bucket>/mesajlar/<sha256-hex>.<ext>` (`media_type` unchanged).
+### Synthetic order customers
 
-- Set `MIGRATION_LEGACY_MEDIA_BUCKET` if the bridge bucket is not the default `gk-legacy-media`. It may differ from `MIGRATION_MEDIA_S3_BUCKET`; the same `MIGRATION_MEDIA_S3_*` credentials must be able to HEAD it.
-- Dry-run: check `messageTransform.legacyObjectMediaPayloads` / `legacyObjectMediaByMime` (separate from `inlineMediaPayloads` and `remoteUrlMediaPayloads`). Any `invalid_legacy_media_uri` warning (wrong bucket, key not `mesajlar/<64-hex>.<known ext>`, uppercase hex, query string, unknown extension) is a blocked row: fix the bridge row and re-run the dry-run before apply.
-- Apply never re-uploads or copies these objects. Before a batch writes anything it HEADs every referenced object; a malformed URI or a missing object fails the whole batch closed. It then writes a `files` row pointing at the original bucket/key (checksum from the key, MIME from a full-MIME `media_type` or the extension, size from HEAD, `upload_status=available`, `scan_status=skipped`) and the `message_attachments` link, exactly like inline media. Public ids derive from the checksum, so reruns are idempotent.
+A snapshot pre-pass groups unmatched orders by the last 10 phone digits, creating one customer per phone; orders without phone digits each get their own customer. Short legacy numbers retain their digits as the phone identity (the local copy has one nine-digit number). The latest order by legacy creation date supplies the name; distinct older names (case/whitespace insensitive) go into notes as `Eski siparişlerde geçen adlar: A, B`. The latest order containing address fields supplies the default address (`TR` country normalization). Equal timestamps break ties by legacy UUID.
+
+Customers and addresses are written before their orders in the batch transaction. Dedicated `legacy_id_map` roles `synthetic_customer` and `synthetic_customer_address` use `phone:<last10>` as source identity (order UUID for phoneless orders), making reruns and resume idempotent. Review `orderTransform.syntheticCustomersFromOrders` (orders), `syntheticCustomers` (unique customers), `syntheticPhoneCustomers` and `syntheticPhonelessCustomers`. Expected local legacy snapshot: 2,379 orders → 2,271 customers (2,260 phones + 11 phoneless); 2,304 orders resolve by phone and 12 by customer ID.
+
+Shipment reports expose `duplicateRowsDropped = duplicateRows + supersededInsertTimeRows` in dry-run and apply; reconcile `sourceRows = uniqueEvents + duplicateRowsDropped + futureDatedRows + undatedRows`.
 
 ```bash
 SOURCE_DATABASE_URL=postgres://... \

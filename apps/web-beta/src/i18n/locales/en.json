@@ -1559,7 +1559,8 @@
     "colAction": "Action",
     "colModule": "Module",
     "colRecord": "Record",
-    "refresh": "Refresh"
+    "refresh": "Refresh",
+    "sipExtension": "SIP extension"
   },
   "dataDeletion": {
     "title": "Data Deletion Request",
@@ -2827,5 +2828,15 @@
       "messages_in": "Messages received from customers (honours the channel filter).",
       "unread_messages": "Current total of unread customer messages (snapshot)."
     }
+  },
+  "forcedPassword": {
+    "title": "Change your password",
+    "description": "Replace your temporary password before continuing.",
+    "password": "New password",
+    "confirmation": "Confirm new password",
+    "submit": "Change password",
+    "logout": "Log out",
+    "mismatch": "Passwords do not match.",
+    "failed": "Could not change password."
   }
 }

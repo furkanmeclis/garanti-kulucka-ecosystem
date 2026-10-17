@@ -1,4 +1,5 @@
 import { SoftphoneProvider } from "@/softphone/Softphone";
+import { ForcedPasswordPage } from "@/pages/forced-password-page";
 import type { ReactNode } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { useAuth } from "@/app/auth";
@@ -55,6 +56,8 @@ function LoginRoute() {
 }
 
 export function App() {
+  const { status, user } = useAuth();
+  if (status === "authenticated" && user?.must_change_password) return <ForcedPasswordPage />;
   return (
     <SoftphoneProvider><Routes>
       <Route path="/giris" element={<LoginRoute />} />

@@ -55,6 +55,23 @@ describe("migration verification", () => {
     }));
   });
 
+  it("allows phone-scoped synthetic customer/address maps without inflating primary customer coverage", () => {
+    const report = createMigrationVerificationReport({
+      runId: "run_synthetic", sourceManifest: manifest({ orders: 1 }),
+      targetPublicIds: targetPublicIds({ customers: ["cus_synthetic"], customer_addresses: ["caddr_synthetic"], orders: ["ord_1"] }),
+      customers: [{ public_id: "cus_synthetic", phone: "5321112233", email: null }],
+      customerExternalIdentities: [], conversations: [], messages: [], orders: [], orderItems: [], shipments: [],
+      legacyIdMaps: [
+        { source_id: "order_1", target_table: "orders", mapping_role: "primary", target_id: "ord_1" },
+        { source_id: "phone:5321112233", target_table: "customers", mapping_role: "synthetic_customer", target_id: "cus_synthetic" },
+        { source_id: "phone:5321112233", target_table: "customer_addresses", mapping_role: "synthetic_customer_address", target_id: "caddr_synthetic" },
+      ].map((map) => ({ ...map, run_id: "run_synthetic", source_system: "legacy_postgres", source_table: "legacy.siparisler" })),
+    });
+    expect(report.checks.find((check) => check.name === "legacy_id_map.foundation_rules")).toMatchObject({ status: "passed" });
+    expect(report.checks.find((check) => check.name === "legacy_id_map.target_references")).toMatchObject({ status: "passed" });
+    expect(report.checks.find((check) => check.name === "legacy_id_map.source_coverage.customers")).toMatchObject({ status: "passed", actual: 0 });
+  });
+
   it("accounts for merged-away conversations: source rows = primary targets + merged-away rows", () => {
     const conversationMap = (sourceId: string, mappingRole: string, targetId: string) => ({
       run_id: "run_merge",

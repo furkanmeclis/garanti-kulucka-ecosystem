@@ -1,3 +1,4 @@
+import { omittedMessageMedia, isOmittedMediaUrl } from "./message-media.js";
 import { createHash } from "node:crypto";
 import { normalizeLegacyTimestamp } from "./customer-mapping.js";
 import type { LegacyRowRejection } from "./customer-mapping.js";
@@ -94,6 +95,7 @@ export interface ConversationTransformationResult {
 }
 
 export interface LegacyMessageRawPayload {
+  readonly media_omitted?: ReturnType<typeof omittedMessageMedia>;
   readonly media_url?: string;
   readonly media_type?: string;
   readonly gonderici_adi?: string;
@@ -288,12 +290,14 @@ export function transformLegacyMessage(
   if (preferredMediaType !== null && fallbackMediaType !== null && preferredMediaType !== fallbackMediaType) {
     warnings.push(Object.freeze({ code: "media_field_conflict" as const, fields: ["media_type", "medya_tipi"] as const }));
   }
+  const omitted = omittedMessageMedia(mediaUrl, mediaType);
   const rawPayload = mediaUrl === null && mediaType === null && senderId === null && senderName === null
     ? null
     : Object.freeze({
-      ...(mediaUrl === null ? {} : { media_url: mediaUrl }),
+      ...(mediaUrl === null || isOmittedMediaUrl(mediaUrl) ? {} : { media_url: mediaUrl }),
+      ...(omitted === null ? {} : { media_omitted: omitted }),
       ...(mediaType === null ? {} : { media_type: mediaType }),
-      ...(fallbackMediaUrl === null ? {} : { medya_url: fallbackMediaUrl }),
+      ...(fallbackMediaUrl === null || isOmittedMediaUrl(fallbackMediaUrl) ? {} : { medya_url: fallbackMediaUrl }),
       ...(fallbackMediaType === null ? {} : { medya_tipi: fallbackMediaType }),
       ...(senderName === null ? {} : { gonderici_adi: senderName }),
       ...(senderId === null ? {} : { gonderici_id: senderId }),
@@ -306,7 +310,7 @@ export function transformLegacyMessage(
     mappingRole: "primary" as const,
     conversationPublicId,
     sender_type: senderType,
-    body,
+    body: omitted === null ? body : body.trim() ? `${body}\n${omitted.note}` : omitted.note,
     external_message_id: optionalExternalId(payload.kanal_mesaj_id, "kanal_mesaj_id", rejectRow),
     is_read: optionalBoolean(payload.okundu, "okundu", rejectRow) ?? false,
     sentAt,

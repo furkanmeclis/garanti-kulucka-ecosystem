@@ -11,6 +11,7 @@ export interface ManagedUser {
   is_active: boolean;
   is_online: boolean;
   last_seen_at: string | null;
+  sip_extension: string | null;
   sip_username: string | null;
   sip_password_configured: boolean;
   created_at: string;
@@ -31,6 +32,7 @@ export interface UpdateManagedUserInput {
   phone?: string | null;
   role?: ManagedRole;
   is_active?: boolean;
+  sip_extension?: string | null;
   sip_username?: string | null;
   sip_password?: string | null;
 }

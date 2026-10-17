@@ -199,11 +199,11 @@ describe("ayarlar admin routes", () => {
 
     const updated = await app().request(
       "/admin/users/usr_staff",
-      jsonRequest("PATCH", accessToken, { first_name: "Ayşe", role: "admin", sip_username: "", sip_password: "s3cret", password: "newpass" }),
+      jsonRequest("PATCH", accessToken, { first_name: "Ayşe", role: "admin", sip_username: "", sip_extension: "101", sip_password: "s3cret", password: "newpass" }),
     );
     expect(updated.status).toBe(200);
     expect(routeMocks.usersRepository.update).toHaveBeenCalledWith(
-      expect.objectContaining({ userPublicId: "usr_staff", role: "admin", sipUsername: null, sipPassword: "s3cret", password: "newpass" }),
+      expect.objectContaining({ userPublicId: "usr_staff", role: "admin", sipUsername: null, sipExtension: "101", sipPassword: "s3cret", password: "newpass" }),
     );
 
     const unknownField = await app().request("/admin/users/usr_staff", jsonRequest("PATCH", accessToken, { email: "x@example.com" }));

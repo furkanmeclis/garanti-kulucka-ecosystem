@@ -8,6 +8,7 @@ const realtimeAuthMocks = vi.hoisted(() => {
       id: 10,
       public_id: "usr_socket",
       role_name: "admin",
+      must_change_password: false,
     },
     session: {
       id: 20,
@@ -69,6 +70,7 @@ describe("realtime auth boundary", () => {
       id: 10,
       public_id: "usr_socket",
       role_name: "admin",
+      must_change_password: false,
     };
     realtimeAuthMocks.state.session = {
       id: 20,
@@ -102,6 +104,11 @@ describe("realtime auth boundary", () => {
     };
 
     await expect(authenticateRealtimeToken(token, config, {} as AppDatabase)).rejects.toThrow("unauthorized");
+  });
+
+  it("rejects users who must change their temporary password", async () => {
+    realtimeAuthMocks.state.user.must_change_password = true;
+    await expect(authenticateRealtimeToken(await validToken(), config, {} as AppDatabase)).rejects.toThrow("password_change_required");
   });
 
   it("keeps conversation room membership commands stable across reconnects", () => {

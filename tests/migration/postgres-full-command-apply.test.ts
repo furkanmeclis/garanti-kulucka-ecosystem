@@ -216,7 +216,10 @@ describe("PostgreSQL command split thread merge E2E", () => {
       expect(applyReport).toMatchObject({
         status: "passed",
         verification: { status: "passed" },
-        migration: { conversationMerge: { groups: 1, memberRows: 3, mergedAwayRows: 2 } },
+        migration: {
+          conversationMerge: { groups: 1, memberRows: 3, mergedAwayRows: 2 },
+          shipmentTrackingEventTransform: { duplicateRowsDropped: 0 },
+        },
       });
       expect(JSON.stringify(applyReport)).toContain("legacy_id_map.merged_conversations");
 

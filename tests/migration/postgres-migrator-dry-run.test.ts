@@ -122,6 +122,7 @@ describe("PostgreSQL migrator dry-run E2E", () => {
         transformedRows: 1,
         uniqueEvents: 1,
         duplicateRows: 0,
+        duplicateRowsDropped: 0,
         futureDatedRows: 0,
         providerTimeEvents: 1,
         firstSeenEvents: 0,

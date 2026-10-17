@@ -107,6 +107,8 @@ export interface UsersTable extends BaseTable {
   is_active: boolean;
   is_online: boolean;
   last_seen_at: Timestamp | null;
+  must_change_password: Generated<boolean>;
+  sip_extension: string | null;
   sip_username: string | null;
   sip_password_encrypted: string | null;
 }
